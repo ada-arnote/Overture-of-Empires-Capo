@@ -86,7 +86,12 @@ const NICE = { forts: ["Forts", "Spend 4 of what you muster to build one. It thr
 createTable({
   game: banners, key: "banners", title: "Brass and Banners", won: "The land is yours.", seats: [2, 3, 4, 5, 6], normal: 4, lengths: [], pace: (p) => (p.owner.length > 40 ? 300 : 430),
   cellsOf, goalOf, landOf, choose, thinking,
-  about: { classic: "The whole map is dealt out. Cards are worth more each time. Ties go to the defender. Play until one player holds the world.", ours: "You start alone in empty land. Ties cost both sides. Cards are always worth the same. Hold 65%.", custom: "Every switch is yours." },
+  about: {
+    classic: "Traditional: inspired by Risk.\nThe standard world-conquest rules as players know them, on our own world map: all land dealt out, place your armies, attack with dice as often as you like, move once, cards in sets for more armies, and play until one player holds the world. Ours: the attacker throws up to 4 dice and the defender 3, ties go to the defender, and our own card values.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
+    custom: "Custom: your own rules.\nSet every rule yourself: how the game starts, the dice, the cards, how much land wins, the number of rounds, and how strongly empty land is held. Add any expansions on top.",
+    ours: "Capo: our own variation.\nEach player starts alone on one province in empty land. Ties cost both sides, cards are always worth the same, and holding 65% of the land wins. Quicker, with more room to grow before the fighting starts.",
+    coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
+  },
   choices: [{ key: "map", label: "Map", normal: "world", values: [["world", "The world"], ["isles", "An archipelago"], ["grown", "An inland sea"]] }],
   switches: [
     { key: "start", label: "Start", normal: SWITCHES.start.normal, values: [["dealt", "Land dealt out"], ["claimed", "Claim in turn"], ["far", "One capital each"]] },

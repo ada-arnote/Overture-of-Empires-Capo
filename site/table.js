@@ -328,7 +328,7 @@ export function createTable(G) {
   }
   /** The options the title screen stands at. */
   function chosen(all = false) {
-    const o = { style: setup.style, seats: setup.seats, ...(setup.rounds ? { rounds: setup.rounds } : {}) };
+    const o = { style: setup.style === "coda" ? "classic" : setup.style, seats: setup.seats, ...(setup.rounds ? { rounds: setup.rounds } : {}) };
     for (const c of G.choices || []) if (!c.local) o[c.key] = setup.extra[c.key];
     if (setup.style === "custom") for (const c of G.switches) o[c.key] = setup.extra[c.key];
     for (const c of G.expansions || []) o[c.key] = !!setup.on[c.key];
@@ -403,14 +403,17 @@ export function createTable(G) {
   }
   function titleCard() {
     radio($("count"), many.map((n) => ({ value: n, label: String(n) })), setup.seats, (v) => { setup.seats = v; titleCard(); });
-    radio($("style"), [["classic", "Traditional"], ["custom", "Custom"], ["ours", "Capo"]].filter(([k]) => G.about[k]).map(([value, label]) => ({ value, label })).concat([{ value: "coda", label: "Coda", note: "coming soon", off: true }]), setup.style, (v) => { if (v === setup.style || v === "coda") return; setup.style = v; titleCard(); attract(); });
-    $("about").textContent = G.about[setup.style];
-    $("style").title = "Coda: legacy campaigns that change from game to game, designed with an AI or shared by players. Coming soon.";
+    radio($("style"), [["classic", "Traditional"], ["custom", "Custom"], ["ours", "Capo"], ["coda", "Coda"]].filter(([k]) => G.about[k]).map(([value, label]) => ({ value, label, note: value === "coda" ? "coming soon" : undefined })), setup.style, (v) => { if (v === setup.style) return; setup.style = v; titleCard(); if (v !== "coda") attract(); });
+    const soon = setup.style === "coda";
+    $("about").replaceChildren(...G.about[setup.style].split("\n").map((x) => el("span", x)));
+    for (const id of ["count", "who"]) $(id).closest(".line, ul").hidden = soon;
+    $("start").disabled = soon;
+    $("start").textContent = soon ? "Coming soon" : "Begin";
     $("length-line").hidden = setup.style !== "ours" || !G.lengths.length;
     const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; attract(); }; line.append(el("span", c.label), k); return line; };
-    more.replaceChildren(...(G.choices || []).map(pickOf));
+    more.replaceChildren(...(soon ? [] : (G.choices || []).map(pickOf)));
     if (setup.style === "custom") more.append(...G.switches.map(pickOf));
-    if (G.expansions) {
+    if (G.expansions && !soon) {
       const box = el("div", undefined, "pick small");
       box.setAttribute("role", "group");
       box.setAttribute("aria-label", "Expansions");
@@ -458,7 +461,7 @@ export function createTable(G) {
   function passLine() {
     const on = setup.who.slice(0, setup.seats).includes("away");
     pass.hidden = !on || !canLock();
-    $("start").disabled = on && !setup.who.slice(0, setup.seats).includes("you");
+    $("start").disabled = setup.style === "coda" || (on && !setup.who.slice(0, setup.seats).includes("you"));
   }
   function kept() {
     try {

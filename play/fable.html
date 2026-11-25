@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-g/mCJ8IetZoP/Q0PwJZqYpIjPQ0//fPy42bIB/Tv4qY='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-A+RH+h8Gk/0Th3TJHW8lNnG8i652pvWw3F55BnWGUtw='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>The Island Fable</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -114,7 +114,7 @@ dialog .stack button { min-height: 48px } dialog .go { position: sticky; bottom:
 }
 @media (max-height: 560px) and (min-width: 821px) { #seats { width: 176px } #act { width: 300px } h1 { font-size: 56px } .seat small { display: none } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important } }
-.about { margin: -6px 0 12px; font-size: 13px; color: var(--soft) }
+.about { margin: -6px 0 12px; font-size: 13px; color: var(--soft) } .about span { display: block } .about span + span { margin-top: 5px } .about span:first-child { color: var(--text) }
 #info { color: #d8cfba; font-size: 14px; min-height: 2.9em; margin-bottom: 8px }
 #amount { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; min-height: 44px } #much { flex: 1; height: 44px; accent-color: var(--gold) } #many { min-width: 3.2em; text-align: right; font: 600 18px/1 var(--serif); font-variant-numeric: tabular-nums }
 #dice { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 10px } #dice div { display: flex; gap: 4px } #dice svg { width: 30px; height: 30px; display: block }
@@ -138,7 +138,7 @@ dialog > .go { background: #161c1e; margin: 0 -22px -22px; padding: 10px 22px 18
   .atlas #toast { top: 176px }
 }
 @media (max-width: 820px) { .menu #foot { left: 0; right: 0; bottom: 0; padding: 8px 16px; background: #10161a; justify-content: center } }
-#style button:disabled { opacity: .45 } #style small { font-size: 11px }
+#style small { font-size: 11px }
 </style>
 <link rel="icon" href="data:,">
 </head>
@@ -2099,7 +2099,7 @@ function createTable(G) {
   }
   /** The options the title screen stands at. */
   function chosen(all = false) {
-    const o = { style: setup.style, seats: setup.seats, ...(setup.rounds ? { rounds: setup.rounds } : {}) };
+    const o = { style: setup.style === "coda" ? "classic" : setup.style, seats: setup.seats, ...(setup.rounds ? { rounds: setup.rounds } : {}) };
     for (const c of G.choices || []) if (!c.local) o[c.key] = setup.extra[c.key];
     if (setup.style === "custom") for (const c of G.switches) o[c.key] = setup.extra[c.key];
     for (const c of G.expansions || []) o[c.key] = !!setup.on[c.key];
@@ -2174,14 +2174,17 @@ function createTable(G) {
   }
   function titleCard() {
     radio($("count"), many.map((n) => ({ value: n, label: String(n) })), setup.seats, (v) => { setup.seats = v; titleCard(); });
-    radio($("style"), [["classic", "Traditional"], ["custom", "Custom"], ["ours", "Capo"]].filter(([k]) => G.about[k]).map(([value, label]) => ({ value, label })).concat([{ value: "coda", label: "Coda", note: "coming soon", off: true }]), setup.style, (v) => { if (v === setup.style || v === "coda") return; setup.style = v; titleCard(); attract(); });
-    $("about").textContent = G.about[setup.style];
-    $("style").title = "Coda: legacy campaigns that change from game to game, designed with an AI or shared by players. Coming soon.";
+    radio($("style"), [["classic", "Traditional"], ["custom", "Custom"], ["ours", "Capo"], ["coda", "Coda"]].filter(([k]) => G.about[k]).map(([value, label]) => ({ value, label, note: value === "coda" ? "coming soon" : undefined })), setup.style, (v) => { if (v === setup.style) return; setup.style = v; titleCard(); if (v !== "coda") attract(); });
+    const soon = setup.style === "coda";
+    $("about").replaceChildren(...G.about[setup.style].split("\n").map((x) => el("span", x)));
+    for (const id of ["count", "who"]) $(id).closest(".line, ul").hidden = soon;
+    $("start").disabled = soon;
+    $("start").textContent = soon ? "Coming soon" : "Begin";
     $("length-line").hidden = setup.style !== "ours" || !G.lengths.length;
     const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; attract(); }; line.append(el("span", c.label), k); return line; };
-    more.replaceChildren(...(G.choices || []).map(pickOf));
+    more.replaceChildren(...(soon ? [] : (G.choices || []).map(pickOf)));
     if (setup.style === "custom") more.append(...G.switches.map(pickOf));
-    if (G.expansions) {
+    if (G.expansions && !soon) {
       const box = el("div", undefined, "pick small");
       box.setAttribute("role", "group");
       box.setAttribute("aria-label", "Expansions");
@@ -2229,7 +2232,7 @@ function createTable(G) {
   function passLine() {
     const on = setup.who.slice(0, setup.seats).includes("away");
     pass.hidden = !on || !canLock();
-    $("start").disabled = on && !setup.who.slice(0, setup.seats).includes("you");
+    $("start").disabled = setup.style === "coda" || (on && !setup.who.slice(0, setup.seats).includes("you"));
   }
   function kept() {
     try {
@@ -2390,7 +2393,12 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 createTable({
   game: fable, key: "fable", title: "The Island Fable", won: "The island is yours.", seats: [2, 3, 4, 5, 6], normal: 3, lengths: [[10, "Short"], [14, "Normal"], [18, "Long"]], pace: (p) => (p.classic ? 240 : 480),
   cellsOf, goalOf, landOf, choose, thinking,
-  about: { classic: "The island is dealt out. Pay your soldiers, clear the woods, build forts, and act as often as you like.", ours: "A small island to settle from one village. Three actions a turn.", custom: "Every switch is yours." },
+  about: {
+    classic: "Traditional: inspired by Slay.\nThe hex island rules as players know them: the island is dealt out, villages keep purses, soldiers cost wages and merge into higher ranks, woods spread over idle land, and you act as often as you like. Ours: four ranks of our own, our prices and wages, forts of our own, and the more players there are, the less of the island you need to win.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
+    custom: "Custom: your own rules.\nSet every rule yourself: island shape and size, the start, actions a turn, ranks, prices, wages, woods, forts, the goal and the number of rounds. Add any expansions on top.",
+    ours: "Capo: our own variation.\nA small island settled from one village each, three actions a turn, no woods and no forts. A quick game of about ten rounds.",
+    coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
+  },
   choices: [
     { key: "isle", label: "Island", normal: "round", values: SHAPES },
     { key: "size", label: "Size", normal: "medium", values: [["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["huge", "Huge"]] },

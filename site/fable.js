@@ -38,7 +38,12 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 createTable({
   game: fable, key: "fable", title: "The Island Fable", won: "The island is yours.", seats: [2, 3, 4, 5, 6], normal: 3, lengths: [[10, "Short"], [14, "Normal"], [18, "Long"]], pace: (p) => (p.classic ? 240 : 480),
   cellsOf, goalOf, landOf, choose, thinking,
-  about: { classic: "The island is dealt out. Pay your soldiers, clear the woods, build forts, and act as often as you like.", ours: "A small island to settle from one village. Three actions a turn.", custom: "Every switch is yours." },
+  about: {
+    classic: "Traditional: inspired by Slay.\nThe hex island rules as players know them: the island is dealt out, villages keep purses, soldiers cost wages and merge into higher ranks, woods spread over idle land, and you act as often as you like. Ours: four ranks of our own, our prices and wages, forts of our own, and the more players there are, the less of the island you need to win.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
+    custom: "Custom: your own rules.\nSet every rule yourself: island shape and size, the start, actions a turn, ranks, prices, wages, woods, forts, the goal and the number of rounds. Add any expansions on top.",
+    ours: "Capo: our own variation.\nA small island settled from one village each, three actions a turn, no woods and no forts. A quick game of about ten rounds.",
+    coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
+  },
   choices: [
     { key: "isle", label: "Island", normal: "round", values: SHAPES },
     { key: "size", label: "Size", normal: "medium", values: [["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["huge", "Huge"]] },

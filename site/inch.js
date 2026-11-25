@@ -70,7 +70,12 @@ createTable({
     } else if (k === "w") T.play({ do: "wait" });
     else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "pour")) { e.preventDefault(); $("pour").click(); }
   },
-  about: { classic: "A wide map. Grow, pour, and hold most of it.", ours: "A smaller map. Land cut off from your tower falls.", custom: "Every switch is yours." },
+  about: {
+    classic: "Traditional: inspired by Territorial.io and OpenFront.io.\nThe browser land-grab as players know it, played in turns: one pool of strength that grows with your land, poured over the border in shares, on a wide map. Ours: turns instead of real time, hexes instead of pixels, two or three players, and the order of each round drawn with three. A real-time version is planned.\nNot affiliated with or endorsed by their makers. Our own map, names and art.",
+    custom: "Custom: your own rules.\nSet every rule yourself: map size, whether cut-off land falls, walled homes, the shares you pour, how strength grows, the goal, the turn order and the number of rounds.",
+    ours: "Capo: our own variation.\nA smaller map where land cut off from your tower falls away, homes are walled, and saving strength pays. Hold 55% with two players, 45% with three.",
+    coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
+  },
   switches: [
     { key: "size", label: "Map", normal: 5, values: [[4, "61 cells"], [5, "91 cells"]] },
     { key: "cut", label: "Cut-off land", normal: false, values: [[false, "Stays yours"], [true, "Falls away"]] },

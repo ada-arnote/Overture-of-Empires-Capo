@@ -104,7 +104,7 @@ dialog .stack button { min-height: 48px } dialog .go { position: sticky; bottom:
 }
 @media (max-height: 560px) and (min-width: 821px) { #seats { width: 176px } #act { width: 300px } h1 { font-size: 56px } .seat small { display: none } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important } }
-.about { margin: -6px 0 12px; font-size: 13px; color: var(--soft) }
+.about { margin: -6px 0 12px; font-size: 13px; color: var(--soft) } .about span { display: block } .about span + span { margin-top: 5px } .about span:first-child { color: var(--text) }
 #info { color: #d8cfba; font-size: 14px; min-height: 2.9em; margin-bottom: 8px }
 #amount { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; min-height: 44px } #much { flex: 1; height: 44px; accent-color: var(--gold) } #many { min-width: 3.2em; text-align: right; font: 600 18px/1 var(--serif); font-variant-numeric: tabular-nums }
 #dice { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 10px } #dice div { display: flex; gap: 4px } #dice svg { width: 30px; height: 30px; display: block }
@@ -128,4 +128,4 @@ dialog > .go { background: #161c1e; margin: 0 -22px -22px; padding: 10px 22px 18
   .atlas #toast { top: 176px }
 }
 @media (max-width: 820px) { .menu #foot { left: 0; right: 0; bottom: 0; padding: 8px 16px; background: #10161a; justify-content: center } }
-#style button:disabled { opacity: .45 } #style small { font-size: 11px }
+#style small { font-size: 11px }
