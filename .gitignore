@@ -8,5 +8,5 @@ docs/
 # Early story-mode test tools: not part of the game
 relay/
 story-test/
-# Real-world map data waits for the answer on where its outlines came from
-lab/map/packs/
+# Map experiments: private notes, and real-world data that waits for the answer on where its outlines came from
+lab/

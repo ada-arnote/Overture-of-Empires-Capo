@@ -108,8 +108,8 @@ export function createMatch(game, { options = {}, seed = "" } = {}) {
  *   code is "illegal", "shape", "over" or "end" (the moves work but lead somewhere else)
  */
 export function whenReplayFails(problem) {
-  // TODO(human): decide which problems lose the file and which keep its good part.
-  return "refuse";
+  if (problem.code === "end") return "refuse"; // no single move is at fault, so no part can be trusted
+  return problem.index > 0 ? "keep" : "refuse"; // with no good move there is nothing to keep
 }
 
 const FIELDS = ["end", "format", "game", "moves", "options", "seed", "version"];

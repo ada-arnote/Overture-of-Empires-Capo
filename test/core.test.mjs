@@ -108,6 +108,23 @@ test("a tampered save is noticed, whatever the replay policy is", () => {
   assert.notEqual(open({ ...f, moves: f.moves.map((x, i) => (i === 1 ? { do: "cheat" } : x)) }), "opened clean");
   assert.notEqual(open({ ...f, seed: f.seed + "x" }), "opened clean");
 });
+test("a save that breaks partway opens at its last good move, with a warning, and can be played on", () => {
+  const f = JSON.parse(game("k").save()), cut = { ...f, moves: f.moves.map((x, i) => (i === 3 ? { do: "cheat" } : x)) };
+  const { match, warning } = openSave(JSON.stringify(cut), [stones]);
+  assert.equal(match.list.length, 3);
+  assert.match(warning, new RegExp(`move 4: .*Kept 3 of ${f.moves.length} moves`));
+  playScript(match);
+  assert.equal(openSave(match.save(), [stones]).warning, "");
+  const long = openSave(JSON.stringify({ ...f, moves: [...f.moves, { do: "roll" }] }), [stones]);
+  assert.equal(long.match.save(), game("k").save());
+  assert.match(long.warning, /the game is over/);
+});
+test("a save with no good move, or that ends in the wrong place, is refused whole", () => {
+  const f = JSON.parse(game("k").save());
+  assert.throws(() => openSave(JSON.stringify({ ...f, moves: [{ do: "cheat" }, ...f.moves] }), [stones]), refused("illegal"));
+  assert.throws(() => openSave(JSON.stringify({ ...f, end: "0000000000000000" }), [stones]), refused("end"));
+  assert.throws(() => openSave(JSON.stringify({ ...f, moves: f.moves.slice(0, -1) }), [stones]), refused("end"));
+});
 test("the replay policy answers refuse or keep for every problem", () => {
   for (const code of ["illegal", "shape", "over", "end"]) for (const index of [0, 5, 10]) assert.ok(["refuse", "keep"].includes(whenReplayFails({ code, index, total: 10 })));
 });

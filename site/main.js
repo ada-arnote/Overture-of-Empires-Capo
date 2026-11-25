@@ -1,15 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { SOURCE_URL, VERSION } from "./config.js";
 import { chance, fingerprint, seedState } from "../src/core/index.js";
+import { footer } from "./footer.js";
 
 const $ = (id) => document.getElementById(id);
-$("version").textContent = `Version ${VERSION}`;
-if (/^https:\/\//.test(SOURCE_URL)) {
-  const a = document.createElement("a");
-  a.href = SOURCE_URL;
-  a.textContent = "Source code";
-  $("source").replaceChildren(a);
-} else $("source").textContent = "Source code: the address is not set yet";
+footer();
 
 // The same short check everywhere. Node's tests hold this code to the same answer.
 $("check").addEventListener("click", () => {

@@ -4,9 +4,12 @@ import assert from "node:assert/strict";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import vm from "node:vm";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { check, rows } from "../tools/check.mjs";
 import { find, makeServer } from "../tools/serve.mjs";
+import { bundle, page } from "../tools/bundle.mjs";
 import { chance, fingerprint, seedState } from "../src/core/index.js";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -96,4 +99,12 @@ test("the server answers with safe headers and refuses to take anything", async 
     for (const m of page.matchAll(/(?:href|src)="([^":]+)"/g)) assert.equal((await fetch(new URL(m[1], a.url))).status, 200, m[1]);
     assert.equal((await fetch(at + "/docs/decisions.md")).status, 404); assert.equal((await fetch(at + "/", { method: "POST", body: "x" })).status, 405);
   } finally { s.close(); s.closeAllConnections(); }
+});
+test("the double-click page holds everything: no imports, no outside files, and its script is the one its rule allows", () => {
+  const js = bundle(path.join(root, "site/inch.js"));
+  new vm.Script(`(() => {${js}})();`);
+  const html = page(readFileSync(path.join(root, "site/inch.html"), "utf8"), "body{}", js);
+  assert.ok(!/<link rel="stylesheet"|type="module"|src="/.test(html));
+  const body = html.match(/<script>([\s\S]*)<\/script>/)[1];
+  assert.ok(html.includes(`sha256-${createHash("sha256").update(body).digest("base64")}`));
 });
