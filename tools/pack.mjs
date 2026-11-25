@@ -19,7 +19,7 @@ if (bad.length) {
   for (const d of ["src", "site"]) cpSync(path.join(root, d), path.join(dist, d), { recursive: true });
   for (const f of ["LICENSE", "NOTICES.md", "CREDITS.csv", "ADAPTED.csv"]) if (existsSync(path.join(root, f))) cpSync(path.join(root, f), path.join(dist, f));
   // Hosts open index.html at the top; send them to the page without a script.
-  writeFileSync(path.join(dist, "index.html"), '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0;url=site/"><link rel="icon" href="data:,"><title>Capo</title><a href="site/">Open</a></html>\n');
+  writeFileSync(path.join(dist, "index.html"), '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0;url=site/"><link rel="icon" href="data:,"><title>Overture of Empires: Capo</title><a href="site/">Open</a></html>\n');
   writeFileSync(path.join(dist, ".nojekyll"), "");
   writeFileSync(path.join(dist, "robots.txt"), "User-agent: *\nDisallow: /\n");
   console.log(`dist/ is ready, ${(total / 1000).toFixed(1)} kB compressed, version ${JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version}. Nothing was uploaded.`);

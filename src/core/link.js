@@ -58,7 +58,7 @@ export function packGame(match, roles, look) {
 export function unpackGame(bytes, games) {
   if (bytes.length > MOST_BYTES) throw broken();
   const r = reader(bytes);
-  if (r.number() !== LAYOUT) throw new Refusal("link", "that link was made by a different version of Capo");
+  if (r.number() !== LAYOUT) throw new Refusal("link", "that link was made by a different version of these games");
   let h;
   try { h = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(r.take(r.number()))); } catch { throw broken(); }
   if (!h || typeof h !== "object" || Object.keys(h).sort().join() !== "g,l,o,r,s,v" || typeof h.s !== "string" || !h.o || typeof h.o !== "object" || Array.isArray(h.o)) throw broken();

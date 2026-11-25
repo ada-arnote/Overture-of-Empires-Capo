@@ -122,11 +122,11 @@ export function openSave(text, games) {
   let f;
   try { f = JSON.parse(text); } catch { throw notASave(); }
   if (!f || typeof f !== "object" || Array.isArray(f) || Object.keys(f).sort().join() !== FIELDS.join()) throw notASave();
-  if (f.format !== FORMAT) throw new Refusal("format", "this save was made by a different version of Capo");
+  if (f.format !== FORMAT) throw new Refusal("format", "this save was made by a different version of these games");
   if (!Array.isArray(f.moves) || f.moves.length > MAX_MOVES || typeof f.seed !== "string" || typeof f.end !== "string") throw notASave();
   if (!f.options || typeof f.options !== "object" || Array.isArray(f.options)) throw notASave();
   const game = games.find((g) => g.id === f.game);
-  if (!game) throw new Refusal("game", "this copy of Capo does not have that game");
+  if (!game) throw new Refusal("game", "this copy does not have that game");
   if (game.version !== f.version) throw new Refusal("version", `this save needs version ${String(f.version).slice(0, 20)} of ${game.id}; this copy has ${game.version}`);
 
   const match = createMatch(game, { options: f.options, seed: f.seed }), total = f.moves.length;

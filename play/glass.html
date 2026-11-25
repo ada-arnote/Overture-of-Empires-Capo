@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-/udeiVrOMMzd6bvDgwp2XAkuD2iUzGSkAriNSvOF+6g='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-DQL7blgvdX6+qAllT2UGM4QGVN9BBclHWNKovcWCcGw='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>Grain and Glass</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -185,7 +185,7 @@ dialog > .go { background: #161c1e; margin: 0 -22px -22px; padding: 10px 22px 18
     <div class="line" id="length-line"><span>Length</span><div class="pick small" id="length" role="radiogroup" aria-label="Length"></div></div>
     <div class="go"><button id="resume" type="button" class="quiet" hidden>Continue</button><button id="start" type="button" class="main">Begin</button></div>
   </div>
-  <p class="links"><button type="button" class="text" id="how">How to play</button><button type="button" class="text" id="open">Open a saved game</button><a href="../site/" class="text">Capo</a></p>
+  <p class="links"><button type="button" class="text" id="how">How to play</button><button type="button" class="text" id="open">Open a saved game</button><a href="../site/" class="text">All games</a></p>
 </main>
 
 <dialog id="sheet" class="panel" aria-labelledby="sheet-title"><h2 id="sheet-title"></h2><div id="sheet-body"></div><div class="go"><button type="button" class="main" id="sheet-close">Close</button></div></dialog>
@@ -791,11 +791,11 @@ function openSave(text, games) {
   let f;
   try { f = JSON.parse(text); } catch { throw notASave(); }
   if (!f || typeof f !== "object" || Array.isArray(f) || Object.keys(f).sort().join() !== FIELDS.join()) throw notASave();
-  if (f.format !== FORMAT) throw new Refusal("format", "this save was made by a different version of Capo");
+  if (f.format !== FORMAT) throw new Refusal("format", "this save was made by a different version of these games");
   if (!Array.isArray(f.moves) || f.moves.length > MAX_MOVES || typeof f.seed !== "string" || typeof f.end !== "string") throw notASave();
   if (!f.options || typeof f.options !== "object" || Array.isArray(f.options)) throw notASave();
   const game = games.find((g) => g.id === f.game);
-  if (!game) throw new Refusal("game", "this copy of Capo does not have that game");
+  if (!game) throw new Refusal("game", "this copy does not have that game");
   if (game.version !== f.version) throw new Refusal("version", `this save needs version ${String(f.version).slice(0, 20)} of ${game.id}; this copy has ${game.version}`);
 
   const match = createMatch(game, { options: f.options, seed: f.seed }), total = f.moves.length;
@@ -876,7 +876,7 @@ function packGame(match, roles, look) {
 function unpackGame(bytes, games) {
   if (bytes.length > MOST_BYTES) throw broken();
   const r = reader(bytes);
-  if (r.number() !== LAYOUT) throw new Refusal("link", "that link was made by a different version of Capo");
+  if (r.number() !== LAYOUT) throw new Refusal("link", "that link was made by a different version of these games");
   let h;
   try { h = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(r.take(r.number()))); } catch { throw broken(); }
   if (!h || typeof h !== "object" || Object.keys(h).sort().join() !== "g,l,o,r,s,v" || typeof h.s !== "string" || !h.o || typeof h.o !== "object" || Array.isArray(h.o)) throw broken();
@@ -1985,7 +1985,7 @@ async function makeLink(page, id, bytes, password = "") {
 /** Read a pasted link. Returns { id, locked, open(password) -> bytes }. */
 function readLink(text) {
   const m = String(text).trim().match(/#t=([\w-]{12,60000})/);
-  if (!m) throw new Refusal("link", "that is not a Capo game link");
+  if (!m) throw new Refusal("link", "that is not a game link from Overture of Empires");
   const b = from64(m[1]), name = b.subarray(1, 1 + ID), rest = b.subarray(1 + ID), id = to64(name);
   if (b.length < 2 + ID || b[0] > 1) throw broken();
   if (!b[0]) return { id, locked: false, open: async () => rest };

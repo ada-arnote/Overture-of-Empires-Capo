@@ -32,7 +32,7 @@ export async function makeLink(page, id, bytes, password = "") {
 /** Read a pasted link. Returns { id, locked, open(password) -> bytes }. */
 export function readLink(text) {
   const m = String(text).trim().match(/#t=([\w-]{12,60000})/);
-  if (!m) throw new Refusal("link", "that is not a Capo game link");
+  if (!m) throw new Refusal("link", "that is not a game link from Overture of Empires");
   const b = from64(m[1]), name = b.subarray(1, 1 + ID), rest = b.subarray(1 + ID), id = to64(name);
   if (b.length < 2 + ID || b[0] > 1) throw broken();
   if (!b[0]) return { id, locked: false, open: async () => rest };

@@ -1,6 +1,6 @@
-# Capo
+# Overture of Empires: Capo
 
-Table games on one shared map, in the browser. Free software, AGPL-3.0-or-later. Working name.
+Table games on one shared map, in the browser, and later Capo, a story game played with an AI. Free software, AGPL-3.0-or-later. Working name.
 
 An early build. Three games can be played in tests, with bots, saves and take-back: **Brass and Banners**, **An Inch of Ink** and **The Island Fable**. Expect them to change.
 

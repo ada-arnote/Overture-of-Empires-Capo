@@ -1,7 +1,7 @@
 # Notices
 
-Capo is free software under the GNU Affero General Public License, version 3 or later. The text is in LICENSE.
+Overture of Empires: Capo is free software under the GNU Affero General Public License, version 3 or later. The text is in LICENSE.
 
-Nothing from another project has been copied into Capo yet. When something is, its notice goes here and its file goes in ADAPTED.csv.
+Nothing from another project has been copied into this project yet. When something is, its notice goes here and its file goes in ADAPTED.csv.
 
 The coast in src/games/maps/world.js is drawn from Natural Earth (1:50m land, version 4.1.0), which is in the public domain. Made with Natural Earth. The provinces, their names and their borders are our own.

@@ -55,7 +55,7 @@ export function page(html, css, js, home = "") {
   return html
     .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, () => `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">`)
     .replace(/<link rel="stylesheet"[^>]*>/, () => `<style>\n${css}</style>`)
-    .replace(/<a href="\.\/" class="text">Capo<\/a>/, home ? `<a href="${home}" class="text">Capo</a>` : "")
+    .replace(/<a href="\.\/" class="text">All games<\/a>/, home ? `<a href="${home}" class="text">All games</a>` : "")
     .replace(/<script type="module"[^>]*><\/script>/, () => `<script>\n${safe}\n</script>`);
 }
 

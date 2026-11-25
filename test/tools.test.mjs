@@ -95,7 +95,7 @@ test("the server answers with safe headers and refuses to take anything", async 
   await new Promise((r) => s.listen(0, "127.0.0.1", r));
   try {
     const at = `http://127.0.0.1:${s.address().port}`, a = await fetch(at + "/");
-    assert.equal(a.status, 200); assert.equal(a.headers.get("x-content-type-options"), "nosniff"); const page = await a.text(); assert.match(page, /<h1>Capo<\/h1>/); assert.ok(a.url.endsWith("/site/"));
+    assert.equal(a.status, 200); assert.equal(a.headers.get("x-content-type-options"), "nosniff"); const page = await a.text(); assert.match(page, /<h1>Overture of Empires: Capo<\/h1>/); assert.ok(a.url.endsWith("/site/"));
     for (const m of page.matchAll(/(?:href|src)="([^":]+)"/g)) assert.equal((await fetch(new URL(m[1], a.url))).status, 200, m[1]);
     assert.equal((await fetch(at + "/docs/decisions.md")).status, 404); assert.equal((await fetch(at + "/", { method: "POST", body: "x" })).status, 405);
   } finally { s.close(); s.closeAllConnections(); }
