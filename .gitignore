@@ -1,0 +1,12 @@
+# Made by tools
+dist/
+__pycache__/
+*.log
+
+# Not for this public repository
+docs/
+# Early story-mode test tools: not part of the game
+relay/
+story-test/
+# Real-world map data waits for the answer on where its outlines came from
+lab/map/packs/

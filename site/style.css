@@ -1,0 +1,13 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+:root { --paper: #f1efe6; --ink: #22261f; --soft: #585f52; --line: #cdccbd; --act: #1f5a52; --on: #fff; color-scheme: light }
+@media (prefers-color-scheme: dark) { :root { --paper: #151813; --ink: #e6e8df; --soft: #a3aa9a; --line: #353a30; --act: #7fc9bc; --on: #101410; color-scheme: dark } }
+* { box-sizing: border-box }
+body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--paper); color: var(--ink); font: 17px/1.55 Georgia, "Times New Roman", serif }
+main { flex: 1; width: 100%; max-width: 44rem; margin: 0 auto; padding: 12vh 16px 32px }
+h1 { font-size: clamp(2.4rem, 9vw, 4rem); line-height: 1; font-weight: 500; margin: 0 0 .5em }
+p { margin: .5em 0; max-width: 62ch }
+button { font: 600 16px/1 system-ui, sans-serif; min-height: 44px; padding: 0 18px; border: 1px solid var(--act); border-radius: 4px; background: var(--act); color: var(--on); cursor: pointer }
+a { color: var(--act) }
+:focus-visible { outline: 3px solid var(--act); outline-offset: 3px }
+footer { border-top: 1px solid var(--line); color: var(--soft); font-size: 15px }
+footer div { max-width: 44rem; margin: 0 auto; padding: 14px 16px 24px; display: flex; flex-wrap: wrap; gap: 4px 22px }

@@ -1,0 +1,14 @@
+{
+  "name": "capo",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node tools/check.mjs",
+    "serve": "node tools/serve.mjs",
+    "pack": "node tools/pack.mjs",
+    "browsers": "node tools/browsers.mjs"
+  }
+}

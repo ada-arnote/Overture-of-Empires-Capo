@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Probe</title>
+<pre id="out">Working</pre>
+<script type="module">
+let answer;
+try {
+  const { probe } = await import("../fixtures/probe.js");
+  answer = { ...probe(), agent: navigator.userAgent };
+} catch (e) {
+  answer = { error: String(e) };
+}
+document.getElementById("out").textContent = JSON.stringify(answer, null, 1);
+try { await fetch("/answer", { method: "POST", body: JSON.stringify(answer) }); } catch { /* opened by hand: the page shows it */ }
+</script>
+</html>

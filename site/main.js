@@ -1,0 +1,19 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { SOURCE_URL, VERSION } from "./config.js";
+import { chance, fingerprint, seedState } from "../src/core/index.js";
+
+const $ = (id) => document.getElementById(id);
+$("version").textContent = `Version ${VERSION}`;
+if (/^https:\/\//.test(SOURCE_URL)) {
+  const a = document.createElement("a");
+  a.href = SOURCE_URL;
+  a.textContent = "Source code";
+  $("source").replaceChildren(a);
+} else $("source").textContent = "Source code: the address is not set yet";
+
+// The same short check everywhere. Node's tests hold this code to the same answer.
+$("check").addEventListener("click", () => {
+  const dice = chance(seedState("page check"));
+  const code = fingerprint(Array.from({ length: 1000 }, () => dice.die()));
+  $("answer").textContent = code === "4386081a00681e1f" ? "This browser gives the same answers as ours." : `This browser differs: ${code}. Please tell us.`;
+});
