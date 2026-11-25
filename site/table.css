@@ -129,3 +129,4 @@ dialog > .go { background: #161c1e; margin: 0 -22px -22px; padding: 10px 22px 18
 }
 @media (max-width: 820px) { .menu #foot { left: 0; right: 0; bottom: 0; padding: 8px 16px; background: #10161a; justify-content: center } }
 #style small { font-size: 11px }
+.goods { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px } .goods span { padding: 2px 8px; border-radius: 7px; background: rgba(255, 244, 214, .1); color: #2a1d14; font-size: 13px; font-weight: 600 } .goods span:nth-last-child(-n+2):not([style]) { color: var(--text) }

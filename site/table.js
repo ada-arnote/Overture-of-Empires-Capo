@@ -139,7 +139,7 @@ export function createTable(G) {
     $("land").setAttribute("aria-label", `${Array.from({ length: seats }, (_, s) => `${NAMES[s]} ${G.cellsOf(p, s)}`).join(", ")}. The goal is ${goal} of ${n}.`);
     $("seats").replaceChildren(...Array.from({ length: seats }, (_, s) => {
       const c = G.cellsOf(p, s), li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${c ? "" : " out"}`), dl = el("dl");
-      for (const [k, v] of [["Land", innerWidth > 820 || seats < 3 ? `${c}/${goal}` : c], ...G.stats(p, s)]) { const d = el("div"); d.append(el("dt", k), el("dd", String(v))); dl.append(d); }
+      for (const [k, v] of [[G.unit || "Land", innerWidth > 820 || seats < 3 ? `${c}/${goal}` : c], ...G.stats(p, s)]) { const d = el("div"); d.append(el("dt", k), el("dd", String(v))); dl.append(d); }
       li.append(sign(s), el("b", NAMES[s]), el("small", T.kinds[s] === "you" && T.solo() ? "You" : WORDS[T.kinds[s]]), dl);
       return li;
     }));
@@ -365,7 +365,7 @@ export function createTable(G) {
       base = up;
     });
     c.setAttribute("role", "img"); c.setAttribute("aria-label", "Land held over the game");
-    body.append(el("p", r.winners.length > 1 ? `They ${r.why}.` : `${NAMES[r.winners[0]]}: ${r.why}, in ${Math.min(p.round, p.rounds)} rounds.`), c, el("p", `${tally(p).map((v, s) => `${NAMES[s]} ${v}`).join(", ")} of ${n} cells.`));
+    body.append(el("p", r.winners.length > 1 ? `They ${r.why}.` : `${NAMES[r.winners[0]]}: ${r.why}, in ${Math.min(p.round, p.rounds)} rounds.`), c, el("p", `${tally(p).map((v, s) => `${NAMES[s]} ${v}`).join(", ")}${G.unit ? ` ${G.unit.toLowerCase()}.` : ` of ${n} cells.`}`));
     const row = el("div", undefined, "stack"), again = el("button", "Play again", "main");
     again.type = "button"; again.onclick = () => { closeSheet(); restart(); };
     row.append(again); body.append(row);

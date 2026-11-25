@@ -62,7 +62,7 @@ export function page(html, css, js, home = "") {
 if (process.argv[1]?.endsWith("bundle.mjs")) {
   const at = (f) => readFileSync(path.join(root, "site", f), "utf8"), out = path.join(root, "dist");
   mkdirSync(out, { recursive: true });
-  for (const name of ["inch", "fable", "banners"]) {
+  for (const name of ["inch", "fable", "banners", "glass"]) {
     const js = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`, text = page(at(`${name}.html`), at("table.css"), js);
     mkdirSync(path.join(root, "play"), { recursive: true });
     writeFileSync(path.join(root, "play", `${name}.html`), page(at(`${name}.html`), at("table.css"), js, "../site/"));
