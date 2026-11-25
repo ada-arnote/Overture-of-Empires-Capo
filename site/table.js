@@ -327,11 +327,12 @@ export function createTable(G) {
     next();
   }
   /** The options the title screen stands at. */
-  function chosen() {
+  function chosen(all = false) {
     const o = { style: setup.style, seats: setup.seats, ...(setup.rounds ? { rounds: setup.rounds } : {}) };
-    for (const c of G.choices || []) o[c.key] = setup.extra[c.key];
+    for (const c of G.choices || []) if (!c.local) o[c.key] = setup.extra[c.key];
     if (setup.style === "custom") for (const c of G.switches) o[c.key] = setup.extra[c.key];
     for (const c of G.expansions || []) o[c.key] = !!setup.on[c.key];
+    if (all) for (const c of G.choices || []) if (c.local) o[c.key] = setup.extra[c.key];
     return o;
   }
   function attract() {
@@ -470,7 +471,7 @@ export function createTable(G) {
 
   $("start").onclick = () => {
     const who = setup.who.slice(0, setup.seats), far = who.includes("away"), words = passField.value.trim();
-    begin(createMatch(G.game, { seed: seed(), options: chosen() }), who, far ? { id: newId(), roles: who.map((k) => (k === "you" ? "host" : k === "away" ? "friend" : k)), pass: canLock() ? words : "", floor: 0 } : null, -1, setup.look.map((x) => [...x]));
+    begin(createMatch(G.game, { seed: G.seedOf?.(chosen(true)) || seed(), options: chosen() }), who, far ? { id: newId(), roles: who.map((k) => (k === "you" ? "host" : k === "away" ? "friend" : k)), pass: canLock() ? words : "", floor: 0 } : null, -1, setup.look.map((x) => [...x]));
   };
   linkButton.onclick = linkSheet;
   sendCopy.onclick = copy;
