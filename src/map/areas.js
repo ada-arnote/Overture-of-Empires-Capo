@@ -6,14 +6,16 @@ import { noise } from "./hexes.js";
 const ROOT3 = Math.sqrt(3);
 
 /** cells: small hexes [[q, r], ...]. of[i]: the province of hex i, or -1 for sea. The sea is the last number in the picture. */
-export function areaPicture(cells, of, mids, size = 26) {
+export function areaPicture(cells, of, mids, size = 26, flat = false) {
   const n = mids.length, seaId = n + 1, key = new Map(cells.map(([q, r], i) => [q * 1000 + r, of[i]]));
-  const round = Math.max(...cells.map(([q, r]) => Math.hypot(ROOT3 * (q + r / 2), 1.5 * r))) * size + size * 1.5, c = Math.ceil(round) + 4, w = c * 2, h = c * 2;
-  const ids = new Uint16Array(w * h), at = ([q, r]) => [c + size * ROOT3 * (q + r / 2), c + size * 1.5 * r];
+  const xs = cells.map(([q, r]) => ROOT3 * (q + r / 2) * size), ys = cells.map(([, r]) => 1.5 * r * size), x0 = flat ? Math.min(...xs) - size * 1.6 : 0, y0 = flat ? Math.min(...ys) - size * 1.6 : 0;
+  const round = Math.max(...cells.map(([q, r]) => Math.hypot(ROOT3 * (q + r / 2), 1.5 * r))) * size + size * 1.5, cx = flat ? Math.ceil(-x0) : Math.ceil(round) + 4, cy = flat ? Math.ceil(-y0) : cx;
+  const w = flat ? 2 * Math.ceil((Math.max(...xs) - x0 + size * 1.6) / 2) : cx * 2, h = flat ? 2 * Math.ceil((Math.max(...ys) - y0 + size * 1.6) / 2) : cy * 2, bend = size / 2;
+  const ids = new Uint16Array(w * h), at = ([q, r]) => [cx + size * ROOT3 * (q + r / 2), cy + size * 1.5 * r];
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if ((x - c) ** 2 + (y - c) ** 2 > round * round) continue;
-      const X = (x - c + (noise(x / 13, y / 13) - 0.5) * 13) / size, Y = (y - c + (noise(x / 13 + 70, y / 13 + 30) - 0.5) * 13) / size;
+      if (!flat && (x - cx) ** 2 + (y - cy) ** 2 > round * round) continue;
+      const X = (x - cx + (noise(x / bend, y / bend) - 0.5) * bend) / size, Y = (y - cy + (noise(x / bend + 70, y / bend + 30) - 0.5) * bend) / size;
       const r0 = Y / 1.5, q0 = X / ROOT3 - r0 / 2; // the hex a point is in, by rounding
       let q = Math.round(q0), r = Math.round(r0);
       const s = Math.round(-q0 - r0), dq = Math.abs(q - q0), dr = Math.abs(r - r0), ds = Math.abs(s + q0 + r0);
@@ -41,6 +43,6 @@ export function areaPicture(cells, of, mids, size = 26) {
       height[i] = Math.max(0, Math.min(255, z));
     }
   }
-  const ends = Array.from({ length: 16 }, (_, k) => [c + round * Math.cos((k * Math.PI) / 8), c + round * Math.sin((k * Math.PI) / 8)]);
-  return { w, h, hw, hh, n: n + 1, ids, height, mid: [...mids.map((m) => at(cells[m])), [c, c]], R: size * 1.6, ends, at: cells.map(at) };
+  const ends = flat ? [[0, 0], [w, 0], [0, h], [w, h]] : Array.from({ length: 16 }, (_, k) => [cx + round * Math.cos((k * Math.PI) / 8), cy + round * Math.sin((k * Math.PI) / 8)]);
+  return { w, h, hw, hh, n: n + 1, ids, height, mid: [...mids.map((m) => at(cells[m])), [flat ? 4 : cx, flat ? 4 : cy]], R: size * (flat ? 2.1 : 1.6), ends, at: cells.map(at) };
 }

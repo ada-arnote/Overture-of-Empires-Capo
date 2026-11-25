@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// A land of provinces round an inner sea, grown from a key. Provinces are patches of small hexes, so every
+// Lands of provinces: round an inner sea, on islands, or the real world. Provinces are patches of small hexes, so every
 // border is a real border. The same key always grows the same land.
 import { chance, seedState } from "../core/index.js";
 import { hexBoard, joined } from "./hex.js";
+import { CELLS, COLS, CROSSINGS, MARKS, LANDS as WORLD_LANDS, NAMES as WORLD_NAMES, REGION } from "./maps/world.js";
 
 const R = 11, PROVINCES = 36, SIZES = [5, 6, 7, 8, 10], TRIES = 200;
 const NAMES = ["Aldermoor", "Ashwick", "Barrowgate", "Bellhollow", "Bracken", "Brightwater", "Calder", "Candlemere", "Carrow", "Cinderford", "Coldharbour", "Corvane", "Dunmarsh", "Eastlode", "Elmreach", "Fallowdale", "Farrow", "Fenwater", "Flintholm", "Foxhythe", "Gallowfield", "Glasswell", "Greywether", "Halloway", "Harrowdown", "Hazelmark", "Heronstead", "Highmoor", "Ironbeck", "Kestrel", "Lanternhead", "Larkfell", "Longstrand", "Maplecross", "Merrow", "Millstone", "Netherby", "Northlode", "Oxmere", "Pellgate", "Quarryhill", "Ravensay", "Redwillow", "Saltmarsh", "Sedgeford", "Silverlea", "Stonewade", "Summerley", "Tallowbridge", "Tarnside", "Thornwick", "Umberfield", "Valecross", "Wardenhill", "Westerby", "Whitcombe", "Windrush", "Wolverden", "Yarrow", "Yewdale"];
 const LANDS = ["the Amber Coast", "the Bronze Hills", "the Chalk Downs", "the Drum Country", "the Grey Reach", "the High Pastures", "the Lantern Shore", "the Old Marches", "the Salt Flats", "the Tin Valleys"];
 const far = ([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
+const SIGNS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const made = new Map();
 
 /** Steps from a start, through places that pass the test. -1 where it cannot reach. */
@@ -116,27 +118,104 @@ function grow(dice) {
     ends.push([i, j]);
   }
   if (!links.length) return null;
-  const near = dry.map((n, i) => [...n, ...links.flatMap(([a, b]) => (a === i ? [b] : b === i ? [a] : []))].sort((x, y) => x - y));
   const { of: region, size: sizes } = share(dry, spread(dry, SIZES.length, dice), SIZES, dice);
   if (Math.min(...sizes) < 4 || Math.max(...sizes) > 12) return null;
-  // the middle of a province: the cell farthest from its border, then nearest its other cells
-  const deep = [], mid = dry.map((_, k) => {
-    const mine = [...land].filter((i) => of[i] === k), edge = mine.filter((i) => g.near[i].length < 6 || g.near[i].some((m) => of[m] !== k)), d = steps(g.near, edge, (m) => of[m] === k);
-    deep[k] = d;
-    const gap = (i) => mine.reduce((n, m) => { const a = g.cells[i], b = g.cells[m]; return n + far([a[0] - b[0], a[1] - b[1]]); }, 0);
-    return mine.reduce((a, b) => (d[b] - d[a] || gap(a) - gap(b)) > 0 ? b : a);
-  });
-  for (let pass = 0; pass < 3; pass++) { // then away from its neighbours' middles, so that pieces do not stand on one another
-    for (let k = 0; k < PROVINCES; k++) {
-      const v = (i) => 5 * Math.min(4, ...mid.map((m, o) => (o === k ? 9 : apart(m, i)))) + 3 * deep[k][i];
-      for (let i = 0; i < of.length; i++) if (of[i] === k && v(i) > v(mid[k])) mid[k] = i;
-    }
-  }
-  return { n: PROVINCES, near, dry, links, ends, region, sizes, fine: g.cells, of, mid, inner: [...inner], names: dice.shuffle(NAMES).slice(0, PROVINCES), lands: dice.shuffle(LANDS).slice(0, SIZES.length) };
+  return finish(g, of, { links, ends, region, names: dice.shuffle(NAMES).slice(0, PROVINCES), lands: dice.shuffle(LANDS).slice(0, SIZES.length) });
 }
 
-/** Where each seat starts: far apart, with about as much land close by. Null when this land has no fair places. */
-function starts(b, seats, dice) {
+/** Everything else about a board follows from which small hex is in which province. */
+function finish(g, of, { links, ends, region, names, lands, flat = false, marks = null }) {
+  const n = names.length, touch = Array.from({ length: n }, () => new Set());
+  of.forEach((o, i) => { if (o >= 0) for (const m of g.near[i]) if (of[m] >= 0 && of[m] !== o) touch[o].add(of[m]); });
+  const dry = touch.map((s) => [...s].sort((x, y) => x - y));
+  const near = dry.map((list, i) => [...new Set([...list, ...links.flatMap(([x, y]) => (x === i ? [y] : y === i ? [x] : []))])].sort((x, y) => x - y));
+  const sizes = lands.map((_, k) => region.filter((x) => x === k).length), cellsOf = Array.from({ length: n }, () => []);
+  of.forEach((o, i) => { if (o >= 0) cellsOf[o].push(i); });
+  const apart = (i, j) => far([g.cells[i][0] - g.cells[j][0], g.cells[i][1] - g.cells[j][1]]);
+  // the middle of a province: the cell farthest from its border, then nearest its other cells
+  const deep = [], mid = cellsOf.map((mine, k) => {
+    const edge = mine.filter((i) => g.near[i].length < 6 || g.near[i].some((m) => of[m] !== k)), d = steps(g.near, edge, (m) => of[m] === k);
+    deep[k] = d;
+    const gap = (i) => mine.reduce((s, m) => s + apart(i, m), 0);
+    return mine.reduce((x, y) => ((d[y] - d[x] || gap(x) - gap(y)) > 0 ? y : x));
+  });
+  for (let pass = 0; pass < 3; pass++) { // then away from its neighbours' middles, so that pieces do not stand on one another
+    for (let k = 0; k < n; k++) {
+      const v = (i) => 5 * Math.min(4, ...near[k].map((o) => apart(mid[o], i))) + 3 * deep[k][i];
+      for (const i of cellsOf[k]) if (v(i) > v(mid[k])) mid[k] = i;
+    }
+  }
+  return { n, near, dry, links, ends, region, sizes, fine: g.cells, of, mid, names, lands, flat, marks };
+}
+
+/** The closest two cells of two groups of cells. */
+function closest(g, A, B) {
+  let best = null;
+  for (const i of A) for (const j of B) { const d = far([g.cells[i][0] - g.cells[j][0], g.cells[i][1] - g.cells[j][1]]); if (!best || d < best[0]) best = [d, i, j]; }
+  return best;
+}
+
+/** Islands: each one is a land of its own, joined by crossings. */
+function isles(dice) {
+  const g = hexBoard(R + 1), many = 6, of = g.cells.map(() => -1), home = spread(g.near, many, dice, (i) => far(g.cells[i]) <= R - 2), isle = g.cells.map(() => -1), size = home.map(() => 1), want = dice.shuffle([34, 40, 46, 52, 60, 68]);
+  home.forEach((h, k) => { isle[h] = k; });
+  for (let turn = 0; turn < 420; turn++) {
+    const k = turn % many;
+    if (size[k] >= want[k]) continue;
+    const edge = g.cells.map((_, i) => i).filter((i) => isle[i] < 0 && far(g.cells[i]) <= R && g.near[i].some((m) => isle[m] === k) && g.near[i].every((m) => (isle[m] < 0 || isle[m] === k) && g.near[m].every((x) => isle[x] < 0 || isle[x] === k)));
+    if (!edge.length) { want[k] = size[k]; continue; }
+    const v = (i) => g.near[i].filter((m) => isle[m] === k).length * 2 + dice.below(5);
+    const at = edge.map((i) => [v(i), i]).reduce((x, y) => (y[0] > x[0] ? y : x))[1];
+    isle[at] = k;
+    size[k]++;
+  }
+  if (Math.min(...size) < 24) return null;
+  const region = [], groups = home.map(() => []);
+  let next = 0;
+  home.forEach((_, k) => {
+    const parts = Math.floor(size[k] / 7), ok = (i) => isle[i] === k, got = share(g.near, spread(g.near, parts, dice, ok), Array(parts).fill(1), dice, ok);
+    even(g.near, got.of, got.size, 5);
+    got.of.forEach((o, i) => { if (o >= 0) { of[i] = next + o; groups[k].push(i); } });
+    for (let x = 0; x < parts; x++) region.push(k);
+    next += parts;
+  });
+  if (next < 30 || next > NAMES.length) return null;
+  const pairs = [];
+  for (let x = 0; x < many; x++) for (let y = x + 1; y < many; y++) pairs.push([...closest(g, groups[x], groups[y]), x, y]);
+  pairs.sort((x, y) => x[0] - y[0]);
+  const set = home.map((_, k) => k), links = [], ends = [], find = (k) => (set[k] === k ? k : find(set[k]));
+  for (const [d, i, j, x, y] of pairs) { // join every island, then the shortest of what is left
+    if (find(x) === find(y) && (d > 6 || links.length >= many + 2)) continue;
+    set[find(x)] = find(y);
+    links.push([of[i], of[j]]);
+    ends.push([i, j]);
+  }
+  return finish(g, of, { links, ends, region, names: dice.shuffle(NAMES).slice(0, next), lands: dice.shuffle(LANDS).slice(0, many) });
+}
+
+/** The real coast, with our own provinces. */
+function earth() {
+  const cells = [], of = [], at = new Map();
+  CELLS.forEach((line, r) => {
+    let c = 0, many = "";
+    const put = (o) => { for (let k = 0; k < (Number(many) || 1); k++) { const q = c - (r - (r & 1)) / 2; at.set(q * 1000 + r, cells.length); cells.push([q, r]); of.push(o); c++; } many = ""; };
+    for (let i = 0; i < line.length; i++) {
+      const s = line[i];
+      if (s === "~") put(SIGNS.indexOf(line[++i]));
+      else if (s >= "0" && s <= "9") many += s;
+      else put(s === "." ? -1 : SIGNS.indexOf(s));
+    }
+    while (c < COLS) put(-1);
+  });
+  const near = cells.map(([q, r]) => [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]].map(([x, y]) => at.get((q + x) * 1000 + r + y)).filter((x) => x !== undefined)), g = { cells, near };
+  const groups = WORLD_NAMES.map(() => []);
+  of.forEach((o, i) => { if (o >= 0) groups[o].push(i); });
+  const ends = CROSSINGS.map(([x, y]) => closest(g, groups[x], groups[y]).slice(1));
+  return finish(g, of, { links: CROSSINGS, ends, region: REGION, names: WORLD_NAMES, lands: WORLD_LANDS, flat: true, marks: MARKS });
+}
+
+/** Where each seat starts: far apart, with about as much land close by. */
+export function starts(b, seats, dice) {
   let best = null;
   for (let t = 0; t < 40; t++) {
     const at = t === 0 ? spread(b.near, seats, dice, () => true, true) : dice.shuffle(b.near.map((_, i) => i)).slice(0, seats);
@@ -147,21 +226,26 @@ function starts(b, seats, dice) {
     const v = 4 * Math.min(apart, 5) - 2 * uneven - reach;
     if (!best || v > best.v) best = { at, v, apart, uneven };
   }
-  return best.apart >= 3 && best.uneven <= 3 ? best.at : null;
+  return best;
 }
 
-/** The land that grows from a key. */
-export function areaBoard(key) {
-  if (made.has(key)) return made.get(key);
+export const MAPS = ["world", "grown", "isles"];
+/** The land of a kind that grows from a key. There is only one world. */
+export function areaBoard(key, map = "grown") {
+  const id = map === "world" ? "world" : `${map}/${key}`;
+  if (made.has(id)) return made.get(id);
   for (let t = 0; t < TRIES; t++) {
-    const dice = chance(seedState(`areas/${key}/${t}`)), b = grow(dice);
+    const dice = chance(seedState(`areas/${id}/${t}`)), b = map === "world" ? earth() : map === "isles" ? isles(dice) : grow(dice);
     if (!b) continue;
-    b.starts = { 2: starts(b, 2, dice), 3: starts(b, 3, dice), 4: starts(b, 4, dice) };
-    if (Object.values(b.starts).some((s) => !s)) continue;
+    b.starts = {};
+    for (const n of [2, 3, 4, 5, 6]) b.starts[n] = starts(b, n, dice);
+    if (map === "grown" && [2, 3, 4].some((n) => b.starts[n].apart < 3 || b.starts[n].uneven > 3)) continue;
+    if (joined(b.near, 0, () => true).length !== b.n) continue;
+    for (const n of [2, 3, 4, 5, 6]) b.starts[n] = b.starts[n].at;
     const done = Object.freeze({ ...b, tries: t + 1 });
     if (made.size > 40) made.clear();
-    made.set(key, done);
+    made.set(id, done);
     return done;
   }
-  throw new Error(`no land grew from ${key}`);
+  throw new Error(`no land grew from ${id}`);
 }

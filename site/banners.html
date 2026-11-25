@@ -29,10 +29,12 @@
   <div id="dice" hidden></div>
   <div id="choice">
     <p id="info"></p>
+    <div id="hand"></div>
+    <div id="trades" class="pick" role="group" aria-label="Hand in cards"></div>
     <div class="pick strip" id="sources" role="radiogroup" aria-label="Your provinces"></div>
     <div class="pick strip" id="targets" role="radiogroup" aria-label="Where to"></div>
     <label id="amount"><input id="much" type="range" min="0" step="1"><output id="many"></output></label>
-    <div class="go"><button id="end" type="button" class="quiet">End turn</button><button id="once" type="button" class="quiet">Roll once</button><button id="do" type="button" class="main"></button></div>
+    <div class="go"><button id="fort" type="button" class="quiet">Fort</button><button id="end" type="button" class="quiet">End turn</button><button id="once" type="button" class="quiet">Roll once</button><button id="do" type="button" class="main"></button></div>
   </div>
   <div id="after" hidden class="go"><button id="review" type="button" class="quiet">See the board</button><button id="again" type="button" class="main">Play again</button></div>
 </section>
@@ -42,7 +44,7 @@
 <main id="title" class="title">
   <p class="eyebrow">Overture of Empires: Capo</p>
   <h1>Brass and<br>Banners</h1>
-  <p class="tag">Muster your strength, roll for the next province, and raise your banner over the land.</p>
+  <p class="tag">A world-conquest dice game. Muster, roll, and raise your banner over the map.</p>
   <div class="panel card">
     <div class="line"><span>Rules</span><div class="pick small" id="style" role="radiogroup" aria-label="Rules"></div></div>
     <p id="about" class="about"></p>
