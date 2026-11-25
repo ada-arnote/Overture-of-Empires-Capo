@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Makes one self-contained page for each game, that opens by double-click, with no server. node tools/bundle.mjs
+// The same pages go in play/, which is what the web address serves: one file cannot be half an old version.
 // Each module becomes a function; imports and exports become plain objects. Only the forms this project uses are understood.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -49,12 +50,12 @@ export function bundle(entry) {
   return `"use strict";\nconst $m = [];\n${parts.join("\n")}`;
 }
 
-export function page(html, css, js) {
+export function page(html, css, js, home = "") {
   const safe = js.replace(/<\/script/gi, "<\\/script"), hash = createHash("sha256").update(`\n${safe}\n`).digest("base64");
   return html
     .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, () => `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">`)
     .replace(/<link rel="stylesheet"[^>]*>/, () => `<style>\n${css}</style>`)
-    .replace(/<a href="\.\/" class="text">Capo<\/a>/, "")
+    .replace(/<a href="\.\/" class="text">Capo<\/a>/, home ? `<a href="${home}" class="text">Capo</a>` : "")
     .replace(/<script type="module"[^>]*><\/script>/, () => `<script>\n${safe}\n</script>`);
 }
 
@@ -62,7 +63,9 @@ if (process.argv[1]?.endsWith("bundle.mjs")) {
   const at = (f) => readFileSync(path.join(root, "site", f), "utf8"), out = path.join(root, "dist");
   mkdirSync(out, { recursive: true });
   for (const name of ["inch", "fable", "banners"]) {
-    const text = page(at(`${name}.html`), at("table.css"), `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`);
+    const js = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`, text = page(at(`${name}.html`), at("table.css"), js);
+    mkdirSync(path.join(root, "play"), { recursive: true });
+    writeFileSync(path.join(root, "play", `${name}.html`), page(at(`${name}.html`), at("table.css"), js, "../site/"));
     writeFileSync(path.join(out, `play-${name}.html`), text);
     console.log(`dist/play-${name}.html, ${Math.round(text.length / 1000)} kB. Open it by double-click.`);
   }

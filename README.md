@@ -17,7 +17,8 @@ An early build. Three games can be played in tests, with bots, saves and take-ba
 | Folder | What |
 |---|---|
 | `src/core` | Seeded chance, fingerprints, the list of moves, saves |
-| `site` | The page |
+| `site` | The pages, as written |
+| `play` | The same pages as single files, made by `node tools/bundle.mjs`. This is what is served |
 | `test`, `tools` | Tests and tools |
 | `src/games` | Rules and bots. Whole numbers, no page, no clock |
 | `src/map` | The hex board: painter, camera, looks, pieces |
