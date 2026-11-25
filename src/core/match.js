@@ -9,6 +9,7 @@
 //   moves(position)      every legal move for that seat, as plain data
 //   apply(position, move, dice) -> { position, events }
 //   result(position)     { winners: [seat], why } when over, else null
+//   allows(position, move) optional: a quick yes or no, for games whose list of moves is long
 import { canon, deepFreeze } from "./canon.js";
 import { fingerprint } from "./digest.js";
 import { chance, seedState } from "./random.js";
@@ -75,7 +76,7 @@ export function createMatch(game, { options = {}, seed = "" } = {}) {
       if (played.length >= MAX_MOVES) throw new Refusal("long", "the list of moves is full");
       let copy;
       try { copy = JSON.parse(canon(move)); } catch (e) { throw new Refusal("shape", `that is not a move: ${e.message}`); }
-      if (!this.isLegal(copy)) throw new Refusal("illegal", `that move is not allowed now: ${canon(copy).slice(0, 120)}`);
+      if (game.allows ? !game.allows(now().position, copy) : !this.isLegal(copy)) throw new Refusal("illegal", `that move is not allowed now: ${canon(copy).slice(0, 120)}`);
       const d = chance(now().dice), made = game.apply(now().position, copy, d);
       canon(made.position);
       canon(made.events || []);

@@ -130,3 +130,6 @@ dialog > .go { background: #161c1e; margin: 0 -22px -22px; padding: 10px 22px 18
 @media (max-width: 820px) { .menu #foot { left: 0; right: 0; bottom: 0; padding: 8px 16px; background: #10161a; justify-content: center } }
 #style small { font-size: 11px }
 .goods { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px } .goods span { padding: 2px 8px; border-radius: 7px; background: rgba(255, 244, 214, .1); color: #2a1d14; font-size: 13px; font-weight: 600 } .goods span:nth-last-child(-n+2):not([style]) { color: var(--text) }
+#live .live-info { color: #d8cfba; font-size: 14px; margin-bottom: 8px } .live-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px } .live-row input { flex: 1; height: 44px; accent-color: var(--gold) } .live-row output { min-width: 3em; text-align: right; font: 600 18px/1 var(--serif) }
+#leaders { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 3px; font-size: 14px } #leaders li { display: flex; align-items: center; gap: 4px } #leaders b { flex: 1; font-weight: 600 } #leaders li.me b { color: var(--gold2) } #live .go button[aria-pressed=true] { border-color: var(--gold) }
+@media (max-width: 820px) { #leaders { grid-template-columns: 1fr 1fr; font-size: 13px } }

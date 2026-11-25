@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-WIhkpflDebTnhsT5RdmPe7fQhXhqTBZbEnF1Pkdku8o='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-dnGT8HbkcdWNVJsqDblI2fkDQXtFXJErZ6O+gggVSVo='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>The Island Fable</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -140,6 +140,9 @@ dialog > .go { background: #161c1e; margin: 0 -22px -22px; padding: 10px 22px 18
 @media (max-width: 820px) { .menu #foot { left: 0; right: 0; bottom: 0; padding: 8px 16px; background: #10161a; justify-content: center } }
 #style small { font-size: 11px }
 .goods { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px } .goods span { padding: 2px 8px; border-radius: 7px; background: rgba(255, 244, 214, .1); color: #2a1d14; font-size: 13px; font-weight: 600 } .goods span:nth-last-child(-n+2):not([style]) { color: var(--text) }
+#live .live-info { color: #d8cfba; font-size: 14px; margin-bottom: 8px } .live-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px } .live-row input { flex: 1; height: 44px; accent-color: var(--gold) } .live-row output { min-width: 3em; text-align: right; font: 600 18px/1 var(--serif) }
+#leaders { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 3px; font-size: 14px } #leaders li { display: flex; align-items: center; gap: 4px } #leaders b { flex: 1; font-weight: 600 } #leaders li.me b { color: var(--gold2) } #live .go button[aria-pressed=true] { border-color: var(--gold) }
+@media (max-width: 820px) { #leaders { grid-template-columns: 1fr 1fr; font-size: 13px } }
 </style>
 <link rel="icon" href="data:,">
 </head>
@@ -867,6 +870,7 @@ $m[10] = (($x) => {
 //   moves(position)      every legal move for that seat, as plain data
 //   apply(position, move, dice) -> { position, events }
 //   result(position)     { winners: [seat], why } when over, else null
+//   allows(position, move) optional: a quick yes or no, for games whose list of moves is long
 const { canon, deepFreeze } = $m[7];
 const { fingerprint } = $m[9];
 const { chance, seedState } = $m[11];
@@ -933,7 +937,7 @@ function createMatch(game, { options = {}, seed = "" } = {}) {
       if (played.length >= MAX_MOVES) throw new Refusal("long", "the list of moves is full");
       let copy;
       try { copy = JSON.parse(canon(move)); } catch (e) { throw new Refusal("shape", `that is not a move: ${e.message}`); }
-      if (!this.isLegal(copy)) throw new Refusal("illegal", `that move is not allowed now: ${canon(copy).slice(0, 120)}`);
+      if (game.allows ? !game.allows(now().position, copy) : !this.isLegal(copy)) throw new Refusal("illegal", `that move is not allowed now: ${canon(copy).slice(0, 120)}`);
       const d = chance(now().dice), made = game.apply(now().position, copy, d);
       canon(made.position);
       canon(made.events || []);
@@ -1327,7 +1331,7 @@ class Painter {
     const T = this.table, g = this.g;
     cells.forEach((c, i) => {
       const id = i + 1, o = ((id >> 6) * 128 + (id & 63) * 2) * 4;
-      T[o] = c.rgb[0]; T[o + 1] = c.rgb[1]; T[o + 2] = c.rgb[2]; T[o + 3] = c.owner < 0 ? 255 : 40 + c.owner * 30;
+      T[o] = c.rgb[0]; T[o + 1] = c.rgb[1]; T[o + 2] = c.rgb[2]; T[o + 3] = c.owner < 0 ? 255 : 20 + ((c.owner * 37) % 211); // different for every owner, up to 211 of them
       T[o + 4] = Math.min(255, Math.round(c.top * 32)); T[o + 5] = c.glow * 255; T[o + 6] = c.wet * 255; T[o + 7] = c.land === undefined ? 255 : 40 + c.land * 30;
     });
     g.activeTexture(g.TEXTURE2);
@@ -1405,11 +1409,11 @@ function canDraw() {
   return !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(name);
 }
 
-function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5] }) {
+function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44 }) {
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
-  const m = picture || hexPicture(cells, rough, sea), painter = new Painter(under), cam = new Camera(), still = matchMedia("(prefers-reduced-motion: reduce)");
+  const m = picture || hexPicture(cells, rough, sea, size), painter = new Painter(under), cam = new Camera(), still = matchMedia("(prefers-reduced-motion: reduce)");
   painter.load(m);
   const ends = m.ends || m.mid.flatMap(([x, y]) => [[x - m.R, y], [x + m.R, y], [x, y - m.R], [x, y + m.R]]);
   const show = m.mid.map((_, i) => ({ land: lands?.[i], rgb: ground(i), from: ground(i), to: ground(i), owner: -1, top: sea[i] ? 0.2 : 1, topTo: sea[i] ? 0.2 : 1, glow: 0, wet: 0, start: 0, ends: 0 }));
@@ -1504,7 +1508,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     ctx.clearRect(0, 0, cam.W, cam.H);
     const flat = Math.max(0.5, cam.ct), size = m.R * cam.s;
     marks.forEach((k, i) => { // emblems lie on the ground
-      if (!k || k.home) return;
+      if (!k || k.home || m.R < 20 || icons[k.seat] === undefined) return; // no emblems on very small cells
       k.seen = show[i].ends ? Math.max(0, Math.min(1, (t - show[i].start) / 260)) : 1;
       if (!k.seen) return;
       cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit());
@@ -1657,7 +1661,8 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
      * Show a position. owner[i] is a seat or -1. `order` lists cells that change first to last, so ink spreads.
      * Returns how long the change takes, in milliseconds.
      */
-    show(owner, { pieces = [], order = [], quick = false } = {}) {
+    show(owner, { pieces = [], order = [], quick = false, names = null } = {}) {
+      if (names) labels = names;
       const homes = new Set(pieces.filter((p) => p.kind === "tower").map((p) => p.at)), held = new Set(pieces.map((p) => p.at));
       const t = performance.now(), slow = !quick && !still.matches, step = Math.min(90, 900 / Math.max(1, order.length)), place = new Map(order.map((c, i) => [c, i]));
       let last = 0;
@@ -1906,6 +1911,8 @@ function createTable(G) {
   }
   function ending() {
     const r = T.match.result;
+    const own = G.ending?.(T);
+    if (own) return own;
     if (r.winners.length > 1) return `${r.winners.map((s) => NAMES[s]).join(" and ")} tie. They ${r.why}.`;
     return T.solo() && T.kinds[r.winners[0]] === "you" ? G.won : `${NAMES[r.winners[0]]} wins.`;
   }
@@ -1936,6 +1943,18 @@ function createTable(G) {
   const tally = (p) => Array.from({ length: T.kinds.length }, (_, s) => G.cellsOf(p, s));
   const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, look: T.look, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds, look: T.look })); };
 
+  /** A tick of a real-time game: played at once, drawn without waiting, saved now and then. */
+  function flow(move) {
+    const events = T.match.play(move), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
+    log.push(...words);
+    if (T.match.list.length % 10 === 0 || T.match.turn === null) { land.push(tally(T.match.position)); keep(); }
+    G.seen?.(T, events);
+    board.show([], false);
+    if (words.length) toast(words.slice(0, 2).join(" "));
+    score(); panel();
+    if (T.match.turn === null) { land.push(tally(T.match.position)); keep(); finish(); }
+  }
+  T.flow = flow;
   async function play(move) {
     const mine = run, seat = T.match.turn, person = T.human();
     T.busy = true;
@@ -2118,9 +2137,9 @@ function createTable(G) {
   /** The options the title screen stands at. */
   function chosen(all = false) {
     const o = { style: setup.style === "coda" ? "classic" : setup.style, seats: setup.seats, ...(setup.rounds ? { rounds: setup.rounds } : {}) };
-    for (const c of G.choices || []) if (!c.local) o[c.key] = setup.extra[c.key];
+    for (const c of G.choices || []) if (!c.local && (!c.only || c.only.includes(o.style))) o[c.key] = setup.extra[c.key];
     if (setup.style === "custom") for (const c of G.switches) o[c.key] = setup.extra[c.key];
-    for (const c of G.expansions || []) o[c.key] = !!setup.on[c.key];
+    for (const c of G.expansions || []) if (!G.expansionsFor || G.expansionsFor(o.style, setup.extra)) o[c.key] = !!setup.on[c.key];
     if (all) for (const c of G.choices || []) if (c.local) o[c.key] = setup.extra[c.key];
     return o;
   }
@@ -2154,7 +2173,7 @@ function createTable(G) {
       base = up;
     });
     c.setAttribute("role", "img"); c.setAttribute("aria-label", "Land held over the game");
-    body.append(el("p", r.winners.length > 1 ? `They ${r.why}.` : `${NAMES[r.winners[0]]}: ${r.why}, in ${Math.min(p.round, p.rounds)} rounds.`), c, el("p", `${tally(p).map((v, s) => `${NAMES[s]} ${v}`).join(", ")}${G.unit ? ` ${G.unit.toLowerCase()}.` : ` of ${n} cells.`}`));
+    body.append(el("p", G.summary?.(T) || (r.winners.length > 1 ? `They ${r.why}.` : `${NAMES[r.winners[0]]}: ${r.why}, in ${Math.min(p.round, p.rounds)} rounds.`)), c, el("p", G.summary?.(T) ? `You held ${tally(p)[0]} of ${n} cells.` : `${tally(p).map((v, s) => `${NAMES[s]} ${v}`).join(", ")}${G.unit ? ` ${G.unit.toLowerCase()}.` : ` of ${n} cells.`}`));
     const row = el("div", undefined, "stack"), again = el("button", "Play again", "main");
     again.type = "button"; again.onclick = () => { closeSheet(); restart(); };
     row.append(again); body.append(row);
@@ -2195,14 +2214,14 @@ function createTable(G) {
     radio($("style"), [["classic", "Traditional"], ["custom", "Custom"], ["ours", "Capo"], ["coda", "Coda"]].filter(([k]) => G.about[k]).map(([value, label]) => ({ value, label, note: value === "coda" ? "coming soon" : undefined })), setup.style, (v) => { if (v === setup.style) return; setup.style = v; titleCard(); if (v !== "coda") attract(); });
     const soon = setup.style === "coda";
     $("about").replaceChildren(...G.about[setup.style].split("\n").map((x) => el("span", x)));
-    for (const id of ["count", "who"]) $(id).closest(".line, ul").hidden = soon;
+    for (const id of ["count", "who"]) $(id).closest(".line, ul").hidden = soon || !!G.alone?.(setup.style, setup.extra);
     $("start").disabled = soon;
     $("start").textContent = soon ? "Coming soon" : "Begin";
     $("length-line").hidden = setup.style !== "ours" || !G.lengths.length;
     const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; attract(); }; line.append(el("span", c.label), k); return line; };
-    more.replaceChildren(...(soon ? [] : (G.choices || []).map(pickOf)));
+    more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => !c.only || c.only.includes(setup.style)).map(pickOf)));
     if (setup.style === "custom") more.append(...G.switches.map(pickOf));
-    if (G.expansions && !soon) {
+    if (G.expansions && !soon && (!G.expansionsFor || G.expansionsFor(setup.style, setup.extra))) {
       const box = el("div", undefined, "pick small");
       box.setAttribute("role", "group");
       box.setAttribute("aria-label", "Expansions");
@@ -2263,7 +2282,7 @@ function createTable(G) {
   const resumeButton = () => { const k = kept(); $("resume").hidden = !k; if (k) $("resume").textContent = `Continue, round ${k.m.position.round}`; };
 
   $("start").onclick = () => {
-    const who = setup.who.slice(0, setup.seats), far = who.includes("away"), words = passField.value.trim();
+    const who = G.kindsOf?.(chosen()) || setup.who.slice(0, setup.seats), far = who.includes("away"), words = passField.value.trim();
     begin(createMatch(G.game, { seed: G.seedOf?.(chosen(true)) || seed(), options: chosen() }), who, far ? { id: newId(), roles: who.map((k) => (k === "you" ? "host" : k === "away" ? "friend" : k)), pass: canLock() ? words : "", floor: 0 } : null, -1, setup.look.map((x) => [...x]));
   };
   linkButton.onclick = linkSheet;
@@ -2350,7 +2369,7 @@ function hexBoard(T, stage, o) {
   };
   if (canDraw()) {
     try {
-      b = createBoard(stage, { picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, rough: o.rough, sea: o.sea, seats: RGB, ground: o.ground, look: LOOKS[kept] ? kept : wide && !o.plain ? "relief" : "flat" });
+      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, look: LOOKS[kept] ? kept : wide && !o.plain ? "relief" : "flat" });
       b.on("pick", (i) => { if (i >= 0) o.tap(i); });
       b.on("hover", (i) => b?.setCursor(i >= 0 && T.ready() && o.can(i)));
       b.on("lost", () => { b = null; still(); });
@@ -2361,7 +2380,7 @@ function hexBoard(T, stage, o) {
     get look() { return b?.look; },
     setLook: (k) => b?.setLook(k),
     layout: (free) => b?.layout(free),
-    show(order, quick) { if (b) return b.show(o.owner(), { pieces: o.pieces(), order, quick }); still(); return 0; },
+    show(order, quick) { if (b) return b.show(o.owner(), { pieces: o.pieces(), order, quick, names: o.names?.() }); still(); return 0; },
     light: (cells, chosen) => b?.preview(cells, chosen),
     clear: () => b?.preview([]),
     destroy: () => b?.destroy(),

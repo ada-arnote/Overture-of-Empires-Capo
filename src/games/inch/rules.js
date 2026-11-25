@@ -3,6 +3,11 @@
 // your home falls, your pool grows, and you pour part of it over a border, or wait.
 // Classic is the genre as it is remembered: a wider map, no cut-off rule, no homes to storm, and play until one holds most of it.
 import { hexBoard, joined } from "../hex.js";
+import { chance, seedState } from "../../core/index.js";
+import { LIVE_MAPS, liveAllows, liveApply, liveBoardOf, liveMoves, liveSetup } from "./live.js";
+
+const roller = (text) => chance(seedState(text));
+export const liveBoardFor = (p) => liveBoardOf(p, roller);
 
 export const NONE = -1;
 const START = 6, WALL = 1, HOME_WALL = 3, SURROUND = 4, LONG = 40;
@@ -11,7 +16,7 @@ const SHARES = { quarter: (p) => Math.floor(p / 4), third: (p) => Math.floor(p /
 export const SWITCHES = {
   size: { values: [4, 5], normal: 5 }, cut: { values: [false, true], normal: false }, walls: { values: [false, true], normal: false },
   shares: { values: ["four", "three"], normal: "four" }, growth: { values: ["rising", "saving"], normal: "rising" }, goal: { values: [45, 55, 60, 70], normal: 60 },
-  drawn: { values: [false, true], normal: true }, limit: { values: [10, 16, 20, 40], normal: 40 },
+  drawn: { values: [false, true], normal: true }, limit: { values: [10, 16, 20, 40], normal: 40 }, live: { values: [false, true], normal: false },
 };
 const SETS = {
   classic: (o) => ({ size: 5, cut: false, walls: false, shares: "four", growth: "rising", goal: CLASSIC_PERCENT[o.seats], drawn: o.seats > 2, limit: LONG }),
@@ -129,10 +134,11 @@ function advance(p, events, dice) {
 }
 
 export const inch = {
-  id: "inch", version: "4",
-  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, ...SWITCHES },
+  id: "inch", version: "5",
+  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, ...SWITCHES },
 
   setup(o, dice) {
+    if (o.style === "classic" || (o.style === "custom" && o.live)) return liveSetup(o, dice, roller);
     const classic = o.style !== "ours", rule = SETS[o.style] ? SETS[o.style](o) : Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]])), b = hexBoard(rule.size), homes = dice.shuffle(o.seats === 2 ? [b.corners[0], b.corners[3]] : [b.corners[0], b.corners[2], b.corners[4]]);
     const cost = b.cells.map(() => (dice.below(4) === 0 ? 2 : 1)), owner = Array(b.size).fill(NONE);
     homes.forEach((h, s) => { cost[h] = 1; owner[h] = s; });
@@ -140,10 +146,12 @@ export const inch = {
     begin(p, []);
     return p;
   },
-  turn: (p) => (p.over ? null : p.seat),
+  turn: (p) => (p.over ? null : p.live ? p.human : p.seat),
+  allows: (p, m) => (p.live ? liveAllows(p, liveBoardFor(p), m) : inch.moves(p).some((x) => JSON.stringify(x) === JSON.stringify(m))),
 
   /** Wait, or pour a share at neutral land or at one rival. Only pours that take something are offered. */
   moves(p) {
+    if (p.live) return liveMoves(p, liveBoardFor(p));
     const s = p.seat, { near } = boardOf(p), targets = new Set(), out = [{ do: "wait" }];
     p.owner.forEach((o, i) => { if (o === s) for (const m of near[i]) if (p.owner[m] !== s) targets.add(p.owner[m]); });
     for (const to of [...targets].sort((a, b) => a - b)) {
@@ -157,6 +165,7 @@ export const inch = {
   },
 
   apply(before, m, dice) {
+    if (before.live) return liveApply(before, liveBoardFor(before), m, dice);
     const p = copy(before), events = [];
     if (m.do === "pour") {
       const r = pour(p, p.seat, m.to, SHARES[m.share](p.pool[p.seat]), events);

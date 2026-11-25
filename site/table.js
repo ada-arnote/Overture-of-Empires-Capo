@@ -117,6 +117,8 @@ export function createTable(G) {
   }
   function ending() {
     const r = T.match.result;
+    const own = G.ending?.(T);
+    if (own) return own;
     if (r.winners.length > 1) return `${r.winners.map((s) => NAMES[s]).join(" and ")} tie. They ${r.why}.`;
     return T.solo() && T.kinds[r.winners[0]] === "you" ? G.won : `${NAMES[r.winners[0]]} wins.`;
   }
@@ -147,6 +149,18 @@ export function createTable(G) {
   const tally = (p) => Array.from({ length: T.kinds.length }, (_, s) => G.cellsOf(p, s));
   const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, look: T.look, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds, look: T.look })); };
 
+  /** A tick of a real-time game: played at once, drawn without waiting, saved now and then. */
+  function flow(move) {
+    const events = T.match.play(move), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
+    log.push(...words);
+    if (T.match.list.length % 10 === 0 || T.match.turn === null) { land.push(tally(T.match.position)); keep(); }
+    G.seen?.(T, events);
+    board.show([], false);
+    if (words.length) toast(words.slice(0, 2).join(" "));
+    score(); panel();
+    if (T.match.turn === null) { land.push(tally(T.match.position)); keep(); finish(); }
+  }
+  T.flow = flow;
   async function play(move) {
     const mine = run, seat = T.match.turn, person = T.human();
     T.busy = true;
@@ -329,9 +343,9 @@ export function createTable(G) {
   /** The options the title screen stands at. */
   function chosen(all = false) {
     const o = { style: setup.style === "coda" ? "classic" : setup.style, seats: setup.seats, ...(setup.rounds ? { rounds: setup.rounds } : {}) };
-    for (const c of G.choices || []) if (!c.local) o[c.key] = setup.extra[c.key];
+    for (const c of G.choices || []) if (!c.local && (!c.only || c.only.includes(o.style))) o[c.key] = setup.extra[c.key];
     if (setup.style === "custom") for (const c of G.switches) o[c.key] = setup.extra[c.key];
-    for (const c of G.expansions || []) o[c.key] = !!setup.on[c.key];
+    for (const c of G.expansions || []) if (!G.expansionsFor || G.expansionsFor(o.style, setup.extra)) o[c.key] = !!setup.on[c.key];
     if (all) for (const c of G.choices || []) if (c.local) o[c.key] = setup.extra[c.key];
     return o;
   }
@@ -365,7 +379,7 @@ export function createTable(G) {
       base = up;
     });
     c.setAttribute("role", "img"); c.setAttribute("aria-label", "Land held over the game");
-    body.append(el("p", r.winners.length > 1 ? `They ${r.why}.` : `${NAMES[r.winners[0]]}: ${r.why}, in ${Math.min(p.round, p.rounds)} rounds.`), c, el("p", `${tally(p).map((v, s) => `${NAMES[s]} ${v}`).join(", ")}${G.unit ? ` ${G.unit.toLowerCase()}.` : ` of ${n} cells.`}`));
+    body.append(el("p", G.summary?.(T) || (r.winners.length > 1 ? `They ${r.why}.` : `${NAMES[r.winners[0]]}: ${r.why}, in ${Math.min(p.round, p.rounds)} rounds.`)), c, el("p", G.summary?.(T) ? `You held ${tally(p)[0]} of ${n} cells.` : `${tally(p).map((v, s) => `${NAMES[s]} ${v}`).join(", ")}${G.unit ? ` ${G.unit.toLowerCase()}.` : ` of ${n} cells.`}`));
     const row = el("div", undefined, "stack"), again = el("button", "Play again", "main");
     again.type = "button"; again.onclick = () => { closeSheet(); restart(); };
     row.append(again); body.append(row);
@@ -406,14 +420,14 @@ export function createTable(G) {
     radio($("style"), [["classic", "Traditional"], ["custom", "Custom"], ["ours", "Capo"], ["coda", "Coda"]].filter(([k]) => G.about[k]).map(([value, label]) => ({ value, label, note: value === "coda" ? "coming soon" : undefined })), setup.style, (v) => { if (v === setup.style) return; setup.style = v; titleCard(); if (v !== "coda") attract(); });
     const soon = setup.style === "coda";
     $("about").replaceChildren(...G.about[setup.style].split("\n").map((x) => el("span", x)));
-    for (const id of ["count", "who"]) $(id).closest(".line, ul").hidden = soon;
+    for (const id of ["count", "who"]) $(id).closest(".line, ul").hidden = soon || !!G.alone?.(setup.style, setup.extra);
     $("start").disabled = soon;
     $("start").textContent = soon ? "Coming soon" : "Begin";
     $("length-line").hidden = setup.style !== "ours" || !G.lengths.length;
     const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; attract(); }; line.append(el("span", c.label), k); return line; };
-    more.replaceChildren(...(soon ? [] : (G.choices || []).map(pickOf)));
+    more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => !c.only || c.only.includes(setup.style)).map(pickOf)));
     if (setup.style === "custom") more.append(...G.switches.map(pickOf));
-    if (G.expansions && !soon) {
+    if (G.expansions && !soon && (!G.expansionsFor || G.expansionsFor(setup.style, setup.extra))) {
       const box = el("div", undefined, "pick small");
       box.setAttribute("role", "group");
       box.setAttribute("aria-label", "Expansions");
@@ -474,7 +488,7 @@ export function createTable(G) {
   const resumeButton = () => { const k = kept(); $("resume").hidden = !k; if (k) $("resume").textContent = `Continue, round ${k.m.position.round}`; };
 
   $("start").onclick = () => {
-    const who = setup.who.slice(0, setup.seats), far = who.includes("away"), words = passField.value.trim();
+    const who = G.kindsOf?.(chosen()) || setup.who.slice(0, setup.seats), far = who.includes("away"), words = passField.value.trim();
     begin(createMatch(G.game, { seed: G.seedOf?.(chosen(true)) || seed(), options: chosen() }), who, far ? { id: newId(), roles: who.map((k) => (k === "you" ? "host" : k === "away" ? "friend" : k)), pass: canLock() ? words : "", floor: 0 } : null, -1, setup.look.map((x) => [...x]));
   };
   linkButton.onclick = linkSheet;

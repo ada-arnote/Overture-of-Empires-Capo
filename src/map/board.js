@@ -52,11 +52,11 @@ export function canDraw() {
   return !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(name);
 }
 
-export function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5] }) {
+export function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44 }) {
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
-  const m = picture || hexPicture(cells, rough, sea), painter = new Painter(under), cam = new Camera(), still = matchMedia("(prefers-reduced-motion: reduce)");
+  const m = picture || hexPicture(cells, rough, sea, size), painter = new Painter(under), cam = new Camera(), still = matchMedia("(prefers-reduced-motion: reduce)");
   painter.load(m);
   const ends = m.ends || m.mid.flatMap(([x, y]) => [[x - m.R, y], [x + m.R, y], [x, y - m.R], [x, y + m.R]]);
   const show = m.mid.map((_, i) => ({ land: lands?.[i], rgb: ground(i), from: ground(i), to: ground(i), owner: -1, top: sea[i] ? 0.2 : 1, topTo: sea[i] ? 0.2 : 1, glow: 0, wet: 0, start: 0, ends: 0 }));
@@ -151,7 +151,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     ctx.clearRect(0, 0, cam.W, cam.H);
     const flat = Math.max(0.5, cam.ct), size = m.R * cam.s;
     marks.forEach((k, i) => { // emblems lie on the ground
-      if (!k || k.home) return;
+      if (!k || k.home || m.R < 20 || icons[k.seat] === undefined) return; // no emblems on very small cells
       k.seen = show[i].ends ? Math.max(0, Math.min(1, (t - show[i].start) / 260)) : 1;
       if (!k.seen) return;
       cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit());
@@ -304,7 +304,8 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
      * Show a position. owner[i] is a seat or -1. `order` lists cells that change first to last, so ink spreads.
      * Returns how long the change takes, in milliseconds.
      */
-    show(owner, { pieces = [], order = [], quick = false } = {}) {
+    show(owner, { pieces = [], order = [], quick = false, names = null } = {}) {
+      if (names) labels = names;
       const homes = new Set(pieces.filter((p) => p.kind === "tower").map((p) => p.at)), held = new Set(pieces.map((p) => p.at));
       const t = performance.now(), slow = !quick && !still.matches, step = Math.min(90, 900 / Math.max(1, order.length)), place = new Map(order.map((c, i) => [c, i]));
       let last = 0;

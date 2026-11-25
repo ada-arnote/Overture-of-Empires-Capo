@@ -28,6 +28,7 @@ function quick(p, dice) {
 
 /** Choose a move a little at a time, so a page can draw between steps. `dice` breaks ties, drives random and draws the futures. */
 export function* thinking(p, dice, tier = "normal") {
+  if (p.live) return p.phase === "spawn" ? dice.pick(inch.moves(p)) : { do: "tick", n: 2 }; // in real time the bots act inside the clock
   const moves = inch.moves(p), me = p.seat;
   if (tier === "random" || moves.length === 1) return dice.pick(moves);
   let best = moves[0], score = -Infinity;

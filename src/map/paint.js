@@ -98,7 +98,7 @@ export class Painter {
     const T = this.table, g = this.g;
     cells.forEach((c, i) => {
       const id = i + 1, o = ((id >> 6) * 128 + (id & 63) * 2) * 4;
-      T[o] = c.rgb[0]; T[o + 1] = c.rgb[1]; T[o + 2] = c.rgb[2]; T[o + 3] = c.owner < 0 ? 255 : 40 + c.owner * 30;
+      T[o] = c.rgb[0]; T[o + 1] = c.rgb[1]; T[o + 2] = c.rgb[2]; T[o + 3] = c.owner < 0 ? 255 : 20 + ((c.owner * 37) % 211); // different for every owner, up to 211 of them
       T[o + 4] = Math.min(255, Math.round(c.top * 32)); T[o + 5] = c.glow * 255; T[o + 6] = c.wet * 255; T[o + 7] = c.land === undefined ? 255 : 40 + c.land * 30;
     });
     g.activeTexture(g.TEXTURE2);

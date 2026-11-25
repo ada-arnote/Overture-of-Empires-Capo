@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-W/aM9605u9AAjy/FICI7JYu469ml+iF/Gr2ujGbk6eU='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-F+00Uy8Xkyjsyy2RwMo7x5ZzVPtwLbm0Zy68uXn87XM='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>An Inch of Ink</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -140,6 +140,9 @@ dialog > .go { background: #161c1e; margin: 0 -22px -22px; padding: 10px 22px 18
 @media (max-width: 820px) { .menu #foot { left: 0; right: 0; bottom: 0; padding: 8px 16px; background: #10161a; justify-content: center } }
 #style small { font-size: 11px }
 .goods { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px } .goods span { padding: 2px 8px; border-radius: 7px; background: rgba(255, 244, 214, .1); color: #2a1d14; font-size: 13px; font-weight: 600 } .goods span:nth-last-child(-n+2):not([style]) { color: var(--text) }
+#live .live-info { color: #d8cfba; font-size: 14px; margin-bottom: 8px } .live-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px } .live-row input { flex: 1; height: 44px; accent-color: var(--gold) } .live-row output { min-width: 3em; text-align: right; font: 600 18px/1 var(--serif) }
+#leaders { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 3px; font-size: 14px } #leaders li { display: flex; align-items: center; gap: 4px } #leaders b { flex: 1; font-weight: 600 } #leaders li.me b { color: var(--gold2) } #live .go button[aria-pressed=true] { border-color: var(--gold) }
+@media (max-width: 820px) { #leaders { grid-template-columns: 1fr 1fr; font-size: 13px } }
 </style>
 <link rel="icon" href="data:,">
 </head>
@@ -224,12 +227,751 @@ function joined(near, start, ok) {
 
 $x.hexBoard = hexBoard; $x.joined = joined;
 return $x; })({});
+$m[4] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// One exact way to write a value as text, the same on every machine.
+// Only whole numbers, text, true, false, null, lists and plain objects are allowed:
+// fractions can round differently between browsers.
+
+const MAX_DEPTH = 40;
+
+function canon(value) {
+  return write(value, "value", 0);
+}
+
+function write(v, where, depth) {
+  if (depth > MAX_DEPTH) throw new TypeError(`${where}: nested too deeply`);
+  if (v === null || v === true || v === false) return String(v);
+  if (typeof v === "number") {
+    if (!Number.isSafeInteger(v)) throw new TypeError(`${where}: ${v} is not a whole number`);
+    return String(v === 0 ? 0 : v); // no negative zero
+  }
+  if (typeof v === "string") {
+    if (!wellFormed(v)) throw new TypeError(`${where}: broken text`);
+    return JSON.stringify(v);
+  }
+  if (Array.isArray(v)) {
+    const out = [];
+    for (let i = 0; i < v.length; i++) {
+      if (!Object.hasOwn(v, i)) throw new TypeError(`${where}[${i}]: missing item`);
+      out.push(write(v[i], `${where}[${i}]`, depth + 1));
+    }
+    return "[" + out.join(",") + "]";
+  }
+  if (typeof v === "object") {
+    const proto = Object.getPrototypeOf(v);
+    if (proto !== Object.prototype && proto !== null) throw new TypeError(`${where}: not a plain object`);
+    const keys = Object.keys(v).sort(); // sorts by code unit, not by language
+    return "{" + keys.map((k) => write(k, where, depth + 1) + ":" + write(v[k], `${where}.${k}`, depth + 1)).join(",") + "}";
+  }
+  throw new TypeError(`${where}: ${typeof v} is not allowed`);
+}
+
+function wellFormed(s) {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const d = s.charCodeAt(i + 1);
+      if (!(d >= 0xdc00 && d <= 0xdfff)) return false;
+      i++;
+    } else if (c >= 0xdc00 && c <= 0xdfff) return false;
+  }
+  return true;
+}
+
+/** Freeze a value all the way down, so nobody can change a position by accident. */
+function deepFreeze(v) {
+  if (v && typeof v === "object" && !Object.isFrozen(v)) {
+    Object.freeze(v);
+    for (const k of Object.keys(v)) deepFreeze(v[k]);
+  }
+  return v;
+}
+
+$x.canon = canon; $x.deepFreeze = deepFreeze;
+return $x; })({});
+$m[6] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SHA-256, written out so that it also works on a page without https.
+const { canon } = $m[4];
+
+const K = new Uint32Array(64);
+const START = new Uint32Array(8);
+{
+  // The standard's constants: the first 32 bits of the fractions of square and cube roots of primes.
+  // Found with whole-number roots, so no machine's rounding can matter.
+  const root = (n, k) => {
+    const target = BigInt(n) << BigInt(32 * k);
+    let lo = 0n, hi = 1n << 40n;
+    while (lo < hi) {
+      const mid = (lo + hi + 1n) >> 1n;
+      if (mid ** BigInt(k) <= target) lo = mid; else hi = mid - 1n;
+    }
+    return Number(lo & 0xffffffffn);
+  };
+  let found = 0;
+  for (let n = 2; found < 64; n++) {
+    let prime = true;
+    for (let d = 2; d * d <= n; d++) if (n % d === 0) { prime = false; break; }
+    if (!prime) continue;
+    if (found < 8) START[found] = root(n, 2);
+    K[found++] = root(n, 3);
+  }
+}
+
+const turn = (x, n) => (x >>> n) | (x << (32 - n));
+
+/** The SHA-256 of some bytes, as 64 hex digits. */
+function sha256(bytes) {
+  const blocks = ((bytes.length + 8) >> 6) + 1;
+  const data = new Uint8Array(blocks * 64), view = new DataView(data.buffer);
+  data.set(bytes);
+  data[bytes.length] = 0x80;
+  view.setUint32(data.length - 8, Math.floor(bytes.length / 0x20000000));
+  view.setUint32(data.length - 4, (bytes.length << 3) >>> 0);
+  const h = Uint32Array.from(START), w = new Uint32Array(64);
+  for (let at = 0; at < data.length; at += 64) {
+    for (let i = 0; i < 16; i++) w[i] = view.getUint32(at + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const a = w[i - 15], b = w[i - 2];
+      w[i] = (w[i - 16] + w[i - 7] + (turn(a, 7) ^ turn(a, 18) ^ (a >>> 3)) + (turn(b, 17) ^ turn(b, 19) ^ (b >>> 10))) | 0;
+    }
+    let [a, b, c, d, e, f, g, x] = h;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (x + (turn(e, 6) ^ turn(e, 11) ^ turn(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+      const t2 = ((turn(a, 2) ^ turn(a, 13) ^ turn(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      x = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += x;
+  }
+  return Array.from(h, (n) => n.toString(16).padStart(8, "0")).join("");
+}
+
+/** A short code for any value: the same value gives the same code on every machine. */
+const fingerprint = (value) => sha256(new TextEncoder().encode(canon(value))).slice(0, 16);
+
+$x.sha256 = sha256; $x.fingerprint = fingerprint;
+return $x; })({});
+$m[8] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Seeded chance, in whole numbers only. The state is four numbers kept beside the position,
+// so a replay rolls the same dice.
+const { sha256 } = $m[6];
+
+function seedState(seed) {
+  const hex = sha256(new TextEncoder().encode("capo/" + String(seed)));
+  return [0, 1, 2, 3].map((i) => parseInt(hex.slice(i * 8, i * 8 + 8), 16));
+}
+
+/** The small fast counter generator (sfc32). Returns [number from 0 to 2^32 - 1, next state]. */
+function next([a, b, c, d]) {
+  const t = (((a + b) | 0) + d) | 0;
+  return [t >>> 0, [(b ^ (b >>> 9)) >>> 0, (c + (c << 3)) >>> 0, ((((c << 21) | (c >>> 11)) + t) | 0) >>> 0, (d + 1) >>> 0]];
+}
+
+/** A chance source for one move. Every draw is fair: no remainder bias. */
+function chance(state) {
+  let now = state;
+  const below = (n) => {
+    if (!Number.isInteger(n) || n < 1 || n > 0x100000000) throw new RangeError("below() needs a whole number from 1 to 2^32");
+    const limit = 0x100000000 - (0x100000000 % n);
+    for (;;) {
+      const [v, s] = next(now);
+      now = s;
+      if (v < limit) return v % n;
+    }
+  };
+  return {
+    below,
+    die: (sides = 6) => below(sides) + 1,
+    pick: (list) => list[below(list.length)],
+    shuffle(list) {
+      const out = [...list];
+      for (let i = out.length - 1; i > 0; i--) {
+        const j = below(i + 1);
+        [out[i], out[j]] = [out[j], out[i]];
+      }
+      return out;
+    },
+    get state() { return now; },
+  };
+}
+
+$x.seedState = seedState; $x.next = next; $x.chance = chance;
+return $x; })({});
+$m[7] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// One game being played. It keeps the options, the seed and the list of moves; everything else follows from them.
+//
+// A game is a plain object:
+//   id, version          text
+//   options              { name: { values: [...], normal } }   house rules, as plain data
+//   setup(options, dice) the first position
+//   turn(position)       the seat to move, or null when the game is over
+//   moves(position)      every legal move for that seat, as plain data
+//   apply(position, move, dice) -> { position, events }
+//   result(position)     { winners: [seat], why } when over, else null
+//   allows(position, move) optional: a quick yes or no, for games whose list of moves is long
+const { canon, deepFreeze } = $m[4];
+const { fingerprint } = $m[6];
+const { chance, seedState } = $m[8];
+
+const FORMAT = 1;
+const MAX_MOVES = 20000, MAX_FILE = 2000000;
+const NEEDED = { setup: "function", turn: "function", moves: "function", apply: "function", result: "function", id: "string", version: "string", options: "object" };
+const same = (a, b) => canon(a) === canon(b);
+
+/** A refusal is a normal answer: bad move, bad file. Anything else that is thrown is a bug. */
+class Refusal extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = "Refusal";
+    this.code = code;
+  }
+}
+
+function checkGame(game) {
+  for (const [k, type] of Object.entries(NEEDED)) if (typeof game?.[k] !== type) throw new TypeError(`game is missing ${k}`);
+  if (!/^[a-z][a-z0-9-]{0,31}$/.test(game.id)) throw new TypeError("game id must be short lower-case text");
+  for (const [k, o] of Object.entries(game.options)) {
+    if (!Array.isArray(o.values) || !o.values.some((v) => same(v, o.normal))) throw new TypeError(`option ${k}: its normal value is not in its list`);
+  }
+  return game;
+}
+
+/** Fill in normal values and refuse anything unknown. */
+function readOptions(game, given = {}) {
+  const out = {};
+  for (const k of Object.keys(given)) if (!Object.hasOwn(game.options, k)) throw new Refusal("option", `unknown option "${k.slice(0, 40)}"`);
+  for (const [k, o] of Object.entries(game.options)) {
+    const v = Object.hasOwn(given, k) ? given[k] : o.normal;
+    const found = o.values.find((x) => { try { return same(x, v); } catch { return false; } });
+    if (found === undefined) throw new Refusal("option", `option "${k}" cannot have that value`);
+    out[k] = found;
+  }
+  return out;
+}
+
+function createMatch(game, { options = {}, seed = "" } = {}) {
+  checkGame(game);
+  const chosen = deepFreeze(readOptions(game, options)), theSeed = String(seed).slice(0, 200);
+  const dice = chance(seedState(`${game.id}/${theSeed}`));
+  const opening = deepFreeze(game.setup(chosen, dice));
+  canon(opening); // a bad first position fails here, not ten moves later
+  const steps = [{ position: opening, dice: dice.state, events: [] }], played = [];
+  const now = () => steps[steps.length - 1];
+
+  return {
+    game, options: chosen, seed: theSeed,
+    get position() { return now().position; },
+    get events() { return now().events; },
+    get turn() { return game.turn(now().position); },
+    get result() { return game.result(now().position); },
+    get list() { return played.map((m) => structuredClone(m)); },
+    legal() { return this.turn === null ? [] : game.moves(now().position); },
+    isLegal(move) { const want = canon(move); return this.legal().some((m) => canon(m) === want); },
+    fingerprint: () => fingerprint([game.id, game.version, chosen, now().position, now().dice]),
+
+    /** Play one move, or refuse it and change nothing. */
+    play(move) {
+      if (this.turn === null) throw new Refusal("over", "the game is over");
+      if (played.length >= MAX_MOVES) throw new Refusal("long", "the list of moves is full");
+      let copy;
+      try { copy = JSON.parse(canon(move)); } catch (e) { throw new Refusal("shape", `that is not a move: ${e.message}`); }
+      if (game.allows ? !game.allows(now().position, copy) : !this.isLegal(copy)) throw new Refusal("illegal", `that move is not allowed now: ${canon(copy).slice(0, 120)}`);
+      const d = chance(now().dice), made = game.apply(now().position, copy, d);
+      canon(made.position);
+      canon(made.events || []);
+      steps.push({ position: deepFreeze(made.position), dice: d.state, events: deepFreeze(made.events || []) });
+      played.push(deepFreeze(copy));
+      return now().events;
+    },
+    /** Take back the last move. Playing it again rolls the same dice. */
+    undo() {
+      if (!played.length) return false;
+      steps.pop();
+      played.pop();
+      return true;
+    },
+    /** The position after the first n moves. */
+    at(n) {
+      if (!Number.isInteger(n) || n < 0 || n >= steps.length) throw new RangeError("no such moment");
+      return steps[n].position;
+    },
+    save() {
+      return canon({ format: FORMAT, game: game.id, version: game.version, options: chosen, seed: theSeed, moves: played, end: this.fingerprint() });
+    },
+  };
+}
+
+/**
+ * A saved game stops making sense at one of its moves. What should happen?
+ * "refuse" loses the whole file; "keep" opens the part before that move, with a warning.
+ * @param {{code: string, index: number, total: number}} problem
+ *   code is "illegal", "shape", "over" or "end" (the moves work but lead somewhere else)
+ */
+function whenReplayFails(problem) {
+  if (problem.code === "end") return "refuse"; // no single move is at fault, so no part can be trusted
+  return problem.index > 0 ? "keep" : "refuse"; // with no good move there is nothing to keep
+}
+
+const FIELDS = ["end", "format", "game", "moves", "options", "seed", "version"];
+
+/** Open a saved game by replaying every move. Returns { match, warning }. */
+function openSave(text, games) {
+  const notASave = () => new Refusal("file", "that is not a saved game");
+  if (typeof text !== "string" || text.length > MAX_FILE) throw new Refusal("file", "that file is too large or not text");
+  let f;
+  try { f = JSON.parse(text); } catch { throw notASave(); }
+  if (!f || typeof f !== "object" || Array.isArray(f) || Object.keys(f).sort().join() !== FIELDS.join()) throw notASave();
+  if (f.format !== FORMAT) throw new Refusal("format", "this save was made by a different version of Capo");
+  if (!Array.isArray(f.moves) || f.moves.length > MAX_MOVES || typeof f.seed !== "string" || typeof f.end !== "string") throw notASave();
+  if (!f.options || typeof f.options !== "object" || Array.isArray(f.options)) throw notASave();
+  const game = games.find((g) => g.id === f.game);
+  if (!game) throw new Refusal("game", "this copy of Capo does not have that game");
+  if (game.version !== f.version) throw new Refusal("version", `this save needs version ${String(f.version).slice(0, 20)} of ${game.id}; this copy has ${game.version}`);
+
+  const match = createMatch(game, { options: f.options, seed: f.seed }), total = f.moves.length;
+  const fail = (code, index, message) => {
+    if (whenReplayFails({ code, index, total }) === "keep") return { match, warning: `${message}. Kept ${index} of ${total} moves.` };
+    throw new Refusal(code, message);
+  };
+  for (let i = 0; i < total; i++) {
+    try { match.play(f.moves[i]); } catch (e) {
+      if (!(e instanceof Refusal)) throw e;
+      return fail(e.code, i, `move ${i + 1}: ${e.message}`);
+    }
+  }
+  if (match.fingerprint() !== f.end) return fail("end", total, "the moves lead to a different position than the file says");
+  return { match, warning: "" };
+}
+
+$x.FORMAT = FORMAT; $x.Refusal = Refusal; $x.checkGame = checkGame; $x.readOptions = readOptions; $x.createMatch = createMatch; $x.whenReplayFails = whenReplayFails; $x.openSave = openSave;
+return $x; })({});
+$m[5] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// A whole game as a few hundred bytes, small enough for one chat message. Each move is stored as its place in the
+// list of legal moves, so a link cannot hold a move that is not allowed.
+const { canon } = $m[4];
+const { fingerprint } = $m[6];
+const { Refusal, createMatch } = $m[7];
+
+const LAYOUT = 2, MOST_MOVES = 4000, MOST_BYTES = 32000, CHECK = 8;
+const ROLES = ["host", "friend", "normal", "easy"];
+const broken = () => new Refusal("link", "that link is broken or not complete");
+
+function put(out, n) { // a whole number, seven bits to a byte
+  while (n > 127) { out.push((n % 128) | 128); n = Math.floor(n / 128); }
+  out.push(n);
+}
+function reader(bytes) {
+  let at = 0;
+  return {
+    number() {
+      let n = 0, unit = 1;
+      for (let i = 0; i < 5; i++) {
+        if (at >= bytes.length) throw broken();
+        const b = bytes[at++];
+        n += (b & 127) * unit;
+        if (b < 128) return n;
+        unit *= 128;
+      }
+      throw broken();
+    },
+    take(n) { if (at + n > bytes.length) throw broken(); at += n; return bytes.subarray(at - n, at); },
+    done: () => at === bytes.length,
+  };
+}
+/** Covers every move as well as where they lead. */
+function check(match, roles) {
+  const f = fingerprint([match.fingerprint(), match.seed, match.list, roles]);
+  return Array.from({ length: CHECK }, (_, i) => parseInt(f.slice(i * 2, i * 2 + 2), 16));
+}
+
+/** roles: for each seat "host", "friend", "normal" or "easy". look: for each seat the numbers of its colour and icon. */
+function packGame(match, roles, look) {
+  const head = new TextEncoder().encode(canon({ g: match.game.id, v: match.game.version, o: match.options, s: match.seed, r: roles, l: look })), out = [LAYOUT];
+  put(out, head.length);
+  out.push(...head);
+  const list = match.list, again = createMatch(match.game, { options: match.options, seed: match.seed });
+  if (list.length > MOST_MOVES) throw new Refusal("link", "this game is too long for a link");
+  put(out, list.length);
+  for (const m of list) {
+    const want = canon(m);
+    put(out, again.legal().findIndex((x) => canon(x) === want));
+    again.play(m);
+  }
+  out.push(...check(match, roles));
+  return Uint8Array.from(out);
+}
+
+/** Returns { match, roles }, or refuses. */
+function unpackGame(bytes, games) {
+  if (bytes.length > MOST_BYTES) throw broken();
+  const r = reader(bytes);
+  if (r.number() !== LAYOUT) throw new Refusal("link", "that link was made by a different version of Capo");
+  let h;
+  try { h = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(r.take(r.number()))); } catch { throw broken(); }
+  if (!h || typeof h !== "object" || Object.keys(h).sort().join() !== "g,l,o,r,s,v" || typeof h.s !== "string" || !h.o || typeof h.o !== "object" || Array.isArray(h.o)) throw broken();
+  const game = games.find((g) => g.id === h.g);
+  if (!game) throw new Refusal("game", "that link is for another game. Open it from that game's page");
+  if (game.version !== h.v) throw new Refusal("version", "that link was made by a different version of this game");
+  const match = createMatch(game, { options: h.o, seed: h.s });
+  if (!Array.isArray(h.r) || h.r.length !== match.options.seats || !h.r.every((x) => ROLES.includes(x))) throw broken();
+  if (!Array.isArray(h.l) || h.l.length !== match.options.seats || !h.l.every((x) => Array.isArray(x) && x.length === 2 && x.every((v) => Number.isInteger(v) && v >= 0 && v < 64))) throw broken();
+  const n = r.number();
+  if (n > MOST_MOVES) throw broken();
+  for (let i = 0; i < n; i++) {
+    const m = match.legal()[r.number()];
+    if (!m) throw broken();
+    match.play(m);
+  }
+  if (canon([...r.take(CHECK)]) !== canon(check(match, h.r)) || !r.done()) throw broken();
+  return { match, roles: h.r, look: h.l };
+}
+
+/** How a game that arrives stands to the one already here: "new" (it goes on from ours), "old" (ours goes further), or "other". */
+function compareGames(ours, theirs) {
+  if (ours.game.id !== theirs.game.id || ours.seed !== theirs.seed || canon(ours.options) !== canon(theirs.options)) return "other";
+  const a = ours.list.map((m) => canon(m)), b = theirs.list.map((m) => canon(m)), n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) if (a[i] !== b[i]) return "other";
+  return b.length > a.length ? "new" : "old";
+}
+
+$x.packGame = packGame; $x.unpackGame = unpackGame; $x.compareGames = compareGames;
+return $x; })({});
+$m[3] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+$x.canon = $m[4].canon; $x.deepFreeze = $m[4].deepFreeze;
+$x.compareGames = $m[5].compareGames; $x.packGame = $m[5].packGame; $x.unpackGame = $m[5].unpackGame;
+$x.fingerprint = $m[6].fingerprint; $x.sha256 = $m[6].sha256;
+$x.chance = $m[8].chance; $x.next = $m[8].next; $x.seedState = $m[8].seedState;
+$x.FORMAT = $m[7].FORMAT; $x.Refusal = $m[7].Refusal; $x.checkGame = $m[7].checkGame; $x.readOptions = $m[7].readOptions; $x.createMatch = $m[7].createMatch; $x.openSave = $m[7].openSave; $x.whenReplayFails = $m[7].whenReplayFails;
+
+
+return $x; })({});
+$m[10] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Made by tools/world.py: our own provinces on a public-domain coast (Natural Earth). Do not edit by hand.
+const COLS = 124, ROWS = 56;
+const LANDS = ["the Northern Shield", "the Great Rivers", "the Middle Seas", "the Southern Cone", "the Western Shores", "the Old Rivers", "the Savanna", "the Steppe", "the Monsoon Coasts", "the Southern Isles"];
+const NAMES = ["Yukon", "Mackenzie", "Hudson", "Labrador", "Ice Cap", "Cascades", "Prairies", "Lakelands", "Gulf Plain", "Sonora", "Anahuac", "Isthmus", "Antilles", "Orinoco", "Amazonia", "Andes", "Sertao", "Pampas", "Patagonia", "Fjords", "Albion", "Iberia", "Rhine", "Danube", "Vistula", "Volga", "Maghreb", "Nile", "Anatolia", "Hejaz", "Zagros", "Sahel", "Congo", "Rift", "Zambezi", "Karoo", "Spice Isle", "Ob", "Turan", "Altai", "Taymyr", "Lena", "Amur", "Kolyma", "Indus", "Deccan", "High Plateau", "Mekong", "Yellow River", "Yangtze", "Sunrise Isles", "Sunda", "Borneo", "Papua", "Red Centre", "Murray", "Long Cloud"];
+const MARKS = [1746, 2642, 3612, 5357, 2034, 3272, 4891, 320, 3337, 5298];
+const REGION = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9];
+const CROSSINGS = [[0, 43], [4, 3], [4, 20], [8, 12], [12, 13], [16, 31], [20, 22], [20, 19], [21, 26], [23, 28], [27, 23], [33, 29], [36, 34], [36, 33], [47, 51], [51, 52], [52, 53], [51, 54], [53, 55], [55, 56], [50, 42], [50, 49], [4, 2], [18, 35]];
+// One line a row. A number before a sign repeats it. A dot is sea; ~ marks a sign that is itself a number.
+const CELLS = [
+  "27.5C3.17E42.o29",
+  "17.5B.8C6.15E38.7o9.2r16",
+  "16.B7.C.2C.C9.13E37.8o10.r16",
+  "15.7B.4C.3CD7.12E35.l11o5p4.r16",
+  "16.B.5B3.C.3C3D6.11E26.l4.5l11o10p3r13",
+  "2.8A3.4B2.4B.B2C2.2C4D5.10E15.4T12.6l11o9p7r2.3r5",
+  "2.12A7B.B.B6C.4D5.8E15.6TY2Z3.Z10l11o10p14r2",
+  ".12A11B6C3.4D3.6E4.E.E10.6TY7Z10l11o9p17r",
+  "2.12A10B7C.5D4.4E6.3E9.3T.T2YZ.5Z11l10o10p13r3",
+  "2.11A10B4C4.D2.2D5.3E16.5T.4Y7Z11l9o11p12r4",
+  "2.12A9B3C6.3D7.2E17.4T.4Y7Z11l2n7o12p4r.4r6",
+  "3.2A6.2A9B4C5.6D23.4T2.4Y7Z9l5n6o11p2.r2.2r9",
+  "4.A7.2A8B6C4.6D19.U5.2T.4Y8Z8l7n4o7p3q6.2r9",
+  "13.7FB2G7C.7D17.3U3.2W2.5Y8Z7l9n3o3p5q7.2r10",
+  "14.7F4G6C9D15.4U.4WX5Y8Z2m5l11no11q5.r10",
+  "14.7F4G5CH7D21.5W3X3Y7Z6ml11nw12q16",
+  "16.5F6G2C4H4D2.D18.6W6X7Z8m9n4w9q17",
+  "16.5F7G5H5D20.V4W6X.5Z.9m8n5w8q18",
+  "16.5F7G6HD21.V.2VW.W.5X3.2cZ.10m7n6w6q2.2q15",
+  "15.6F5GI6H22.4V2.W.X.3X.2c.2ce2.e7m2n5u7w4q21",
+  "16.4F2J4G3I4H23.3V7.X.7ce.2e5m2s7u7w2.q2.3y16",
+  "16.3F5J5I3H24.V.V3a6.6c6e2m4s6u8w2.q.3y17",
+  "18.6J6I2H24.2V5a8.3c7e5s7u5w2x4.3y17",
+  "18.6J6I25.V8a.6bc3d5e6s7u3w4x24",
+  "20.5JI4.M24.V8a8b4d4e7s6uvw6x23",
+  "21.2J2K5.2M21.2V7a2f6b.5d2.2e6st4u4v5x24",
+  "22.J2K5.3M20.2V6a4f6b.7d3.3s4t2u5v3x25",
+  "22.3K2.L2.2M21.V5a6f6b.7d4.5t2.5v29",
+  "24.3KL25.V4a8f6b.5d6.3t4.5v28",
+  "27.3L22.V3a10f5b4d9.2t6.4v28",
+  "29.L4.N18.3a10f3b5h11.t8.2v28",
+  "29.3L6N16.a10f3g8h9.t6.z31",
+  "32.8N15.4f.4f5g7h17.z5.~024",
+  "31.7N3O21.f5g6h18.2z3.2~025",
+  "31.P5N5O20.7g5h19.z2.3~025",
+  "31.2P3N5O4Q17.7g3h21.2z2.~0.~04.4~116",
+  "31.4P7O5Q16.6gi2h23.z10.4~114",
+  "31.4P6O5Q17.4g3i2h29.~25.~1.~114",
+  "32.4P5O5Q17.3g6ih51",
+  "32.4P5O4Q17.2g8i3.k26.3~22.~316",
+  "34.2P5O4Q18.g8i2.2k25.6~22~315",
+  "34.2P4RO4Q18.j6i3.3k23.7~24~314",
+  "35.P5R3Q20.2j5i3.2k22.9~24~313",
+  "34.8R21.5j2i27.9~25~313",
+  "34.8R22.6j28.8~26~312",
+  "34.7R23.5j29.7~26~313",
+  "34.7R24.3j30.3~24.6~313",
+  "33.S5R67.4~314",
+  "33.3S2R80.2~44",
+  "33.3S72.~38.3~44",
+  "34.3S80.3~44",
+  "32.3S81.~47",
+  "33.3S88",
+  "33.2S89",
+  "33.2S89",
+  "124",
+];
+
+$x.COLS = COLS; $x.ROWS = ROWS; $x.LANDS = LANDS; $x.NAMES = NAMES; $x.MARKS = MARKS; $x.REGION = REGION; $x.CROSSINGS = CROSSINGS; $x.CELLS = CELLS;
+return $x; })({});
+$m[9] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// An Inch of Ink in real time: the genre as it is played in a browser. Many nations, one pool of strength each,
+// borders that creep, and a share of your strength sent with every attack. Time passes in ticks of half a second,
+// so a game is still a list of moves and replays the same anywhere.
+const { CELLS, COLS, ROWS } = $m[10];
+
+const NONE = -1, PCTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100], TICK_MS = 500;
+const LIVE_MAPS = ["world", "continents", "islands"];
+const START = 30, GOAL = 80, LIMIT = 1600, RANGE = 9;
+const NATIONS = ["Aster", "Bryn", "Caldo", "Dorran", "Elm", "Fenn", "Gale", "Harrow", "Isle", "Jarl", "Kest", "Lume", "Morrow", "Nesh", "Orra", "Pell", "Quill", "Rook", "Sable", "Tarn", "Ulm", "Vael", "Wren", "Yarrow", "Zeal", "Arden", "Brisk", "Corve", "Drey", "Ebon", "Fallow", "Grist", "Holm", "Ivo", "Juno", "Kell", "Lorn", "Mire", "Nox", "Oaken", "Pryor", "Rune", "Sorrel", "Thane", "Umber", "Vesk", "Wold", "Ysolde", "Zinn", "Amber"];
+const STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
+const made = new Map();
+
+/** Every cell of a grid of COLS by ROWS small hexes, with its neighbours. */
+function grid() {
+  if (made.has("grid")) return made.get("grid");
+  const cells = [], at = new Map();
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) { const q = c - (r - (r & 1)) / 2; at.set(q * 1000 + r, cells.length); cells.push([q, r]); }
+  const near = cells.map(([q, r]) => STEPS.map(([a, b]) => at.get((q + a) * 1000 + r + b)).filter((x) => x !== undefined));
+  const g = { cells, near, n: cells.length };
+  made.set("grid", g);
+  return g;
+}
+
+/** The land of a map: the real coast, or land grown from the game's own dice. Hills are scattered the same way. */
+function liveBoard(map, key, chance) {
+  const id = `${map}/${map === "world" ? 0 : key}`;
+  if (made.has(id)) return made.get(id);
+  const g = grid(), land = Array(g.n).fill(0), hill = Array(g.n).fill(0), dice = chance(`inch-live/${id}`);
+  if (map === "world") {
+    CELLS.forEach((line, r) => { let c = 0, many = ""; for (let i = 0; i < line.length; i++) { const s = line[i]; if (s === "~") { i++; land[r * COLS + c++] = 1; continue; } if (s >= "0" && s <= "9") { many += s; continue; } for (let k = 0; k < (Number(many) || 1); k++) land[r * COLS + c++] = s === "." ? 0 : 1; many = ""; } });
+  } else {
+    const blobs = map === "islands" ? 16 : 5, want = Math.floor(g.n * (map === "islands" ? 0.3 : 0.42)), inside = (i) => { const r = Math.floor(i / COLS), c = i % COLS; return r > 1 && r < ROWS - 2 && c > 1 && c < COLS - 2; };
+    const seeds = Array.from({ length: blobs }, () => { for (;;) { const i = dice.below(g.n); if (inside(i)) return i; } }), size = seeds.map(() => 0), edge = seeds.map((s) => [s]);
+    let total = 0;
+    while (total < want) {
+      const k = dice.below(blobs), list = edge[k];
+      if (!list.length) continue;
+      const pick = list.splice(dice.below(list.length), 1)[0];
+      if (land[pick] || !inside(pick)) continue;
+      land[pick] = 1; size[k]++; total++;
+      for (const m of g.near[pick]) if (!land[m]) list.push(m);
+      if (map === "islands" && size[k] > want / blobs * 1.6) edge[k] = [];
+    }
+  }
+  const dry = land.flatMap((l, i) => (l ? [i] : []));
+  for (let t = 0; t < Math.floor(dry.length / 40); t++) { // ranges of hills
+    let at = dice.pick(dry);
+    for (let s = 0; s < 12; s++) { hill[at] = 1; const next = g.near[at].filter((m) => land[m]); if (!next.length) break; at = dice.pick(next); }
+  }
+  const b = Object.freeze({ ...g, land, hill, dry, total: dry.length });
+  if (made.size > 12) made.clear();
+  made.set(id, b);
+  return b;
+}
+
+// ---- the clock ----
+const landOf = (p, s) => p.land[s];
+const maxOf = (p, s) => 40 + 4 * p.land[s] + 80 * p.cities.filter((c) => p.owner[c] === s).length;
+const gainOf = (p, s) => 1 + Math.floor(p.land[s] / 10) + Math.floor(p.troops[s] / 60) + p.cities.filter((c) => p.owner[c] === s).length;
+/** What a cell costs to take: more for hills, and more where the owner holds much strength on little land. */
+function costOf(p, b, i) {
+  const o = p.owner[i];
+  return 2 + (b.hill[i] ? 3 : 0) + (o === NONE ? 0 : Math.floor(p.troops[o] / Math.max(1, p.land[o])));
+}
+const goalOf = (p) => Math.ceil((p.total * GOAL) / 100);
+
+/** Who borders whom: for each nation, the set of owners beside its land (NONE for empty land). */
+function bordersOf(p, b) {
+  const out = p.troops.map(() => new Set());
+  for (let i = 0; i < b.n; i++) {
+    const a = p.owner[i];
+    if (a === NONE) continue;
+    for (const m of b.near[i]) { const o = p.owner[m]; if (o !== a && b.land[m]) out[a].add(o); }
+  }
+  return out;
+}
+
+/** Start or strengthen an attack. Changes p. */
+function send(p, by, to, troops) {
+  if (troops <= 0) return;
+  p.troops[by] -= troops;
+  const a = p.attacks.find((x) => x.by === by && x.to === to);
+  if (a) a.left += troops; else p.attacks.push({ by, to, left: troops });
+}
+
+/** The bots: each has a temper drawn at the start. They act now and then, never on every tick. */
+function think(p, b, dice, borders) {
+  for (let s = 0; s < p.troops.length; s++) {
+    if (s === p.human || !p.land[s] || dice.below(4)) continue;
+    const busy = p.attacks.some((a) => a.by === s), full = p.troops[s] * 10 >= maxOf(p, s) * 7;
+    if (busy && !full) continue;
+    const near = [...borders[s]], share = 30 + p.temper[s] * 10;
+    if (near.includes(NONE) && (!near.some((o) => o !== NONE) || dice.below(3))) { send(p, s, NONE, Math.floor((p.troops[s] * share) / 100)); continue; }
+    const rivals = near.filter((o) => o !== NONE);
+    if (!rivals.length) { if (p.boats && full && dice.below(3) === 0) sail(p, b, s, dice); continue; }
+    const weak = rivals.reduce((x, y) => (p.troops[y] * Math.max(1, p.land[x]) < p.troops[x] * Math.max(1, p.land[y]) ? y : x));
+    if (p.troops[s] > p.troops[weak] * (p.temper[s] > 2 ? 0.8 : 1.3) || full) send(p, s, weak, Math.floor((p.troops[s] * share) / 100));
+  }
+}
+
+/** A bot with nowhere to go on foot sends a boat to the nearest shore it can reach. Changes p. */
+function sail(p, b, s, dice) {
+  const spots = [...landings(p, b, s)];
+  if (!spots.length) return;
+  land(p, b, s, dice.pick(spots), Math.floor(p.troops[s] / 2));
+}
+/** Put troops ashore. A landing costs double; what is left goes on attacking. Changes p. */
+function land(p, b, s, at, troops) {
+  const was = p.owner[at], cost = costOf(p, b, at) * 2;
+  p.troops[s] -= troops;
+  if (troops <= cost) return false;
+  if (was !== NONE) { p.land[was]--; p.troops[was] = Math.max(0, p.troops[was] - 1); }
+  p.owner[at] = s;
+  p.land[s]++;
+  const a = p.attacks.find((x) => x.by === s && x.to === was);
+  if (a) a.left += troops - cost; else p.attacks.push({ by: s, to: was, left: troops - cost });
+  return true;
+}
+
+/** One tick: growth, the bots, then every attack pushes its border. Changes p. */
+function tick(p, b, dice, events) {
+  p.tick++;
+  for (let s = 0; s < p.troops.length; s++) {
+    if (!p.land[s]) continue;
+    const top = maxOf(p, s);
+    p.troops[s] = p.troops[s] > top ? p.troops[s] - Math.ceil((p.troops[s] - top) / 10) : Math.min(top, p.troops[s] + gainOf(p, s));
+  }
+  const borders = bordersOf(p, b);
+  think(p, b, dice, borders);
+  // the cells each attack could take now, gathered in one pass over the map
+  const front = p.attacks.map(() => []), which = new Map(p.attacks.map((a, k) => [a.by * 1000 + (a.to + 1), k]));
+  for (let i = 0; i < b.n; i++) {
+    const a = p.owner[i];
+    if (a === NONE || !b.land[i]) continue;
+    for (const m of b.near[i]) {
+      if (!b.land[m] || p.owner[m] === a) continue;
+      const k = which.get(a * 1000 + (p.owner[m] + 1));
+      if (k !== undefined) front[k].push(m);
+    }
+  }
+  const done = [];
+  p.attacks.forEach((a, k) => {
+    const list = [...new Set(front[k])].sort((x, y) => p.order[x] - p.order[y]), many = Math.max(2, Math.ceil(list.length / 4));
+    let taken = 0;
+    for (const i of list) {
+      if (taken >= many || p.owner[i] !== a.to) continue;
+      const cost = costOf(p, b, i);
+      if (a.left < cost) { a.left = 0; break; }
+      a.left -= cost;
+      if (a.to !== NONE) { p.troops[a.to] = Math.max(0, p.troops[a.to] - Math.max(1, Math.floor(p.troops[a.to] / Math.max(1, p.land[a.to])))); p.land[a.to]--; }
+      p.owner[i] = a.by;
+      p.land[a.by]++;
+      taken++;
+    }
+    if (!list.length || !a.left || (a.to !== NONE && !p.land[a.to])) { p.troops[a.by] += a.left; done.push(k); }
+  });
+  p.attacks = p.attacks.filter((_, k) => !done.includes(k));
+  for (let s = 0; s < p.troops.length; s++) if (!p.land[s] && p.alive[s]) { p.alive[s] = 0; p.attacks = p.attacks.filter((a) => a.by !== s); events.push({ kind: "out", seat: s }); }
+  const top = p.land.reduce((x, v, s) => (v > p.land[x] ? s : x), 0);
+  if (!p.land[p.human]) return finish(p, [top], "overran you", events);
+  if (p.land[top] >= goalOf(p)) return finish(p, [top], "held most of the map", events);
+  if (p.alive.filter(Boolean).length === 1) return finish(p, [top], "the only one left", events);
+  if (p.tick >= p.limit) return finish(p, [top], "held the most land when time ran out", events);
+  return undefined;
+}
+function finish(p, winners, why, events) {
+  p.over = { winners, why };
+  events.push({ kind: "end", winners, why });
+}
+
+/** Where a boat from a seat's coast can land: coastal cells of others within reach over water. */
+function landings(p, b, s = p.human) {
+  const seen = new Map(), list = [];
+  for (let i = 0; i < b.n; i++) if (p.owner[i] === s && b.near[i].some((m) => !b.land[m])) for (const m of b.near[i]) if (!b.land[m] && !seen.has(m)) { seen.set(m, 1); list.push(m); }
+  const out = new Set();
+  for (let k = 0; k < list.length; k++) {
+    const w = list[k], d = seen.get(w);
+    for (const m of b.near[w]) {
+      if (b.land[m]) { if (p.owner[m] !== s) out.add(m); continue; }
+      if (!seen.has(m) && d < RANGE) { seen.set(m, d + 1); list.push(m); }
+    }
+  }
+  return out;
+}
+
+/** The board a live position is played on. */
+const liveBoardOf = (p, chance) => liveBoard(p.map, p.key, chance);
+
+function liveSetup(o, dice, chance) {
+  const key = dice.below(0x40000000), b = liveBoard(o.map, key, chance), n = o.nations;
+  const p = { live: true, classic: true, style: o.style, map: o.map, key: 0, human: 0, total: b.total, owner: Array(b.n).fill(NONE), order: dice.shuffle(b.cells.map((_, i) => i)), troops: Array(n).fill(START), land: Array(n).fill(0), alive: Array(n).fill(1), temper: Array.from({ length: n }, () => dice.below(4)), names: ["You", ...dice.shuffle(NATIONS).slice(0, n - 1)], attacks: [], cities: [], boats: !!o.boats || o.map === "islands", building: !!o.cities, tick: 0, limit: LIMIT, phase: "spawn", seat: 0, round: 1, rounds: LIMIT, over: null };
+  p.key = o.map === "world" ? 0 : key;
+  // bots start far apart
+  const spots = [], far = (i) => spots.every((j) => Math.abs(b.cells[i][0] - b.cells[j][0]) + Math.abs(b.cells[i][1] - b.cells[j][1]) > 7);
+  for (let s = 1; s < n; s++) { for (let t = 0; t < 60; t++) { const i = dice.pick(b.dry); if (p.owner[i] === NONE && far(i)) { spots.push(i); claim(p, b, s, i); break; } } }
+  return p;
+}
+function claim(p, b, s, i) {
+  for (const c of [i, ...b.near[i]]) if (b.land[c] && p.owner[c] === NONE) { p.owner[c] = s; p.land[s]++; }
+}
+
+function liveMoves(p, b) {
+  if (p.over) return [];
+  if (p.phase === "spawn") return b.dry.filter((i) => p.owner[i] === NONE && b.near[i].every((m) => p.owner[m] === NONE)).map((at) => ({ do: "spawn", at }));
+  const out = [{ do: "tick", n: 1 }, { do: "tick", n: 2 }, { do: "tick", n: 4 }], near = [...bordersOf(p, b)[p.human]];
+  for (const to of near) for (const pct of PCTS) out.push({ do: "attack", to, pct });
+  if (p.building) for (let i = 0; i < b.n; i++) if (p.owner[i] === p.human && !p.cities.includes(i) && p.troops[p.human] >= cityPrice(p)) out.push({ do: "city", at: i });
+  return out;
+}
+const cityPrice = (p) => 60 * (1 + p.cities.filter((c) => p.owner[c] === p.human).length);
+
+/** A quick check, so that a tick does not have to list every move to be allowed. */
+function liveAllows(p, b, m) {
+  if (p.over) return false;
+  if (p.phase === "spawn") return m.do === "spawn" && Number.isInteger(m.at) && b.land[m.at] === 1 && p.owner[m.at] === NONE && b.near[m.at].every((x) => p.owner[x] === NONE);
+  if (m.do === "tick") return [1, 2, 4].includes(m.n);
+  if (m.do === "attack") return PCTS.includes(m.pct) && (m.to === NONE || (Number.isInteger(m.to) && m.to > 0 && m.to < p.troops.length)) && bordersOf(p, b)[p.human].has(m.to);
+  if (m.do === "boat") return p.boats && PCTS.includes(m.pct) && Number.isInteger(m.at) && landings(p, b).has(m.at);
+  if (m.do === "city") return p.building && Number.isInteger(m.at) && p.owner[m.at] === p.human && !p.cities.includes(m.at) && p.troops[p.human] >= cityPrice(p);
+  return false;
+}
+
+const copy = (p) => ({ ...p, owner: [...p.owner], troops: [...p.troops], land: [...p.land], alive: [...p.alive], attacks: p.attacks.map((a) => ({ ...a })), cities: [...p.cities] });
+
+function liveApply(before, b, m, dice) {
+  const p = copy(before), events = [], s = p.human;
+  if (m.do === "spawn") { claim(p, b, s, m.at); p.phase = "play"; events.push({ kind: "spawn", at: m.at }); }
+  else if (m.do === "attack") { send(p, s, m.to, Math.floor((p.troops[s] * m.pct) / 100)); events.push({ kind: "attack", seat: s, to: m.to, pct: m.pct }); }
+  else if (m.do === "boat") {
+    const landed = land(p, b, s, m.at, Math.floor((p.troops[s] * m.pct) / 100));
+    events.push({ kind: "boat", seat: s, at: m.at, landed });
+  } else if (m.do === "city") { p.troops[s] -= cityPrice(before); p.cities.push(m.at); events.push({ kind: "city", seat: s, at: m.at }); }
+  else for (let k = 0; k < m.n && !p.over; k++) tick(p, b, dice, events);
+  return { position: p, events };
+}
+
+$x.NONE = NONE; $x.PCTS = PCTS; $x.TICK_MS = TICK_MS; $x.LIVE_MAPS = LIVE_MAPS; $x.liveBoard = liveBoard; $x.landOf = landOf; $x.maxOf = maxOf; $x.gainOf = gainOf; $x.costOf = costOf; $x.goalOf = goalOf; $x.bordersOf = bordersOf; $x.landings = landings; $x.liveBoardOf = liveBoardOf; $x.liveSetup = liveSetup; $x.liveMoves = liveMoves; $x.cityPrice = cityPrice; $x.liveAllows = liveAllows; $x.liveApply = liveApply;
+return $x; })({});
 $m[1] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // An Inch of Ink (working name). Each seat has one pool of strength. On your turn land cut off from
 // your home falls, your pool grows, and you pour part of it over a border, or wait.
 // Classic is the genre as it is remembered: a wider map, no cut-off rule, no homes to storm, and play until one holds most of it.
 const { hexBoard, joined } = $m[2];
+const { chance, seedState } = $m[3];
+const { LIVE_MAPS, liveAllows, liveApply, liveBoardOf, liveMoves, liveSetup } = $m[9];
+
+const roller = (text) => chance(seedState(text));
+const liveBoardFor = (p) => liveBoardOf(p, roller);
 
 const NONE = -1;
 const START = 6, WALL = 1, HOME_WALL = 3, SURROUND = 4, LONG = 40;
@@ -238,7 +980,7 @@ const SHARES = { quarter: (p) => Math.floor(p / 4), third: (p) => Math.floor(p /
 const SWITCHES = {
   size: { values: [4, 5], normal: 5 }, cut: { values: [false, true], normal: false }, walls: { values: [false, true], normal: false },
   shares: { values: ["four", "three"], normal: "four" }, growth: { values: ["rising", "saving"], normal: "rising" }, goal: { values: [45, 55, 60, 70], normal: 60 },
-  drawn: { values: [false, true], normal: true }, limit: { values: [10, 16, 20, 40], normal: 40 },
+  drawn: { values: [false, true], normal: true }, limit: { values: [10, 16, 20, 40], normal: 40 }, live: { values: [false, true], normal: false },
 };
 const SETS = {
   classic: (o) => ({ size: 5, cut: false, walls: false, shares: "four", growth: "rising", goal: CLASSIC_PERCENT[o.seats], drawn: o.seats > 2, limit: LONG }),
@@ -356,10 +1098,11 @@ function advance(p, events, dice) {
 }
 
 const inch = {
-  id: "inch", version: "4",
-  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, ...SWITCHES },
+  id: "inch", version: "5",
+  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, ...SWITCHES },
 
   setup(o, dice) {
+    if (o.style === "classic" || (o.style === "custom" && o.live)) return liveSetup(o, dice, roller);
     const classic = o.style !== "ours", rule = SETS[o.style] ? SETS[o.style](o) : Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]])), b = hexBoard(rule.size), homes = dice.shuffle(o.seats === 2 ? [b.corners[0], b.corners[3]] : [b.corners[0], b.corners[2], b.corners[4]]);
     const cost = b.cells.map(() => (dice.below(4) === 0 ? 2 : 1)), owner = Array(b.size).fill(NONE);
     homes.forEach((h, s) => { cost[h] = 1; owner[h] = s; });
@@ -367,10 +1110,12 @@ const inch = {
     begin(p, []);
     return p;
   },
-  turn: (p) => (p.over ? null : p.seat),
+  turn: (p) => (p.over ? null : p.live ? p.human : p.seat),
+  allows: (p, m) => (p.live ? liveAllows(p, liveBoardFor(p), m) : inch.moves(p).some((x) => JSON.stringify(x) === JSON.stringify(m))),
 
   /** Wait, or pour a share at neutral land or at one rival. Only pours that take something are offered. */
   moves(p) {
+    if (p.live) return liveMoves(p, liveBoardFor(p));
     const s = p.seat, { near } = boardOf(p), targets = new Set(), out = [{ do: "wait" }];
     p.owner.forEach((o, i) => { if (o === s) for (const m of near[i]) if (p.owner[m] !== s) targets.add(p.owner[m]); });
     for (const to of [...targets].sort((a, b) => a - b)) {
@@ -384,6 +1129,7 @@ const inch = {
   },
 
   apply(before, m, dice) {
+    if (before.live) return liveApply(before, liveBoardFor(before), m, dice);
     const p = copy(before), events = [];
     if (m.do === "pour") {
       const r = pour(p, p.seat, m.to, SHARES[m.share](p.pool[p.seat]), events);
@@ -395,9 +1141,9 @@ const inch = {
   result: (p) => p.over,
 };
 
-$x.NONE = NONE; $x.SWITCHES = SWITCHES; $x.sharesOf = sharesOf; $x.boardOf = boardOf; $x.cellsOf = cellsOf; $x.goalOf = goalOf; $x.growth = growth; $x.poolLimit = poolLimit; $x.density = density; $x.inch = inch;
+$x.liveBoardFor = liveBoardFor; $x.NONE = NONE; $x.SWITCHES = SWITCHES; $x.sharesOf = sharesOf; $x.boardOf = boardOf; $x.cellsOf = cellsOf; $x.goalOf = goalOf; $x.growth = growth; $x.poolLimit = poolLimit; $x.density = density; $x.inch = inch;
 return $x; })({});
-$m[3] = (($x) => {
+$m[11] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Bots for An Inch of Ink. They see only what a player sees and choose from the legal moves.
 const { NONE, cellsOf, inch } = $m[1];
@@ -428,6 +1174,7 @@ function quick(p, dice) {
 
 /** Choose a move a little at a time, so a page can draw between steps. `dice` breaks ties, drives random and draws the futures. */
 function* thinking(p, dice, tier = "normal") {
+  if (p.live) return p.phase === "spawn" ? dice.pick(inch.moves(p)) : { do: "tick", n: 2 }; // in real time the bots act inside the clock
   const moves = inch.moves(p), me = p.seat;
   if (tier === "random" || moves.length === 1) return dice.pick(moves);
   let best = moves[0], score = -Infinity;
@@ -459,429 +1206,7 @@ function choose(p, dice, tier) {
 
 $x.TIERS = TIERS; $x.value = value; $x.thinking = thinking; $x.choose = choose;
 return $x; })({});
-$m[6] = (($x) => {
-// SPDX-License-Identifier: AGPL-3.0-or-later
-// One exact way to write a value as text, the same on every machine.
-// Only whole numbers, text, true, false, null, lists and plain objects are allowed:
-// fractions can round differently between browsers.
-
-const MAX_DEPTH = 40;
-
-function canon(value) {
-  return write(value, "value", 0);
-}
-
-function write(v, where, depth) {
-  if (depth > MAX_DEPTH) throw new TypeError(`${where}: nested too deeply`);
-  if (v === null || v === true || v === false) return String(v);
-  if (typeof v === "number") {
-    if (!Number.isSafeInteger(v)) throw new TypeError(`${where}: ${v} is not a whole number`);
-    return String(v === 0 ? 0 : v); // no negative zero
-  }
-  if (typeof v === "string") {
-    if (!wellFormed(v)) throw new TypeError(`${where}: broken text`);
-    return JSON.stringify(v);
-  }
-  if (Array.isArray(v)) {
-    const out = [];
-    for (let i = 0; i < v.length; i++) {
-      if (!Object.hasOwn(v, i)) throw new TypeError(`${where}[${i}]: missing item`);
-      out.push(write(v[i], `${where}[${i}]`, depth + 1));
-    }
-    return "[" + out.join(",") + "]";
-  }
-  if (typeof v === "object") {
-    const proto = Object.getPrototypeOf(v);
-    if (proto !== Object.prototype && proto !== null) throw new TypeError(`${where}: not a plain object`);
-    const keys = Object.keys(v).sort(); // sorts by code unit, not by language
-    return "{" + keys.map((k) => write(k, where, depth + 1) + ":" + write(v[k], `${where}.${k}`, depth + 1)).join(",") + "}";
-  }
-  throw new TypeError(`${where}: ${typeof v} is not allowed`);
-}
-
-function wellFormed(s) {
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c >= 0xd800 && c <= 0xdbff) {
-      const d = s.charCodeAt(i + 1);
-      if (!(d >= 0xdc00 && d <= 0xdfff)) return false;
-      i++;
-    } else if (c >= 0xdc00 && c <= 0xdfff) return false;
-  }
-  return true;
-}
-
-/** Freeze a value all the way down, so nobody can change a position by accident. */
-function deepFreeze(v) {
-  if (v && typeof v === "object" && !Object.isFrozen(v)) {
-    Object.freeze(v);
-    for (const k of Object.keys(v)) deepFreeze(v[k]);
-  }
-  return v;
-}
-
-$x.canon = canon; $x.deepFreeze = deepFreeze;
-return $x; })({});
-$m[8] = (($x) => {
-// SPDX-License-Identifier: AGPL-3.0-or-later
-// SHA-256, written out so that it also works on a page without https.
-const { canon } = $m[6];
-
-const K = new Uint32Array(64);
-const START = new Uint32Array(8);
-{
-  // The standard's constants: the first 32 bits of the fractions of square and cube roots of primes.
-  // Found with whole-number roots, so no machine's rounding can matter.
-  const root = (n, k) => {
-    const target = BigInt(n) << BigInt(32 * k);
-    let lo = 0n, hi = 1n << 40n;
-    while (lo < hi) {
-      const mid = (lo + hi + 1n) >> 1n;
-      if (mid ** BigInt(k) <= target) lo = mid; else hi = mid - 1n;
-    }
-    return Number(lo & 0xffffffffn);
-  };
-  let found = 0;
-  for (let n = 2; found < 64; n++) {
-    let prime = true;
-    for (let d = 2; d * d <= n; d++) if (n % d === 0) { prime = false; break; }
-    if (!prime) continue;
-    if (found < 8) START[found] = root(n, 2);
-    K[found++] = root(n, 3);
-  }
-}
-
-const turn = (x, n) => (x >>> n) | (x << (32 - n));
-
-/** The SHA-256 of some bytes, as 64 hex digits. */
-function sha256(bytes) {
-  const blocks = ((bytes.length + 8) >> 6) + 1;
-  const data = new Uint8Array(blocks * 64), view = new DataView(data.buffer);
-  data.set(bytes);
-  data[bytes.length] = 0x80;
-  view.setUint32(data.length - 8, Math.floor(bytes.length / 0x20000000));
-  view.setUint32(data.length - 4, (bytes.length << 3) >>> 0);
-  const h = Uint32Array.from(START), w = new Uint32Array(64);
-  for (let at = 0; at < data.length; at += 64) {
-    for (let i = 0; i < 16; i++) w[i] = view.getUint32(at + i * 4);
-    for (let i = 16; i < 64; i++) {
-      const a = w[i - 15], b = w[i - 2];
-      w[i] = (w[i - 16] + w[i - 7] + (turn(a, 7) ^ turn(a, 18) ^ (a >>> 3)) + (turn(b, 17) ^ turn(b, 19) ^ (b >>> 10))) | 0;
-    }
-    let [a, b, c, d, e, f, g, x] = h;
-    for (let i = 0; i < 64; i++) {
-      const t1 = (x + (turn(e, 6) ^ turn(e, 11) ^ turn(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
-      const t2 = ((turn(a, 2) ^ turn(a, 13) ^ turn(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
-      x = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
-    }
-    h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += x;
-  }
-  return Array.from(h, (n) => n.toString(16).padStart(8, "0")).join("");
-}
-
-/** A short code for any value: the same value gives the same code on every machine. */
-const fingerprint = (value) => sha256(new TextEncoder().encode(canon(value))).slice(0, 16);
-
-$x.sha256 = sha256; $x.fingerprint = fingerprint;
-return $x; })({});
-$m[10] = (($x) => {
-// SPDX-License-Identifier: AGPL-3.0-or-later
-// Seeded chance, in whole numbers only. The state is four numbers kept beside the position,
-// so a replay rolls the same dice.
-const { sha256 } = $m[8];
-
-function seedState(seed) {
-  const hex = sha256(new TextEncoder().encode("capo/" + String(seed)));
-  return [0, 1, 2, 3].map((i) => parseInt(hex.slice(i * 8, i * 8 + 8), 16));
-}
-
-/** The small fast counter generator (sfc32). Returns [number from 0 to 2^32 - 1, next state]. */
-function next([a, b, c, d]) {
-  const t = (((a + b) | 0) + d) | 0;
-  return [t >>> 0, [(b ^ (b >>> 9)) >>> 0, (c + (c << 3)) >>> 0, ((((c << 21) | (c >>> 11)) + t) | 0) >>> 0, (d + 1) >>> 0]];
-}
-
-/** A chance source for one move. Every draw is fair: no remainder bias. */
-function chance(state) {
-  let now = state;
-  const below = (n) => {
-    if (!Number.isInteger(n) || n < 1 || n > 0x100000000) throw new RangeError("below() needs a whole number from 1 to 2^32");
-    const limit = 0x100000000 - (0x100000000 % n);
-    for (;;) {
-      const [v, s] = next(now);
-      now = s;
-      if (v < limit) return v % n;
-    }
-  };
-  return {
-    below,
-    die: (sides = 6) => below(sides) + 1,
-    pick: (list) => list[below(list.length)],
-    shuffle(list) {
-      const out = [...list];
-      for (let i = out.length - 1; i > 0; i--) {
-        const j = below(i + 1);
-        [out[i], out[j]] = [out[j], out[i]];
-      }
-      return out;
-    },
-    get state() { return now; },
-  };
-}
-
-$x.seedState = seedState; $x.next = next; $x.chance = chance;
-return $x; })({});
-$m[9] = (($x) => {
-// SPDX-License-Identifier: AGPL-3.0-or-later
-// One game being played. It keeps the options, the seed and the list of moves; everything else follows from them.
-//
-// A game is a plain object:
-//   id, version          text
-//   options              { name: { values: [...], normal } }   house rules, as plain data
-//   setup(options, dice) the first position
-//   turn(position)       the seat to move, or null when the game is over
-//   moves(position)      every legal move for that seat, as plain data
-//   apply(position, move, dice) -> { position, events }
-//   result(position)     { winners: [seat], why } when over, else null
-const { canon, deepFreeze } = $m[6];
-const { fingerprint } = $m[8];
-const { chance, seedState } = $m[10];
-
-const FORMAT = 1;
-const MAX_MOVES = 20000, MAX_FILE = 2000000;
-const NEEDED = { setup: "function", turn: "function", moves: "function", apply: "function", result: "function", id: "string", version: "string", options: "object" };
-const same = (a, b) => canon(a) === canon(b);
-
-/** A refusal is a normal answer: bad move, bad file. Anything else that is thrown is a bug. */
-class Refusal extends Error {
-  constructor(code, message) {
-    super(message);
-    this.name = "Refusal";
-    this.code = code;
-  }
-}
-
-function checkGame(game) {
-  for (const [k, type] of Object.entries(NEEDED)) if (typeof game?.[k] !== type) throw new TypeError(`game is missing ${k}`);
-  if (!/^[a-z][a-z0-9-]{0,31}$/.test(game.id)) throw new TypeError("game id must be short lower-case text");
-  for (const [k, o] of Object.entries(game.options)) {
-    if (!Array.isArray(o.values) || !o.values.some((v) => same(v, o.normal))) throw new TypeError(`option ${k}: its normal value is not in its list`);
-  }
-  return game;
-}
-
-/** Fill in normal values and refuse anything unknown. */
-function readOptions(game, given = {}) {
-  const out = {};
-  for (const k of Object.keys(given)) if (!Object.hasOwn(game.options, k)) throw new Refusal("option", `unknown option "${k.slice(0, 40)}"`);
-  for (const [k, o] of Object.entries(game.options)) {
-    const v = Object.hasOwn(given, k) ? given[k] : o.normal;
-    const found = o.values.find((x) => { try { return same(x, v); } catch { return false; } });
-    if (found === undefined) throw new Refusal("option", `option "${k}" cannot have that value`);
-    out[k] = found;
-  }
-  return out;
-}
-
-function createMatch(game, { options = {}, seed = "" } = {}) {
-  checkGame(game);
-  const chosen = deepFreeze(readOptions(game, options)), theSeed = String(seed).slice(0, 200);
-  const dice = chance(seedState(`${game.id}/${theSeed}`));
-  const opening = deepFreeze(game.setup(chosen, dice));
-  canon(opening); // a bad first position fails here, not ten moves later
-  const steps = [{ position: opening, dice: dice.state, events: [] }], played = [];
-  const now = () => steps[steps.length - 1];
-
-  return {
-    game, options: chosen, seed: theSeed,
-    get position() { return now().position; },
-    get events() { return now().events; },
-    get turn() { return game.turn(now().position); },
-    get result() { return game.result(now().position); },
-    get list() { return played.map((m) => structuredClone(m)); },
-    legal() { return this.turn === null ? [] : game.moves(now().position); },
-    isLegal(move) { const want = canon(move); return this.legal().some((m) => canon(m) === want); },
-    fingerprint: () => fingerprint([game.id, game.version, chosen, now().position, now().dice]),
-
-    /** Play one move, or refuse it and change nothing. */
-    play(move) {
-      if (this.turn === null) throw new Refusal("over", "the game is over");
-      if (played.length >= MAX_MOVES) throw new Refusal("long", "the list of moves is full");
-      let copy;
-      try { copy = JSON.parse(canon(move)); } catch (e) { throw new Refusal("shape", `that is not a move: ${e.message}`); }
-      if (!this.isLegal(copy)) throw new Refusal("illegal", `that move is not allowed now: ${canon(copy).slice(0, 120)}`);
-      const d = chance(now().dice), made = game.apply(now().position, copy, d);
-      canon(made.position);
-      canon(made.events || []);
-      steps.push({ position: deepFreeze(made.position), dice: d.state, events: deepFreeze(made.events || []) });
-      played.push(deepFreeze(copy));
-      return now().events;
-    },
-    /** Take back the last move. Playing it again rolls the same dice. */
-    undo() {
-      if (!played.length) return false;
-      steps.pop();
-      played.pop();
-      return true;
-    },
-    /** The position after the first n moves. */
-    at(n) {
-      if (!Number.isInteger(n) || n < 0 || n >= steps.length) throw new RangeError("no such moment");
-      return steps[n].position;
-    },
-    save() {
-      return canon({ format: FORMAT, game: game.id, version: game.version, options: chosen, seed: theSeed, moves: played, end: this.fingerprint() });
-    },
-  };
-}
-
-/**
- * A saved game stops making sense at one of its moves. What should happen?
- * "refuse" loses the whole file; "keep" opens the part before that move, with a warning.
- * @param {{code: string, index: number, total: number}} problem
- *   code is "illegal", "shape", "over" or "end" (the moves work but lead somewhere else)
- */
-function whenReplayFails(problem) {
-  if (problem.code === "end") return "refuse"; // no single move is at fault, so no part can be trusted
-  return problem.index > 0 ? "keep" : "refuse"; // with no good move there is nothing to keep
-}
-
-const FIELDS = ["end", "format", "game", "moves", "options", "seed", "version"];
-
-/** Open a saved game by replaying every move. Returns { match, warning }. */
-function openSave(text, games) {
-  const notASave = () => new Refusal("file", "that is not a saved game");
-  if (typeof text !== "string" || text.length > MAX_FILE) throw new Refusal("file", "that file is too large or not text");
-  let f;
-  try { f = JSON.parse(text); } catch { throw notASave(); }
-  if (!f || typeof f !== "object" || Array.isArray(f) || Object.keys(f).sort().join() !== FIELDS.join()) throw notASave();
-  if (f.format !== FORMAT) throw new Refusal("format", "this save was made by a different version of Capo");
-  if (!Array.isArray(f.moves) || f.moves.length > MAX_MOVES || typeof f.seed !== "string" || typeof f.end !== "string") throw notASave();
-  if (!f.options || typeof f.options !== "object" || Array.isArray(f.options)) throw notASave();
-  const game = games.find((g) => g.id === f.game);
-  if (!game) throw new Refusal("game", "this copy of Capo does not have that game");
-  if (game.version !== f.version) throw new Refusal("version", `this save needs version ${String(f.version).slice(0, 20)} of ${game.id}; this copy has ${game.version}`);
-
-  const match = createMatch(game, { options: f.options, seed: f.seed }), total = f.moves.length;
-  const fail = (code, index, message) => {
-    if (whenReplayFails({ code, index, total }) === "keep") return { match, warning: `${message}. Kept ${index} of ${total} moves.` };
-    throw new Refusal(code, message);
-  };
-  for (let i = 0; i < total; i++) {
-    try { match.play(f.moves[i]); } catch (e) {
-      if (!(e instanceof Refusal)) throw e;
-      return fail(e.code, i, `move ${i + 1}: ${e.message}`);
-    }
-  }
-  if (match.fingerprint() !== f.end) return fail("end", total, "the moves lead to a different position than the file says");
-  return { match, warning: "" };
-}
-
-$x.FORMAT = FORMAT; $x.Refusal = Refusal; $x.checkGame = checkGame; $x.readOptions = readOptions; $x.createMatch = createMatch; $x.whenReplayFails = whenReplayFails; $x.openSave = openSave;
-return $x; })({});
-$m[7] = (($x) => {
-// SPDX-License-Identifier: AGPL-3.0-or-later
-// A whole game as a few hundred bytes, small enough for one chat message. Each move is stored as its place in the
-// list of legal moves, so a link cannot hold a move that is not allowed.
-const { canon } = $m[6];
-const { fingerprint } = $m[8];
-const { Refusal, createMatch } = $m[9];
-
-const LAYOUT = 2, MOST_MOVES = 4000, MOST_BYTES = 32000, CHECK = 8;
-const ROLES = ["host", "friend", "normal", "easy"];
-const broken = () => new Refusal("link", "that link is broken or not complete");
-
-function put(out, n) { // a whole number, seven bits to a byte
-  while (n > 127) { out.push((n % 128) | 128); n = Math.floor(n / 128); }
-  out.push(n);
-}
-function reader(bytes) {
-  let at = 0;
-  return {
-    number() {
-      let n = 0, unit = 1;
-      for (let i = 0; i < 5; i++) {
-        if (at >= bytes.length) throw broken();
-        const b = bytes[at++];
-        n += (b & 127) * unit;
-        if (b < 128) return n;
-        unit *= 128;
-      }
-      throw broken();
-    },
-    take(n) { if (at + n > bytes.length) throw broken(); at += n; return bytes.subarray(at - n, at); },
-    done: () => at === bytes.length,
-  };
-}
-/** Covers every move as well as where they lead. */
-function check(match, roles) {
-  const f = fingerprint([match.fingerprint(), match.seed, match.list, roles]);
-  return Array.from({ length: CHECK }, (_, i) => parseInt(f.slice(i * 2, i * 2 + 2), 16));
-}
-
-/** roles: for each seat "host", "friend", "normal" or "easy". look: for each seat the numbers of its colour and icon. */
-function packGame(match, roles, look) {
-  const head = new TextEncoder().encode(canon({ g: match.game.id, v: match.game.version, o: match.options, s: match.seed, r: roles, l: look })), out = [LAYOUT];
-  put(out, head.length);
-  out.push(...head);
-  const list = match.list, again = createMatch(match.game, { options: match.options, seed: match.seed });
-  if (list.length > MOST_MOVES) throw new Refusal("link", "this game is too long for a link");
-  put(out, list.length);
-  for (const m of list) {
-    const want = canon(m);
-    put(out, again.legal().findIndex((x) => canon(x) === want));
-    again.play(m);
-  }
-  out.push(...check(match, roles));
-  return Uint8Array.from(out);
-}
-
-/** Returns { match, roles }, or refuses. */
-function unpackGame(bytes, games) {
-  if (bytes.length > MOST_BYTES) throw broken();
-  const r = reader(bytes);
-  if (r.number() !== LAYOUT) throw new Refusal("link", "that link was made by a different version of Capo");
-  let h;
-  try { h = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(r.take(r.number()))); } catch { throw broken(); }
-  if (!h || typeof h !== "object" || Object.keys(h).sort().join() !== "g,l,o,r,s,v" || typeof h.s !== "string" || !h.o || typeof h.o !== "object" || Array.isArray(h.o)) throw broken();
-  const game = games.find((g) => g.id === h.g);
-  if (!game) throw new Refusal("game", "that link is for another game. Open it from that game's page");
-  if (game.version !== h.v) throw new Refusal("version", "that link was made by a different version of this game");
-  const match = createMatch(game, { options: h.o, seed: h.s });
-  if (!Array.isArray(h.r) || h.r.length !== match.options.seats || !h.r.every((x) => ROLES.includes(x))) throw broken();
-  if (!Array.isArray(h.l) || h.l.length !== match.options.seats || !h.l.every((x) => Array.isArray(x) && x.length === 2 && x.every((v) => Number.isInteger(v) && v >= 0 && v < 64))) throw broken();
-  const n = r.number();
-  if (n > MOST_MOVES) throw broken();
-  for (let i = 0; i < n; i++) {
-    const m = match.legal()[r.number()];
-    if (!m) throw broken();
-    match.play(m);
-  }
-  if (canon([...r.take(CHECK)]) !== canon(check(match, h.r)) || !r.done()) throw broken();
-  return { match, roles: h.r, look: h.l };
-}
-
-/** How a game that arrives stands to the one already here: "new" (it goes on from ours), "old" (ours goes further), or "other". */
-function compareGames(ours, theirs) {
-  if (ours.game.id !== theirs.game.id || ours.seed !== theirs.seed || canon(ours.options) !== canon(theirs.options)) return "other";
-  const a = ours.list.map((m) => canon(m)), b = theirs.list.map((m) => canon(m)), n = Math.min(a.length, b.length);
-  for (let i = 0; i < n; i++) if (a[i] !== b[i]) return "other";
-  return b.length > a.length ? "new" : "old";
-}
-
-$x.packGame = packGame; $x.unpackGame = unpackGame; $x.compareGames = compareGames;
-return $x; })({});
-$m[5] = (($x) => {
-// SPDX-License-Identifier: AGPL-3.0-or-later
-$x.canon = $m[6].canon; $x.deepFreeze = $m[6].deepFreeze;
-$x.compareGames = $m[7].compareGames; $x.packGame = $m[7].packGame; $x.unpackGame = $m[7].unpackGame;
-$x.fingerprint = $m[8].fingerprint; $x.sha256 = $m[8].sha256;
-$x.chance = $m[10].chance; $x.next = $m[10].next; $x.seedState = $m[10].seedState;
-$x.FORMAT = $m[9].FORMAT; $x.Refusal = $m[9].Refusal; $x.checkGame = $m[9].checkGame; $x.readOptions = $m[9].readOptions; $x.createMatch = $m[9].createMatch; $x.openSave = $m[9].openSave; $x.whenReplayFails = $m[9].whenReplayFails;
-
-
-return $x; })({});
-$m[12] = (($x) => {
+$m[14] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // One camera for every look. Board point (x, y) in board pixels, height Z in screen pixels.
 // The *To methods write into fields and make no objects, so picking makes no garbage.
@@ -950,7 +1275,7 @@ function pick(cam, m, sx, sy, top, unit, most) {
 
 $x.Camera = Camera; $x.pick = pick;
 return $x; })({});
-$m[13] = (($x) => {
+$m[15] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Turns a list of hexes into what the painter needs: a picture of cell numbers and a picture of heights.
 const ROOT3 = Math.sqrt(3);
@@ -1002,7 +1327,7 @@ function hexPicture(cells, rough, sea = [], size = 44) {
 
 $x.noise = noise; $x.hexPicture = hexPicture;
 return $x; })({});
-$m[14] = (($x) => {
+$m[16] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The painter: WebGL2 by hand. One full-screen triangle; the shader undoes the camera and walks down to the first cell top.
 const VS = `#version 300 es
@@ -1103,7 +1428,7 @@ class Painter {
     const T = this.table, g = this.g;
     cells.forEach((c, i) => {
       const id = i + 1, o = ((id >> 6) * 128 + (id & 63) * 2) * 4;
-      T[o] = c.rgb[0]; T[o + 1] = c.rgb[1]; T[o + 2] = c.rgb[2]; T[o + 3] = c.owner < 0 ? 255 : 40 + c.owner * 30;
+      T[o] = c.rgb[0]; T[o + 1] = c.rgb[1]; T[o + 2] = c.rgb[2]; T[o + 3] = c.owner < 0 ? 255 : 20 + ((c.owner * 37) % 211); // different for every owner, up to 211 of them
       T[o + 4] = Math.min(255, Math.round(c.top * 32)); T[o + 5] = c.glow * 255; T[o + 6] = c.wet * 255; T[o + 7] = c.land === undefined ? 255 : 40 + c.land * 30;
     });
     g.activeTexture(g.TEXTURE2);
@@ -1126,13 +1451,13 @@ class Painter {
 
 $x.Painter = Painter;
 return $x; })({});
-$m[11] = (($x) => {
+$m[13] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A hex board on a page: the painted surface, standing pieces and emblems, picking, looks and animation.
 // It never changes a game. It is told what to show and says which cell was pointed at.
-const { Camera, pick } = $m[12];
-const { hexPicture } = $m[13];
-const { Painter } = $m[14];
+const { Camera, pick } = $m[14];
+const { hexPicture } = $m[15];
+const { Painter } = $m[16];
 
 const DEG = Math.PI / 180;
 const LOOKS = {
@@ -1181,11 +1506,11 @@ function canDraw() {
   return !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(name);
 }
 
-function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5] }) {
+function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44 }) {
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
-  const m = picture || hexPicture(cells, rough, sea), painter = new Painter(under), cam = new Camera(), still = matchMedia("(prefers-reduced-motion: reduce)");
+  const m = picture || hexPicture(cells, rough, sea, size), painter = new Painter(under), cam = new Camera(), still = matchMedia("(prefers-reduced-motion: reduce)");
   painter.load(m);
   const ends = m.ends || m.mid.flatMap(([x, y]) => [[x - m.R, y], [x + m.R, y], [x, y - m.R], [x, y + m.R]]);
   const show = m.mid.map((_, i) => ({ land: lands?.[i], rgb: ground(i), from: ground(i), to: ground(i), owner: -1, top: sea[i] ? 0.2 : 1, topTo: sea[i] ? 0.2 : 1, glow: 0, wet: 0, start: 0, ends: 0 }));
@@ -1280,7 +1605,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     ctx.clearRect(0, 0, cam.W, cam.H);
     const flat = Math.max(0.5, cam.ct), size = m.R * cam.s;
     marks.forEach((k, i) => { // emblems lie on the ground
-      if (!k || k.home) return;
+      if (!k || k.home || m.R < 20 || icons[k.seat] === undefined) return; // no emblems on very small cells
       k.seen = show[i].ends ? Math.max(0, Math.min(1, (t - show[i].start) / 260)) : 1;
       if (!k.seen) return;
       cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit());
@@ -1433,7 +1758,8 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
      * Show a position. owner[i] is a seat or -1. `order` lists cells that change first to last, so ink spreads.
      * Returns how long the change takes, in milliseconds.
      */
-    show(owner, { pieces = [], order = [], quick = false } = {}) {
+    show(owner, { pieces = [], order = [], quick = false, names = null } = {}) {
+      if (names) labels = names;
       const homes = new Set(pieces.filter((p) => p.kind === "tower").map((p) => p.at)), held = new Set(pieces.map((p) => p.at));
       const t = performance.now(), slow = !quick && !still.matches, step = Math.min(90, 900 / Math.max(1, order.length)), place = new Map(order.map((c, i) => [c, i]));
       let last = 0;
@@ -1470,7 +1796,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
 
 $x.LOOKS = LOOKS; $x.EMBLEMS = EMBLEMS; $x.emblem = emblem; $x.canDraw = canDraw; $x.createBoard = createBoard;
 return $x; })({});
-$m[16] = (($x) => {
+$m[18] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Where this copy's source code can be read. Anyone who runs a changed copy puts their own address here.
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
@@ -1480,9 +1806,9 @@ const VERSION = "0.0.1";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION;
 return $x; })({});
-$m[15] = (($x) => {
+$m[17] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-const { SOURCE_URL, VERSION } = $m[16];
+const { SOURCE_URL, VERSION } = $m[18];
 
 /** Every page shows its version and where its source can be read. */
 function footer() {
@@ -1497,12 +1823,12 @@ function footer() {
 
 $x.footer = footer;
 return $x; })({});
-$m[17] = (($x) => {
+$m[19] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Games played by pasting a link. The whole game is in the part after #, which browsers do not send to the host.
 // With a password the game is locked (AES-GCM, the key made from the password by PBKDF2) before it goes in the link.
-const { Refusal } = $m[5];
-const { SITE_URL } = $m[16];
+const { Refusal } = $m[3];
+const { SITE_URL } = $m[18];
 
 const ID = 6, SALT = 16, IV = 12, ROUNDS = 250000, PLACE = "capo-link-";
 const broken = () => new Refusal("link", "that link is broken or not complete");
@@ -1562,14 +1888,14 @@ const linkGames = {
 
 $x.canLock = canLock; $x.newId = newId; $x.makeLink = makeLink; $x.readLink = readLink; $x.linkGames = linkGames;
 return $x; })({});
-$m[4] = (($x) => {
+$m[12] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What every table game's screen shares: title, seats, score bar, words, taking back, saving, bots' turns and the end.
 // A game gives its rules, its board and its own move panel.
-const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } = $m[5];
-const { EMBLEMS, emblem } = $m[11];
-const { footer } = $m[15];
-const { canLock, linkGames, makeLink, newId, readLink } = $m[17];
+const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } = $m[3];
+const { EMBLEMS, emblem } = $m[13];
+const { footer } = $m[17];
+const { canLock, linkGames, makeLink, newId, readLink } = $m[19];
 
 const COLOURS = [["Azure", [91, 143, 196]], ["Rust", [208, 106, 75]], ["Moss", [138, 168, 81]], ["Plum", [160, 108, 182]], ["Saffron", [222, 176, 62]], ["Teal", [64, 160, 150]], ["Rose", [220, 124, 154]], ["Slate", [112, 124, 138]], ["Umber", [146, 100, 64]], ["Indigo", [88, 92, 190]], ["Lime", [186, 208, 72]], ["Crimson", [176, 48, 62]], ["Ivory", [236, 226, 200]], ["Night", [52, 58, 78]]];
 const LOOK0 = [[0, 0], [1, 1], [2, 2], [3, 3], [4, 8], [5, 4]];
@@ -1682,6 +2008,8 @@ function createTable(G) {
   }
   function ending() {
     const r = T.match.result;
+    const own = G.ending?.(T);
+    if (own) return own;
     if (r.winners.length > 1) return `${r.winners.map((s) => NAMES[s]).join(" and ")} tie. They ${r.why}.`;
     return T.solo() && T.kinds[r.winners[0]] === "you" ? G.won : `${NAMES[r.winners[0]]} wins.`;
   }
@@ -1712,6 +2040,18 @@ function createTable(G) {
   const tally = (p) => Array.from({ length: T.kinds.length }, (_, s) => G.cellsOf(p, s));
   const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, look: T.look, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds, look: T.look })); };
 
+  /** A tick of a real-time game: played at once, drawn without waiting, saved now and then. */
+  function flow(move) {
+    const events = T.match.play(move), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
+    log.push(...words);
+    if (T.match.list.length % 10 === 0 || T.match.turn === null) { land.push(tally(T.match.position)); keep(); }
+    G.seen?.(T, events);
+    board.show([], false);
+    if (words.length) toast(words.slice(0, 2).join(" "));
+    score(); panel();
+    if (T.match.turn === null) { land.push(tally(T.match.position)); keep(); finish(); }
+  }
+  T.flow = flow;
   async function play(move) {
     const mine = run, seat = T.match.turn, person = T.human();
     T.busy = true;
@@ -1894,9 +2234,9 @@ function createTable(G) {
   /** The options the title screen stands at. */
   function chosen(all = false) {
     const o = { style: setup.style === "coda" ? "classic" : setup.style, seats: setup.seats, ...(setup.rounds ? { rounds: setup.rounds } : {}) };
-    for (const c of G.choices || []) if (!c.local) o[c.key] = setup.extra[c.key];
+    for (const c of G.choices || []) if (!c.local && (!c.only || c.only.includes(o.style))) o[c.key] = setup.extra[c.key];
     if (setup.style === "custom") for (const c of G.switches) o[c.key] = setup.extra[c.key];
-    for (const c of G.expansions || []) o[c.key] = !!setup.on[c.key];
+    for (const c of G.expansions || []) if (!G.expansionsFor || G.expansionsFor(o.style, setup.extra)) o[c.key] = !!setup.on[c.key];
     if (all) for (const c of G.choices || []) if (c.local) o[c.key] = setup.extra[c.key];
     return o;
   }
@@ -1930,7 +2270,7 @@ function createTable(G) {
       base = up;
     });
     c.setAttribute("role", "img"); c.setAttribute("aria-label", "Land held over the game");
-    body.append(el("p", r.winners.length > 1 ? `They ${r.why}.` : `${NAMES[r.winners[0]]}: ${r.why}, in ${Math.min(p.round, p.rounds)} rounds.`), c, el("p", `${tally(p).map((v, s) => `${NAMES[s]} ${v}`).join(", ")}${G.unit ? ` ${G.unit.toLowerCase()}.` : ` of ${n} cells.`}`));
+    body.append(el("p", G.summary?.(T) || (r.winners.length > 1 ? `They ${r.why}.` : `${NAMES[r.winners[0]]}: ${r.why}, in ${Math.min(p.round, p.rounds)} rounds.`)), c, el("p", G.summary?.(T) ? `You held ${tally(p)[0]} of ${n} cells.` : `${tally(p).map((v, s) => `${NAMES[s]} ${v}`).join(", ")}${G.unit ? ` ${G.unit.toLowerCase()}.` : ` of ${n} cells.`}`));
     const row = el("div", undefined, "stack"), again = el("button", "Play again", "main");
     again.type = "button"; again.onclick = () => { closeSheet(); restart(); };
     row.append(again); body.append(row);
@@ -1971,14 +2311,14 @@ function createTable(G) {
     radio($("style"), [["classic", "Traditional"], ["custom", "Custom"], ["ours", "Capo"], ["coda", "Coda"]].filter(([k]) => G.about[k]).map(([value, label]) => ({ value, label, note: value === "coda" ? "coming soon" : undefined })), setup.style, (v) => { if (v === setup.style) return; setup.style = v; titleCard(); if (v !== "coda") attract(); });
     const soon = setup.style === "coda";
     $("about").replaceChildren(...G.about[setup.style].split("\n").map((x) => el("span", x)));
-    for (const id of ["count", "who"]) $(id).closest(".line, ul").hidden = soon;
+    for (const id of ["count", "who"]) $(id).closest(".line, ul").hidden = soon || !!G.alone?.(setup.style, setup.extra);
     $("start").disabled = soon;
     $("start").textContent = soon ? "Coming soon" : "Begin";
     $("length-line").hidden = setup.style !== "ours" || !G.lengths.length;
     const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; attract(); }; line.append(el("span", c.label), k); return line; };
-    more.replaceChildren(...(soon ? [] : (G.choices || []).map(pickOf)));
+    more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => !c.only || c.only.includes(setup.style)).map(pickOf)));
     if (setup.style === "custom") more.append(...G.switches.map(pickOf));
-    if (G.expansions && !soon) {
+    if (G.expansions && !soon && (!G.expansionsFor || G.expansionsFor(setup.style, setup.extra))) {
       const box = el("div", undefined, "pick small");
       box.setAttribute("role", "group");
       box.setAttribute("aria-label", "Expansions");
@@ -2039,7 +2379,7 @@ function createTable(G) {
   const resumeButton = () => { const k = kept(); $("resume").hidden = !k; if (k) $("resume").textContent = `Continue, round ${k.m.position.round}`; };
 
   $("start").onclick = () => {
-    const who = setup.who.slice(0, setup.seats), far = who.includes("away"), words = passField.value.trim();
+    const who = G.kindsOf?.(chosen()) || setup.who.slice(0, setup.seats), far = who.includes("away"), words = passField.value.trim();
     begin(createMatch(G.game, { seed: G.seedOf?.(chosen(true)) || seed(), options: chosen() }), who, far ? { id: newId(), roles: who.map((k) => (k === "you" ? "host" : k === "away" ? "friend" : k)), pass: canLock() ? words : "", floor: 0 } : null, -1, setup.look.map((x) => [...x]));
   };
   linkButton.onclick = linkSheet;
@@ -2093,11 +2433,11 @@ function createTable(G) {
 
 $x.COLOURS = COLOURS; $x.NAMES = NAMES; $x.RGB = RGB; $x.ICONS = ICONS; $x.PAPER = PAPER; $x.dress = dress; $x.$ = $; $x.el = el; $x.sleep = sleep; $x.sign = sign; $x.radio = radio; $x.toast = toast; $x.sheet = sheet; $x.createTable = createTable;
 return $x; })({});
-$m[18] = (($x) => {
+$m[20] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The hex board for a game's screen: the moving one when the device can draw it, else a still picture that can be tapped.
-const { LOOKS, canDraw, createBoard } = $m[11];
-const { ICONS, RGB } = $m[4];
+const { LOOKS, canDraw, createBoard } = $m[13];
+const { ICONS, RGB } = $m[12];
 
 /**
  * o.picture and o.fine { cells, of } for a board of provinces. Otherwise o: cells (axial), rough[], sea[], ground(i), owner() -> seats or -1 by cell, pieces() -> standing pieces, tap(i), can(i).
@@ -2126,7 +2466,7 @@ function hexBoard(T, stage, o) {
   };
   if (canDraw()) {
     try {
-      b = createBoard(stage, { picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, rough: o.rough, sea: o.sea, seats: RGB, ground: o.ground, look: LOOKS[kept] ? kept : wide && !o.plain ? "relief" : "flat" });
+      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, look: LOOKS[kept] ? kept : wide && !o.plain ? "relief" : "flat" });
       b.on("pick", (i) => { if (i >= 0) o.tap(i); });
       b.on("hover", (i) => b?.setCursor(i >= 0 && T.ready() && o.can(i)));
       b.on("lost", () => { b = null; still(); });
@@ -2137,7 +2477,7 @@ function hexBoard(T, stage, o) {
     get look() { return b?.look; },
     setLook: (k) => b?.setLook(k),
     layout: (free) => b?.layout(free),
-    show(order, quick) { if (b) return b.show(o.owner(), { pieces: o.pieces(), order, quick }); still(); return 0; },
+    show(order, quick) { if (b) return b.show(o.owner(), { pieces: o.pieces(), order, quick, names: o.names?.() }); still(); return 0; },
     light: (cells, chosen) => b?.preview(cells, chosen),
     clear: () => b?.preview([]),
     destroy: () => b?.destroy(),
@@ -2146,13 +2486,191 @@ function hexBoard(T, stage, o) {
 
 $x.hexBoard = hexBoard;
 return $x; })({});
+$m[22] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Turns provinces made of small hexes into what the painter needs. Borders are bent a little so they look drawn,
+// never enough to make two provinces touch that did not, or part two that did.
+const { noise } = $m[15];
+
+const ROOT3 = Math.sqrt(3);
+
+/** cells: small hexes [[q, r], ...]. of[i]: the province of hex i, or -1 for sea. The sea is the last number in the picture. */
+function areaPicture(cells, of, mids, size = 26, flat = false) {
+  const n = mids.length, seaId = n + 1, key = new Map(cells.map(([q, r], i) => [q * 1000 + r, of[i]]));
+  const xs = cells.map(([q, r]) => ROOT3 * (q + r / 2) * size), ys = cells.map(([, r]) => 1.5 * r * size), x0 = flat ? Math.min(...xs) - size * 1.6 : 0, y0 = flat ? Math.min(...ys) - size * 1.6 : 0;
+  const round = Math.max(...cells.map(([q, r]) => Math.hypot(ROOT3 * (q + r / 2), 1.5 * r))) * size + size * 1.5, cx = flat ? Math.ceil(-x0) : Math.ceil(round) + 4, cy = flat ? Math.ceil(-y0) : cx;
+  const w = flat ? 2 * Math.ceil((Math.max(...xs) - x0 + size * 1.6) / 2) : cx * 2, h = flat ? 2 * Math.ceil((Math.max(...ys) - y0 + size * 1.6) / 2) : cy * 2, bend = size / 2;
+  const ids = new Uint16Array(w * h), at = ([q, r]) => [cx + size * ROOT3 * (q + r / 2), cy + size * 1.5 * r];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!flat && (x - cx) ** 2 + (y - cy) ** 2 > round * round) continue;
+      const X = (x - cx + (noise(x / bend, y / bend) - 0.5) * bend) / size, Y = (y - cy + (noise(x / bend + 70, y / bend + 30) - 0.5) * bend) / size;
+      const r0 = Y / 1.5, q0 = X / ROOT3 - r0 / 2; // the hex a point is in, by rounding
+      let q = Math.round(q0), r = Math.round(r0);
+      const s = Math.round(-q0 - r0), dq = Math.abs(q - q0), dr = Math.abs(r - r0), ds = Math.abs(s + q0 + r0);
+      if (dq > dr && dq > ds) q = -r - s; else if (dr > ds) r = -q - s;
+      const o = key.get(q * 1000 + r);
+      ids[y * w + x] = o === undefined || o < 0 ? seaId : o + 1;
+    }
+  }
+  const hw = w >> 1, hh = h >> 1, height = new Uint8Array(hw * hh), gap = new Float32Array(hw * hh).fill(99), id = (x, y) => (x < 0 || y < 0 || x >= hw || y >= hh ? 0 : ids[y * 2 * w + x * 2]);
+  for (let y = 0; y < hh; y++) for (let x = 0; x < hw; x++) { const v = id(x, y); if (id(x - 1, y) !== v || id(x + 1, y) !== v || id(x, y - 1) !== v || id(x, y + 1) !== v) gap[y * hw + x] = 0; }
+  const low = (i, j, d) => { if (j >= 0 && j < gap.length && gap[j] + d < gap[i]) gap[i] = gap[j] + d; };
+  for (let i = 0; i < gap.length; i++) { low(i, i - 1, 1); low(i, i - hw, 1); low(i, i - hw - 1, 1.4); low(i, i - hw + 1, 1.4); }
+  for (let i = gap.length - 1; i >= 0; i--) { low(i, i + 1, 1); low(i, i + hw, 1); low(i, i + hw + 1, 1.4); low(i, i + hw - 1, 1.4); }
+  for (let y = 0; y < hh; y++) {
+    for (let x = 0; x < hw; x++) {
+      const i = y * hw + x, v = id(x, y), X = x * 2, Y = y * 2;
+      if (!v) { height[i] = 6; continue; }
+      let z;
+      if (v === seaId) z = 20 + 5 * noise(X / 14, Y / 6) + 2 * noise(X / 6 + 9, Y / 5);
+      else {
+        const ridge = Math.max(0, noise(X / 46 + 11, Y / 46 + 5) - 0.56) * 2.3; // a few rolling hills
+        z = 26 + 6 * noise(X / 34, Y / 34) + 2 * noise(X / 9 + 40, Y / 9) + ridge * 62 * (0.7 + 0.5 * noise(X / 8, Y / 8)) * Math.min(1, gap[i] / 7);
+        if (gap[i] < 3) z -= (3 - gap[i]) * 3.2;
+      }
+      height[i] = Math.max(0, Math.min(255, z));
+    }
+  }
+  const ends = flat ? [[0, 0], [w, 0], [0, h], [w, h]] : Array.from({ length: 16 }, (_, k) => [cx + round * Math.cos((k * Math.PI) / 8), cy + round * Math.sin((k * Math.PI) / 8)]);
+  return { w, h, hw, hh, n: n + 1, ids, height, mid: [...mids.map((m) => at(cells[m])), [flat ? 4 : cx, flat ? 4 : cy]], R: size * (flat ? 2.1 : 1.6), ends, at: cells.map(at) };
+}
+
+$x.areaPicture = areaPicture;
+return $x; })({});
+$m[21] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// An Inch of Ink in real time, on the table: a clock, a share to send, a click on where it goes, and a leaderboard.
+const { NONE, PCTS, TICK_MS, bordersOf, cityPrice, gainOf, goalOf, landings, maxOf } = $m[9];
+const { liveBoardFor } = $m[1];
+const { $, RGB, el, toast } = $m[12];
+const { hexBoard } = $m[20];
+const { areaPicture } = $m[22];
+
+const SEA = [64, 104, 128], LAND = [[214, 204, 170], [206, 198, 162], [220, 210, 178]], HILL = [178, 160, 128];
+let pct = 40, paused = false, speed = 1, clock = 0, building = false, box = null;
+
+/** Colours for every nation: yours first, the rest spread round the wheel. */
+function colours(p) {
+  return p.troops.map((_, s) => {
+    if (s === 0) return RGB[0];
+    const h = (s * 137.508) % 360, f = (n) => { const k = (n + h / 30) % 12; return Math.round(255 * (0.52 - 0.3 * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); };
+    return [f(0), f(8), f(4)];
+  });
+}
+
+function controls(T) {
+  if (box) return box;
+  box = el("div");
+  box.id = "live";
+  const row = el("label", undefined, "live-row"), slider = el("input"), out = el("output"), btns = el("div", undefined, "go"), pause = el("button", "Pause", "quiet"), fast = el("button", "Speed 1x", "quiet"), city = el("button", "Build a city", "quiet");
+  Object.assign(slider, { type: "range", min: "0", max: String(PCTS.length - 1), step: "1", value: String(PCTS.indexOf(pct)) });
+  slider.setAttribute("aria-label", "Share of your strength to send");
+  slider.oninput = () => { pct = PCTS[Number(slider.value)]; out.textContent = `${pct}%`; };
+  out.textContent = `${pct}%`;
+  row.append(el("span", "Send"), slider, out);
+  for (const b of [pause, fast, city]) b.type = "button";
+  pause.onclick = () => { paused = !paused; pause.textContent = paused ? "Play" : "Pause"; T.refresh(); };
+  fast.onclick = () => { speed = speed === 4 ? 1 : speed * 2; fast.textContent = `Speed ${speed}x`; };
+  city.onclick = () => { building = !building; city.setAttribute("aria-pressed", String(building)); toast(building ? "Tap one of your cells to build a city there." : "Building stopped."); };
+  btns.append(pause, fast, city);
+  const board = el("ol");
+  board.id = "leaders";
+  box.append(el("p", "", "live-info"), row, btns, board);
+  box.city = city;
+  box.slider = slider;
+  $("choice").append(box);
+  return box;
+}
+
+/** The clock: a tick every half second, faster when asked, never while a sheet is open or the game is paused. */
+function start(T) {
+  clearInterval(clock);
+  clock = setInterval(() => {
+    const p = T.match?.position;
+    if (!p?.live || T.demo || paused || p.phase !== "play" || document.querySelector("#sheet").open || !T.ready()) return;
+    T.flow({ do: "tick", n: speed });
+  }, TICK_MS);
+}
+
+function tap(T, i) {
+  if (!T.ready()) return undefined;
+  const p = T.match.position, b = liveBoardFor(p);
+  if (i < 0 || !b.land[i]) return toast("That is sea.");
+  if (p.phase === "spawn") { const m = T.match.legal().find((x) => x.at === i); return m ? T.play(m) : toast("Too close to someone. Choose empty land away from others."); }
+  const o = p.owner[i];
+  if (o === p.human) {
+    if (building && p.building) { const m = { do: "city", at: i }; if (p.troops[p.human] < cityPrice(p)) return toast(`A city costs ${cityPrice(p)} strength.`); building = false; box?.city.setAttribute("aria-pressed", "false"); return T.play(m); }
+    return toast("That land is yours. Tap a neighbour's, or empty land beside yours.");
+  }
+  if (bordersOf(p, b)[p.human].has(o)) return T.play({ do: "attack", to: o, pct });
+  if (p.boats && landings(p, b).has(i)) return T.play({ do: "boat", at: i, pct });
+  return toast(p.boats ? "Too far, even by boat." : "You can only attack land beside yours.");
+}
+
+function board(T, stage) {
+  const p = T.match.position, b = liveBoardFor(p), cs = colours(p), slot = new Map(b.dry.map((c, k) => [c, k])), of = b.cells.map((_, i) => (slot.has(i) ? slot.get(i) : -1));
+  const picture = areaPicture(b.cells, of, b.dry, 9, true);
+  document.body.classList.add("atlas");
+  return hexBoard(T, stage, {
+    picture, cells: [], rough: [], sea: [...b.dry.map(() => false), true], seats: cs, plain: true, fine: { cells: b.cells, of, mid: b.dry },
+    ground: (k) => (k >= b.dry.length ? SEA : b.hill[b.dry[k]] ? HILL : LAND[k % 3]),
+    owner: () => [...b.dry.map((c) => T.match.position.owner[c]), NONE],
+    pieces: () => T.match.position.cities.map((at) => ({ kind: "town", at: slot.get(at), rgb: cs[T.match.position.owner[at]] || [180, 170, 150] })),
+    names() { // a nation's name sits in the middle of its land, larger the more it holds
+      const q = T.match.position, sum = q.troops.map(() => [0, 0, 0]);
+      q.owner.forEach((o, i) => { if (o >= 0) { const [x, y] = picture.at[i]; sum[o][0] += x; sum[o][1] += y; sum[o][2]++; } });
+      return sum.flatMap(([x, y, n], s) => (n > 25 ? [{ at: [x / n, y / n], text: q.names[s], sea: true }] : []));
+    },
+    tap: (k) => tap(T, k < b.dry.length ? b.dry[k] : -1),
+    can: (k) => k < b.dry.length,
+  });
+}
+
+function panel(T) {
+  const p = T.match.position, s = p.human, c = controls(T);
+  for (const id of ["targets", "shares", "pour", "wait"]) $(id).closest(".go, .pick")?.setAttribute("hidden", "");
+  $("targets").hidden = $("shares").hidden = true;
+  $("pour").parentElement.hidden = true;
+  c.hidden = false;
+  c.city.hidden = !p.building;
+  if (p.phase === "spawn") { $("status").textContent = "Tap empty land to start your nation"; c.querySelector(".live-info").textContent = `${p.troops.length - 1} other nations are already on the map. Choose a place with room to grow.`; return; }
+  const going = p.attacks.filter((a) => a.by === s);
+  $("status").textContent = paused ? "Paused" : `Strength ${p.troops[s]} of ${maxOf(p, s)}`;
+  c.querySelector(".live-info").textContent = `+${gainOf(p, s)} every half second. ${going.length ? `${going.length} ${going.length === 1 ? "attack" : "attacks"} under way, ${going.reduce((n, a) => n + a.left, 0)} strength in them.` : "Tap a neighbour to attack with the share below."}`;
+  const top = p.land.map((n, k) => [n, k]).filter(([n]) => n).sort((x, y) => y[0] - x[0]).slice(0, 8), cs = colours(p);
+  if (!top.some(([, k]) => k === s) && p.land[s]) top.push([p.land[s], s]);
+  $("leaders").replaceChildren(...top.map(([n, k]) => { const li = el("li"), dot = el("i", undefined, "dot"); dot.style.background = `rgb(${cs[k]})`; li.append(dot, el("b", p.names[k]), el("span", `${Math.round((100 * n) / p.total)}%`)); if (k === s) li.className = "me"; return li; }));
+  if (!clock) start(T);
+}
+
+const ending = (T) => {
+  const p = T.match.position, w = T.match.result.winners[0];
+  return w === p.human ? "The map is yours." : p.land[p.human] ? `${p.names[w]} wins.` : `${p.names[w]} overran you.`;
+};
+const lineOf = (e, p) => (e.kind === "out" ? `${p.names[e.seat]} is gone.` : e.kind === "city" ? "You build a city." : e.kind === "boat" ? (e.landed ? "Your boats land." : "Your boats are thrown back.") : "");
+const leave = () => { if (box) box.hidden = true; for (const id of ["targets", "shares"]) $(id).hidden = false; $("pour").parentElement.hidden = false; };
+const liveGoal = goalOf;
+/** Keys in real time: Space pauses, 1 to 0 choose the share. */
+function key(T, k) {
+  if (k === " ") { box?.querySelector(".go button")?.click(); return true; }
+  const n = "1234567890".indexOf(k);
+  if (n < 0) return false;
+  pct = PCTS[n];
+  if (box) { box.slider.value = String(n); box.slider.oninput(); }
+  return true;
+}
+
+$x.colours = colours; $x.start = start; $x.tap = tap; $x.board = board; $x.panel = panel; $x.ending = ending; $x.lineOf = lineOf; $x.leave = leave; $x.liveGoal = liveGoal; $x.key = key;
+return $x; })({});
 $m[0] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // An Inch of Ink on the table: where to pour and how much.
 const { NONE, boardOf, cellsOf, goalOf, growth, inch, poolLimit, sharesOf } = $m[1];
-const { choose, thinking } = $m[3];
-const { $, NAMES, PAPER, RGB, createTable, radio, toast } = $m[4];
-const { hexBoard } = $m[18];
+const { choose, thinking } = $m[11];
+const { $, NAMES, PAPER, RGB, createTable, radio, toast } = $m[12];
+const { hexBoard } = $m[20];
+const { board: liveBoard, ending: liveEnding, key: liveKey, leave: liveLeave, lineOf: liveLine, liveGoal, panel: livePanel } = $m[21];
 
 const SHARE = { quarter: "Quarter", third: "A third", half: "Half", most: "Most", all: "All" }, HILL = [201, 178, 140];
 const cells = (n) => `${n} ${n === 1 ? "cell" : "cells"}`, place = (to) => (to === NONE ? "empty land" : NAMES[to]);
@@ -2173,9 +2691,20 @@ function aim(T, i) {
 
 createTable({
   game: inch, key: "inch", title: "An Inch of Ink", won: "The map is yours.", lengths: [[10, "Short"], [16, "Normal"], [20, "Long"]], pace: () => 650,
-  cellsOf, goalOf, landOf: (p) => p.owner.length, choose, thinking,
-  stats: (p, s) => { const c = cellsOf(p, s), x = p.pool[s]; return [["Strength", x], ["Grows", p.home[s] === NONE ? "out" : `+${Math.max(0, Math.min(growth(p, s), poolLimit(c) - x))}`]]; },
-  line(e) {
+  cellsOf: (p, s) => (p.live ? p.land[s] : cellsOf(p, s)), goalOf: (p) => (p.live ? liveGoal(p) : goalOf(p)), landOf: (p) => (p.live ? p.total : p.owner.length), choose, thinking,
+  summary: (T) => { const p = T.match.position; if (!p.live) return null; const m = Math.round((p.tick * 0.5) / 60); return `${p.names[T.match.result.winners[0]]} ${T.match.result.why}, after ${m < 1 ? "less than a minute" : `${m} ${m === 1 ? "minute" : "minutes"}`} of game time.`; },
+  ending: (T) => (T.match.position.live ? liveEnding(T) : null),
+  kindsOf: (o) => (o.style === "classic" || (o.style === "custom" && o.live) ? ["you"] : null),
+  alone: (style, extra) => style === "classic" || (style === "custom" && extra.live),
+  expansionsFor: (style, extra) => style === "classic" || (style === "custom" && extra.live),
+  choices: [
+    { key: "map", label: "Map", normal: "world", only: ["classic", "custom"], values: [["world", "The world"], ["continents", "Continents"], ["islands", "Islands"]] },
+    { key: "nations", label: "Nations", normal: 20, only: ["classic", "custom"], values: [[8, "8"], [12, "12"], [20, "20"], [30, "30"], [50, "50"]] },
+  ],
+  expansions: [{ key: "cities", label: "Cities", note: "Spend strength on a city: it holds more and grows faster." }, { key: "boats", label: "Boats", note: "Send a share across the sea to land on a far coast. Always on with islands." }],
+  stats: (p, s) => p.live ? [["Strength", p.troops[s]], ["Nations left", p.alive.filter(Boolean).length]] : (() => { const c = cellsOf(p, s), x = p.pool[s]; return [["Strength", x], ["Grows", p.home[s] === NONE ? "out" : `+${Math.max(0, Math.min(growth(p, s), poolLimit(c) - x))}`]]; })(),
+  line(e, p) {
+    if (p?.live) return liveLine(e, p);
     const who = NAMES[e.seat];
     if (e.kind === "pour") return `${who} pours ${e.spent} over ${place(e.to)} and takes ${cells(e.taken.length)}.`;
     if (e.kind === "order" && e.turns.length > 2) return `Round ${e.round}: ${e.turns.map((s) => NAMES[s]).join(", then ")}.`;
@@ -2184,8 +2713,11 @@ createTable({
     if (e.kind === "home") return e.to === NONE ? `${who} has no land left.` : `${who}'s home falls to ${NAMES[e.by]} and moves.`;
     return "";
   },
-  order: (events) => events.flatMap((e) => (e.kind === "pour" ? e.taken : e.kind === "cut" ? e.cells : [])),
+  order: (events) => events.some((e) => e.kind === "attack" || e.kind === "spawn") ? [] : events.flatMap((e) => (e.kind === "pour" ? e.taken : e.kind === "cut" ? e.cells : [])),
   board(T, stage) {
+    if (T.match.position.live) return liveBoard(T, stage);
+    liveLeave();
+    document.body.classList.remove("atlas");
     const rough = T.match.position.cost.map((c) => c === 2);
     return hexBoard(T, stage, {
       cells: boardOf(T.match.position).cells, rough, sea: [], ground: (i) => (rough[i] ? HILL : PAPER[(i * 7 + (i >> 2)) % 3]),
@@ -2196,6 +2728,7 @@ createTable({
     });
   },
   panel(T) {
+    if (T.match.position.live) return livePanel(T);
     const list = offers(T), shares = sharesOf(T.match.position), targets = [...new Set(list.map((m) => m.to))];
     const of = (s) => list.find((m) => m.to === target && m.share === s);
     $("status").textContent = T.solo() ? (list.length ? "Where will your ink run?" : "Nothing in reach. Wait and grow.") : `${NAMES[T.match.turn]}, your move`;
@@ -2213,6 +2746,7 @@ createTable({
     T.board.light(e ? e.taken : []);
   },
   keys(T, k, e) {
+    if (T.match.position.live) { if (liveKey(T, k)) e.preventDefault(); return; }
     const s = T.match && sharesOf(T.match.position)[Number(k) - 1];
     if (s) {
       if (offers(T).some((m) => m.to === target && m.share === s)) { share = s; T.refresh(); }
@@ -2220,7 +2754,7 @@ createTable({
     else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "pour")) { e.preventDefault(); $("pour").click(); }
   },
   about: {
-    classic: "Traditional: inspired by Territorial.io and OpenFront.io.\nThe browser land-grab as players know it, played in turns: one pool of strength that grows with your land, poured over the border in shares, on a wide map. Ours: turns instead of real time, hexes instead of pixels, two or three players, and the order of each round drawn with three. A real-time version is planned.\nNot affiliated with or endorsed by their makers. Our own map, names and art.",
+    classic: "Traditional: inspired by Territorial.io and OpenFront.io.\nThe browser land-grab as players know it, in real time: start anywhere on the world map or a made one, among up to 50 nations. Your strength grows with your land; send a share of it with the slider and watch the border creep. Ours: small hexes in place of pixels, our own numbers and maps, a pause button, and the clock in half-second ticks so a game can be saved.\nNot affiliated with or endorsed by their makers. Our own map, names and art.",
     custom: "Custom: your own rules.\nSet every rule yourself: map size, whether cut-off land falls, walled homes, the shares you pour, how strength grows, the goal, the turn order and the number of rounds.",
     ours: "Capo: our own variation.\nA smaller map where land cut off from your tower falls away, homes are walled, and saving strength pays. Hold 55% with two players, 45% with three.",
     coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
@@ -2235,7 +2769,8 @@ createTable({
     { key: "drawn", label: "Order with three", normal: true, values: [[true, "Drawn each round"], [false, "Rotates"]] },
     { key: "limit", label: "Rounds", normal: 40, values: [[10, "10"], [16, "16"], [20, "20"], [40, "40"]] },
   ],
-  rules: (classic, p) => ((p ? p.rule.growth === "rising" : classic) ? ["Your strength is one pool. The number on your tower shows it. It grows every turn: 3, and 1 for every 3 cells you hold, and a little more each round for everyone.", "Tap empty land or a rival, choose how much to pour, and the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A rival's land costs more when they hold a lot of strength on little land.", "The tower only shows whose land it is. If it is taken it moves.", "Reach the gold mark on the bar to win. If nobody has after 40 rounds, the most land wins.", "Whoever moves first changes every round. With three, the order of each round is drawn.", "Keys: 1 to 4 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."] : ["Your strength is one pool. The number on your tower shows it. It grows every turn: land grows it, and saving a little more.", "Tap empty land or a rival, choose how much to pour, and the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A cell with four of yours around it costs half.", "A rival's land costs more when they hold a lot of strength on little land. A home costs 3 more.", "Land cut off from your tower falls at the start of your turn. If your tower is taken, it moves to your largest piece of land.", "Reach the gold mark on the bar to win, or hold the most land after the last round. Whoever moves first changes every round.", "Keys: 1, 2, 3 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."]),
+  fresh: () => { liveLeave(); },
+  rules: (classic, p) => p?.live ? ["Real time: the clock runs on its own. Pause it, or run it faster, with the buttons.", "Tap empty land to start your nation. Your strength grows every half second: more for more land, a little more for saving, up to a limit set by your land.", "Choose a share with the slider, then tap a neighbour, or empty land beside yours. That share of your strength goes, and the border creeps forward until it is spent.", "Each cell costs 2, 3 more on hills, and more where the owner holds much strength on little land. Taking a cell costs its owner some strength too.", "Win by holding 80% of the land, or by being the last one left. If time runs out, the biggest nation wins. If you lose all your land, the game is over.", ...(p.building ? ["Cities: tap Build a city, then one of your cells. A city holds more and grows faster; each costs more than the last."] : []), ...(p.boats ? ["Boats: tap a coast across the water, up to nine cells of sea away. Landing costs double."] : []), "Keys: 1 to 0 choose the share, Space pauses."] : ((p ? p.rule.growth === "rising" : classic) ? ["Your strength is one pool. The number on your tower shows it. It grows every turn: 3, and 1 for every 3 cells you hold, and a little more each round for everyone.", "Tap empty land or a rival, choose how much to pour, and the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A rival's land costs more when they hold a lot of strength on little land.", "The tower only shows whose land it is. If it is taken it moves.", "Reach the gold mark on the bar to win. If nobody has after 40 rounds, the most land wins.", "Whoever moves first changes every round. With three, the order of each round is drawn.", "Keys: 1 to 4 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."] : ["Your strength is one pool. The number on your tower shows it. It grows every turn: land grows it, and saving a little more.", "Tap empty land or a rival, choose how much to pour, and the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A cell with four of yours around it costs half.", "A rival's land costs more when they hold a lot of strength on little land. A home costs 3 more.", "Land cut off from your tower falls at the start of your turn. If your tower is taken, it moves to your largest piece of land.", "Reach the gold mark on the bar to win, or hold the most land after the last round. Whoever moves first changes every round.", "Keys: 1, 2, 3 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."]),
 });
 
 
