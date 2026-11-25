@@ -128,3 +128,4 @@ dialog > .go { background: #161c1e; margin: 0 -22px -22px; padding: 10px 22px 18
   .atlas #toast { top: 176px }
 }
 @media (max-width: 820px) { .menu #foot { left: 0; right: 0; bottom: 0; padding: 8px 16px; background: #10161a; justify-content: center } }
+#style button:disabled { opacity: .45 } #style small { font-size: 11px }

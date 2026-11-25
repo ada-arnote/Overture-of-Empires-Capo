@@ -7,12 +7,22 @@ import { hexBoard, joined } from "../hex.js";
 export const NONE = -1;
 const START = 6, WALL = 1, HOME_WALL = 3, SURROUND = 4, LONG = 40;
 const SHARES = { quarter: (p) => Math.floor(p / 4), third: (p) => Math.floor(p / 3), half: (p) => Math.floor(p / 2), most: (p) => Math.floor((p * 3) / 4), all: (p) => p };
-export const sharesOf = (p) => (p.classic ? ["quarter", "half", "most", "all"] : ["third", "half", "all"]);
+/** What the rule sets set. Custom takes each of these as it is given. */
+export const SWITCHES = {
+  size: { values: [4, 5], normal: 5 }, cut: { values: [false, true], normal: false }, walls: { values: [false, true], normal: false },
+  shares: { values: ["four", "three"], normal: "four" }, growth: { values: ["rising", "saving"], normal: "rising" }, goal: { values: [45, 55, 60, 70], normal: 60 },
+  drawn: { values: [false, true], normal: true }, limit: { values: [10, 16, 20, 40], normal: 40 },
+};
+const SETS = {
+  classic: (o) => ({ size: 5, cut: false, walls: false, shares: "four", growth: "rising", goal: CLASSIC_PERCENT[o.seats], drawn: o.seats > 2, limit: LONG }),
+  ours: (o) => ({ size: 4, cut: true, walls: true, shares: "three", growth: "saving", goal: WIN_PERCENT[o.seats], drawn: false, limit: o.rounds }),
+};
+export const sharesOf = (p) => (p.rule.shares === "four" ? ["quarter", "half", "most", "all"] : ["third", "half", "all"]);
 const WIN_PERCENT = { 2: 55, 3: 45 }, CLASSIC_PERCENT = { 2: 60, 3: 55 };
 
-export const boardOf = (p) => hexBoard(p?.classic ? 5 : 4);
+export const boardOf = (p) => hexBoard(p.rule.size);
 export const cellsOf = (p, seat) => p.owner.reduce((n, o) => n + (o === seat ? 1 : 0), 0);
-export const goalOf = (p) => Math.ceil((p.owner.length * ((p.classic ? CLASSIC_PERCENT : WIN_PERCENT)[p.pool.length])) / 100);
+export const goalOf = (p) => Math.ceil((p.owner.length * p.rule.goal) / 100);
 
 function root(n) { // whole-number square root
   let r = 0;
@@ -23,7 +33,7 @@ function root(n) { // whole-number square root
 /** How much a seat's pool grows on its turn. */
 export function growth(p, seat, cells = cellsOf(p, seat)) {
   // Classic: land counts in full, and every round brings more to everyone, so a long game cannot stand still.
-  if (p.classic) return 3 + Math.floor(cells / 3) + Math.floor(p.round / 2);
+  if (p.rule.growth === "rising") return 3 + Math.floor(cells / 3) + Math.floor(p.round / 2);
   // A flat base, then land (1.5 times its square root), then a little for saving. The base keeps a seat that is behind in the game.
   return 3 + Math.floor(root(9 * cells) / 2) + Math.floor(p.pool[seat] / 8);
 }
@@ -41,8 +51,8 @@ function cheapest(p, seat, to, dense) {
     if (p.owner[i] !== to) continue;
     const mine = near[i].reduce((n, m) => n + (p.owner[m] === seat ? 1 : 0), 0);
     if (!mine) continue;
-    let price = p.cost[i] + dense + (to !== NONE ? WALL : 0) + (to !== NONE && !p.classic && p.home[to] === i ? HOME_WALL : 0);
-    if (mine >= SURROUND && !p.classic) price = Math.ceil(price / 2);
+    let price = p.cost[i] + dense + (to !== NONE ? WALL : 0) + (to !== NONE && p.rule.walls && p.home[to] === i ? HOME_WALL : 0);
+    if (mine >= SURROUND && p.rule.walls) price = Math.ceil(price / 2);
     if (!best || price < best.price || (price === best.price && p.order[i] < p.order[best.cell])) best = { cell: i, price };
   }
   return best;
@@ -63,7 +73,7 @@ function pour(p, seat, to, amount, events) {
     p.pool[to] = Math.max(0, p.pool[to] - dense);
     if (c.cell !== p.home[to]) continue;
     p.home[to] = newHome(p, to);
-    if (!p.classic || p.home[to] === NONE) events.push({ kind: "home", seat: to, by: seat, to: p.home[to] });
+    if (p.rule.walls || p.rule.cut || p.home[to] === NONE) events.push({ kind: "home", seat: to, by: seat, to: p.home[to] });
     if (p.home[to] === NONE) { p.pool[to] = 0; break; }
   }
   p.pool[seat] += left;
@@ -86,9 +96,9 @@ function newHome(p, seat) {
 /** The start of a seat's turn: cut-off land falls, then the pool grows. Changes p. */
 function begin(p, events) {
   const s = p.seat, keep = new Set(joined(boardOf(p).near, p.home[s], (m) => p.owner[m] === s)), lost = [];
-  if (!p.classic) for (let i = 0; i < p.owner.length; i++) if (p.owner[i] === s && !keep.has(i)) { p.owner[i] = NONE; lost.push(i); }
+  if (p.rule.cut) for (let i = 0; i < p.owner.length; i++) if (p.owner[i] === s && !keep.has(i)) { p.owner[i] = NONE; lost.push(i); }
   if (lost.length) events.push({ kind: "cut", seat: s, cells: lost });
-  const cells = p.classic ? cellsOf(p, s) : keep.size, before = p.pool[s];
+  const cells = p.rule.cut ? keep.size : cellsOf(p, s), before = p.pool[s];
   p.pool[s] = Math.max(before, Math.min(poolLimit(cells), before + growth(p, s, cells)));
   events.push({ kind: "grow", seat: s, by: p.pool[s] - before });
 }
@@ -107,26 +117,26 @@ function advance(p, events, dice) {
     if (++p.step === n) {
       p.step = 0;
       p.round++;
-      if (n > 2 && p.classic && dice) { p.turns = dice.shuffle(p.turns); events.push({ kind: "order", turns: p.turns.filter((s) => p.home[s] !== NONE), round: p.round }); }
+      if (n > 2 && p.rule.drawn && dice) { p.turns = dice.shuffle(p.turns); events.push({ kind: "order", turns: p.turns.filter((s) => p.home[s] !== NONE), round: p.round }); }
       if (p.round > p.rounds) {
         const most = Math.max(...live.map((s) => cellsOf(p, s)));
         return finish(p, live.filter((s) => cellsOf(p, s) === most), "held the most land at the end", events);
       }
     }
-    p.seat = n > 2 && p.classic ? p.turns[p.step] : (p.step + p.round - 1) % n;
+    p.seat = n > 2 && p.rule.drawn ? p.turns[p.step] : (p.step + p.round - 1) % n;
   } while (p.home[p.seat] === NONE);
   begin(p, events);
 }
 
 export const inch = {
-  id: "inch", version: "3",
-  options: { style: { values: ["classic", "ours"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 } },
+  id: "inch", version: "4",
+  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, ...SWITCHES },
 
   setup(o, dice) {
-    const classic = o.style === "classic", b = boardOf({ classic }), homes = dice.shuffle(o.seats === 2 ? [b.corners[0], b.corners[3]] : [b.corners[0], b.corners[2], b.corners[4]]);
+    const classic = o.style !== "ours", rule = SETS[o.style] ? SETS[o.style](o) : Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]])), b = hexBoard(rule.size), homes = dice.shuffle(o.seats === 2 ? [b.corners[0], b.corners[3]] : [b.corners[0], b.corners[2], b.corners[4]]);
     const cost = b.cells.map(() => (dice.below(4) === 0 ? 2 : 1)), owner = Array(b.size).fill(NONE);
     homes.forEach((h, s) => { cost[h] = 1; owner[h] = s; });
-    const p = { classic, owner, cost, order: dice.shuffle(b.cells.map((_, i) => i)), pool: Array(o.seats).fill(START), home: homes, turns: Array.from({ length: o.seats }, (_, s) => s), seat: 0, step: 0, round: 1, rounds: classic ? LONG : o.rounds, over: null };
+    const p = { classic, style: o.style, rule, owner, cost, order: dice.shuffle(b.cells.map((_, i) => i)), pool: Array(o.seats).fill(START), home: homes, turns: Array.from({ length: o.seats }, (_, s) => s), seat: 0, step: 0, round: 1, rounds: rule.limit, over: null };
     begin(p, []);
     return p;
   },

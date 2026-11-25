@@ -86,7 +86,7 @@ const NICE = { forts: ["Forts", "Spend 4 of what you muster to build one. It thr
 createTable({
   game: banners, key: "banners", title: "Brass and Banners", won: "The land is yours.", seats: [2, 3, 4, 5, 6], normal: 4, lengths: [], pace: (p) => (p.owner.length > 40 ? 300 : 430),
   cellsOf, goalOf, landOf, choose, thinking,
-  about: { classic: "The whole map is dealt out. Cards are worth more each time. Ties go to the defender. Hold 80%, or be the last one left.", ours: "You start alone in empty land. Ties cost both sides. Cards are always worth the same. Hold 65%.", custom: "Every switch is yours." },
+  about: { classic: "The whole map is dealt out. Cards are worth more each time. Ties go to the defender. Play until one player holds the world.", ours: "You start alone in empty land. Ties cost both sides. Cards are always worth the same. Hold 65%.", custom: "Every switch is yours." },
   choices: [{ key: "map", label: "Map", normal: "world", values: [["world", "The world"], ["isles", "An archipelago"], ["grown", "An inland sea"]] }],
   switches: [
     { key: "start", label: "Start", normal: SWITCHES.start.normal, values: [["dealt", "Land dealt out"], ["claimed", "Claim in turn"], ["far", "One capital each"]] },

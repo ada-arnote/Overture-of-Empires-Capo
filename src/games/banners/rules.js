@@ -17,7 +17,7 @@ export const SWITCHES = {
   neutral: { values: [1, 2, 3], normal: 2 },
 };
 const SETS = {
-  classic: { start: "dealt", dice: "guard", cards: "rising", goal: 80, rounds: 40, neutral: 2 },
+  classic: { start: "dealt", dice: "guard", cards: "rising", goal: 100, rounds: 40, neutral: 2 },
   ours: { start: "far", dice: "even", cards: "flat", goal: 65, rounds: 40, neutral: 3 },
 };
 export const EXPANSIONS = ["forts", "leaders", "capitals", "secrets", "events"];

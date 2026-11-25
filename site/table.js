@@ -403,8 +403,9 @@ export function createTable(G) {
   }
   function titleCard() {
     radio($("count"), many.map((n) => ({ value: n, label: String(n) })), setup.seats, (v) => { setup.seats = v; titleCard(); });
-    radio($("style"), [["classic", "Traditional"], ["ours", "Capo"], ["custom", "Coda"]].filter(([k]) => G.about[k]).map(([value, label]) => ({ value, label })), setup.style, (v) => { if (v === setup.style) return; setup.style = v; titleCard(); attract(); });
+    radio($("style"), [["classic", "Traditional"], ["custom", "Custom"], ["ours", "Capo"]].filter(([k]) => G.about[k]).map(([value, label]) => ({ value, label })).concat([{ value: "coda", label: "Coda", note: "coming soon", off: true }]), setup.style, (v) => { if (v === setup.style || v === "coda") return; setup.style = v; titleCard(); attract(); });
     $("about").textContent = G.about[setup.style];
+    $("style").title = "Coda: legacy campaigns that change from game to game, designed with an AI or shared by players. Coming soon.";
     $("length-line").hidden = setup.style !== "ours" || !G.lengths.length;
     const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; attract(); }; line.append(el("span", c.label), k); return line; };
     more.replaceChildren(...(G.choices || []).map(pickOf));
