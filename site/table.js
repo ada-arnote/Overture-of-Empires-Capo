@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What every table game's screen shares: title, seats, score bar, words, taking back, saving, bots' turns and the end.
 // A game gives its rules, its board and its own move panel.
-import { Refusal, chance, createMatch, openSave, seedState } from "../src/core/index.js";
+import { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } from "../src/core/index.js";
 import { emblem } from "../src/map/board.js";
 import { footer } from "./footer.js";
+import { canLock, linkGames, makeLink, newId, readLink } from "./link.js";
 
 export const NAMES = ["Azure", "Rust", "Moss", "Plum"], RGB = [[91, 143, 196], [208, 106, 75], [138, 168, 81], [160, 108, 182]], PAPER = [[231, 217, 185], [228, 213, 180], [234, 221, 191]];
 export const $ = (id) => document.getElementById(id);
 export const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"]];
+const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["away", "A friend, by link"]];
+const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", away: "By link" };
 const store = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* files still work */ } };
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 
@@ -64,14 +66,26 @@ const closeSheet = () => { if ($("sheet").open) $("sheet").close(); };
  */
 export function createTable(G) {
   $("broken")?.remove();
+  // what link play adds to the page
+  const send = el("div"), sendSay = el("p"), sendRow = el("div", undefined, "go"), sendShare = el("button", "Share", "quiet"), sendCopy = el("button", "Copy the link", "main"), skip = el("button", "Skip to now", "quiet"), linkButton = el("button", "Link games", "text"), pass = el("div", undefined, "line"), passField = el("input");
+  for (const b of [sendShare, sendCopy, skip, linkButton]) b.type = "button";
+  send.id = "send"; send.hidden = skip.hidden = pass.hidden = true;
+  sendRow.append(sendShare, sendCopy); send.append(sendSay, sendRow);
+  $("act").append(send, skip);
+  $("title").querySelector(".links").append(linkButton);
+  Object.assign(passField, { type: "text", className: "field", placeholder: "None", autocomplete: "off", maxLength: 100 });
+  passField.setAttribute("aria-label", "Password for the link, if you want one");
+  pass.append(el("span", "Password"), passField);
+  $("title").querySelector(".card").lastElementChild.before(pass);
   const KEY = `capo-${G.key}-2`, LOOK = `capo-${G.key}-look`, many = G.seats || [2, 3], setup = { seats: G.normal || 2, style: "classic", rounds: G.lengths[1]?.[0], who: ["you", "normal", "normal", "normal"] };
   let log = [], land = [], board = null, run = 0;
   const T = {
-    match: null, kinds: [], demo: true, busy: false, RGB, NAMES, read: () => read(LOOK),
+    match: null, kinds: [], link: null, demo: true, busy: false, RGB, NAMES, read: () => read(LOOK),
     get board() { return board; },
+    away: () => !!T.match && T.match.turn !== null && T.kinds[T.match.turn] === "away",
     human: () => !!T.match && T.match.turn !== null && T.kinds[T.match.turn] === "you",
     ready: () => !T.demo && T.human() && !T.busy,
-    solo: () => T.kinds.filter((k) => k === "you").length === 1,
+    solo: () => T.kinds.filter((k) => k === "you" || k === "away").length === 1 || (!!T.link && T.kinds.filter((k) => k === "you").length === 1),
     play, refresh: panel,
   };
   const place = () => {
@@ -94,11 +108,12 @@ export function createTable(G) {
     return T.solo() && T.kinds[r.winners[0]] === "you" ? G.won : `${NAMES[r.winners[0]]} wins.`;
   }
   function panel() {
+    sendBox();
     const over = T.match.turn === null, me = T.human() && !T.busy;
     $("choice").hidden = !me;
     $("after").hidden = !over;
     if (over) { $("status").textContent = ending(); board.clear(); } else if (!me) {
-      $("status").textContent = T.human() ? "" : `${NAMES[T.match.position.seat]} is thinking`;
+      $("status").textContent = T.away() ? `Waiting for ${NAMES[T.match.turn]}` : T.human() ? "" : `${NAMES[T.match.position.seat]} is thinking`;
       board.clear();
     } else G.panel(T);
   }
@@ -111,12 +126,12 @@ export function createTable(G) {
     $("seats").replaceChildren(...Array.from({ length: seats }, (_, s) => {
       const c = G.cellsOf(p, s), li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${c ? "" : " out"}`), dl = el("dl");
       for (const [k, v] of [["Land", innerWidth > 820 || seats < 3 ? `${c}/${goal}` : c], ...G.stats(p, s)]) { const d = el("div"); d.append(el("dt", k), el("dd", String(v))); dl.append(d); }
-      li.append(sign(s), el("b", NAMES[s]), el("small", T.kinds[s] === "you" ? (T.solo() ? "You" : "A person") : T.kinds[s] === "easy" ? "Easy bot" : "Bot"), dl);
+      li.append(sign(s), el("b", NAMES[s]), el("small", T.kinds[s] === "you" && T.solo() ? "You" : WORDS[T.kinds[s]]), dl);
       return li;
     }));
   }
   const tally = (p) => Array.from({ length: T.kinds.length }, (_, s) => G.cellsOf(p, s));
-  const keep = () => { if (!T.demo) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds })); };
+  const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds })); };
 
   async function play(move) {
     const mine = run, seat = T.match.turn, person = T.human();
@@ -140,6 +155,7 @@ export function createTable(G) {
     const mine = run;
     if (T.match.turn === null) { if (T.demo) { await sleep(2500); if (mine === run && T.demo) attract(); } return; }
     if (T.human()) return;
+    if (T.away()) { panel(); return; }
     T.busy = true;
     if (!T.demo) panel();
     const dice = chance(seedState(`${T.match.seed}/${T.match.list.length}`)), from = performance.now();
@@ -156,9 +172,124 @@ export function createTable(G) {
     }
     if (mine === run) play(move);
   }
-  function begin(m, k) {
+  /** The panel that hands the game to a friend. The link is made before it is asked for, so one press copies it. */
+  let ready = null;
+  function sendBox() {
+    const p = T.match.position, over = T.match.turn === null, on = !!T.link && !T.demo && !T.busy && T.kinds.includes("you") && (T.away() || over), mark = on ? `${T.link.id}/${T.match.list.length}` : "";
+    send.hidden = !on;
+    if (!on || ready?.mark === mark) return;
+    const made = ready = { mark, url: "" }, fresh = T.match.list.length > T.link.floor;
+    sendSay.textContent = over ? "Send the last link, so that everyone sees the end." : fresh || !T.match.list.length ? `Send this to ${NAMES[p.seat]}. It is their turn.` : `Already sent. ${NAMES[p.seat]} has not sent a link back yet.`;
+    sendCopy.disabled = true;
+    sendCopy.textContent = "Copy the link";
+    sendShare.hidden = !navigator.share;
+    Promise.resolve().then(() => makeLink(G.key, T.link.id, packGame(T.match, T.link.roles), T.link.pass)).then((url) => { made.url = url; if (ready === made) sendCopy.disabled = false; }, (e) => { if (ready === made) sendSay.textContent = e instanceof Refusal ? `${e.message}.` : "The link could not be made."; });
+  }
+  function sent() { T.link.floor = T.match.list.length; keep(); sendSay.textContent = "Copied. Paste it to your friend, then wait for theirs. Opening it brings you back here."; }
+  async function copy() {
+    const url = ready?.url;
+    if (!url) return;
+    try { await navigator.clipboard.writeText(url); sendCopy.textContent = "Copied"; toast("Link copied."); } catch {
+      const t = el("textarea"), box = el("div");
+      t.value = url; t.rows = 6; t.readOnly = true; t.className = "paste"; t.setAttribute("aria-label", "The link");
+      box.append(el("p", "Copy this and paste it to your friend."), t);
+      sheet("Your link", box);
+      t.select();
+    }
+    sent();
+  }
+  function seatsFor(roles, seat) { return roles.map((r, i) => (i === seat ? "you" : r === "host" || r === "friend" ? "away" : r)); }
+  /** A link has been opened or pasted. */
+  async function openLink(text, password) {
+    try {
+      const l = readLink(text), mine = linkGames.get(l.id), pass = password ?? mine?.pass ?? "";
+      if (l.locked && !pass) return askPassword(text, "");
+      let got;
+      try { got = unpackGame(await l.open(pass), [G.game]); } catch (e) { if (e instanceof Refusal && e.code === "password") return askPassword(text, password === undefined ? "The password kept here does not open this link. Either it has another password, or the link was changed." : "That is not the password, or the link was changed."); throw e; }
+      const { match: m, roles } = got, link = { id: l.id, roles, pass: l.locked ? pass : "", floor: m.list.length };
+      if (mine) {
+        const old = openSave(mine.save, [G.game]).match, how = compareGames(old, m);
+        if (how === "other") throw new Refusal("other", "this link tells the game differently from the one you have, so it was not opened");
+        closeSheet();
+        if (how === "old") { begin(old, mine.kinds, { ...link, floor: mine.floor }); toast("You already have this turn."); return undefined; }
+        return begin(m, mine.kinds, link, old.list.length);
+      }
+      return takeSeat(m, link);
+    } catch (e) {
+      if (!(e instanceof Refusal)) throw e;
+      return sheet("That link was not opened", el("p", `${e.message[0].toUpperCase()}${e.message.slice(1)}.`));
+    }
+  }
+  function askPassword(text, note) {
+    const box = el("div", undefined, "stack"), f = el("input"), go = el("button", "Open", "main");
+    f.type = "password"; f.autocomplete = "off"; f.className = "field"; f.setAttribute("aria-label", "Password");
+    go.type = "button"; go.onclick = () => { if (f.value) { closeSheet(); openLink(text, f.value); } };
+    f.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); go.click(); } };
+    box.append(el("p", note || "This game has a password. Ask whoever sent the link."), f, go);
+    sheet("A game with a password", box, "Not now");
+    f.focus();
+  }
+  function takeSeat(m, link) {
+    const box = el("div", undefined, "stack"), people = link.roles.map((r, i) => [r, i]).filter(([r]) => r === "host" || r === "friend"), now = m.turn;
+    box.append(el("p", now === null ? "This game is over." : `It is round ${m.position.round}, and ${NAMES[now]} is to move. Which seat is yours?`));
+    const go = (seat) => { closeSheet(); begin(m, seatsFor(link.roles, seat), link, seat < 0 ? m.list.length : Math.max(0, m.list.length - 14)); };
+    for (const [r, i] of people.sort((a, b) => (b[1] === now) - (a[1] === now))) { const b = el("button", `${NAMES[i]}${r === "host" ? ", who made the game" : ""}`, i === now ? "main" : "quiet"); b.type = "button"; b.prepend(sign(i)); b.onclick = () => go(i); box.append(b); }
+    const w = el("button", "Only watch", "quiet"); w.type = "button"; w.onclick = () => go(-1);
+    box.append(w);
+    sheet(G.title, box, "Not now");
+  }
+  function linkSheet() {
+    const box = el("div", undefined, "stack"), t = el("textarea"), go = el("button", "Open the link", "main"), all = linkGames.list(G.key);
+    t.rows = 3; t.className = "paste"; t.placeholder = "Paste a link here"; t.setAttribute("aria-label", "Paste a link here");
+    go.type = "button"; go.onclick = () => { const v = t.value; closeSheet(); openLink(v); };
+    box.append(el("p", "To start one, choose \"A friend, by link\" for a player. Links hold the whole game. Without a password, anyone who has the link can read it. A friend set on cheating could try a turn more than once, so play with people you trust."), t, go);
+    for (const r of all) {
+      let m;
+      try { m = openSave(r.save, [G.game]).match; } catch { continue; }
+      const row = el("div", undefined, "go"), b = el("button", `Round ${m.position.round}, ${m.turn === null ? "over" : r.kinds[m.turn] === "you" ? "your turn" : `waiting for ${NAMES[m.turn]}`}`, "quiet"), x = el("button", "Remove", "quiet");
+      b.type = x.type = "button"; b.style.flex = "1";
+      b.onclick = () => { closeSheet(); begin(m, r.kinds, { id: r.id, roles: r.roles, pass: r.pass, floor: r.floor }); };
+      x.onclick = () => { if (x.textContent === "Remove") { x.textContent = "Sure?"; return; } linkGames.drop(r.id); row.remove(); };
+      row.append(b, x); box.append(row);
+    }
+    sheet("Link games", box, "Back");
+  }
+  /** Play out what happened since `from`, then go on. */
+  async function catchUp(m, from) {
+    const mine = run, all = m.list, show = createMatch(G.game, { seed: m.seed, options: m.options });
+    for (const mv of all.slice(0, from)) show.play(mv);
+    Object.assign(T, { match: show, busy: true, catching: true });
+    G.changed?.(T);
+    makeBoard();
+    board.show([], true);
+    score(); panel(); place();
+    skip.hidden = false;
+    $("status").textContent = "What has happened";
+    for (const mv of all.slice(from)) {
+      await sleep(T.catching ? 120 : 0);
+      if (mine !== run) return;
+      const events = show.play(mv), words = events.map((e) => G.line(e, show.position)).filter(Boolean);
+      if (!T.catching) continue;
+      G.seen?.(T, events);
+      score();
+      const took = board.show(G.order(events), false);
+      if (words.length) toast(words.slice(0, 2).join(" "));
+      await sleep(Math.max(G.pace(show.position) * 0.7, took + 80));
+      if (mine !== run) return;
+    }
+    skip.hidden = true;
+    Object.assign(T, { match: m, busy: false, catching: false });
+    G.changed?.(T);
+    board.show([], true);
+    score(); panel();
+    if (T.match.turn === null) finish();
+    next();
+  }
+  function begin(m, k, link = null, from = -1) {
     run++;
-    Object.assign(T, { demo: false, busy: false, match: m, kinds: k });
+    ready = null;
+    skip.hidden = true;
+    Object.assign(T, { demo: false, busy: false, catching: false, match: m, kinds: k, link });
     G.fresh?.(T);
     log = []; land = [];
     const again = createMatch(G.game, { seed: m.seed, options: m.options });
@@ -167,6 +298,8 @@ export function createTable(G) {
     document.body.classList.remove("menu");
     $("title").hidden = true;
     for (const id of ["bar", "seats", "act"]) $(id).hidden = false;
+    keep();
+    if (from >= 0 && from < m.list.length) { catchUp(m, from); return; }
     G.changed?.(T);
     makeBoard();
     score(); panel(); place();
@@ -176,7 +309,7 @@ export function createTable(G) {
   }
   function attract() {
     run++;
-    Object.assign(T, { demo: true, busy: false, kinds: Array(Math.max(...many)).fill("easy"), match: createMatch(G.game, { seed: "title " + (run % 9), options: { seats: Math.max(...many), style: setup.style } }) });
+    Object.assign(T, { demo: true, busy: false, link: null, kinds: Array(Math.max(...many)).fill("easy"), match: createMatch(G.game, { seed: "title " + (run % 9), options: { seats: Math.max(...many), style: setup.style } }) });
     G.changed?.(T);
     makeBoard();
     board.show([], true);
@@ -210,12 +343,15 @@ export function createTable(G) {
     sheet(ending(), body, "See the board");
   }
   const seed = () => [...crypto.getRandomValues(new Uint32Array(2))].map((v) => v.toString(36)).join("");
-  const restart = () => begin(createMatch(G.game, { seed: seed(), options: T.match.options }), [...T.kinds]);
-  const canUndo = () => T.match.list.length > 0 && T.kinds.includes("you");
+  const restart = () => begin(createMatch(G.game, { seed: seed(), options: T.match.options }), [...T.kinds], T.link ? { id: newId(), roles: T.kinds.map((x) => (x === "you" ? "host" : x === "away" ? "friend" : x)), pass: T.link.pass, floor: 0 } : null);
+  const floor = () => (T.link ? T.link.floor : 0);
+  const canUndo = () => !T.catching && T.match.list.length > floor() && T.kinds.includes("you");
   function undo() {
     if (!canUndo()) return;
-    do { if (!T.match.undo()) break; } while (!T.human());
-    begin(T.match, T.kinds);
+    const had = T.match.list;
+    do { if (T.match.list.length <= floor() || !T.match.undo()) break; } while (!T.human());
+    if (!T.human()) { for (const mv of had.slice(T.match.list.length)) T.match.play(mv); return; } // nothing of yours to take back
+    begin(T.match, T.kinds, T.link);
   }
   function save() {
     const a = el("a");
@@ -238,32 +374,44 @@ export function createTable(G) {
   }
   function titleCard() {
     radio($("count"), many.map((n) => ({ value: n, label: String(n) })), setup.seats, (v) => { setup.seats = v; titleCard(); });
-    radio($("style"), [{ value: "classic", label: "Classic" }, { value: "ours", label: "New" }], setup.style, (v) => { if (v === setup.style) return; setup.style = v; titleCard(); attract(); });
+    radio($("style"), [{ value: "classic", label: "Traditional" }, ...(G.about.ours ? [{ value: "ours", label: "New" }] : [])], setup.style, (v) => { if (v === setup.style) return; setup.style = v; titleCard(); attract(); });
     $("about").textContent = G.about[setup.style];
     $("length-line").hidden = setup.style === "classic";
-    $("style").parentElement.hidden = !G.about.ours;
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
       const li = el("li"), k = el("select");
       k.append(...KINDS.map(([v, t]) => new Option(t, v)));
       k.value = setup.who[s];
       k.setAttribute("aria-label", NAMES[s]);
-      k.onchange = () => { setup.who[s] = k.value; };
+      k.onchange = () => { setup.who[s] = k.value; passLine(); };
       li.append(sign(s), el("b", NAMES[s]), k);
       return li;
     }));
+    passLine();
+  }
+  function passLine() {
+    const on = setup.who.slice(0, setup.seats).includes("away");
+    pass.hidden = !on || !canLock();
+    $("start").disabled = on && !setup.who.slice(0, setup.seats).includes("you");
   }
   function kept() {
     try {
       const s = JSON.parse(read(KEY) || "null");
       if (!s) return null;
       const { match: m } = openSave(s.save, [G.game]);
-      return Array.isArray(s.kinds) && s.kinds.length === m.options.seats && s.kinds.every((k) => KINDS.some(([v]) => v === k)) ? { m, kinds: s.kinds } : null;
+      return Array.isArray(s.kinds) && s.kinds.length === m.options.seats && s.kinds.every((k) => k !== "away" && KINDS.some(([v]) => v === k)) ? { m, kinds: s.kinds } : null;
     } catch { return null; }
   }
   const resumeButton = () => { const k = kept(); $("resume").hidden = !k; if (k) $("resume").textContent = `Continue, round ${k.m.position.round}`; };
 
-  $("start").onclick = () => begin(createMatch(G.game, { seed: seed(), options: { style: setup.style, seats: setup.seats, ...(setup.rounds ? { rounds: setup.rounds } : {}) } }), setup.who.slice(0, setup.seats));
+  $("start").onclick = () => {
+    const who = setup.who.slice(0, setup.seats), far = who.includes("away"), words = passField.value.trim();
+    begin(createMatch(G.game, { seed: seed(), options: { style: setup.style, seats: setup.seats, ...(setup.rounds ? { rounds: setup.rounds } : {}) } }), who, far ? { id: newId(), roles: who.map((k) => (k === "you" ? "host" : k === "away" ? "friend" : k)), pass: canLock() ? words : "", floor: 0 } : null);
+  };
+  linkButton.onclick = linkSheet;
+  sendCopy.onclick = copy;
+  sendShare.onclick = async () => { if (ready?.url) try { await navigator.share({ url: ready.url }); sent(); } catch { /* they changed their mind */ } };
+  skip.onclick = () => { T.catching = false; };
   $("resume").onclick = () => { const k = kept(); if (k) begin(k.m, k.kinds); };
   $("menu").onclick = menu;
   $("how").onclick = rules;
@@ -302,6 +450,9 @@ export function createTable(G) {
   footer();
   titleCard();
   resumeButton();
+  const arrive = () => { if (!location.hash.startsWith("#t=")) return; const text = location.hash; history.replaceState(null, "", location.pathname + location.search); openLink(text); };
+  addEventListener("hashchange", arrive);
   attract();
+  arrive();
   return T;
 }

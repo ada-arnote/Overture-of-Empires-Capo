@@ -40,7 +40,7 @@ export function bundle(entry) {
     const pairs = (list, sep) => list.split(",").map((x) => x.trim()).filter(Boolean).map((x) => x.replace(/\s+as\s+/, sep)).join(", ");
     t = t.replace(/^import\s*\{([^}]*)\}\s*from\s*["']([^"']+)["'];?$/gm, (_, list, spec) => { const n = from(spec); need(file, list, n); return `const { ${pairs(list, ": ")} } = $m[${n}];`; });
     t = t.replace(/^export\s*\{([^}]*)\}\s*from\s*["']([^"']+)["'];?$/gm, (_, list, spec) => { const n = from(spec); need(file, list, n); names.push(...list.split(",").map((x) => x.trim()).filter(Boolean)); return list.split(",").map((x) => x.trim()).filter(Boolean).map((x) => `$x.${x} = $m[${n}].${x};`).join(" "); });
-    t = t.replace(/^export\s+(const|let|function\*?|class)\s+([\w$]+)/gm, (all, kind, name, at, whole) => { names.push(...(kind === "const" || kind === "let" ? declared(whole, at + all.length - name.length) : [name])); return `${kind} ${name}`; });
+    t = t.replace(/^export\s+(const|let|(?:async\s+)?function\*?|class)\s+([\w$]+)/gm, (all, kind, name, at, whole) => { names.push(...(kind === "const" || kind === "let" ? declared(whole, at + all.length - name.length) : [name])); return `${kind} ${name}`; });
     if (/^\s*(?:import|export)\b/m.test(t.replace(/\/\*[\s\S]*?\*\//g, ""))) throw new Error(`${file}: an import or export this tool does not understand`);
     parts.push(`$m[${id}] = (($x) => {\n${t}\n${names.filter((n) => !t.includes(`$x.${n} = $m`)).map((n) => `$x.${n} = ${n};`).join(" ")}\nreturn $x; })({});`);
     return id;

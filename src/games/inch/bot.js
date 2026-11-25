@@ -14,14 +14,14 @@ export function value(p, seat) {
   return 160 * cellsOf(p, seat) - 60 * rivals + 12 * p.pool[seat];
 }
 
-const after = (p, m) => inch.apply(p, m).position;
+const after = (p, m, dice) => inch.apply(p, m, dice).position;
 
 /** The position after the move that looks best straight away, for whoever is to move. */
-function quick(p) {
+function quick(p, dice) {
   let best = null, score = -Infinity;
   for (const m of inch.moves(p)) {
-    const q = after(p, m), v = value(q, p.seat);
-    if (v > score) { score = v; best = q; }
+    const q = after(p, m, dice), v = value(q, p.seat);
+    if (v > score || (v === score && dice.below(2))) { score = v; best = q; } // no seat is picked on for its number
   }
   return best;
 }
@@ -32,14 +32,14 @@ export function* thinking(p, dice, tier = "normal") {
   if (tier === "random" || moves.length === 1) return dice.pick(moves);
   let best = moves[0], score = -Infinity;
   for (const m of moves) {
-    const q = after(p, m);
+    const q = after(p, m, dice);
     let v = value(q, me);
     if (tier === "normal" && !q.over) {
       // People are neither perfect nor careless: half the moves in each future are sensible, half are any move.
       let sum = 0;
       for (let k = 0; k < FUTURES; k++) {
         let r = q;
-        for (let d = 0; d < DEPTH && !r.over; d++) r = dice.below(2) ? quick(r) : after(r, dice.pick(inch.moves(r)));
+        for (let d = 0; d < DEPTH && !r.over; d++) r = dice.below(2) ? quick(r, dice) : after(r, dice.pick(inch.moves(r)), dice);
         sum += value(r, me);
         yield;
       }

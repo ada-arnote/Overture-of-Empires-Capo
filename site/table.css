@@ -111,3 +111,7 @@ dialog .stack button { min-height: 48px } dialog .go { position: sticky; bottom:
 @media (prefers-reduced-motion: reduce) { #dice svg { animation: none } }
 @media (max-width: 820px) { #info { min-height: 1.4em; font-size: 13px } #dice svg { width: 26px; height: 26px } }
 @media (max-width: 820px) { .seat dl { margin: 7px 0 0 -24px } .seat { overflow: hidden } }
+#send p { color: #d8cfba; margin-bottom: 10px } #send + .quiet, #act > .quiet { width: 100%; margin-top: 8px }
+.field, .paste { min-height: 44px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line2); background: #20282a; color: var(--text); font: inherit } .line .field { width: 190px } .paste { width: 100%; resize: vertical; font-size: 14px; word-break: break-all }
+dialog .stack > button canvas { width: 22px; height: 22px; vertical-align: -5px; margin-right: 10px } dialog .stack .go { position: static; padding: 0 }
+dialog > .go { background: #161c1e; margin: 0 -22px -22px; padding: 10px 22px 18px !important }

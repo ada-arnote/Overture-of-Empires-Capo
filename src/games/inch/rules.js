@@ -31,7 +31,7 @@ export const poolLimit = (cells) => 3 * cells + 6;
 /** How hard a rival's land is to take: their strength spread over their cells. */
 export const density = (p, seat) => Math.ceil(p.pool[seat] / Math.max(1, cellsOf(p, seat)));
 
-const copy = (p) => ({ ...p, owner: [...p.owner], pool: [...p.pool], home: [...p.home] });
+const copy = (p) => ({ ...p, owner: [...p.owner], pool: [...p.pool], turns: [...p.turns], home: [...p.home] });
 
 /** The next cell a pour would take from `to`, and its price, or null. */
 function cheapest(p, seat, to, dense) {
@@ -98,8 +98,8 @@ function finish(p, seats, why, events) {
   events.push({ kind: "end", winners: seats, why });
 }
 
-/** Move on to the next seat that still has land. The first seat of a round rotates. Changes p. */
-function advance(p, events) {
+/** Move on to the next seat that still has land. The first seat of a round rotates; in a Classic game of three the order is drawn. Changes p. */
+function advance(p, events, dice) {
   const n = p.pool.length, live = p.home.flatMap((h, s) => (h === NONE ? [] : [s]));
   if (live.length === 1) return finish(p, live, "the only one left", events);
   if (cellsOf(p, p.seat) >= goalOf(p)) return finish(p, [p.seat], "held enough of the land", events);
@@ -107,25 +107,26 @@ function advance(p, events) {
     if (++p.step === n) {
       p.step = 0;
       p.round++;
+      if (n > 2 && p.classic && dice) { p.turns = dice.shuffle(p.turns); events.push({ kind: "order", turns: p.turns.filter((s) => p.home[s] !== NONE), round: p.round }); }
       if (p.round > p.rounds) {
         const most = Math.max(...live.map((s) => cellsOf(p, s)));
         return finish(p, live.filter((s) => cellsOf(p, s) === most), "held the most land at the end", events);
       }
     }
-    p.seat = (p.step + p.round - 1) % n;
+    p.seat = n > 2 && p.classic ? p.turns[p.step] : (p.step + p.round - 1) % n;
   } while (p.home[p.seat] === NONE);
   begin(p, events);
 }
 
 export const inch = {
-  id: "inch", version: "2",
+  id: "inch", version: "3",
   options: { style: { values: ["classic", "ours"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 } },
 
   setup(o, dice) {
     const classic = o.style === "classic", b = boardOf({ classic }), homes = dice.shuffle(o.seats === 2 ? [b.corners[0], b.corners[3]] : [b.corners[0], b.corners[2], b.corners[4]]);
     const cost = b.cells.map(() => (dice.below(4) === 0 ? 2 : 1)), owner = Array(b.size).fill(NONE);
     homes.forEach((h, s) => { cost[h] = 1; owner[h] = s; });
-    const p = { classic, owner, cost, order: dice.shuffle(b.cells.map((_, i) => i)), pool: Array(o.seats).fill(START), home: homes, seat: 0, step: 0, round: 1, rounds: classic ? LONG : o.rounds, over: null };
+    const p = { classic, owner, cost, order: dice.shuffle(b.cells.map((_, i) => i)), pool: Array(o.seats).fill(START), home: homes, turns: Array.from({ length: o.seats }, (_, s) => s), seat: 0, step: 0, round: 1, rounds: classic ? LONG : o.rounds, over: null };
     begin(p, []);
     return p;
   },
@@ -145,13 +146,13 @@ export const inch = {
     return out;
   },
 
-  apply(before, m) {
+  apply(before, m, dice) {
     const p = copy(before), events = [];
     if (m.do === "pour") {
       const r = pour(p, p.seat, m.to, SHARES[m.share](p.pool[p.seat]), events);
       events.unshift({ kind: "pour", seat: p.seat, to: m.to, spent: r.spent, taken: r.taken });
     } else events.push({ kind: "wait", seat: p.seat });
-    advance(p, events);
+    advance(p, events, dice);
     return { position: p, events };
   },
   result: (p) => p.over,
