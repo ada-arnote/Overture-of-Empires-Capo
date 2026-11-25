@@ -2,7 +2,7 @@
 
 Table games on one shared map, in the browser. Free software, AGPL-3.0-or-later. Working name.
 
-An early build. One game, **An Inch of Ink**, can be played in tests: for two or three, with bots, saves and take-back. Expect it to change.
+An early build. Three games can be played in tests, with bots, saves and take-back: **Brass and Banners**, **An Inch of Ink** and **The Island Fable**. Expect them to change.
 
 | Command | What it does |
 |---|---|
@@ -10,8 +10,8 @@ An early build. One game, **An Inch of Ink**, can be played in tests: for two or
 | `node tools/check.mjs` | The gate: sizes, file types, records, rules-code limits |
 | `node tools/browsers.mjs` | The same probe in Node and each browser found here |
 | `node tools/serve.mjs` | Look at it on this computer. `--lan` also lets your phone in |
-| `node tools/bundle.mjs` | Makes `dist/play-inch.html`, one file that opens by double-click |
-| `node tools/play.mjs inch 200 2` | Plays bots against each other and prints the balance |
+| `node tools/bundle.mjs` | Makes `dist/play-*.html`, one file for each game, that opens by double-click |
+| `node tools/play.mjs banners 200 3` | Plays bots against each other and prints the balance |
 | `node tools/pack.mjs` | Makes `dist/` for a static host. Uploads nothing |
 
 | Folder | What |
