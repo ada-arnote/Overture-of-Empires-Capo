@@ -12,7 +12,7 @@ int idSoft(vec2 p){ vec2 q=p-.5,f=fract(q); ivec2 b=ivec2(floor(q)); int a=raw(b
   if(a==c&&a==d&&a==e) return a; vec4 w=vec4((1.-f.x)*(1.-f.y),f.x*(1.-f.y),(1.-f.x)*f.y,f.x*f.y); vec4 s;
   s.x=w.x+(c==a?w.y:0.)+(d==a?w.z:0.)+(e==a?w.w:0.); s.y=w.y+(a==c?w.x:0.)+(d==c?w.z:0.)+(e==c?w.w:0.); s.z=w.z+(a==d?w.x:0.)+(c==d?w.y:0.)+(e==d?w.w:0.); s.w=w.w+(a==e?w.x:0.)+(c==e?w.y:0.)+(d==e?w.z:0.);
   float m=max(max(s.x,s.y),max(s.z,s.w)); return m==s.x?a:m==s.y?c:m==s.z?d:e; }
-vec4 tab(int id,int k){ return texelFetch(uTab,ivec2((id&63)*2+k,id>>6),0); } // 0: colour, owner. 1: top, glow, wetness, spare
+vec4 tab(int id,int k){ return texelFetch(uTab,ivec2((id&63)*2+k,id>>6),0); } // 0: colour, owner. 1: top, glow, wetness, the land a province is in (1 for none)
 float top(int id){ return id<=0?0.:tab(id,1).r*255./32.*uUnit; }
 vec2 plane(vec2 uv,float Z){ float Y=(uv.y*(1.-uQ*Z*uTilt.x)+Z*uTilt.y)/max(.02,uTilt.x+uQ*uv.y*uTilt.y), X=uv.x*(1.-uQ*(Y*uTilt.y+Z*uTilt.x));
   return uC+vec2(X*uYaw.x+Y*uYaw.y,-X*uYaw.y+Y*uYaw.x)/uS; }
@@ -26,11 +26,12 @@ vec3 face(vec2 p,int id,float foot){
   float wet=b.b; c=mix(c,c*c*1.15,wet*.55); // fresh ink is deeper
   if(wet>0.) c+=vec3(.10)*wet*smoothstep(.0,1.,k-1.)*2.;
   // borders: a firm line where the owner changes, a faint one between cells of one owner
-  float w=max(1.6,foot*1.1); bool edge=false,own=false;
-  for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*(w*2.6)); if(n!=id){ edge=true; if(n<=0||abs(tab(max(n,0),0).a-a.a)>.002) own=true; } }
+  float w=max(1.6,foot*1.1); bool edge=false,own=false,land=false;
+  for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*(w*2.6)); if(n!=id){ edge=true; if(n<=0||abs(tab(max(n,0),0).a-a.a)>.002) own=true; if(n>0){ float m=tab(n,1).a; if((m>.99)!=(b.a>.99)) own=true; else if(abs(m-b.a)>.002) land=true; } } }
   if(own){ bool near=false; for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*(w*1.5)); if(n!=id) near=true; }
     float l=dot(a.rgb,vec3(.3,.6,.1)); vec3 line=l>.36?uInk:uPale; c=mix(c,near?line:mix(line,a.rgb,.55),a.a<.99?(near?.92:.5):(near?.42:.15)); }
-  else if(edge) c=mix(c,uInk,.16);
+  else if(edge) c=mix(c,uInk,b.a<.99?.46:.16);
+  if(land) c=mix(c,uGlow,own?.6:.92);
   float gl=b.g; if(gl>0.){ float pulse=uTime<=0.?1.:.72+.28*cos(uTime*6.2832); c=mix(c,uGlow,gl*(edge?.95:.34*pulse)); }
   return c; }
 void main(){
@@ -98,7 +99,7 @@ export class Painter {
     cells.forEach((c, i) => {
       const id = i + 1, o = ((id >> 6) * 128 + (id & 63) * 2) * 4;
       T[o] = c.rgb[0]; T[o + 1] = c.rgb[1]; T[o + 2] = c.rgb[2]; T[o + 3] = c.owner < 0 ? 255 : 40 + c.owner * 30;
-      T[o + 4] = Math.min(255, Math.round(c.top * 32)); T[o + 5] = c.glow * 255; T[o + 6] = c.wet * 255; T[o + 7] = 255;
+      T[o + 4] = Math.min(255, Math.round(c.top * 32)); T[o + 5] = c.glow * 255; T[o + 6] = c.wet * 255; T[o + 7] = c.land === undefined ? 255 : 40 + c.land * 30;
     });
     g.activeTexture(g.TEXTURE2);
     g.texSubImage2D(g.TEXTURE_2D, 0, 0, 0, 128, this.rows, g.RGBA, g.UNSIGNED_BYTE, T);

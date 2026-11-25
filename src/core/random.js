@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Seeded chance, in whole numbers only. The state is four numbers kept beside the position,
 // so a replay rolls the same dice.
-import { sha256 } from "./fingerprint.js";
+import { sha256 } from "./digest.js";
 
 export function seedState(seed) {
   const hex = sha256(new TextEncoder().encode("capo/" + String(seed)));

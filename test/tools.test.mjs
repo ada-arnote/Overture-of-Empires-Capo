@@ -101,10 +101,12 @@ test("the server answers with safe headers and refuses to take anything", async 
   } finally { s.close(); s.closeAllConnections(); }
 });
 test("the double-click page holds everything: no imports, no outside files, and its script is the one its rule allows", () => {
-  const js = bundle(path.join(root, "site/inch.js"));
+  for (const name of ["inch", "fable", "banners"]) {
+  const js = bundle(path.join(root, `site/${name}.js`));
   new vm.Script(`(() => {${js}})();`);
-  const html = page(readFileSync(path.join(root, "site/inch.html"), "utf8"), "body{}", js);
+  const html = page(readFileSync(path.join(root, `site/${name}.html`), "utf8"), "body{}", js);
   assert.ok(!/<link rel="stylesheet"|type="module"|src="/.test(html));
   const body = html.match(/<script>([\s\S]*)<\/script>/)[1];
   assert.ok(html.includes(`sha256-${createHash("sha256").update(body).digest("base64")}`));
+  }
 });

@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // An Inch of Ink (working name). Each seat has one pool of strength. On your turn land cut off from
 // your home falls, your pool grows, and you pour part of it over a border, or wait.
+// Classic is the genre as it is remembered: a wider map, no cut-off rule, no homes to storm, and play until one holds most of it.
 import { hexBoard, joined } from "../hex.js";
 
 export const NONE = -1;
-const RADIUS = 4, START = 6, WALL = 1, HOME_WALL = 3, SURROUND = 4;
-const SHARES = { third: (p) => Math.floor(p / 3), half: (p) => Math.floor(p / 2), all: (p) => p };
-const WIN_PERCENT = { 2: 55, 3: 45 };
+const START = 6, WALL = 1, HOME_WALL = 3, SURROUND = 4, LONG = 40;
+const SHARES = { quarter: (p) => Math.floor(p / 4), third: (p) => Math.floor(p / 3), half: (p) => Math.floor(p / 2), most: (p) => Math.floor((p * 3) / 4), all: (p) => p };
+export const sharesOf = (p) => (p.classic ? ["quarter", "half", "most", "all"] : ["third", "half", "all"]);
+const WIN_PERCENT = { 2: 55, 3: 45 }, CLASSIC_PERCENT = { 2: 60, 3: 55 };
 
-export const boardOf = () => hexBoard(RADIUS);
+export const boardOf = (p) => hexBoard(p?.classic ? 5 : 4);
 export const cellsOf = (p, seat) => p.owner.reduce((n, o) => n + (o === seat ? 1 : 0), 0);
-export const goalOf = (p) => Math.ceil((p.owner.length * WIN_PERCENT[p.pool.length]) / 100);
+export const goalOf = (p) => Math.ceil((p.owner.length * ((p.classic ? CLASSIC_PERCENT : WIN_PERCENT)[p.pool.length])) / 100);
 
 function root(n) { // whole-number square root
   let r = 0;
@@ -19,9 +21,11 @@ function root(n) { // whole-number square root
 }
 
 /** How much a seat's pool grows on its turn. */
-export function growth(cells, pool) {
+export function growth(p, seat, cells = cellsOf(p, seat)) {
+  // Classic: land counts in full, and every round brings more to everyone, so a long game cannot stand still.
+  if (p.classic) return 3 + Math.floor(cells / 3) + Math.floor(p.round / 2);
   // A flat base, then land (1.5 times its square root), then a little for saving. The base keeps a seat that is behind in the game.
-  return 3 + Math.floor(root(9 * cells) / 2) + Math.floor(pool / 8);
+  return 3 + Math.floor(root(9 * cells) / 2) + Math.floor(p.pool[seat] / 8);
 }
 export const poolLimit = (cells) => 3 * cells + 6;
 /** How hard a rival's land is to take: their strength spread over their cells. */
@@ -31,14 +35,14 @@ const copy = (p) => ({ ...p, owner: [...p.owner], pool: [...p.pool], home: [...p
 
 /** The next cell a pour would take from `to`, and its price, or null. */
 function cheapest(p, seat, to, dense) {
-  const { near } = boardOf();
+  const { near } = boardOf(p);
   let best = null;
   for (let i = 0; i < p.owner.length; i++) {
     if (p.owner[i] !== to) continue;
     const mine = near[i].reduce((n, m) => n + (p.owner[m] === seat ? 1 : 0), 0);
     if (!mine) continue;
-    let price = p.cost[i] + dense + (to !== NONE ? WALL : 0) + (to !== NONE && p.home[to] === i ? HOME_WALL : 0);
-    if (mine >= SURROUND) price = Math.ceil(price / 2);
+    let price = p.cost[i] + dense + (to !== NONE ? WALL : 0) + (to !== NONE && !p.classic && p.home[to] === i ? HOME_WALL : 0);
+    if (mine >= SURROUND && !p.classic) price = Math.ceil(price / 2);
     if (!best || price < best.price || (price === best.price && p.order[i] < p.order[best.cell])) best = { cell: i, price };
   }
   return best;
@@ -59,7 +63,7 @@ function pour(p, seat, to, amount, events) {
     p.pool[to] = Math.max(0, p.pool[to] - dense);
     if (c.cell !== p.home[to]) continue;
     p.home[to] = newHome(p, to);
-    events.push({ kind: "home", seat: to, by: seat, to: p.home[to] });
+    if (!p.classic || p.home[to] === NONE) events.push({ kind: "home", seat: to, by: seat, to: p.home[to] });
     if (p.home[to] === NONE) { p.pool[to] = 0; break; }
   }
   p.pool[seat] += left;
@@ -68,7 +72,7 @@ function pour(p, seat, to, amount, events) {
 
 /** The first cell of a seat's largest joined group, or NONE when it has no land. */
 function newHome(p, seat) {
-  const { near } = boardOf(), seen = new Set();
+  const { near } = boardOf(p), seen = new Set();
   let best = [];
   for (let i = 0; i < p.owner.length; i++) {
     if (p.owner[i] !== seat || seen.has(i)) continue;
@@ -81,11 +85,11 @@ function newHome(p, seat) {
 
 /** The start of a seat's turn: cut-off land falls, then the pool grows. Changes p. */
 function begin(p, events) {
-  const s = p.seat, keep = new Set(joined(boardOf().near, p.home[s], (m) => p.owner[m] === s)), lost = [];
-  for (let i = 0; i < p.owner.length; i++) if (p.owner[i] === s && !keep.has(i)) { p.owner[i] = NONE; lost.push(i); }
+  const s = p.seat, keep = new Set(joined(boardOf(p).near, p.home[s], (m) => p.owner[m] === s)), lost = [];
+  if (!p.classic) for (let i = 0; i < p.owner.length; i++) if (p.owner[i] === s && !keep.has(i)) { p.owner[i] = NONE; lost.push(i); }
   if (lost.length) events.push({ kind: "cut", seat: s, cells: lost });
-  const cells = keep.size, before = p.pool[s];
-  p.pool[s] = Math.max(before, Math.min(poolLimit(cells), before + growth(cells, before)));
+  const cells = p.classic ? cellsOf(p, s) : keep.size, before = p.pool[s];
+  p.pool[s] = Math.max(before, Math.min(poolLimit(cells), before + growth(p, s, cells)));
   events.push({ kind: "grow", seat: s, by: p.pool[s] - before });
 }
 
@@ -114,14 +118,14 @@ function advance(p, events) {
 }
 
 export const inch = {
-  id: "inch", version: "1",
-  options: { seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 } },
+  id: "inch", version: "2",
+  options: { style: { values: ["classic", "ours"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 } },
 
   setup(o, dice) {
-    const b = boardOf(), homes = dice.shuffle(o.seats === 2 ? [b.corners[0], b.corners[3]] : [b.corners[0], b.corners[2], b.corners[4]]);
+    const classic = o.style === "classic", b = boardOf({ classic }), homes = dice.shuffle(o.seats === 2 ? [b.corners[0], b.corners[3]] : [b.corners[0], b.corners[2], b.corners[4]]);
     const cost = b.cells.map(() => (dice.below(4) === 0 ? 2 : 1)), owner = Array(b.size).fill(NONE);
     homes.forEach((h, s) => { cost[h] = 1; owner[h] = s; });
-    const p = { owner, cost, order: dice.shuffle(b.cells.map((_, i) => i)), pool: Array(o.seats).fill(START), home: homes, seat: 0, step: 0, round: 1, rounds: o.rounds, over: null };
+    const p = { classic, owner, cost, order: dice.shuffle(b.cells.map((_, i) => i)), pool: Array(o.seats).fill(START), home: homes, seat: 0, step: 0, round: 1, rounds: classic ? LONG : o.rounds, over: null };
     begin(p, []);
     return p;
   },
@@ -129,11 +133,11 @@ export const inch = {
 
   /** Wait, or pour a share at neutral land or at one rival. Only pours that take something are offered. */
   moves(p) {
-    const s = p.seat, { near } = boardOf(), targets = new Set(), out = [{ do: "wait" }];
+    const s = p.seat, { near } = boardOf(p), targets = new Set(), out = [{ do: "wait" }];
     p.owner.forEach((o, i) => { if (o === s) for (const m of near[i]) if (p.owner[m] !== s) targets.add(p.owner[m]); });
     for (const to of [...targets].sort((a, b) => a - b)) {
       const first = cheapest(p, s, to, to === NONE ? 0 : density(p, to)), seen = new Set();
-      for (const share of ["all", "half", "third"]) {
+      for (const share of [...sharesOf(p)].reverse()) {
         const amount = SHARES[share](p.pool[s]);
         if (amount >= first.price && !seen.has(amount)) { seen.add(amount); out.push({ do: "pour", to, share }); }
       }

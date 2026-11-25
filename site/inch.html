@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#12171a">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <title>An Inch of Ink</title>
-<link rel="stylesheet" href="inch.css">
+<link rel="stylesheet" href="table.css">
 <link rel="icon" href="data:,">
 </head>
 <body class="menu">
@@ -41,9 +41,11 @@
   <h1>An Inch<br>of Ink</h1>
   <p class="tag">Pour your strength over the border. Hold enough of the land to win.</p>
   <div class="panel card">
+    <div class="line"><span>Rules</span><div class="pick small" id="style" role="radiogroup" aria-label="Rules"></div></div>
+    <p id="about" class="about"></p>
     <div class="line"><span>Players</span><div class="pick small" id="count" role="radiogroup" aria-label="Players"></div></div>
     <ul id="who"></ul>
-    <div class="line"><span>Length</span><div class="pick small" id="length" role="radiogroup" aria-label="Length"></div></div>
+    <div class="line" id="length-line"><span>Length</span><div class="pick small" id="length" role="radiogroup" aria-label="Length"></div></div>
     <div class="go"><button id="resume" type="button" class="quiet" hidden>Continue</button><button id="start" type="button" class="main">Begin</button></div>
   </div>
   <p class="links"><button type="button" class="text" id="how">How to play</button><button type="button" class="text" id="open">Open a saved game</button><a href="./" class="text">Capo</a></p>

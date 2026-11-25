@@ -8,7 +8,7 @@ import { TIERS, choose } from "../src/games/inch/bot.js";
 import { playOne } from "../tools/play.mjs";
 
 const G = { game: inch, choose, score: cellsOf };
-const start = (seats = 2, seed = "t") => createMatch(inch, { seed, options: { seats } });
+const start = (seats = 2, seed = "t") => createMatch(inch, { seed, options: { seats, style: "ours" } });
 /** A position with named cells given away, for one rule at a time. */
 const set = (p, change) => ({ ...structuredClone(p), cost: p.cost.map(() => 1), ...change });
 
@@ -22,14 +22,14 @@ test("the board: 61 cells, neighbours agree, opposite corners are far apart", ()
   assert.deepEqual(joined(b.near, 0, () => false), []);
 });
 test("growth is the stated formula for every size, in whole numbers", () => {
-  for (let c = 0; c <= 61; c++) for (const pool of [0, 4, 5, 60]) assert.equal(growth(c, pool), 3 + Math.floor(1.5 * Math.sqrt(c) + 1e-9) + Math.floor(pool / 8));
+  for (let c = 0; c <= 61; c++) for (const pool of [0, 4, 5, 60]) assert.equal(growth({ classic: false, pool: [pool] }, 0, c), 3 + Math.floor(1.5 * Math.sqrt(c) + 1e-9) + Math.floor(pool / 8));
 });
 test("setup: fair homes, home ground is easy, the first seat has already grown", () => {
   for (const seats of [2, 3]) for (let s = 0; s < 30; s++) {
     const p = start(seats, "s" + s).position;
     assert.equal(new Set(p.home).size, seats);
     p.home.forEach((h, k) => { assert.equal(p.owner[h], k); assert.equal(p.cost[h], 1); assert.ok(boardOf().corners.includes(h)); });
-    assert.equal(p.pool[0], Math.min(poolLimit(1), 6 + growth(1, 6)));
+    assert.equal(p.pool[0], Math.min(poolLimit(1), 6 + growth({ pool: [6] }, 0, 1)));
     assert.equal(p.pool[1], 6);
   }
 });
@@ -54,7 +54,7 @@ test("a rival's land costs more when their strength is dense, and each cell drai
   const q = set(p, { owner, home: [a, home1], pool: [20, 7] });
   assert.equal(density(q, 1), 4);
   const { position, events } = inch.apply(q, { do: "pour", to: 1, share: "third" });
-  assert.deepEqual(events[0].taken, [x]); assert.equal(events[0].spent, 1 + 1 + 4); assert.ok(position.pool[1] < 7 + growth(1, 3) + 1);
+  assert.deepEqual(events[0].taken, [x]); assert.equal(events[0].spent, 1 + 1 + 4); assert.ok(position.pool[1] < 7 + growth({ pool: [0, 3] }, 1, 1) + 1);
 });
 test("a lost home moves to the largest group; with no land left the seat is out and the game ends", () => {
   const b = boardOf(), p = start().position, a = 30, x = b.near[a][0], owner = p.owner.map(() => NONE); owner[a] = 0; owner[x] = 1;
@@ -74,7 +74,7 @@ test("the first seat of a round rotates", () => {
   assert.deepEqual(order, [0, 1, 2, 1, 2, 0, 2, 0, 1]);
 });
 test("a game nobody presses ends after its rounds, and a tie names both", () => {
-  const m = createMatch(inch, { seed: "w", options: { rounds: 10 } }); while (m.turn !== null) m.play({ do: "wait" });
+  const m = createMatch(inch, { seed: "w", options: { rounds: 10, style: "ours" } }); while (m.turn !== null) m.play({ do: "wait" });
   assert.equal(m.list.length, 20); assert.deepEqual(m.result.winners, [0, 1]);
 });
 test("the goal is more than half at two seats, and is reachable", () => { assert.equal(goalOf(start(2).position), 34); assert.equal(goalOf(start(3).position), 28); });
@@ -101,4 +101,17 @@ test("random play: pools stay in range, owners are real, homes are owned, and sa
 });
 test("bots only choose legal moves, and the same seed plays the same game", () => {
   for (const tier of TIERS) for (const seats of [2, 3]) { const run = () => playOne(G, { seed: "b", seats, tiers: Array(seats).fill(tier), check: true }); assert.deepEqual(run(), run()); }
+});
+const classic = (seats = 2, seed = "c") => createMatch(inch, { seed, options: { seats, style: "classic" } });
+test("classic: a wider map, land never falls for being cut off, and no home to storm", () => {
+  const p = classic().position, b = boardOf(p); assert.equal(b.size, 91); assert.equal(goalOf(p), 55); assert.equal(growth({ ...p, round: 6 }, 0, 10), 3 + 3 + 3); assert.equal(p.rounds, 40);
+  const owner = p.owner.map(() => NONE), [h0, , , h1] = b.corners; owner[h0] = 0; owner[h1] = 1; owner[45] = 1;
+  const q = inch.apply({ ...structuredClone(p), owner, home: [h0, h1], pool: [0, 6], seat: 0 }, { do: "wait" }).position; assert.equal(q.owner[45], 1);
+  const a = 45, x = b.near[a][0], own2 = p.owner.map(() => NONE); own2[a] = 0; own2[x] = 1; own2[h1] = 1;
+  const e = inch.apply({ ...structuredClone(p), cost: p.cost.map(() => 1), owner: own2, home: [a, x], pool: [2, 0], seat: 0 }, { do: "pour", to: 1, share: "all" }).events[0]; assert.deepEqual(e.taken, [x]); assert.equal(e.spent, 2);
+});
+test("classic: four shares, random games replay, and the two styles never mix", () => {
+  assert.ok(classic().legal().every((m) => m.do === "wait" || ["quarter", "half", "most", "all"].includes(m.share)));
+  for (let s = 0; s < 12; s++) { const m = classic(2 + (s % 2), "k" + s), d = chance(seedState("k" + s)); while (m.turn !== null) m.play(d.pick(m.legal())); assert.equal(openSave(m.save(), [inch]).match.fingerprint(), m.fingerprint()); }
+  const f = JSON.parse(classic(2, "z").save()); f.options.style = "ours"; assert.throws(() => openSave(JSON.stringify(f), [inch]));
 });

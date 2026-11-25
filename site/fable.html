@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#12171a">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<title>The Island Fable</title>
+<link rel="stylesheet" href="table.css">
+<link rel="icon" href="data:,">
+</head>
+<body class="menu">
+<p id="broken" class="broken">If nothing happens, this copy was opened as a file. Open <b>play-fable.html</b> from the dist folder instead.</p>
+<div id="stage" aria-hidden="true"></div>
+<div class="shade" aria-hidden="true"></div>
+
+<header id="bar" class="panel" hidden>
+  <button id="menu" type="button" class="icon" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  <div class="mid"><p id="round"></p>
+    <div id="land" role="img"><div id="fills"></div><i id="goal"></i></div></div>
+  <button id="look" type="button" class="icon" aria-label="Change the board's look"><svg viewBox="0 0 24 24"><path d="M3 9l9-5 9 5-9 5zM3 9v6l9 5 9-5V9M12 14v6"/></svg></button>
+</header>
+
+<ul id="seats" hidden></ul>
+
+<section id="act" class="panel" hidden aria-label="Your move">
+  <p id="status" role="status"></p>
+  <div id="choice">
+    <div class="pick strip" id="sources" role="radiogroup" aria-label="Halls and units"></div>
+    <div class="pick strip" id="wheres" role="radiogroup" aria-label="Where to"></div>
+    <div class="go"><button id="end" type="button" class="quiet">End turn</button><button id="do" type="button" class="main"></button></div>
+  </div>
+  <div id="after" hidden class="go"><button id="review" type="button" class="quiet">See the board</button><button id="again" type="button" class="main">Play again</button></div>
+</section>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<main id="title" class="title">
+  <p class="eyebrow">Overture of Empires: Capo</p>
+  <h1>The Island<br>Fable</h1>
+  <p class="tag">Grow your land, pay your people, and cut a rival's island in two.</p>
+  <div class="panel card">
+    <div class="line"><span>Rules</span><div class="pick small" id="style" role="radiogroup" aria-label="Rules"></div></div>
+    <p id="about" class="about"></p>
+    <div class="line"><span>Players</span><div class="pick small" id="count" role="radiogroup" aria-label="Players"></div></div>
+    <ul id="who"></ul>
+    <div class="line" id="length-line"><span>Length</span><div class="pick small" id="length" role="radiogroup" aria-label="Length"></div></div>
+    <div class="go"><button id="resume" type="button" class="quiet" hidden>Continue</button><button id="start" type="button" class="main">Begin</button></div>
+  </div>
+  <p class="links"><button type="button" class="text" id="how">How to play</button><button type="button" class="text" id="open">Open a saved game</button><a href="./" class="text">Capo</a></p>
+</main>
+
+<dialog id="sheet" class="panel" aria-labelledby="sheet-title"><h2 id="sheet-title"></h2><div id="sheet-body"></div><div class="go"><button type="button" class="main" id="sheet-close">Close</button></div></dialog>
+<input id="file" type="file" accept=".json,application/json" hidden>
+<footer id="foot"><span id="version"></span><span id="source"></span><span>AGPL-3.0</span></footer>
+<script type="module" src="fable.js"></script>
+</body>
+</html>

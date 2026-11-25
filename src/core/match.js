@@ -10,7 +10,7 @@
 //   apply(position, move, dice) -> { position, events }
 //   result(position)     { winners: [seat], why } when over, else null
 import { canon, deepFreeze } from "./canon.js";
-import { fingerprint } from "./fingerprint.js";
+import { fingerprint } from "./digest.js";
 import { chance, seedState } from "./random.js";
 
 export const FORMAT = 1;
