@@ -14,6 +14,7 @@ An early build, at an unlisted address: https://ada-arnote.github.io/Overture-of
 | `node tools/bundle.mjs` | Makes `dist/play-*.html`, one file for each game, that opens by double-click |
 | `node tools/play.mjs banners 200 3` | Plays bots against each other and prints the balance |
 | `node tools/pack.mjs` | Makes `dist/` for a static host. Uploads nothing |
+| `node tools/capo-mcp.mjs` | The Capo bridge, optional: lets your own AI app (any MCP client) tell Capo's story, on this computer only. It prints a token to paste into Capo and how to add it to the app; `--tokens` shows them again |
 
 | Folder | What |
 |---|---|

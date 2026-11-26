@@ -1,0 +1,10 @@
+{
+  "kind": "capo-pack",
+  "v": 1,
+  "name": "Two quiet starts",
+  "about": "Two small starting points on the real map, to show what a pack is.",
+  "scenarios": [
+    { "kind": "capo-scenario", "v": 1, "id": "pack-quiet-2030", "title": "A quiet 2030", "blurb": "The world as the map shows it, a few years on.", "opening": "The story begins on 1 January 2030. Borders are as the map shows them.", "start": "2030-01-01", "facts": [{ "text": "A long drought has made grain dear everywhere." }] },
+    { "kind": "capo-scenario", "v": 1, "id": "pack-quiet-2040", "title": "A quiet 2040", "blurb": "The world as the map shows it, a generation on.", "opening": "The story begins on 1 January 2040. Borders are as the map shows them.", "start": "2040-01-01" }
+  ]
+}

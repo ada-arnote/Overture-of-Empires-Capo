@@ -2,6 +2,22 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Your own AI app as the storyteller, and plugins that are only data
+
+**Players**
+- **The Capo bridge (optional).** If you use an AI app that speaks MCP (Claude Code, Claude Desktop, Codex and others), it can tell Capo's story on its own sign-in, with no key. You run `node tools/capo-mcp.mjs` from Capo's source yourself; it prints a page token. In Capo, under Game, How Capo reaches an AI, choose the service "Your AI app (MCP bridge)", paste the token and press Check the bridge. Add the bridge to your AI app as the script says, start a turn, and tell the app "play my Capo turn". Capo never starts the bridge and reaches it only after you choose it and paste the token.
+- **What the AI app can do.** Four tools: read the prompt Capo is waiting on, hand a reply back, read a short summary of the game (date, turn, your country, wars, treaties, offers, your waiting actions and the last receipt), and, only if you tick "Let my AI app propose orders", propose a treaty, peace or an attack. A proposal is answered by the rules at once (who would agree, the odds, or why not) and shown to you with Accept and Dismiss. Nothing is ordered unless you accept it, and the rules carry it out only when you advance.
+- **Prose styles and tones.** A new Plugins section in the AI settings chooses how the story is told: a prose style (two come with Capo: a court chronicle, a wire report) and a tone (grim and spare, wry and worldly). They shape the wording only; the reply format, the facts and the rules stay as they are.
+- **Plugin files.** A plugin is a small JSON file you open: a prose style, a tone, a service preset (another server on this computer, or more models at a service Capo already lists) or a scenario pack (up to twelve scenarios in one file, opened from the first screen with Open a scenario file). Capo checks each like a save, keeps only the parts it knows, refuses any text with a web address in it, and runs nothing. Examples are in `test/fixtures/plugins/`.
+
+**Contributors**
+- New: `tools/capo-mcp.mjs` (MCP's JSON-RPC by hand over stdio and Streamable HTTP, and the page's endpoint; Node's own modules only), `site/aimore.js` (the bridge's and the plugins' page parts), `src/story/bridge.js` (the game digest, a reply's shape, the rules' answer to a proposed order) and `src/story/plugins.js` (the checks). Tests: `test/mcp.test.mjs`, `test/plugins.test.mjs`.
+- The bridge binds 127.0.0.1 only, checks the Host and Origin of every request, and has two tokens (one for the page, one for an AI app over HTTP) kept in `.capo-bridge.json` in the home folder. The page rule is unchanged: connect-src already allowed this computer.
+- Hooks in existing files are single lines marked "mcp hook" or "plugins hook": six in `site/ai.js`, and in `site/game.js` two imports, one call and the pack opener beside the scenario shelf.
+- Growth: about 7.5 kB compressed in `site` and 6.5 kB in `src/story`, and 272 lines in `tools` (now 1,275 against a 1,000-line guide).
+
 ## v0.7.0 (2026-11-26): new worlds, and a deeper Capo
 
 ### A deeper Capo: gauges, ambitions, crises, causes for war, the press
