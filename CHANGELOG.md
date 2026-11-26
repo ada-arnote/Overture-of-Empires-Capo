@@ -2,6 +2,19 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Capo starts in late 2026, and the front page keeps one blue
+
+**Players**
+- **"Late 2026: the world as it stands" is the first start, and the one chosen** when Capo opens: the present day with its wars, alliances and leaders in place. The blank present day follows it, renamed **"A clean slate"** (no wars or treaties yet); games and scenario files made from it still open.
+- **With no AI, Advance asks only once.** The first Advance in a browser still offers the choice: move the world by the rules, or connect an AI. After that Advance moves the world by the rules at once, and a small **Connect an AI** beside it opens the AI settings (still in the Game menu too). Actions in your own words are kept for a turn told by an AI, as before.
+- **The front page has one dark blue**, with no lantern switch; a choice kept from the old switch no longer changes it.
+
+**Contributors**
+- `src/story/presets.js`: `FIRST` (the start the first screen opens on) and `startOrder(blank, presets)`, the first screen's order. The clean slate keeps the id `today`.
+- `site/main.js` no longer reads or writes `capo-tent-theme`; the table games' Light setting still does (`site/guard.js`, `site/table.js`). `site/icons/game-icons/old-lantern.svg` is gone with its credit.
+
 ## v0.9.2 (2026-11-26): An Inch of Ink waits for you, and fights fairer
 
 ### An Inch of Ink: a clock that waits, rivals that teach, attacks you can see, and a truce

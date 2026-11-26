@@ -6,7 +6,7 @@
 @font-face { font-family: "Atkinson Hyperlegible"; src: url("fonts/atkinson/atkinson-400.woff2") format("woff2"); font-display: swap }
 @font-face { font-family: "Atkinson Hyperlegible"; font-weight: 700; src: url("fonts/atkinson/atkinson-700.woff2") format("woff2"); font-display: swap }
 
-/* daylight: the tent's blue (ruling 126). Three tiers of ground, one accent */
+/* one theme: the tent's dark blue (rulings 126 and 151). Three tiers of ground, one accent */
 :root {
   --bg: #22364f; --deep: #1b2c43; --raised: #2b4263; --raised-2: #33507a;
   --ink: #eef2f7; --soft: #cfd6de; --line: rgba(226, 233, 241, .16); --line-2: rgba(226, 233, 241, .44);
@@ -18,23 +18,6 @@
   --ui: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   --gutter: max(16px, env(safe-area-inset-left, 0px)); --gap: clamp(64px, 9vw, 128px);
   color-scheme: dark;
-}
-/* lamplight: the same room after dark */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0f1a2a; --deep: #0a121e; --raised: #162539; --raised-2: #1e3350;
-    --ink: #e6ebf1; --soft: #b8c1cb; --line: rgba(214, 222, 232, .12); --line-2: rgba(214, 222, 232, .42);
-    --brass: #c3ccd6; --brass-2: #e1e7ee; --glow: rgba(195, 205, 215, .09); --chart: rgba(214, 222, 232, .04);
-    --sea: #2f4a57; --shade: rgba(0, 0, 0, .55); --halo: #060c15;
-    --g-banners: #e58f82; --g-fable: #7cc2ad; --g-glass: #e0b866; --g-inch: #a3b2e6;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0f1a2a; --deep: #0a121e; --raised: #162539; --raised-2: #1e3350;
-  --ink: #e6ebf1; --soft: #b8c1cb; --line: rgba(214, 222, 232, .12); --line-2: rgba(214, 222, 232, .42);
-  --brass: #c3ccd6; --brass-2: #e1e7ee; --glow: rgba(195, 205, 215, .09); --chart: rgba(214, 222, 232, .04);
-  --sea: #2f4a57; --shade: rgba(0, 0, 0, .55); --halo: #060c15;
-  --g-banners: #e58f82; --g-fable: #7cc2ad; --g-glass: #e0b866; --g-inch: #a3b2e6;
 }
 
 *, *::before, *::after { box-sizing: border-box }
@@ -70,8 +53,8 @@ h3 { font-size: 1.5rem; line-height: 1.2 }
 .btn.ghost:hover { background: var(--line); border-color: var(--ink); color: var(--ink) }
 .btn.small { min-height: 44px; padding: 0 1.15em }
 .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px }
-.chip, .lantern, .burger { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 4px; background: none; color: var(--ink); font: 700 .9375rem/1 var(--ui); cursor: pointer }
-.chip:hover, .lantern:hover, .burger:hover { border-color: var(--ink); background: var(--line) }
+.chip, .burger { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 4px; background: none; color: var(--ink); font: 700 .9375rem/1 var(--ui); cursor: pointer }
+.chip:hover, .burger:hover { border-color: var(--ink); background: var(--line) }
 
 /* the top bar stays with the reader */
 .top { position: sticky; top: 0; z-index: 20; background: var(--deep); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top, 0px) }
@@ -88,10 +71,7 @@ h3 { font-size: 1.5rem; line-height: 1.2 }
 .top nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--soft); font-size: .9375rem; text-decoration: none; border-radius: 4px }
 .top nav a:hover { color: var(--ink); background: var(--line) }
 .tools { display: flex; align-items: center; gap: 8px }
-.lantern { padding: 0 10px }
-.lantern .mk { --m: url("icons/game-icons/old-lantern.svg"); width: 24px; height: 24px }
-.lantern[aria-pressed="true"] .mk { color: var(--brass) }
-.lantern .t, .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap }
 .burger { display: none }
 @media (max-width: 1039px) {
   .top .in { column-gap: 12px }

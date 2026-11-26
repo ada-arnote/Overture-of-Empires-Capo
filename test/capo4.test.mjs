@@ -15,8 +15,8 @@ import { checkSave, snapGame, takeBack } from "../src/story/saves.js";
 import { ROOM, compact, compactNote, fatten, pressure, shortTurn, sizeWords, slim } from "../src/story/keep.js";
 import { keeper } from "../site/keep.js";
 import { AUTHORED } from "../src/story/authored.js";
-import { KINDS as HEADINGS, PRESETS } from "../src/story/presets.js";
-import { FICTION, checkScenario, scenarioFrom, scenarioText } from "../src/story/scenarios.js";
+import { FIRST, KINDS as HEADINGS, PRESETS, startOrder } from "../src/story/presets.js";
+import { FICTION, SCENARIOS, checkScenario, scenarioFrom, scenarioText } from "../src/story/scenarios.js";
 import { crossesLine } from "../src/story/line.js";
 import { rivalMoves } from "../src/story/rivals.js";
 import { stageOf } from "../src/story/overlay.js";
@@ -317,6 +317,16 @@ const realGeo = (g) => {
   const holds = (c) => { let n = base[c] || 0; for (const [id, o] of Object.entries(g.owners)) { if (provinces.get(id).country === c) n--; if (o === c) n++; } return n; };
   return { name: (c) => world.countries[c] || c, place: (id) => provinces.get(id), find: (s) => (provinces.has(s) ? s : null), owner, neighbours: (id) => nb.get(id), across: () => [], coastal: () => false, holds, known: (c) => c in base, all: ids, hasCoast: () => false, might: (c) => g.might?.[c] };
 };
+
+test("the first screen opens on Late 2026, with the clean slate second and every start once (ruling 151)", () => {
+  const list = startOrder(SCENARIOS);
+  assert.equal(FIRST, "late-2026");
+  assert.deepEqual(list.slice(0, 2).map((s) => s.id), ["late-2026", "today"], "Late 2026 first, the blank start second");
+  assert.equal(SCENARIOS[0].title, "A clean slate");
+  assert.equal(SCENARIOS[0].id, "today", "the blank start keeps its id, so saves still open");
+  assert.equal(list.length, SCENARIOS.length + PRESETS.length);
+  assert.equal(new Set(list.map((s) => s.id)).size, list.length);
+});
 
 test("three authored starts: whole scenario files on the real map, fiction by their own words, real names only in the present day", () => {
   assert.equal(AUTHORED.length, 3);

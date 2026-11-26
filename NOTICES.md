@@ -23,7 +23,7 @@ The models on the boards and on Capo's map are made in code (src/map/kit.js and 
 
 The disputed areas in maps/disputes.json, drawn over the world map, are from Natural Earth (1:10m admin-0 disputed areas, version 5.1.1), which is in the public domain. Made with Natural Earth. The notes on who holds and who claims each area are the source's own, with its abbreviations written out.
 
-Icons in site/icons/game-icons/ are from game-icons.net under the Creative Commons Attribution 3.0 licence (https://creativecommons.org/licenses/by/3.0/). Icons made by Delapouite (rolling-dices.svg, village.svg, old-lantern.svg) and by Lorc (wheat.svg, ink-swirl.svg). Available on https://game-icons.net. We dropped their metadata and rounded their coordinates; the page sets their colour.
+Icons in site/icons/game-icons/ are from game-icons.net under the Creative Commons Attribution 3.0 licence (https://creativecommons.org/licenses/by/3.0/). Icons made by Delapouite (rolling-dices.svg, village.svg) and by Lorc (wheat.svg, ink-swirl.svg). Available on https://game-icons.net. We dropped their metadata and rounded their coordinates; the page sets their colour.
 
 Icons in site/icons/phosphor/ (play.svg, link.svg) are from Phosphor Icons, version 2.0.8 (https://github.com/phosphor-icons/core), under the MIT License; coordinates rounded:
 

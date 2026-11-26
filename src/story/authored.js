@@ -3,7 +3,7 @@
 // believable present day, a regional brink, and an armed peace a few years on. Fiction, every one: not news and
 // not a forecast. The two later starts name offices, never people. "Late 2026" names the real leaders in office as
 // it begins (rulings 48 and 149): fiction with real names, kept current, and marked so in its blurb, its opening and
-// its first fact. Text is a draft for the owner's review; it becomes the first choice only after that review.
+// its first fact. The owner reviewed it, and it is the first choice on the start screen (ruling 151).
 //
 // Real people named in "Late 2026", for the owner's review. Holders as of 26 November 2026, checked against news
 // reports that day; the ones marked * changed during 2026 and are the likeliest to need a second look:

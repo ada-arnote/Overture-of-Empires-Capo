@@ -759,7 +759,7 @@ export function createTable(G) {
     row("Seat patterns", ...bind("patterns"), CHOICES.patterns);
     box.append(el("p", "Patterns show on the board and the score bar.", "about"));
     row("Text size", ...bind("text"), CHOICES.text);
-    // daylight or lamplight: the same choice the front page's lantern keeps
+    // daylight or lamplight, kept in this browser for every table game (the front page has one dark blue)
     row("Light", () => read(THEME) || "system", (v) => { store(THEME, v === "system" ? null : v); if (v === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = v; }, [["system", "Follow the system"], ["light", "Daylight"], ["dark", "Lamplight"]]);
     return box;
   }
