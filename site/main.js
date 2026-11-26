@@ -47,6 +47,7 @@ function menu() {
   burger.addEventListener("click", () => set(!top.classList.contains("open")));
   $("nav").addEventListener("click", (e) => { if (e.target.closest("a")) set(false); });
   addEventListener("keydown", (e) => { if (e.key === "Escape" && top.classList.contains("open")) { set(false); burger.focus(); } });
+  document.addEventListener("click", (e) => { if (top.classList.contains("open") && !top.contains(e.target)) set(false); }); // a tap outside folds it too
 }
 
 /**
@@ -56,17 +57,19 @@ function menu() {
  */
 function desk() {
   const stage = $("stage"), fig = stage.parentElement, say = $("live-say"), go = $("live-go"), still = say.textContent, calm = matchMedia("(prefers-reduced-motion: reduce)");
-  let game = null, loading = false, seen = false, wanted = !calm.matches && !navigator.connection?.saveData;
+  let game = null, loading = false, seen = false, wanted = !calm.matches && !navigator.connection?.saveData, told = still;
+  // the caption says Paused, not Live, while the visitor has paused it
+  const tell = (text = told) => { told = text; say.textContent = game && !wanted ? text.replace(/^Live on this page/, "Paused") : text; };
   const sync = () => {
     const run = !!game && wanted && seen && !document.hidden;
-    if (game) { if (run) game.start(); else game.stop(); go.textContent = wanted ? "Pause" : "Resume"; }
+    if (game) { if (run) game.start(); else game.stop(); go.textContent = wanted ? "Pause" : "Resume"; tell(); }
     fig.classList.toggle("on", run);
   };
-  const gone = () => { game = null; stage.classList.remove("live"); go.hidden = true; say.textContent = still; sync(); };
+  const gone = () => { game = null; stage.classList.remove("live"); go.hidden = true; tell(still); sync(); };
   const load = async () => {
     if (game || loading) return;
     loading = true;
-    try { game = (await import("./live.js")).live(stage, (text) => { say.textContent = text; }, gone); } catch (e) { console.warn("The live board did not start:", e); }
+    try { game = (await import("./live.js")).live(stage, tell, gone); } catch (e) { console.warn("The live board did not start:", e); }
     loading = false;
     go.hidden = !game; // where this device cannot draw it, the picture stays and nothing is offered
     if (!game) return;

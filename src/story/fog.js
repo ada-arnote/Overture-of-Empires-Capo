@@ -11,6 +11,7 @@
 // An Envoy on the council (the foreign seat, filled) lifts every country below clear by one tier.
 // Other rules may teach the player something for a while: learn(g, country, tier, date). What is learned holds for
 // a year, then stands one tier lower for two more.
+// Fog of war is a setting, on by default (ruling 149): with g.fog === false every country is known clear.
 import { draw100 } from "./line.js";
 import { monthsApart } from "./relations.js";
 import { GAUGES, gaugeOf, gaugeWord } from "./state.js";
@@ -28,6 +29,7 @@ const tierAt = (seen, now) => { if (!seen) return 0; const m = monthsApart(seen[
 
 /** How well the player's side knows a country today: {tier, word, why}. near: its neighbours by land or narrow sea. */
 export function knowledge(g, c, near = [], now = g.date) {
+  if (g.fog === false) return { tier: 3, word: TIERS[3], why: "fog of war is off" };
   const me = g.player, learned = tierAt(g.seen?.[c], now);
   let [tier, why] = c === me ? [3, "your own country"] : has(g.treaties, me, c, ["defence", "alliance"]) ? [3, "a treaty partner"] : has(g.wars, me, c) ? [2, "an enemy at war"]
     : has(g.treaties, me, c) ? [2, "a trade partner"] : near.includes(c) ? [2, "a neighbour"] : g.crisis && [g.crisis.a, g.crisis.b].includes(me) && [g.crisis.a, g.crisis.b].includes(c) ? [2, "a crisis between you"]
@@ -63,5 +65,8 @@ export function fogLines(g, codes, near = []) {
   return told.length ? [`- What the player's side knows of others (stability, treasury, mandate). Speak only from this; a rumour may be wrong: ${told.join("; ")}`] : [];
 }
 
-/** What is learned, from a save: countries on the map, tiers 1 to 3, dates as dates. */
-export const keepFog = (s, known) => ({ seen: Object.fromEntries(Object.entries(s.seen && typeof s.seen === "object" && !Array.isArray(s.seen) ? s.seen : {}).filter(([c, v]) => known(c) && Array.isArray(v) && [1, 2, 3].includes(v[0]) && /^\d{4}-\d{2}-\d{2}$/.test(v[1] || "")).map(([c, v]) => [c, [v[0], v[1]]])) });
+/** Turn fog of war on or off for this game. Returns the receipt-style sentence the page shows. */
+export function setFog(g, on) { g.fog = on ? undefined : false; return on ? "Fog of war is on: you see others only as well as you know them." : "Fog of war is off: you see every country clearly."; }
+
+/** What is learned, from a save: countries on the map, tiers 1 to 3, dates as dates; fog off only when written so. */
+export const keepFog = (s, known) => ({ fog: s.fog === false ? false : undefined, seen: Object.fromEntries(Object.entries(s.seen && typeof s.seen === "object" && !Array.isArray(s.seen) ? s.seen : {}).filter(([c, v]) => known(c) && Array.isArray(v) && [1, 2, 3].includes(v[0]) && /^\d{4}-\d{2}-\d{2}$/.test(v[1] || "")).map(([c, v]) => [c, [v[0], v[1]]])) });

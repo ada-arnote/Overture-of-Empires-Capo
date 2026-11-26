@@ -72,6 +72,7 @@ export function page(html, css, js, home = "", fetches = false, from = path.join
   // served pages load fonts, pictures and sounds from their own site; the double-click page carries them inside, as data:
   const own = home ? "'self'" : "data:", img = home ? "'self' data:" : "data:";
   return assets(html, home, from)
+    .replace(/<script src="source\.js"><\/script>\n?/, "") // the source pages' way to the built ones (site/source.js): not wanted in a built page
     .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, () => `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src ${img}; font-src ${own}; media-src ${own};${talk} base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">`)
     .replace(/<link rel="stylesheet"[^>]*>/, () => `<style>\n${assets(css, home, from)}</style>`)
     .replace(/<a href="\.\/" class="text">All games<\/a>/, home ? `<a href="${home}" class="text">All games</a>` : "")

@@ -14,7 +14,7 @@ export function formatOf(prompt) {
     if (l.trim() === "END") { end = true; continue; }
     const m = l.match(/^([A-Z][A-Z ]*[A-Z]):\s*(.*)$/);
     if (!m) continue;
-    if (/^t\d+-\w+$/.test(m[2].trim())) fixed.push(l.trim()); // the turn's code: Capo writes it, not the AI
+    if (/^t\d+-[\w-]+$/.test(m[2].trim())) fixed.push(l.trim()); // the turn's code: Capo writes it, not the AI (a seed may hold a hyphen, ruling 150)
     else if (!rows.some((r) => r.label === m[1])) rows.push({ label: m[1], fields: m[2].split(" | ").map((s) => s.trim()) });
   }
   return rows.length ? { rows, fixed, end } : null;

@@ -15,7 +15,7 @@ export const LIMITS = {
   code: { "src/core": 12 * KB, "src/map": 45 * KB, "src/games": 90 * KB, "src/story": 90 * KB, site: 200 * KB }, // compressed. site: 200, the owner's ruling (rulings 121, 125, 134 and 137)
   first: 700 * KB, // everything shipped, compressed (rulings 130 and 139)
   map: 300 * KB, // one map file in maps/, compressed: fetched by the page that needs it, never by the first page
-  lines: { "src/map": 2400, "src/games": 6500, "src/core": 700, tools: 1000 },
+  lines: { "src/map": 2400, "src/games": 6500, "src/core": 700, tools: 1300 }, // tools: 1,300 (ruling 150)
   // vendored assets, apart from code (lane 7's rule of thumb); still inside the 600 kB above. Each folder holds only its own kinds, plus .txt licence texts
   assets: { "site/fonts": { max: 110 * KB, types: [".woff2", ".txt"] }, "site/icons": { max: 25 * KB, types: [".svg", ".png", ".webp", ".txt"] }, "site/sounds": { max: 60 * KB, types: [".ogg", ".mp3", ".txt"] }, "site/textures": { max: 32 * KB, types: [".webp", ".png", ".txt"] }, "site/shots": { max: 120 * KB, types: [".webp", ".txt"] } }, // textures: ruling 128; shots (our own in-game screenshots): ruling 130
 };
@@ -46,6 +46,7 @@ export function check(root, { release = false } = {}) {
   const files = SHIPPED.flatMap((d) => walk(path.join(root, d)));
   const read = (name) => (existsSync(path.join(root, name)) ? readFileSync(path.join(root, name), "utf8") : null);
   const ai = (read("site/config.js") || "").split("AI_BASES")[1] || "", aiOrigins = [...new Set([...ai.matchAll(/"(https:\/\/[^/"]+)/g)].map((m) => m[1]))]; // the AI services Capo may call
+  const home = (read("site/config.js") || "").match(/SITE_URL\s*=\s*"(https:\/\/[^"]*\/)play\/"/)?.[1]; // the site's own public address, for a share card
 
   let total = 0;
   const code = Object.fromEntries(Object.keys(LIMITS.code).map((k) => [k, 0])), assets = Object.fromEntries(Object.keys(LIMITS.assets).map((k) => [k, 0]));
@@ -75,7 +76,8 @@ export function check(root, { release = false } = {}) {
     // Nothing is fetched from elsewhere. Links a person follows are fine, and so are the two fixed names below.
     for (const m of text.matchAll(/\b(?:https?|wss?):\/\/[^\s"'`<>)]+/g)) {
       if (/^http:\/\/(localhost|127\.0\.0\.1)[:/]/.test(m[0])) continue; // this computer is not elsewhere
-      if (/^http:\/\/www\.w3\.org\//.test(m[0]) || (csp && aiOrigins.includes(m[0]) && csp.includes(` ${m[0]} `)) || (ext === ".html" && new RegExp(`<a [^>]*href="${m[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(text)) || name === "site/config.js") continue;
+      const card = home && ext === ".html" && m[0].startsWith(home) && new RegExp(`<meta (?:property|name)="(?:og|twitter):[\\w:]+" content="${m[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`).test(text); // a share card names the site's own pages
+      if (card || /^http:\/\/www\.w3\.org\//.test(m[0]) || (csp && aiOrigins.includes(m[0]) && csp.includes(` ${m[0]} `)) || (ext === ".html" && new RegExp(`<a [^>]*href="${m[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(text)) || name === "site/config.js") continue;
       bad.push(`${name}: names an outside address, ${m[0].slice(0, 60)}`);
     }
     if (ext === ".js") {

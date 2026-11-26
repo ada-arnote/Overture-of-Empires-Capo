@@ -6,7 +6,7 @@
 // realm.js, with: order(o) an order by card, ask(prompt, take, sheet) one call to the AI, asking(), askBox(),
 // colour(code), refresh() paints the map again, bar() draws the top bar again.
 import { CARES, moodOf, quellPlan, termsFor } from "../src/story/home.js";
-import { fogLines, knowledge, seenGauge, seenWords } from "../src/story/fog.js";
+import { fogLines, knowledge, seenGauge, seenWords, setFog } from "../src/story/fog.js";
 import { chooseScene, openScene, readScene, scenePlan, sceneProblem, scenePrompt, sceneWith } from "../src/story/scenes.js";
 import { MEANS, SCALES, meansOf, meansTarget, scaleProblem, switchScale } from "../src/story/scale.js";
 import { debatePrompt, debaters, readDebate } from "../src/story/debate.js";
@@ -159,9 +159,10 @@ export function gameMore(x) {
     const b = button(MODES[k][0], () => {
       const why = scaleProblem(g, k); if (why) return x.toast(why);
       if (crosses(nm.value)) return x.toast("Refused: nothing sexual involving minors.");
-      if (!confirm(`Play on as ${MODES[k][1]}? Your country and its past stay as they are.${k === "citizen" ? " A citizen commands nothing: orders by card are dropped." : ""}`)) return;
-      switchScale(g, k); if (k !== "nation" && nm.value.trim() && !g.character.name) g.character.name = nm.value.trim().slice(0, 80);
-      x.save(); x.bar(); x.open("game"); x.toast(`You now play as ${MODES[k][0].toLowerCase()}.`);
+      x.sure(`Play on as ${MODES[k][1]}? Your country and its past stay as they are.${k === "citizen" ? " A citizen commands nothing: orders by card are dropped." : ""}`, "Play on", () => {
+        switchScale(g, k); if (k !== "nation" && nm.value.trim() && !g.character.name) g.character.name = nm.value.trim().slice(0, 80);
+        x.save(); x.bar(); x.open("game"); x.toast(`You now play as ${MODES[k][0].toLowerCase()}.`);
+      });
     });
     b.setAttribute("aria-pressed", String(g.mode === k)); scale.append(b);
   }
@@ -175,7 +176,12 @@ export function gameMore(x) {
     // ids already played keep their place: new beats go last
     g.script = got; beatDraft = { text: "", when: "" }; x.save(); x.open("game");
   });
+  // fog of war, a setting on by default (ruling 149)
+  const fog = el("label", undefined, "note"), box = Object.assign(el("input"), { type: "checkbox", checked: g.fog !== false });
+  box.onchange = () => { x.toast(setFog(g, box.checked)); x.save(); x.refresh(); x.open("game"); };
+  fog.append(box, " Fog of war: you see other countries only as well as you know them (neighbours, partners, enemies, talks). Off, every country's state and answers are in view.");
   return [
+    el("h3", "Fog of war"), fog,
     el("h3", "How you play"), el("p", `You play as ${MODES[g.mode][1]}. You may change the scale once a turn: standing goes to the new scale's own and your circle follows, each member to the matching seat.`, "note"), scale, ...(g.character?.name ? [] : [nm]),
     el("h3", "This scenario's own beats"), el("p", "Moments you script. Each comes once, on the first turn its condition holds, ahead of the rules' own beats; the AI writes it, and it changes no fact. They are saved with the scenario.", "note"),
     ...(script.length ? [rows(x, script.map((b, i) => [`${b.text} (${b.when.length ? `when: ${b.when.join(", ")}` : "whenever"}${(g.beats || []).some(([id]) => id === b.id) ? "; played" : ""})`, button("Remove", () => { g.script = script.filter((_, j) => j !== i); x.save(); x.open("game"); })]))] : []),

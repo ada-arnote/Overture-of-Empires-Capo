@@ -318,7 +318,7 @@ const realGeo = (g) => {
   return { name: (c) => world.countries[c] || c, place: (id) => provinces.get(id), find: (s) => (provinces.has(s) ? s : null), owner, neighbours: (id) => nb.get(id), across: () => [], coastal: () => false, holds, known: (c) => c in base, all: ids, hasCoast: () => false, might: (c) => g.might?.[c] };
 };
 
-test("three authored starts: whole scenario files on the real map, fiction by their own words, offices and no names", () => {
+test("three authored starts: whole scenario files on the real map, fiction by their own words, real names only in the present day", () => {
   assert.equal(AUTHORED.length, 3);
   assert.equal(HEADINGS.authored, "Authored starts");
   assert.ok(AUTHORED.every((s) => PRESETS.includes(s)) && PRESETS[0] === AUTHORED[0], "listed first among the ready-made starts");
@@ -332,8 +332,9 @@ test("three authored starts: whole scenario files on the real map, fiction by th
     assert.deepEqual([r.scenario.wars.length, r.scenario.treaties.length, r.scenario.facts.length, Object.keys(r.scenario.rel).length, Object.keys(r.scenario.might).length], [s.wars.length, s.treaties.length, s.facts.length, Object.keys(s.rel).length, Object.keys(s.might).length], s.id);
     assert.deepEqual(r.scenario.facts.map((f) => f.text), s.facts.map((f) => f.text), "no fact is cut short");
     assert.deepEqual(crossesLine(scenarioText(r.scenario)), []);
-    assert.match(s.blurb, /^Fiction\. /);
-    assert.match(s.facts[0].text, /offices, not people/);
+    // "Late 2026" names the real leaders of its day (rulings 48 and 149), and says so first; the others name offices
+    if (s.id === "late-2026") { assert.match(s.blurb, /^Fiction with real names\. /); assert.match(s.facts[0].text, /^Fiction with real names/); assert.match(s.opening, /real people/); }
+    else { assert.match(s.blurb, /^Fiction\. /); assert.match(s.facts[0].text, /offices, not people/); }
     const pairs = [...s.wars, ...s.treaties].map((x) => x.pair);
     assert.equal(new Set(pairs).size, pairs.length, `${s.id}: no pair is bound twice, or at war and in a treaty`);
     for (const p of [...pairs, ...Object.keys(s.rel)]) assert.equal(p, p.split("|").sort().join("|"));
