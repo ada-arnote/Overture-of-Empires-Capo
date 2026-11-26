@@ -3,10 +3,10 @@
 // Ancient Kingdom: choose any country and a mode, write actions, jump time, read what happened. The AI proposes
 // moves; the rules in src/story/worldrules.js decide which stand, and the map follows.
 import { JUMPS, MODES, UNITS, jumpFrom, monthsBetween, newWorldGame, readWorldReply, turnCode, worldPrompt } from "../src/story/turn.js";
-import { applyMoves, mightOf, placesFor, treatiesOf, warsOf } from "../src/story/worldrules.js";
+import { adviceFor, applyMoves, leaks, mightOf, placesFor, treatiesOf, warsOf } from "../src/story/worldrules.js";
 import { crossesLine } from "../src/story/rules.js";
 import { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacter, scenarioFrom, scenarioText } from "../src/story/scenarios.js";
-import { STANDING, askPrompt, chatPrompt, councilPrompt, moveFavour, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
+import { STANDING, askPrompt, changeStanding, chatPrompt, councilPrompt, moveFavour, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
 import { loadWorld, ownerColour, worldMap } from "./worldmap.js";
 import { ask, forgetKey, loadRoute, saveRoute } from "./ai.js";
 
@@ -58,11 +58,43 @@ function seaNeighbours(code) {
   return [...out];
 }
 
+// disputed areas: the provinces each touches, and the countries that claim it, read from the source's note
+const claimsOf = new Map();
+function claims() {
+  const byName = new Map(Object.entries(world.countries).map(([c, n]) => [n.toLowerCase(), c]));
+  const code = (s) => byName.get(s.trim().replace(/^the\s+/i, "").toLowerCase()) || [...byName].find(([n]) => n.startsWith(s.trim().toLowerCase()))?.[1];
+  const probe = document.createElement("canvas").getContext("2d");
+  for (const d of world.disputes || []) {
+    const m = d.note.match(/Claimed by ([^.]+)/), claimants = m ? m[1].split(/\s+and\s+|,\s*/).map(code).filter(Boolean) : [];
+    if (!claimants.length) continue;
+    const [x0, y0, x1, y1] = d.box, mid = [(x0 + x1) / 2, (y0 + y1) / 2];
+    for (const p of world.provinces.values()) {
+      const b = p.box;
+      if (b[2] < x0 || b[0] > x1 || b[3] < y0 || b[1] > y1) continue;
+      if (probe.isPointInPath(d.path, p.label[0], p.label[1], "evenodd") || probe.isPointInPath(p.path, mid[0], mid[1], "evenodd")) {
+        claimsOf.set(p.id, [...(claimsOf.get(p.id) || []), { name: d.name, note: d.note, claimants }]);
+      }
+    }
+  }
+}
+/** Disputed land in or next to the player's provinces, for the prompt. */
+function disputeLines() {
+  const near = new Set();
+  for (const id of held(state.player)) { near.add(id); for (const n of [...world.neighbours.get(id), ...world.across.get(id)]) near.add(n); }
+  const found = new Map();
+  for (const id of near) for (const d of claimsOf.get(id) || []) {
+    if (!found.has(d.name)) found.set(d.name, { note: d.note, ids: [] });
+    found.get(d.name).ids.push(id);
+  }
+  return [...found].slice(0, 12).map(([n, d]) => `- ${n}: ${d.note} Provinces: ${d.ids.join(", ")}`);
+}
+
 /** What the rules may ask of the map. */
 function geo() {
   return {
     name, place: (id) => world.provinces.get(id), owner: ownerOf, neighbours: (id) => world.neighbours.get(id), across: (id) => world.across.get(id), coastal: (id) => world.coast.has(id),
     holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c, hasCoast: (c) => held(c).some((id) => world.coast.has(id)), might: (c) => state?.might?.[c],
+    claims: (id, c) => (claimsOf.get(id) || []).some((d) => d.claimants.includes(c) && ownerOf(id) !== c),
     find: (s) => { const k = String(s || "").trim(); if (world.provinces.has(k)) return k; const low = k.toLowerCase(), hits = [...world.provinces.values()].filter((p) => p.name.toLowerCase() === low); return hits.length === 1 ? hits[0].id : null; },
   };
 }
@@ -350,7 +382,7 @@ function advance() {
   const to = jumpFrom(state.date, jump);
   const g = geo();
   const auto = jump.key === "auto";
-  pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, across: seaNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]), talk: talkLines(state, { name }) }, acts, to, auto), to, auto, actions: acts };
+  pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, across: seaNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]), talk: talkLines(state, { name }), disputes: disputeLines() }, acts, to, auto), to, auto, actions: acts };
   if (route.route === "paste") { open("actions"); return; }
   viaAddress();
 }
@@ -364,7 +396,11 @@ function finish(text) {
   if (!r.events.length) { pending.error = `No event could be read${r.dropped.length ? `: ${r.dropped.slice(0, 3).join("; ")}` : ""}.`; open("actions"); return; }
   past.push(structuredClone(state));
   const receipt = applyMoves(state, r.moves, geo(), pending.actions, monthsBetween(state.date, r.stop));
-  receipt.push(...moveFavour(state, receipt));
+  receipt.push(...moveFavour(state, receipt), ...changeStanding(state, r.standing));
+  // advisers who have turned against the player may leak; the AI hears of it next turn
+  const leaked = leaks(state);
+  state.leaks = [...(state.leaks || []), ...leaked.map((l) => ({ ...l, turn: state.turn + 1 }))].slice(-10);
+  receipt.push(...leaked.map((l) => ({ ok: true, text: `${l.name}: leaks your plans to the press` })));
   state.log.push({ from: state.date, to: r.stop, actions: pending.actions, events: r.events, news: r.news, summary: r.summary, dropped: r.dropped, receipt, advice: r.advice });
   state.log = state.log.slice(-60);
   state.date = r.stop; state.turn++; state.actions = [];
@@ -403,7 +439,7 @@ function ledger(box) {
   if (last.advice) box.append(el("h3", `Your trusted adviser, ${last.advice.name}`), el("p", `${last.advice.word}: ${last.advice.text}`));
   if (last.receipt?.length) {
     const list = el("ul", undefined, "list");
-    list.append(...last.receipt.map((x) => { const li = el("li"); li.append(el("span", `${x.ok ? "✓" : "✗"} ${x.text}.`)); if (!x.ok) li.style.opacity = ".7"; return li; }));
+    list.append(...last.receipt.map((x) => { const li = el("li"); li.append(el("span", `${x.ok ? "✓" : "✗"} ${x.text.replace(/[.!?]$/, "")}.`)); if (!x.ok) li.style.opacity = ".7"; return li; }));
     box.append(el("h3", "What the rules decided"), list);
   }
   if (last.dropped.length) box.append(el("p", `Left out of the reply: ${last.dropped.join("; ")}.`, "note"));
@@ -601,7 +637,7 @@ function advisors(box) {
       li.append(r);
     } else {
       const trusted = council.trusted === seat;
-      li.append(el("div", `${label}${trusted ? ", your trusted adviser" : ""}`, "note"), el("b", m.name), el("p", `${m.traits}. Skill ${m.skill} of 5. Wants ${m.wants}. Favour ${m.favour > 0 ? "+" : ""}${m.favour}.${m.likes.length ? ` Likes you to ${m.likes.map((v) => v.toLowerCase()).join(", ")}.` : ""}${m.hates.length ? ` Dislikes ${m.hates.map((v) => v.toLowerCase()).join(", ")}.` : ""}`));
+      li.append(el("div", `${label}${trusted ? ", your trusted adviser" : ""}`, "note"), el("b", m.name), ...(m.favour <= -2 ? [el("p", "Turned against you: may stall orders they dislike, and leak your plans.", "warn")] : []), el("p", `${m.traits}. Skill ${m.skill} of 5. Wants ${m.wants}. Favour ${m.favour > 0 ? "+" : ""}${m.favour}.${m.record?.n ? ` Right ${m.record.right} of ${m.record.n}.` : ""}${m.likes.length ? ` Likes you to ${m.likes.map((v) => v.toLowerCase()).join(", ")}.` : ""}${m.hates.length ? ` Dislikes ${m.hates.map((v) => v.toLowerCase()).join(", ")}.` : ""}`));
       const r = el("div", undefined, "row");
       if (!trusted) r.append(button("Trust most", () => { council.trusted = seat; save(); open("advisors"); }));
       r.append(button("Ask", () => askCouncil([[seat, m]])), button("Dismiss", () => { if (!confirm(`Dismiss ${m.name}?`)) return; council.former.push({ ...m, seat, left: state.date, why: "dismissed", favour: m.favour - 2 }); council.seats[seat] = null; if (trusted) council.trusted = null; save(); open("advisors"); }));
@@ -708,8 +744,8 @@ let picked = null;
 
 async function start() {
   try { world = await loadWorld("../maps/world.json", "../maps/disputes.json"); } catch (e) { toast(`${e.message} Capo needs its web address, not a file opened by double-click.`); return; }
-  index();
-  map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked });
+  index(); claims();
+  map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked, mine: () => state?.player });
   $("view").onchange = (e) => { view = e.target.value; map.refresh(); };
   $("in").onclick = () => map.zoomBy(1.6);
   $("out").onclick = () => map.zoomBy(1 / 1.6);

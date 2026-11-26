@@ -93,6 +93,7 @@ export function worldPrompt(g, world, actions, to, auto = false) {
     ...(g.opening ? [`- Opening: ${g.opening}`] : []),
     `- The player is ${world.name(me)} (${me}), playing as ${mode}.`,
     ...(g.custom ? [`- ${g.custom.name} (${g.custom.code}) is a country of the player's own making, real in this story. Its history: ${g.custom.history || "not told"}`] : []),
+    ...(g.mode !== "nation" ? [`- The player's standing: ${g.standing || 5} of 5 (1 outside society, 2 ordinary, 3 known locally, 4 a national figure, 5 ruling).`] : []),
     ...(g.character && g.mode !== "nation" ? [`- The player's character: ${Object.entries(g.character).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join("; ")}`] : []),
     `- ${world.name(me)} holds ${world.size(me)} province${world.size(me) === 1 ? "" : "s"} and borders by land: ${near}.`,
     ...(world.across?.(me).length ? [`- Across a narrow sea from ${world.name(me)}: ${world.across(me).map((c) => `${world.name(c)} (${c})`).join(", ")}.`] : []),
@@ -101,6 +102,7 @@ export function worldPrompt(g, world, actions, to, auto = false) {
     ...(recent.length ? recent : ["- nothing yet: this is the first turn"]),
     "", "SAID THIS TURN (chats and counsel: words only, nothing agreed is done until a MOVE)", ...(world.talk?.length ? world.talk : ["- nothing"]),
     "", "PLACES (province id, name, holder)", ...world.places,
+    ...(world.disputes?.length ? ["", "DISPUTED LAND NEAR THE PLAYER", ...world.disputes] : []),
     "", "ACTIONS (what the player does in this turn)",
     ...(actions.length ? actions.map((a, i) => `${i + 1}. ${a}`) : ["- none: the player waits and watches"]),
     "", "Reply with only these lines, 3 to 8 EVENT lines, and nothing else:",
@@ -110,6 +112,7 @@ export function worldPrompt(g, world, actions, to, auto = false) {
     "NEWS: the kind of outlet, for example a Lima daily | headline | one sentence (2 to 4 NEWS lines: what the world's press says, which may be slanted or wrong)",
     "SUMMARY: one sentence on the turn as a whole",
     ...(auto ? ["STOP: YYYY-MM-DD | why the turn stops here"] : []),
+    ...(g.mode !== "nation" ? [`STANDING: up or down | why (only if the player's standing, now ${g.standing || 5} of 5, clearly changed; otherwise leave this line out)`] : []),
     ...(trustedOf(g) ? [`ADVICE: one word from ${WORDS.join(", ")} | one sentence in the voice of ${trustedOf(g).name}, the player's trusted adviser, on what comes next`] : []),
     "END",
   ].join("\n");
@@ -120,7 +123,7 @@ export function readWorldReply(text, g, known, to, auto = false) {
   const lines = String(text || "").split(/\r?\n/).map((l) => l.trim().replace(/^[*_`>-]+\s*/, "").replace(/\s*[*_`]+$/, "")), dropped = [], events = [];
   const turn = lines.find((l) => /^TURN\s*:/i.test(l));
   if (!turn || turn.replace(/^TURN\s*:\s*/i, "").trim() !== turnCode(g)) return { matched: false, events, moves: [], news: [], summary: "", dropped, stop: to };
-  let summary = "", advice = null, stop = to;
+  let summary = "", advice = null, stop = to, standing = null;
   const moves = [], news = [];
   // an automatic turn ends where the AI says, if that is inside the turn; otherwise at the latest date
   if (auto) {
@@ -129,6 +132,11 @@ export function readWorldReply(text, g, known, to, auto = false) {
     else dropped.push(`no stop date inside the turn, so it runs to ${to}`);
   }
   for (const l of lines) {
+    if (/^STANDING\s*:/i.test(l)) {
+      const [dir, ...why] = l.replace(/^STANDING\s*:\s*/i, "").split("|").map((s) => s.trim());
+      if (g.mode !== "nation" && ["up", "down"].includes((dir || "").toLowerCase())) standing = { dir: dir.toLowerCase(), why: why.join(" | ").slice(0, 200) };
+      continue;
+    }
     if (/^NEWS\s*:/i.test(l)) {
       const [outlet, headline, ...rest] = l.replace(/^NEWS\s*:\s*/i, "").split("|").map((s) => s.trim());
       if (headline && news.length < 4) news.push({ outlet: (outlet || "a newspaper").slice(0, 60), headline: headline.slice(0, 140), text: rest.join(" | ").slice(0, 300) });
@@ -137,7 +145,7 @@ export function readWorldReply(text, g, known, to, auto = false) {
     if (/^SUMMARY\s*:/i.test(l)) { summary = l.replace(/^SUMMARY\s*:\s*/i, "").slice(0, 300); continue; }
     if (/^ADVICE\s*:/i.test(l)) {
       const [word, ...rest] = l.replace(/^ADVICE\s*:\s*/i, "").split("|").map((s) => s.trim());
-      if (WORDS.includes((word || "").toLowerCase()) && trustedOf(g)) advice = { word: word.toLowerCase(), text: rest.join(" | ").slice(0, 400), name: trustedOf(g).name };
+      if (WORDS.includes((word || "").toLowerCase()) && trustedOf(g)) advice = { word: word.toLowerCase(), text: rest.join(" | ").slice(0, 400), name: trustedOf(g).name, seat: g.council.trusted };
       continue;
     }
     if (/^MOVE\s*:/i.test(l)) {
@@ -157,5 +165,5 @@ export function readWorldReply(text, g, known, to, auto = false) {
     events.push({ date, at: code, text: said });
   }
   events.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  return { matched: true, events, moves, news, summary, advice, dropped, stop };
+  return { matched: true, events, moves, news, summary, advice, standing, dropped, stop };
 }

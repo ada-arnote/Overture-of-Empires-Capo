@@ -48,6 +48,8 @@ export function applyMoves(g, moves, geo, actions, months) {
       used[m.action] = (used[m.action] || 0) + 1;
       if (used[m.action] > 3) { say(m, false, `more than three moves from action ${m.action} are not allowed`); continue; }
     } else if (++rivals > 6) { say(m, false, "more than six moves by other countries in one turn are not allowed"); continue; }
+    const staller = isMe ? stalledBy(g, m, receipt.length) : null;
+    if (staller) { say(m, false, `${verb.toLowerCase()} held back: ${staller.name} (favour ${staller.favour}), who opposes it, stalled the order this turn`); continue; }
     const r = ({ WAR: war, PEACE: peace, TREATY: treaty, BREAK: unbind, ATTACK: attack, GIVE: give })[verb](g, m, geo, { isMe, attacks, months });
     say(m, r.ok, r.why);
     for (const extra of r.also || []) receipt.push({ ok: true, text: extra });
@@ -113,9 +115,13 @@ function attack(g, m, geo, { attacks, months }) {
   attacks[c] = (attacks[c] || 0) + 1;
   if (attacks[c] > most) return { ok: false, why: `attack on ${place} refused: no more than ${most} attack${most > 1 ? "s" : ""} in a turn this long` };
   const home = geo.place(id).country === c ? 0.15 : 0, sea = bySea ? -0.1 : byStrait ? -0.05 : 0;
-  const luck = Math.min(1, Math.max(0, draw(g.seed, `${g.turn}:attack:${id}:${c}`) + home + sea));
+  // land this country claims in a dispute it is not holding: a cause people rally to
+  const claim = !home && geo.claims?.(id, c) ? 0.1 : 0;
+  const counsel = c === g.player && g.mode !== "citizen" ? adviceFor(g) : null;
+  const luck = Math.min(1, Math.max(0, draw(g.seed, `${g.turn}:attack:${id}:${c}`) + home + sea + claim + (counsel?.nudge || 0)));
   const a = mightOf(geo, c), d = mightOf(geo, o), wins = (a / d) * (0.5 + luck) > 1;
-  const how = `might ${a} against ${d}, luck ${Math.round(luck * 100)} of 100${home ? " (its own land, +15)" : ""}${bySea ? " (by open sea, -10)" : byStrait ? " (across a narrow sea, -5)" : ""}`;
+  const how = `might ${a} against ${d}, luck ${Math.round(luck * 100)} of 100${home ? " (its own land, +15)" : ""}${claim ? " (land it claims, +10)" : ""}${bySea ? " (by open sea, -10)" : byStrait ? " (across a narrow sea, -5)" : ""}${counsel?.nudge ? ` (${counsel.member.name}'s counsel, ${counsel.nudge > 0 ? "+" : ""}${Math.round(counsel.nudge * 100)})` : ""}`;
+  if (counsel) record(counsel, wins);
   const from = bySea ? " from the sea" : byStrait ? " across the strait" : "";
   if (!wins) return { ok: true, why: `attacks ${place}${from} and is thrown back (${how})` };
   if (geo.place(id).country === c) delete g.owners[id]; else g.owners[id] = c;
@@ -148,6 +154,7 @@ export function worldFacts(g, geo) {
   const last = g.log[g.log.length - 1];
   return [
     ...(g.facts || []).map((f) => `- Told by the Game Master, and true: ${f.text}`),
+    ...(g.leaks || []).filter((l) => l.turn === g.turn).map((l) => `- Leaked: ${l.name}, an unhappy adviser of the player, told the press about the player's plans. Papers may report it.`),
     `- Wars: ${wars.join(", ") || "none"}`,
     `- Treaties: ${treaties.join(", ") || "none"}`,
     `- Offers waiting for the player: ${g.offers.map((o) => `${o.from} ${o.kind}`).join(", ") || "none"}`,
@@ -166,4 +173,43 @@ export function placesFor(g, geo, all) {
     for (const id of all) if (geo.owner(id) === a || geo.owner(id) === b) for (const n of geo.neighbours(id)) { const o = geo.owner(n); if ((o === a || o === b) && o !== geo.owner(id)) { want.add(id); want.add(n); } }
   }
   return [...want].slice(0, 90).map((id) => `- ${id} ${geo.place(id).name} (${geo.owner(id)})`);
+}
+
+// ---- counsel and favour that act (rulings 54 and 56) ----
+
+/**
+ * The trusted adviser's word from last turn moves the player's battle luck by at most 5 in 100, scaled by skill
+ * and by how often they have been right. Unclear advice moves nothing. An adviser who has turned against the
+ * player (favour -2 or lower) shades their counsel, so it counts for half.
+ */
+export function adviceFor(g) {
+  // the advice follows the person, not the seat: standing may have moved them to another seat since
+  const last = g.log[g.log.length - 1], said = last?.advice;
+  const member = said && Object.values(g.council?.seats || {}).find((m) => m && m.name === said.name);
+  if (!member || said.word === "unclear") return null;
+  const rec = member.record || { right: 0, n: 0 }, trust = rec.n >= 3 ? rec.right / rec.n : 0.6;
+  const nudge = (said.word === "favourable" ? 1 : -1) * 0.05 * (member.skill / 5) * trust * (member.favour <= -2 ? 0.5 : 1);
+  return { member, word: said.word, nudge: Math.round(nudge * 100) / 100 };
+}
+function record(counsel, wins) {
+  const m = counsel.member, rec = m.record || { right: 0, n: 0 };
+  m.record = { right: rec.right + ((counsel.word === "favourable") === wins ? 1 : 0), n: rec.n + 1 };
+}
+
+/** An adviser at favour -2 or lower may stall one of the player's moves that they dislike: an even chance. */
+function stalledBy(g, m, i) {
+  for (const [seat, member] of Object.entries(g.council?.seats || {})) {
+    if (!member || member.favour > -2 || !member.hates.includes(m.verb)) continue;
+    if (draw(g.seed, `${g.turn}:stall:${seat}:${i}`) < 0.5) return member;
+  }
+  return null;
+}
+
+/** After a turn, an adviser at favour -2 or lower may leak the player's plans: a 40 percent chance each. */
+export function leaks(g) {
+  const out = [];
+  for (const [seat, member] of Object.entries(g.council?.seats || {})) {
+    if (member && member.favour <= -2 && draw(g.seed, `${g.turn}:leak:${seat}`) < 0.4) out.push({ seat, name: member.name });
+  }
+  return out;
 }

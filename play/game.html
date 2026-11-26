@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-0YobvtUzKf1cwL3JS4lWHDMNAfV1O7eueX1yWPqG1d0='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-NvAzwmAP6DA3gfGvE54sPjV1oVUZ26hJvjvLYvWfu8Y='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
 <title>Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -890,6 +890,8 @@ function applyMoves(g, moves, geo, actions, months) {
       used[m.action] = (used[m.action] || 0) + 1;
       if (used[m.action] > 3) { say(m, false, `more than three moves from action ${m.action} are not allowed`); continue; }
     } else if (++rivals > 6) { say(m, false, "more than six moves by other countries in one turn are not allowed"); continue; }
+    const staller = isMe ? stalledBy(g, m, receipt.length) : null;
+    if (staller) { say(m, false, `${verb.toLowerCase()} held back: ${staller.name} (favour ${staller.favour}), who opposes it, stalled the order this turn`); continue; }
     const r = ({ WAR: war, PEACE: peace, TREATY: treaty, BREAK: unbind, ATTACK: attack, GIVE: give })[verb](g, m, geo, { isMe, attacks, months });
     say(m, r.ok, r.why);
     for (const extra of r.also || []) receipt.push({ ok: true, text: extra });
@@ -955,9 +957,13 @@ function attack(g, m, geo, { attacks, months }) {
   attacks[c] = (attacks[c] || 0) + 1;
   if (attacks[c] > most) return { ok: false, why: `attack on ${place} refused: no more than ${most} attack${most > 1 ? "s" : ""} in a turn this long` };
   const home = geo.place(id).country === c ? 0.15 : 0, sea = bySea ? -0.1 : byStrait ? -0.05 : 0;
-  const luck = Math.min(1, Math.max(0, draw(g.seed, `${g.turn}:attack:${id}:${c}`) + home + sea));
+  // land this country claims in a dispute it is not holding: a cause people rally to
+  const claim = !home && geo.claims?.(id, c) ? 0.1 : 0;
+  const counsel = c === g.player && g.mode !== "citizen" ? adviceFor(g) : null;
+  const luck = Math.min(1, Math.max(0, draw(g.seed, `${g.turn}:attack:${id}:${c}`) + home + sea + claim + (counsel?.nudge || 0)));
   const a = mightOf(geo, c), d = mightOf(geo, o), wins = (a / d) * (0.5 + luck) > 1;
-  const how = `might ${a} against ${d}, luck ${Math.round(luck * 100)} of 100${home ? " (its own land, +15)" : ""}${bySea ? " (by open sea, -10)" : byStrait ? " (across a narrow sea, -5)" : ""}`;
+  const how = `might ${a} against ${d}, luck ${Math.round(luck * 100)} of 100${home ? " (its own land, +15)" : ""}${claim ? " (land it claims, +10)" : ""}${bySea ? " (by open sea, -10)" : byStrait ? " (across a narrow sea, -5)" : ""}${counsel?.nudge ? ` (${counsel.member.name}'s counsel, ${counsel.nudge > 0 ? "+" : ""}${Math.round(counsel.nudge * 100)})` : ""}`;
+  if (counsel) record(counsel, wins);
   const from = bySea ? " from the sea" : byStrait ? " across the strait" : "";
   if (!wins) return { ok: true, why: `attacks ${place}${from} and is thrown back (${how})` };
   if (geo.place(id).country === c) delete g.owners[id]; else g.owners[id] = c;
@@ -990,6 +996,7 @@ function worldFacts(g, geo) {
   const last = g.log[g.log.length - 1];
   return [
     ...(g.facts || []).map((f) => `- Told by the Game Master, and true: ${f.text}`),
+    ...(g.leaks || []).filter((l) => l.turn === g.turn).map((l) => `- Leaked: ${l.name}, an unhappy adviser of the player, told the press about the player's plans. Papers may report it.`),
     `- Wars: ${wars.join(", ") || "none"}`,
     `- Treaties: ${treaties.join(", ") || "none"}`,
     `- Offers waiting for the player: ${g.offers.map((o) => `${o.from} ${o.kind}`).join(", ") || "none"}`,
@@ -1010,7 +1017,46 @@ function placesFor(g, geo, all) {
   return [...want].slice(0, 90).map((id) => `- ${id} ${geo.place(id).name} (${geo.owner(id)})`);
 }
 
-$x.MIGHT = MIGHT; $x.VERBS = VERBS; $x.atWar = atWar; $x.treatyOf = treatyOf; $x.mightOf = mightOf; $x.warsOf = warsOf; $x.treatiesOf = treatiesOf; $x.applyMoves = applyMoves; $x.worldFacts = worldFacts; $x.placesFor = placesFor;
+// ---- counsel and favour that act (rulings 54 and 56) ----
+
+/**
+ * The trusted adviser's word from last turn moves the player's battle luck by at most 5 in 100, scaled by skill
+ * and by how often they have been right. Unclear advice moves nothing. An adviser who has turned against the
+ * player (favour -2 or lower) shades their counsel, so it counts for half.
+ */
+function adviceFor(g) {
+  // the advice follows the person, not the seat: standing may have moved them to another seat since
+  const last = g.log[g.log.length - 1], said = last?.advice;
+  const member = said && Object.values(g.council?.seats || {}).find((m) => m && m.name === said.name);
+  if (!member || said.word === "unclear") return null;
+  const rec = member.record || { right: 0, n: 0 }, trust = rec.n >= 3 ? rec.right / rec.n : 0.6;
+  const nudge = (said.word === "favourable" ? 1 : -1) * 0.05 * (member.skill / 5) * trust * (member.favour <= -2 ? 0.5 : 1);
+  return { member, word: said.word, nudge: Math.round(nudge * 100) / 100 };
+}
+function record(counsel, wins) {
+  const m = counsel.member, rec = m.record || { right: 0, n: 0 };
+  m.record = { right: rec.right + ((counsel.word === "favourable") === wins ? 1 : 0), n: rec.n + 1 };
+}
+
+/** An adviser at favour -2 or lower may stall one of the player's moves that they dislike: an even chance. */
+function stalledBy(g, m, i) {
+  for (const [seat, member] of Object.entries(g.council?.seats || {})) {
+    if (!member || member.favour > -2 || !member.hates.includes(m.verb)) continue;
+    if (draw(g.seed, `${g.turn}:stall:${seat}:${i}`) < 0.5) return member;
+  }
+  return null;
+}
+
+/** After a turn, an adviser at favour -2 or lower may leak the player's plans: a 40 percent chance each. */
+function leaks(g) {
+  const out = [];
+  for (const [seat, member] of Object.entries(g.council?.seats || {})) {
+    if (member && member.favour <= -2 && draw(g.seed, `${g.turn}:leak:${seat}`) < 0.4) out.push({ seat, name: member.name });
+  }
+  return out;
+}
+
+$x.MIGHT = MIGHT; $x.VERBS = VERBS; $x.atWar = atWar; $x.treatyOf = treatyOf; $x.mightOf = mightOf; $x.warsOf = warsOf; $x.treatiesOf = treatiesOf; $x.applyMoves = applyMoves; $x.worldFacts = worldFacts; $x.placesFor = placesFor; $x.adviceFor = adviceFor; $x.leaks = leaks;
 return $x; })({});
 $m[5] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -1181,7 +1227,41 @@ function talkLines(g, world) {
   return lines.slice(-12);
 }
 
-$x.WORDS = WORDS; $x.STANDING = STANDING; $x.SEATS = SEATS; $x.seatsFor = seatsFor; $x.chatPrompt = chatPrompt; $x.readChat = readChat; $x.councilPrompt = councilPrompt; $x.readCouncil = readCouncil; $x.askPrompt = askPrompt; $x.readAsk = readAsk; $x.moveFavour = moveFavour; $x.talkLines = talkLines;
+/**
+ * Standing moves at most one step a turn, by rule, when the turn's reply proposes it (ruling 59). The circle follows:
+ * members whose seat exists at the new standing stay; the rest part, kept as former members; new seats open empty.
+ */
+function changeStanding(g, change) {
+  if (!change || g.mode === "nation") return [];
+  const from = g.standing || STANDING[g.mode] || 5, to = Math.max(1, Math.min(5, from + (change.dir === "up" ? 1 : -1)));
+  if (to === from) return [];
+  g.standing = to;
+  const lines = [{ ok: true, text: `Your standing ${to > from ? "rises" : "falls"} to ${to} of 5${change.why ? `: ${change.why}` : ""}` }];
+  if (g.council) {
+    // nobody vanishes: each member moves to the matching seat at the new standing (the first seat to the first,
+    // and so on); only those already cool toward the player (favour below zero) take the change as their moment to go
+    const before = SEATS[from], after = SEATS[to], seats = {};
+    let trusted = null;
+    after.forEach(([k, label], i) => {
+      const [old] = before[i] || [], m = old && g.council.seats[old];
+      seats[k] = null;
+      if (!m) return;
+      if (m.favour < 0) {
+        g.council.former.push({ ...m, seat: old, left: g.date, why: "parted as your standing changed" });
+        lines.push({ ok: true, text: `${m.name}: parts from your circle as your standing changes` });
+        return;
+      }
+      seats[k] = m;
+      if (g.council.trusted === old) trusted = k;
+      if (k !== old) lines.push({ ok: true, text: `${m.name}: stays with you, now as ${label.toLowerCase()}` });
+    });
+    g.council.seats = seats;
+    g.council.trusted = trusted;
+  }
+  return lines;
+}
+
+$x.WORDS = WORDS; $x.STANDING = STANDING; $x.SEATS = SEATS; $x.seatsFor = seatsFor; $x.chatPrompt = chatPrompt; $x.readChat = readChat; $x.councilPrompt = councilPrompt; $x.readCouncil = readCouncil; $x.askPrompt = askPrompt; $x.readAsk = readAsk; $x.moveFavour = moveFavour; $x.talkLines = talkLines; $x.changeStanding = changeStanding;
 return $x; })({});
 $m[1] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -1279,6 +1359,7 @@ function worldPrompt(g, world, actions, to, auto = false) {
     ...(g.opening ? [`- Opening: ${g.opening}`] : []),
     `- The player is ${world.name(me)} (${me}), playing as ${mode}.`,
     ...(g.custom ? [`- ${g.custom.name} (${g.custom.code}) is a country of the player's own making, real in this story. Its history: ${g.custom.history || "not told"}`] : []),
+    ...(g.mode !== "nation" ? [`- The player's standing: ${g.standing || 5} of 5 (1 outside society, 2 ordinary, 3 known locally, 4 a national figure, 5 ruling).`] : []),
     ...(g.character && g.mode !== "nation" ? [`- The player's character: ${Object.entries(g.character).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join("; ")}`] : []),
     `- ${world.name(me)} holds ${world.size(me)} province${world.size(me) === 1 ? "" : "s"} and borders by land: ${near}.`,
     ...(world.across?.(me).length ? [`- Across a narrow sea from ${world.name(me)}: ${world.across(me).map((c) => `${world.name(c)} (${c})`).join(", ")}.`] : []),
@@ -1287,6 +1368,7 @@ function worldPrompt(g, world, actions, to, auto = false) {
     ...(recent.length ? recent : ["- nothing yet: this is the first turn"]),
     "", "SAID THIS TURN (chats and counsel: words only, nothing agreed is done until a MOVE)", ...(world.talk?.length ? world.talk : ["- nothing"]),
     "", "PLACES (province id, name, holder)", ...world.places,
+    ...(world.disputes?.length ? ["", "DISPUTED LAND NEAR THE PLAYER", ...world.disputes] : []),
     "", "ACTIONS (what the player does in this turn)",
     ...(actions.length ? actions.map((a, i) => `${i + 1}. ${a}`) : ["- none: the player waits and watches"]),
     "", "Reply with only these lines, 3 to 8 EVENT lines, and nothing else:",
@@ -1296,6 +1378,7 @@ function worldPrompt(g, world, actions, to, auto = false) {
     "NEWS: the kind of outlet, for example a Lima daily | headline | one sentence (2 to 4 NEWS lines: what the world's press says, which may be slanted or wrong)",
     "SUMMARY: one sentence on the turn as a whole",
     ...(auto ? ["STOP: YYYY-MM-DD | why the turn stops here"] : []),
+    ...(g.mode !== "nation" ? [`STANDING: up or down | why (only if the player's standing, now ${g.standing || 5} of 5, clearly changed; otherwise leave this line out)`] : []),
     ...(trustedOf(g) ? [`ADVICE: one word from ${WORDS.join(", ")} | one sentence in the voice of ${trustedOf(g).name}, the player's trusted adviser, on what comes next`] : []),
     "END",
   ].join("\n");
@@ -1306,7 +1389,7 @@ function readWorldReply(text, g, known, to, auto = false) {
   const lines = String(text || "").split(/\r?\n/).map((l) => l.trim().replace(/^[*_`>-]+\s*/, "").replace(/\s*[*_`]+$/, "")), dropped = [], events = [];
   const turn = lines.find((l) => /^TURN\s*:/i.test(l));
   if (!turn || turn.replace(/^TURN\s*:\s*/i, "").trim() !== turnCode(g)) return { matched: false, events, moves: [], news: [], summary: "", dropped, stop: to };
-  let summary = "", advice = null, stop = to;
+  let summary = "", advice = null, stop = to, standing = null;
   const moves = [], news = [];
   // an automatic turn ends where the AI says, if that is inside the turn; otherwise at the latest date
   if (auto) {
@@ -1315,6 +1398,11 @@ function readWorldReply(text, g, known, to, auto = false) {
     else dropped.push(`no stop date inside the turn, so it runs to ${to}`);
   }
   for (const l of lines) {
+    if (/^STANDING\s*:/i.test(l)) {
+      const [dir, ...why] = l.replace(/^STANDING\s*:\s*/i, "").split("|").map((s) => s.trim());
+      if (g.mode !== "nation" && ["up", "down"].includes((dir || "").toLowerCase())) standing = { dir: dir.toLowerCase(), why: why.join(" | ").slice(0, 200) };
+      continue;
+    }
     if (/^NEWS\s*:/i.test(l)) {
       const [outlet, headline, ...rest] = l.replace(/^NEWS\s*:\s*/i, "").split("|").map((s) => s.trim());
       if (headline && news.length < 4) news.push({ outlet: (outlet || "a newspaper").slice(0, 60), headline: headline.slice(0, 140), text: rest.join(" | ").slice(0, 300) });
@@ -1323,7 +1411,7 @@ function readWorldReply(text, g, known, to, auto = false) {
     if (/^SUMMARY\s*:/i.test(l)) { summary = l.replace(/^SUMMARY\s*:\s*/i, "").slice(0, 300); continue; }
     if (/^ADVICE\s*:/i.test(l)) {
       const [word, ...rest] = l.replace(/^ADVICE\s*:\s*/i, "").split("|").map((s) => s.trim());
-      if (WORDS.includes((word || "").toLowerCase()) && trustedOf(g)) advice = { word: word.toLowerCase(), text: rest.join(" | ").slice(0, 400), name: trustedOf(g).name };
+      if (WORDS.includes((word || "").toLowerCase()) && trustedOf(g)) advice = { word: word.toLowerCase(), text: rest.join(" | ").slice(0, 400), name: trustedOf(g).name, seat: g.council.trusted };
       continue;
     }
     if (/^MOVE\s*:/i.test(l)) {
@@ -1343,7 +1431,7 @@ function readWorldReply(text, g, known, to, auto = false) {
     events.push({ date, at: code, text: said });
   }
   events.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  return { matched: true, events, moves, news, summary, advice, dropped, stop };
+  return { matched: true, events, moves, news, summary, advice, standing, dropped, stop };
 }
 
 $x.JUMPS = JUMPS; $x.UNITS = UNITS; $x.MODES = MODES; $x.jumpFrom = jumpFrom; $x.monthsBetween = monthsBetween; $x.newWorldGame = newWorldGame; $x.turnCode = turnCode; $x.worldPrompt = worldPrompt; $x.readWorldReply = readWorldReply;
@@ -1541,16 +1629,20 @@ function worldMap(canvas, world, o) {
       const f = fills.get(who); f.path.addPath(p.path);
       f.box = [Math.min(f.box[0], p.box[0]), Math.min(f.box[1], p.box[1]), Math.max(f.box[2], p.box[2]), Math.max(f.box[3], p.box[3])];
     }
-    const inner = new Path2D(), outer = new Path2D(), coast = new Path2D();
-    world.sides.forEach((ids, k) => { (ids.length < 2 ? coast : owners.get(ids[0]) === owners.get(ids[1]) ? inner : outer).addPath(world.lines[k]); });
-    layers = { owners, fills, inner, outer, coast };
+    const inner = new Path2D(), outer = new Path2D(), coast = new Path2D(), mine = new Path2D(), me = o.mine?.();
+    world.sides.forEach((ids, k) => {
+      (ids.length < 2 ? coast : owners.get(ids[0]) === owners.get(ids[1]) ? inner : outer).addPath(world.lines[k]);
+      // the edge of the player's land, coast included, outlined in gold
+      if (me && ids.some((id) => owners.get(id) === me) && !(ids.length === 2 && owners.get(ids[0]) === owners.get(ids[1]))) mine.addPath(world.lines[k]);
+    });
+    layers = { owners, fills, inner, outer, coast, mine };
   }
 
   // The whole map is painted into a hidden picture; moving and zooming slide and stretch that picture,
   // and the map is painted again once things are still.
   function paint() {
     const t0 = performance.now(), d = devicePixelRatio || 1, cw = base.width / d, ch = base.height / d, s = view.s, c = bctx;
-    const sig = [...world.provinces.keys()].map((id) => o.owner(id)).join();
+    const sig = `${o.mine?.() || ""}:${[...world.provinces.keys()].map((id) => o.owner(id)).join()}`;
     if (!layers || sig !== signature) { build(); signature = sig; }
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.fillStyle = "#16242b"; c.fillRect(0, 0, base.width, base.height);
@@ -1579,6 +1671,7 @@ function worldMap(canvas, world, o) {
       c.setLineDash([]);
     }
     c.strokeStyle = "rgba(255,244,214,.7)"; c.lineWidth = 1.4 / s; c.stroke(layers.outer);
+    if (o.mine?.()) { c.strokeStyle = "#e2b866"; c.lineWidth = 2.2 / s; c.stroke(layers.mine); }
     labels(c, cw, ch, layers.owners);
     drawn = { ...view };
     canvas.dataset.paintMs = Math.round(performance.now() - t0); // how long a full paint takes, for checking on slow phones
@@ -1733,10 +1826,10 @@ $m[0] = (($x) => {
 // Ancient Kingdom: choose any country and a mode, write actions, jump time, read what happened. The AI proposes
 // moves; the rules in src/story/worldrules.js decide which stand, and the map follows.
 const { JUMPS, MODES, UNITS, jumpFrom, monthsBetween, newWorldGame, readWorldReply, turnCode, worldPrompt } = $m[1];
-const { applyMoves, mightOf, placesFor, treatiesOf, warsOf } = $m[2];
+const { adviceFor, applyMoves, leaks, mightOf, placesFor, treatiesOf, warsOf } = $m[2];
 const { crossesLine } = $m[3];
 const { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacter, scenarioFrom, scenarioText } = $m[6];
-const { STANDING, askPrompt, chatPrompt, councilPrompt, moveFavour, readAsk, readChat, readCouncil, seatsFor, talkLines } = $m[5];
+const { STANDING, askPrompt, changeStanding, chatPrompt, councilPrompt, moveFavour, readAsk, readChat, readCouncil, seatsFor, talkLines } = $m[5];
 const { loadWorld, ownerColour, worldMap } = $m[7];
 const { ask, forgetKey, loadRoute, saveRoute } = $m[8];
 
@@ -1788,11 +1881,43 @@ function seaNeighbours(code) {
   return [...out];
 }
 
+// disputed areas: the provinces each touches, and the countries that claim it, read from the source's note
+const claimsOf = new Map();
+function claims() {
+  const byName = new Map(Object.entries(world.countries).map(([c, n]) => [n.toLowerCase(), c]));
+  const code = (s) => byName.get(s.trim().replace(/^the\s+/i, "").toLowerCase()) || [...byName].find(([n]) => n.startsWith(s.trim().toLowerCase()))?.[1];
+  const probe = document.createElement("canvas").getContext("2d");
+  for (const d of world.disputes || []) {
+    const m = d.note.match(/Claimed by ([^.]+)/), claimants = m ? m[1].split(/\s+and\s+|,\s*/).map(code).filter(Boolean) : [];
+    if (!claimants.length) continue;
+    const [x0, y0, x1, y1] = d.box, mid = [(x0 + x1) / 2, (y0 + y1) / 2];
+    for (const p of world.provinces.values()) {
+      const b = p.box;
+      if (b[2] < x0 || b[0] > x1 || b[3] < y0 || b[1] > y1) continue;
+      if (probe.isPointInPath(d.path, p.label[0], p.label[1], "evenodd") || probe.isPointInPath(p.path, mid[0], mid[1], "evenodd")) {
+        claimsOf.set(p.id, [...(claimsOf.get(p.id) || []), { name: d.name, note: d.note, claimants }]);
+      }
+    }
+  }
+}
+/** Disputed land in or next to the player's provinces, for the prompt. */
+function disputeLines() {
+  const near = new Set();
+  for (const id of held(state.player)) { near.add(id); for (const n of [...world.neighbours.get(id), ...world.across.get(id)]) near.add(n); }
+  const found = new Map();
+  for (const id of near) for (const d of claimsOf.get(id) || []) {
+    if (!found.has(d.name)) found.set(d.name, { note: d.note, ids: [] });
+    found.get(d.name).ids.push(id);
+  }
+  return [...found].slice(0, 12).map(([n, d]) => `- ${n}: ${d.note} Provinces: ${d.ids.join(", ")}`);
+}
+
 /** What the rules may ask of the map. */
 function geo() {
   return {
     name, place: (id) => world.provinces.get(id), owner: ownerOf, neighbours: (id) => world.neighbours.get(id), across: (id) => world.across.get(id), coastal: (id) => world.coast.has(id),
     holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c, hasCoast: (c) => held(c).some((id) => world.coast.has(id)), might: (c) => state?.might?.[c],
+    claims: (id, c) => (claimsOf.get(id) || []).some((d) => d.claimants.includes(c) && ownerOf(id) !== c),
     find: (s) => { const k = String(s || "").trim(); if (world.provinces.has(k)) return k; const low = k.toLowerCase(), hits = [...world.provinces.values()].filter((p) => p.name.toLowerCase() === low); return hits.length === 1 ? hits[0].id : null; },
   };
 }
@@ -2080,7 +2205,7 @@ function advance() {
   const to = jumpFrom(state.date, jump);
   const g = geo();
   const auto = jump.key === "auto";
-  pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, across: seaNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]), talk: talkLines(state, { name }) }, acts, to, auto), to, auto, actions: acts };
+  pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, across: seaNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]), talk: talkLines(state, { name }), disputes: disputeLines() }, acts, to, auto), to, auto, actions: acts };
   if (route.route === "paste") { open("actions"); return; }
   viaAddress();
 }
@@ -2094,7 +2219,11 @@ function finish(text) {
   if (!r.events.length) { pending.error = `No event could be read${r.dropped.length ? `: ${r.dropped.slice(0, 3).join("; ")}` : ""}.`; open("actions"); return; }
   past.push(structuredClone(state));
   const receipt = applyMoves(state, r.moves, geo(), pending.actions, monthsBetween(state.date, r.stop));
-  receipt.push(...moveFavour(state, receipt));
+  receipt.push(...moveFavour(state, receipt), ...changeStanding(state, r.standing));
+  // advisers who have turned against the player may leak; the AI hears of it next turn
+  const leaked = leaks(state);
+  state.leaks = [...(state.leaks || []), ...leaked.map((l) => ({ ...l, turn: state.turn + 1 }))].slice(-10);
+  receipt.push(...leaked.map((l) => ({ ok: true, text: `${l.name}: leaks your plans to the press` })));
   state.log.push({ from: state.date, to: r.stop, actions: pending.actions, events: r.events, news: r.news, summary: r.summary, dropped: r.dropped, receipt, advice: r.advice });
   state.log = state.log.slice(-60);
   state.date = r.stop; state.turn++; state.actions = [];
@@ -2133,7 +2262,7 @@ function ledger(box) {
   if (last.advice) box.append(el("h3", `Your trusted adviser, ${last.advice.name}`), el("p", `${last.advice.word}: ${last.advice.text}`));
   if (last.receipt?.length) {
     const list = el("ul", undefined, "list");
-    list.append(...last.receipt.map((x) => { const li = el("li"); li.append(el("span", `${x.ok ? "✓" : "✗"} ${x.text}.`)); if (!x.ok) li.style.opacity = ".7"; return li; }));
+    list.append(...last.receipt.map((x) => { const li = el("li"); li.append(el("span", `${x.ok ? "✓" : "✗"} ${x.text.replace(/[.!?]$/, "")}.`)); if (!x.ok) li.style.opacity = ".7"; return li; }));
     box.append(el("h3", "What the rules decided"), list);
   }
   if (last.dropped.length) box.append(el("p", `Left out of the reply: ${last.dropped.join("; ")}.`, "note"));
@@ -2331,7 +2460,7 @@ function advisors(box) {
       li.append(r);
     } else {
       const trusted = council.trusted === seat;
-      li.append(el("div", `${label}${trusted ? ", your trusted adviser" : ""}`, "note"), el("b", m.name), el("p", `${m.traits}. Skill ${m.skill} of 5. Wants ${m.wants}. Favour ${m.favour > 0 ? "+" : ""}${m.favour}.${m.likes.length ? ` Likes you to ${m.likes.map((v) => v.toLowerCase()).join(", ")}.` : ""}${m.hates.length ? ` Dislikes ${m.hates.map((v) => v.toLowerCase()).join(", ")}.` : ""}`));
+      li.append(el("div", `${label}${trusted ? ", your trusted adviser" : ""}`, "note"), el("b", m.name), ...(m.favour <= -2 ? [el("p", "Turned against you: may stall orders they dislike, and leak your plans.", "warn")] : []), el("p", `${m.traits}. Skill ${m.skill} of 5. Wants ${m.wants}. Favour ${m.favour > 0 ? "+" : ""}${m.favour}.${m.record?.n ? ` Right ${m.record.right} of ${m.record.n}.` : ""}${m.likes.length ? ` Likes you to ${m.likes.map((v) => v.toLowerCase()).join(", ")}.` : ""}${m.hates.length ? ` Dislikes ${m.hates.map((v) => v.toLowerCase()).join(", ")}.` : ""}`));
       const r = el("div", undefined, "row");
       if (!trusted) r.append(button("Trust most", () => { council.trusted = seat; save(); open("advisors"); }));
       r.append(button("Ask", () => askCouncil([[seat, m]])), button("Dismiss", () => { if (!confirm(`Dismiss ${m.name}?`)) return; council.former.push({ ...m, seat, left: state.date, why: "dismissed", favour: m.favour - 2 }); council.seats[seat] = null; if (trusted) council.trusted = null; save(); open("advisors"); }));
@@ -2438,8 +2567,8 @@ let picked = null;
 
 async function start() {
   try { world = await loadWorld("../maps/world.json", "../maps/disputes.json"); } catch (e) { toast(`${e.message} Capo needs its web address, not a file opened by double-click.`); return; }
-  index();
-  map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked });
+  index(); claims();
+  map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked, mine: () => state?.player });
   $("view").onchange = (e) => { view = e.target.value; map.refresh(); };
   $("in").onclick = () => map.zoomBy(1.6);
   $("out").onclick = () => map.zoomBy(1 / 1.6);

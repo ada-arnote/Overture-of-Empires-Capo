@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-66/y49mey7gR3a0DrFlL7JXfyb2qYsLs9vLq1XKd5Ss='; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-yUBLTBoBMDXkbikyhp1lSYbFU//2ruKbqcs91pvroqk='; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <title>Capo world map</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -270,16 +270,20 @@ function worldMap(canvas, world, o) {
       const f = fills.get(who); f.path.addPath(p.path);
       f.box = [Math.min(f.box[0], p.box[0]), Math.min(f.box[1], p.box[1]), Math.max(f.box[2], p.box[2]), Math.max(f.box[3], p.box[3])];
     }
-    const inner = new Path2D(), outer = new Path2D(), coast = new Path2D();
-    world.sides.forEach((ids, k) => { (ids.length < 2 ? coast : owners.get(ids[0]) === owners.get(ids[1]) ? inner : outer).addPath(world.lines[k]); });
-    layers = { owners, fills, inner, outer, coast };
+    const inner = new Path2D(), outer = new Path2D(), coast = new Path2D(), mine = new Path2D(), me = o.mine?.();
+    world.sides.forEach((ids, k) => {
+      (ids.length < 2 ? coast : owners.get(ids[0]) === owners.get(ids[1]) ? inner : outer).addPath(world.lines[k]);
+      // the edge of the player's land, coast included, outlined in gold
+      if (me && ids.some((id) => owners.get(id) === me) && !(ids.length === 2 && owners.get(ids[0]) === owners.get(ids[1]))) mine.addPath(world.lines[k]);
+    });
+    layers = { owners, fills, inner, outer, coast, mine };
   }
 
   // The whole map is painted into a hidden picture; moving and zooming slide and stretch that picture,
   // and the map is painted again once things are still.
   function paint() {
     const t0 = performance.now(), d = devicePixelRatio || 1, cw = base.width / d, ch = base.height / d, s = view.s, c = bctx;
-    const sig = [...world.provinces.keys()].map((id) => o.owner(id)).join();
+    const sig = `${o.mine?.() || ""}:${[...world.provinces.keys()].map((id) => o.owner(id)).join()}`;
     if (!layers || sig !== signature) { build(); signature = sig; }
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.fillStyle = "#16242b"; c.fillRect(0, 0, base.width, base.height);
@@ -308,6 +312,7 @@ function worldMap(canvas, world, o) {
       c.setLineDash([]);
     }
     c.strokeStyle = "rgba(255,244,214,.7)"; c.lineWidth = 1.4 / s; c.stroke(layers.outer);
+    if (o.mine?.()) { c.strokeStyle = "#e2b866"; c.lineWidth = 2.2 / s; c.stroke(layers.mine); }
     labels(c, cw, ch, layers.owners);
     drawn = { ...view };
     canvas.dataset.paintMs = Math.round(performance.now() - t0); // how long a full paint takes, for checking on slow phones

@@ -165,3 +165,37 @@ export function talkLines(g, world) {
   for (const c of (g.counsel || []).filter((x) => x.turn === g.turn).slice(-2)) lines.push(`- The player asked the council "${clip(c.question, 160)}": ${c.says.map((s) => `${s.name} ${s.word}`).join(", ")}`);
   return lines.slice(-12);
 }
+
+/**
+ * Standing moves at most one step a turn, by rule, when the turn's reply proposes it (ruling 59). The circle follows:
+ * members whose seat exists at the new standing stay; the rest part, kept as former members; new seats open empty.
+ */
+export function changeStanding(g, change) {
+  if (!change || g.mode === "nation") return [];
+  const from = g.standing || STANDING[g.mode] || 5, to = Math.max(1, Math.min(5, from + (change.dir === "up" ? 1 : -1)));
+  if (to === from) return [];
+  g.standing = to;
+  const lines = [{ ok: true, text: `Your standing ${to > from ? "rises" : "falls"} to ${to} of 5${change.why ? `: ${change.why}` : ""}` }];
+  if (g.council) {
+    // nobody vanishes: each member moves to the matching seat at the new standing (the first seat to the first,
+    // and so on); only those already cool toward the player (favour below zero) take the change as their moment to go
+    const before = SEATS[from], after = SEATS[to], seats = {};
+    let trusted = null;
+    after.forEach(([k, label], i) => {
+      const [old] = before[i] || [], m = old && g.council.seats[old];
+      seats[k] = null;
+      if (!m) return;
+      if (m.favour < 0) {
+        g.council.former.push({ ...m, seat: old, left: g.date, why: "parted as your standing changed" });
+        lines.push({ ok: true, text: `${m.name}: parts from your circle as your standing changes` });
+        return;
+      }
+      seats[k] = m;
+      if (g.council.trusted === old) trusted = k;
+      if (k !== old) lines.push({ ok: true, text: `${m.name}: stays with you, now as ${label.toLowerCase()}` });
+    });
+    g.council.seats = seats;
+    g.council.trusted = trusted;
+  }
+  return lines;
+}
