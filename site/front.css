@@ -91,7 +91,7 @@ h3 { font-size: 1.5rem; line-height: 1.2 }
 .lantern { padding: 0 10px }
 .lantern .mk { --m: url("icons/game-icons/old-lantern.svg"); width: 24px; height: 24px }
 .lantern[aria-pressed="true"] .mk { color: var(--brass) }
-.lantern .t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap }
+.lantern .t, .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap }
 .burger { display: none }
 @media (max-width: 1039px) {
   .top .in { column-gap: 12px }
@@ -110,29 +110,29 @@ h3 { font-size: 1.5rem; line-height: 1.2 }
 .hero { position: relative; isolation: isolate; padding-block: clamp(40px, 6vw, 88px) clamp(48px, 6vw, 80px); text-align: center; overflow: clip }
 .hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(60rem 30rem at 50% 0, var(--glow), transparent 70%), repeating-linear-gradient(0deg, var(--chart) 0 1px, transparent 1px 72px), repeating-linear-gradient(90deg, var(--chart) 0 1px, transparent 1px 72px); -webkit-mask: linear-gradient(#000 40%, transparent); mask: linear-gradient(#000 40%, transparent) }
 .hero .in { display: grid; justify-items: center; gap: 22px }
-.pill a { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 16px 0 6px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--ink); font-size: .9375rem; text-decoration: none }
-.pill a:hover { border-color: var(--brass) }
-.pill span:first-child { padding: 5px 10px; border-radius: 999px; background: var(--brass); color: var(--brass-ink); font-weight: 700; font-size: .8125rem; letter-spacing: .04em }
-.pill span:last-child::after { content: " \2192" }
 h1 { max-width: 13em; font-size: clamp(2.6rem, 1.1rem + 6.4vw, 5.5rem); line-height: 1; letter-spacing: -.015em }
 .hero .lede { max-width: 31em }
 .hero .cta { justify-content: center; margin-top: 6px }
 .promise { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 0; color: var(--soft); font-size: .9375rem }
 .promise li:not(:last-child)::after { content: ""; display: inline-block; width: 4px; height: 4px; margin: 0 12px; rotate: 45deg; vertical-align: middle; background: var(--brass) }
-/* the desk: a walnut frame with a brass line, the board inside it */
+/* the desk: a walnut frame with a silver line, the board inside it; the whole board opens the game it shows */
 .desk { width: 100%; max-width: 72rem; margin-top: clamp(16px, 3vw, 36px) }
-.stage { position: relative; aspect-ratio: 20 / 9; overflow: hidden; border-radius: 6px; background: var(--sea); border: clamp(6px, 1vw, 12px) solid #3a2415; border-image: url("textures/walnut.webp") 40 / clamp(6px, 1vw, 12px) round; box-shadow: 0 0 0 1px var(--brass), 0 30px 80px -20px var(--shade), 0 0 120px -30px var(--glow) }
+.stage { position: relative; display: block; color: var(--ink); text-decoration: none; aspect-ratio: 20 / 9; overflow: hidden; border-radius: 6px; background: var(--sea); border: clamp(6px, 1vw, 12px) solid #3a2415; border-image: url("textures/walnut.webp") 40 / clamp(6px, 1vw, 12px) round; box-shadow: 0 0 0 1px var(--brass), 0 30px 80px -20px var(--shade), 0 0 120px -30px var(--glow) }
 .stage::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(211, 219, 228, .55), inset 0 0 60px rgba(4, 10, 18, .45) }
 .stage img { width: 100%; height: 100%; object-fit: cover; transition: opacity .6s }
 .stage .board-layer { position: absolute; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .6s }
 .stage.live .board-layer { opacity: 1 }
 .stage.live img { opacity: 0 }
+.go { position: absolute; right: clamp(10px, 1.6vw, 18px); bottom: clamp(10px, 1.6vw, 18px); z-index: 2; display: inline-flex; align-items: center; gap: .5em; min-height: 40px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 4px; background: color-mix(in srgb, var(--deep) 86%, transparent); font: 700 .9375rem/1 var(--ui); box-shadow: 0 8px 24px -10px var(--shade); transition: background-color .2s, border-color .2s, color .2s }
+.stage:hover .go, .stage:focus-visible .go { background: var(--brass); border-color: var(--brass); color: var(--brass-ink) }
+.stage:hover { color: var(--ink) }
+.stage:focus-visible { outline-offset: 5px; border-radius: 6px; box-shadow: 0 0 0 1px var(--brass), 0 30px 80px -20px var(--shade) }
 .desk figcaption { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 12px; min-height: 44px; margin-top: 14px; color: var(--soft); font-size: .9375rem }
 .say { display: inline-flex; align-items: baseline; gap: 10px; text-align: left }
 .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--line-2); translate: 0 -1px }
 .desk.on .dot { background: var(--brass); box-shadow: 0 0 0 4px var(--glow) }
 .chip[hidden] { display: none }
-@media (max-width: 699px) { .stage { aspect-ratio: 3 / 2 } .hero .btn { width: 100% } .hero .cta { width: 100% } }
+@media (max-width: 699px) { .stage { aspect-ratio: 3 / 2 } .go { min-height: 36px; padding: 0 12px; font-size: .875rem } .hero .btn { width: 100% } .hero .cta { width: 100% } }
 
 /* four figures, set like a ledger line */
 .figures { border-block: 1px solid var(--line); background: var(--deep) }
@@ -165,8 +165,9 @@ main > section:not(.hero, .figures) { padding-block: var(--gap) }
 .steps li::before { content: "0" counter(step); position: absolute; left: 0; top: .15em; font: 700 .8125rem/1.6 var(--ui); letter-spacing: .12em; color: var(--brass) }
 .steps li::after { content: ""; position: absolute; left: 1.75em; top: .78em; width: .9em; border-top: 1px solid var(--line-2) }
 .steps b { color: var(--ink) }
-.tags { display: flex; flex-wrap: wrap; gap: 8px }
-.tags li { padding: 5px 12px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--soft); font-size: .875rem }
+/* labels, not controls: set as a plain line like the promises */
+.tags { display: flex; flex-wrap: wrap; gap: 4px 0; color: var(--soft); font-size: .9375rem }
+.tags li:not(:last-child)::after { content: ""; display: inline-block; width: 4px; height: 4px; margin: 0 12px; rotate: 45deg; vertical-align: middle; background: var(--brass) }
 .shot img, .plate img { width: 100% }
 .shot img { border-radius: 6px; box-shadow: 0 0 0 1px var(--line-2), 0 30px 70px -24px var(--shade) }
 .shot figcaption, .plate figcaption { margin-top: 12px; color: var(--soft); font-size: .875rem }
@@ -174,14 +175,14 @@ main > section:not(.hero, .figures) { padding-block: var(--gap) }
 /* the games: each card is a real picture of its board, its name, and Play */
 .games { display: grid; gap: clamp(16px, 2vw, 28px) }
 .games > li { container-type: inline-size }
-@media (min-width: 700px) { .games { grid-template-columns: repeat(2, minmax(0, 1fr)) } .games > .lead, .games > li:last-child { grid-column: 1 / -1 } }
-@media (min-width: 1040px) { .games { grid-template-columns: repeat(3, minmax(0, 1fr)) } .games > li:last-child { grid-column: auto } }
+@media (min-width: 700px) { .games { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+@media (min-width: 1200px) { .games { grid-template-columns: repeat(4, minmax(0, 1fr)) } }
 .game { position: relative; display: grid; grid-template-rows: auto 1fr; height: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); transition: border-color .25s, translate .25s, box-shadow .25s }
 .game:hover { border-color: var(--line-2); translate: 0 -3px; box-shadow: 0 24px 50px -24px var(--shade) }
 .pic { overflow: hidden; background: var(--sea); aspect-ratio: 16 / 10 }
 .pic img { width: 100%; height: 100%; object-fit: cover; transition: scale .6s cubic-bezier(.2, .7, .2, 1) }
 .game:hover .pic img { scale: 1.035 }
-.body { display: grid; gap: 12px; align-content: start; justify-items: start; padding: clamp(18px, 5cqi, 32px) }
+.body { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: clamp(18px, 5cqi, 32px) }
 .body > p:not(.kind) { color: var(--soft) }
 .kind { display: flex; align-items: center; gap: 8px }
 .kind .mk { width: 22px; height: 22px; color: var(--g) }
@@ -191,13 +192,15 @@ main > section:not(.hero, .figures) { padding-block: var(--gap) }
 .g-inch { --g: var(--g-inch) } .g-inch .kind .mk { --m: url("icons/game-icons/ink-swirl.svg") }
 .facts { display: flex; flex-wrap: wrap; gap: 4px 0; color: var(--soft); font-size: .875rem }
 .facts li:not(:last-child)::after { content: "/"; margin: 0 .6em; color: var(--line-2) }
-.game .btn { margin-top: 6px; min-width: 8.5em; translate: none }
-/* the whole card opens the game; the button is the link */
+.game .btn { margin-top: auto; min-width: 8.5em; translate: none } /* the buttons of a row of cards line up */
+/* the whole card opens the game; the button is its one link, and the card shows the link's focus */
 .game .btn::after { content: ""; position: absolute; inset: 0 }
+.game:has(.btn:focus-visible) { border-color: var(--brass); box-shadow: 0 0 0 1px var(--brass), 0 0 0 6px var(--halo) }
 @container (min-width: 640px) {
   .game { grid-template-rows: none; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) }
   .game .pic { aspect-ratio: auto; min-height: 100% }
-  .game .body { align-content: center; padding: clamp(24px, 4cqi, 48px) }
+  .game .body { justify-content: center; padding: clamp(24px, 4cqi, 48px) }
+  .game .btn { margin-top: 6px }
   .game h3 { font-size: clamp(1.6rem, 3.4cqi, 2.4rem) }
 }
 
@@ -228,6 +231,7 @@ main > section:not(.hero, .figures) { padding-block: var(--gap) }
 .ledger div { display: grid; gap: 2px 20px; padding-block: 14px; border-top: 1px solid var(--line) }
 .ledger dt { font: 700 .8125rem/1.6 var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--brass) }
 .ledger dd { color: var(--soft) }
+.ledger dd a { padding-block: .7em }
 @media (min-width: 560px) { .ledger div { grid-template-columns: 7.5em 1fr } .ledger dt { padding-top: .2em } }
 /* Sandby's etching, printed light on the blue like a chart's cartouche */
 .plate { justify-self: center; width: 100%; max-width: 32rem; padding: clamp(16px, 3vw, 32px); border: 1px solid var(--line-2); outline: 1px solid var(--line); outline-offset: 5px; text-align: center }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The front page: its footer, the lantern (daylight or lamplight, kept in this browser), the folding menu,
 // and the desk, where a real game of Brass and Banners is played by bots when the device can draw it (live.js).
+// The board on the desk is a link into that game; its Pause button sits outside the link, in the caption.
 import { footer } from "./footer.js";
 import { VERSION } from "./config.js";
 
@@ -21,7 +22,7 @@ if (lantern) {
     show();
     try { localStorage.setItem("capo-tent-theme", next); } catch { /* kept for this visit only */ }
   });
-  $("pill-v").textContent = `v${VERSION}`;
+  $("version").textContent = `Version ${VERSION}`; // the front page names its version only; the build stamp is for the game pages
   menu();
   saved();
   desk();
