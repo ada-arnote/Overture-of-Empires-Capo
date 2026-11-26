@@ -14,7 +14,9 @@ import { crossesLine } from "../src/story/line.js";
 import { checkSave as checkSaveOf, convertNote, keptRecords, mendGame, snapGame, takeBack } from "../src/story/saves.js";
 import { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacter, scenarioFrom, scenarioText } from "../src/story/scenarios.js";
 import { askPrompt, chatPrompt, councilPrompt, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
-import { loadWorld, ownerColour, worldMap } from "./worldmap.js";
+// presets hook: ready-made starts and the worlds they are set on
+import { KINDS, PRESETS, checkSetting, madeWorld, settingScenario, staged, worldKey } from "../src/story/presets.js";
+import { loadWorld, ownerColour, unpackWorld, worldMap } from "./worldmap.js";
 import { aiPanel, ask, loadRoute, pasteBox as pastePanel, waitBox, watch } from "./ai.js";
 import { fold, sampleReply, unfold } from "../src/story/replyform.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
@@ -66,8 +68,31 @@ const ownCode = () => (/^[A-Z]{3}$/.test(draft?.own.code || "") ? draft.own.code
 const SHELF = "capo-scenarios-1";
 const shelf = () => { try { return JSON.parse(localStorage.getItem(SHELF) || "[]"); } catch { return []; } };
 const shelve = (list) => { try { localStorage.setItem(SHELF, JSON.stringify(list.slice(-12))); } catch { toast("This browser would not keep the scenario; it works for this visit."); } };
-const allScenarios = () => [...SCENARIOS, ...shelf()];
-const scen = () => (draft ? allScenarios().find((x) => x.id === draft.scenario) || SCENARIOS[0] : null);
+// ---- presets hook: ready-made starts from src/story/presets.js, and the map each one is played on ----
+const allScenarios = () => [...SCENARIOS, ...PRESETS, ...shelf()];
+const baseScen = () => allScenarios().find((x) => x.id === draft.scenario) || SCENARIOS[0];
+const scen = () => (draft ? staged(baseScen(), draft.seeds[draft.scenario]) : null);
+let earth = null, on = null; // the real map, fetched when first needed; which world is shown now ("" is the real one)
+/** Show the world a game or scenario is set on: one made from its seed, or the real one. False when it cannot be made. */
+async function enter(ref) {
+  const made = ref ? madeWorld(ref) : null, key = made ? made.key : "";
+  if (ref && !made) return false;
+  if (key === on) return true;
+  world = made ? unpackWorld(made.data) : earth || (earth = await loadWorld("../maps/world.json", "../maps/disputes.json"));
+  on = key; index(); claimsOf.clear(); claims(); map?.world(world);
+  document.querySelector(".credit").textContent = made ? "A world of our own, made from a seed" : "Made with Natural Earth";
+  return true;
+}
+/** Choose where the story starts, and move to that world. A world of our own may be made again from another seed. */
+async function choose(id, seed) {
+  draft.scenario = id; if (seed) draft.seeds[id] = seed;
+  const s = scen(), was = on;
+  if (s.custom && draft.kind === "own") draft.kind = "map";
+  if (!(await enter(s.world))) toast("That world could not be made.");
+  if (on !== was) { draft.country = null; draft.own.provinces.clear(); }
+  map.refresh(); startScreen(); document.querySelector("input[name=scenario]:checked")?.focus();
+}
+// ---- end of the presets hook (its other lines are marked where they stand) ----
 const custom = () => state?.custom || (draft?.kind === "own" ? { code: ownCode(), name: draft.own.name.trim() || "Your new country", colour: draft.own.colour } : scen()?.custom || null);
 const name = (code) => (custom()?.code === code ? custom().name : world.countries[code] || code);
 const colourOf = (code) => (custom()?.code === code ? custom().colour : undefined);
@@ -186,7 +211,7 @@ let stepShown = "scenario";
 const STEPS = [["scenario", "Scenario"], ["country", "Country"], ["you", "You"], ["begin", "Begin"]];
 
 function startScreen() {
-  draft = draft || { step: "scenario", scenario: SCENARIOS[0].id, kind: "map", country: null, own: { name: "", code: "", colour: PALETTE[0], history: "", provinces: new Set() }, mode: "nation", character: blankCharacter(), fill: null };
+  draft = draft || { step: "scenario", scenario: SCENARIOS[0].id, kind: "map", country: null, own: { name: "", code: "", colour: PALETTE[0], history: "", provinces: new Set() }, mode: "nation", character: blankCharacter(), fill: null, seeds: {} };
   const box = $("start-box"), pills = el("div", undefined, "row"), at = STEPS.findIndex(([k]) => k === draft.step);
   // while picking on the map, the wizard shrinks to a bar so the map can be tapped, even on a phone
   $("start").classList.toggle("min", !!draft.picking);
@@ -211,13 +236,15 @@ function ready(i) { return (i <= 1 || !countryProblem()) && (i <= 2 || !youProbl
 
 function stepScenario(box) {
   const kept = load(), list = el("div", undefined, "modes"), mine = shelf();
+  let head = "";
   for (const s of allScenarios()) {
-    const l = el("label"), r = el("input"), t = el("span"), opened = mine.some((x) => x.id === s.id);
+    const l = el("label"), r = el("input"), t = el("span"), opened = mine.some((x) => x.id === s.id), kind = opened ? "Opened from files" : KINDS[s.kind] || "";
+    if (kind !== head) list.append(el("h3", head = kind)); // presets hook: a heading for each kind of start
     Object.assign(r, { type: "radio", name: "scenario", value: s.id, checked: s.id === draft.scenario });
-    r.onchange = () => { draft.scenario = s.id; if (s.custom && draft.kind === "own") draft.kind = "map"; map.refresh(); };
+    r.onchange = () => choose(s.id);
     t.append(el("b", s.title), el("small", `${s.blurb || ""}${opened ? ` From a file; starts ${fmtDate(s.start)}.` : ""}`));
     l.append(r, t);
-    if (opened) l.append(button("Remove", () => { shelve(shelf().filter((x) => x.id !== s.id)); if (draft.scenario === s.id) draft.scenario = SCENARIOS[0].id; map.refresh(); startScreen(); }));
+    if (opened) l.append(button("Remove", () => { shelve(shelf().filter((x) => x.id !== s.id)); if (draft.scenario === s.id) return choose(SCENARIOS[0].id); startScreen(); }));
     list.append(l);
   }
   const file = el("input"); file.type = "file"; file.accept = ".json,application/json"; file.hidden = true;
@@ -225,16 +252,28 @@ function stepScenario(box) {
     const f = file.files[0]; if (!f) return;
     if (f.size > 400000) return toast("That file is too big to be a scenario.");
     let raw; try { raw = JSON.parse(await f.text()); } catch { return toast("That file is not a Capo scenario."); }
-    const r = checkScenario(raw, (c) => homes.has(c), (id) => world.provinces.has(id));
-    if (!r.ok) return toast(r.why);
-    if (crossesLine(scenarioText(r.scenario)).length) return toast("That scenario is refused: nothing sexual involving minors.");
-    shelve([...shelf().filter((x) => x.id !== r.scenario.id), r.scenario]); draft.scenario = r.scenario.id; map.refresh(); startScreen(); toast(`Opened: ${r.scenario.title}.`);
+    // presets hook: a setting file becomes a scenario on its own world; a scenario is checked against the world it is set on
+    if (raw?.kind === "capo-setting") { const c = checkSetting(raw); if (!c.ok) return toast(c.why); raw = { ...settingScenario(c.setting, "first"), kind: "capo-scenario", v: 1, id: `file-${c.setting.id}` }; }
+    if (!(await enter(raw?.world))) return toast("That scenario is set on a world that could not be read.");
+    const r = checkScenario(raw, (c) => homes.has(c), (id) => world.provinces.has(id)), why = !r.ok ? r.why : crossesLine(scenarioText(r.scenario)).length ? "That scenario is refused: nothing sexual involving minors." : "";
+    if (why) { toast(why); return choose(draft.scenario); }
+    shelve([...shelf().filter((x) => x.id !== r.scenario.id), r.scenario]); toast(`Opened: ${r.scenario.title}.`); choose(r.scenario.id);
   };
   const openRow = el("div", undefined, "row"); openRow.append(button("Open a scenario file", () => file.click()), file);
   for (const [title, what] of SOON) { const l = el("label"), t = el("span"); l.style.opacity = ".55"; t.append(el("b", `${title}: coming soon`), el("small", what)); l.append(t); list.append(l); }
-  box.append(el("p", "Lead a country, a leader's life or an ordinary one. You decide what to do; an AI tells what happens; the rules decide wars, borders and treaties.", "note"), el("h3", "Choose where the story starts"), list, openRow, nextRow("Next: your country", () => "", "country"));
-  const good = kept?.state ? checkSave(kept.state) : null;
-  if (good) { const r = el("div", undefined, "row"); r.append(button(`Continue as ${good.custom?.name || name(good.player)}, ${fmtDate(good.date)}`, () => { state = good; past = keptPast(kept); draft = null; $("start").classList.remove("open"); play(); })); box.append(el("h3", "Or carry on"), r); }
+  box.append(el("p", "Lead a country, a leader's life or an ordinary one. You decide what to do; an AI tells what happens; the rules decide wars, borders and treaties.", "note"), el("h3", "Choose where the story starts"), list, openRow);
+  // presets hook: a world of our own is made from a seed, and can be made again from another
+  const s = scen();
+  if (s.world && !Object.keys(s.owners || {}).length) {
+    const seed = Object.assign(el("input", undefined, "plain"), { type: "text", value: s.world.seed, maxLength: 12 }), r = el("div", undefined, "row"), roll = (v) => choose(s.id, v.toLowerCase().replace(/[^a-z0-9]/g, "") || s.world.seed);
+    seed.setAttribute("aria-label", "This world's seed"); seed.onchange = () => roll(seed.value);
+    r.append(seed, button("Roll a new world", () => roll(crypto.getRandomValues(new Uint32Array(1))[0].toString(36))));
+    box.append(el("h3", `${s.title}: its world`), r, el("p", `The same seed always makes the same map, countries and names. Roll for a new world, or type a seed someone gave you. This setting's first world is "${baseScen().world.seed}".`, "note"));
+  }
+  box.append(nextRow("Next: your country", () => "", "country"));
+  // the game kept in this browser may be on another world than the one shown; it is checked on its own world when carried on
+  const same = worldKey(kept?.state?.world) === on, good = kept?.state && (same ? checkSave(kept.state) : kept.state);
+  if (good) { const r = el("div", undefined, "row"); r.append(button(same ? `Continue as ${good.custom?.name || name(good.player)}, ${fmtDate(good.date)}` : "Continue the game kept in this browser", async () => { const g = (await enter(kept.state.world)) && checkSave(kept.state); if (!g) { toast("That game could not be read."); return choose(draft.scenario); } state = g; past = keptPast(kept); draft = null; $("start").classList.remove("open"); map.refresh(); play(); })); box.append(el("h3", "Or carry on"), r); }
 }
 
 function countryProblem() {
@@ -337,7 +376,7 @@ function stepYou(box) {
 function ownName() { return draft.kind === "own" ? draft.own.name.trim() : name(draft.country); }
 async function fillCharacter() {
   const why = youProblem(); if (why) return toast(why);
-  draft.fill = { prompt: characterPrompt(ownName() || "their country", draft.mode, draft.character) };
+  draft.fill = { prompt: characterPrompt(ownName() || "their country", draft.mode, draft.character, scen().world?.where) };
   if (route.route !== "address") { startScreen(); return; }
   toast("Asking the AI...");
   try { takeCharacter(await call(draft.fill.prompt, "character")); } catch (e) { draft.fill.error = e.message; startScreen(); }
@@ -835,12 +874,12 @@ function about() {
 
 function gameSheet(box) {
   const file = el("input"); file.type = "file"; file.accept = ".json,application/json"; file.hidden = true;
-  file.onchange = async () => { const f = file.files[0]; if (!f) return; try { const raw = JSON.parse(await f.text()), s = checkSave(raw); if (!s) throw new Error(); state = s; past = []; save(); toast(convertNote(raw) || "Opened."); open(null); play(); } catch { toast("That file is not a Capo game."); } };
+  file.onchange = async () => { const f = file.files[0]; if (!f) return; try { const raw = JSON.parse(await f.text()), s = (await enter(raw?.world)) && checkSave(raw); if (!s) { await enter(state.world); throw new Error(); } state = s; past = []; save(); toast(convertNote(raw) || "Opened."); open(null); play(); } catch { toast("That file is not a Capo game."); } };
   const saves = el("div", undefined, "row");
   saves.append(button(past.length ? `Take back ${past[past.length - 1].why}` : "Take back the last turn", () => { if (!past.length) return toast("Nothing to take back."); state = restore(past.pop()); save(); topBar(); open("game"); map.refresh(); }),
     button("Save to a file", () => { const a = el("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: "application/json" })); a.download = `capo-${state.player}-turn-${state.turn}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }),
     button("Open a file", () => file.click()),
-    button("New game", () => { if (confirm("Leave this game? It stays saved until you begin another.")) { open(null); $("top").hidden = true; $("dock").hidden = true; state = null; draft = null; map.refresh(); startScreen(); } }));
+    button("New game", () => { if (confirm("Leave this game? It stays saved until you begin another.")) { open(null); $("top").hidden = true; $("dock").hidden = true; state = null; draft = null; enter().then(() => { map.refresh(); startScreen(); }); } }));
   const sTitle = Object.assign(el("input", undefined, "plain"), { type: "text", maxLength: 60, placeholder: "Title, for example: The Andean War of 2027" });
   const sBlurb = Object.assign(el("input", undefined, "plain"), { type: "text", maxLength: 200, placeholder: "One line on what it is" });
   const sOpen = Object.assign(el("textarea", undefined, "plain"), { rows: 3, maxLength: 1000, value: state.log[state.log.length - 1]?.summary || state.opening || "", placeholder: "How the story begins" });
@@ -971,14 +1010,14 @@ function attackBox(p) {
 }
 
 async function start() {
-  try { world = await loadWorld("../maps/world.json", "../maps/disputes.json"); } catch (e) { toast(`${e.message} Capo needs its web address, not a file opened by double-click.`); return; }
-  index(); claims(); ids = [...world.provinces.keys()];
+  const kept = load();
+  // presets hook: a kept game opens on its own world; anything else starts on the real one
+  try { if (!(await enter(kept?.state?.world))) await enter(); } catch (e) { toast(`${e.message} Capo needs its web address, not a file opened by double-click.`); return; }
   map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked, mine: () => state?.player });
   $("view").onchange = (e) => { view = e.target.value; map.refresh(); };
   $("in").onclick = () => map.zoomBy(1.6);
   $("out").onclick = () => map.zoomBy(1 / 1.6);
   $("home").onclick = () => (state ? showCountry(state.player) : map.reset());
-  const kept = load();
   const good = kept?.state ? checkSave(kept.state) : null;
   if (good) { state = good; past = keptPast(kept); play(); const note = convertNote(kept.state); if (note) { save(); toast(note); } }
   else { if (kept) toast("The saved game in this browser could not be read, so a new one starts. Any game saved to a file can still be opened."); startScreen(); }

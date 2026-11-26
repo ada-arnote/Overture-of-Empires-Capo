@@ -8,7 +8,10 @@ export async function loadWorld(url, disputesUrl = "") {
   const disputes = disputesUrl ? await fetch(disputesUrl).then((r) => (r.ok ? r.json() : { areas: [] })).catch(() => ({ areas: [] })) : { areas: [] };
   const res = await fetch(url);
   if (!res.ok) throw new Error(`The map could not be loaded (${res.status}).`);
-  const w = await res.json();
+  return unpackWorld(await res.json(), disputes);
+}
+/** A world as the page uses it, from the plain data of a map file or of a world made from a seed. */
+export function unpackWorld(w, disputes = { areas: [] }) {
   const arcs = w.arcs.map((d) => { const pts = []; let x = 0, y = 0; for (let i = 0; i < d.length; i += 2) { x += d[i]; y += d[i + 1]; if (i === 0) { x = d[0]; y = d[1]; } pts.push([x, y]); } return pts; });
   const sides = arcs.map(() => []);
   const byId = new Map();
@@ -44,7 +47,7 @@ export async function loadWorld(url, disputesUrl = "") {
     for (const r of a.rings) { for (let i = 0; i < r.length; i += 2) { const x = r[i], y = r[i + 1]; if (i) path.lineTo(x, y); else path.moveTo(x, y); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } path.closePath(); }
     return { ...a, path, box: [x0, y0, x1, y1] };
   });
-  return { width: w.width, height: w.height, countries: w.countries, source: w.source, provinces: byId, lines, sides, neighbours, across, straits, coast, disputes: areas };
+  return { width: w.width, height: w.height, view: w.view, countries: w.countries, source: w.source, provinces: byId, lines, sides, neighbours, across, straits, coast, disputes: areas };
 }
 
 let tile = null;
@@ -76,9 +79,10 @@ export function worldMap(canvas, world, o) {
   const size = () => { const r = canvas.getBoundingClientRect(), d = devicePixelRatio || 1; canvas.width = base.width = Math.round(r.width * d); canvas.height = base.height = Math.round(r.height * d); drawn = null; return [r.width, r.height]; };
   // the whole world on a wide screen; on a tall phone, the middle of it at a size that can be read
   const fit = () => {
-    const [cw, ch] = size(), tall = cw < ch;
-    view.s = tall ? (ch / (world.height * 0.86)) * 0.62 : Math.min(cw / world.width, ch / (world.height * 0.86));
-    const [mx, my] = [world.width * 0.54, world.height * 0.42];
+    // a made world says where its middle is and how much of its height to show, in hundredths; the real one is fitted by eye
+    const [cw, ch] = size(), tall = cw < ch, [px, py, ph] = world.view || [54, 42, 86], high = (world.height * ph) / 100;
+    view.s = tall ? (ch / high) * 0.62 : Math.min(cw / world.width, ch / high);
+    const [mx, my] = [(world.width * px) / 100, (world.height * py) / 100];
     view.x = mx - cw / 2 / view.s; view.y = my - ch / 2 / view.s; clamp();
   };
   const clamp = () => { const [cw, ch] = [canvas.clientWidth, canvas.clientHeight]; view.s = Math.max(Math.min(cw / world.width, ch / world.height) * 0.9, Math.min(view.s, 60)); view.x = Math.max(-cw / view.s * 0.5, Math.min(world.width - cw / view.s * 0.5, view.x)); view.y = Math.max(-ch / view.s * 0.5, Math.min(world.height - ch / view.s * 0.5, view.y)); };
@@ -218,6 +222,8 @@ export function worldMap(canvas, world, o) {
   fit(); redraw();
   return {
     redraw,
+    /** Show another world on the same canvas. */
+    world(w) { world = w; layers = null; signature = ""; drawn = null; fit(); redraw(); },
     /** Paint again now: land has changed hands, so the picture is out of date. */
     refresh: () => { drawn = null; redraw(); },
     zoomBy: (f) => zoom(f, canvas.clientWidth / 2, canvas.clientHeight / 2),
