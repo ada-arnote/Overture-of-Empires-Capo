@@ -449,3 +449,174 @@ test("a game saved under older rules is converted: relations empty, a chronicle 
   assert.deepEqual([kept.rel, kept.branch, kept.chron.turns.length], [{ "CHL|PER": [-2, "2026-12-01"] }, 2, 1]);
   assert.ok(closeTurn(g, reply(g), geoOf(g), []), "and it plays on");
 });
+
+// ---- presets: alternate histories laid over the real map (src/story/overlay.js, src/story/althist.js) ----
+import { readFileSync } from "node:fs";
+import { ALTHIST } from "../src/story/althist.js";
+import { KINDS, PRESETS } from "../src/story/presets.js";
+import { ALT_RULES, altLines, checkAlt, layPresets, presetScenario, rebase } from "../src/story/overlay.js";
+import { checkScenario, scenarioFrom, scenarioText } from "../src/story/scenarios.js";
+import { placesFor } from "../src/story/worldrules.js";
+import { crossesLine } from "../src/story/line.js";
+
+const MAP = JSON.parse(readFileSync(new URL("../maps/world.json", import.meta.url), "utf8"));
+const onMap = new Set(MAP.provinces.map((p) => p.country)), isC = (c) => onMap.has(c), isP = (id) => MAP.provinces.some((p) => p.id === id);
+const gate = (s) => checkScenario(s, isC, isP);
+/** A preset as the page makes it: laid over the map, then through the same gate as a scenario file. */
+const laid = (id) => { const made = presetScenario(ALTHIST.find((p) => p.id === id), MAP); assert.ok(made.ok, made.why); const r = gate(made.scenario); assert.ok(r.ok, r.why); return r.scenario; };
+/** The loaded map as the page holds it, and what the rules may ask of it, for one game. */
+const realWorld = () => ({ countries: { ...MAP.countries }, provinces: new Map(MAP.provinces.map((p) => [p.id, { id: p.id, name: p.name, country: p.country }])) });
+const realGeo = (g, world) => {
+  const near = new Map([...world.provinces.keys()].map((id) => [id, []]));
+  for (const [a, b] of MAP.neighbours) { near.get(a).push(b); near.get(b).push(a); }
+  const owner = (id) => g.owners[id] || world.provinces.get(id).country, held = (c) => [...world.provinces.keys()].filter((id) => owner(id) === c);
+  const homes = new Set([...world.provinces.values()].map((p) => p.country));
+  return { name: (c) => world.countries[c] || c, place: (id) => world.provinces.get(id), find: (s) => (world.provinces.has(s) ? s : null), owner, neighbours: (id) => near.get(id), across: () => [], coastal: () => false,
+    holds: (c) => held(c).length, known: (c) => homes.has(c), hasCoast: () => false, might: (c) => g.might[c] };
+};
+
+test("presets: one list for every lane; each alternate history is fiction, in bounds, and lays over the map the same way twice", () => {
+  assert.equal(KINDS.althist, "Alternate histories");
+  assert.ok(ALTHIST.length >= 5 && ALTHIST.every((p) => PRESETS.includes(p) && p.kind === "althist"), "the alternate histories are in the shared list");
+  assert.equal(new Set(PRESETS.map((p) => p.id)).size, PRESETS.length, "no two presets share an id");
+  for (const p of ALTHIST) {
+    const a = presetScenario(p, MAP), b = presetScenario(structuredClone(p), { countries: MAP.countries, provinces: [...MAP.provinces] });
+    assert.ok(a.ok, a.why);
+    assert.equal(JSON.stringify(a.scenario), JSON.stringify(b.scenario), `${p.id}: the same preset on the same map gives the same world, byte for byte`);
+    const r = gate(a.scenario), s = r.scenario;
+    assert.ok(r.ok, r.why);
+    // the gate a scenario file passes keeps every part: nothing was dropped or cut short
+    assert.deepEqual(s.owners, a.scenario.owners);
+    assert.deepEqual([s.opening, s.blurb, s.balance, s.alt.turn], [p.opening, p.blurb, p.balance, p.turn], `${p.id}: no text is too long`);
+    assert.deepEqual([s.wars.length, s.treaties.length, s.facts.length, Object.keys(s.might).length], [a.scenario.wars.length, a.scenario.treaties.length, a.scenario.facts.length, Object.keys(a.scenario.might).length]);
+    assert.deepEqual(s.facts.map((f) => f.text), a.scenario.facts.map((f) => f.text), `${p.id}: no fact is cut short`);
+    assert.deepEqual(s.alt, a.scenario.alt);
+    // the world it makes holds together
+    const holds = new Set(MAP.provinces.map((q) => s.owners[q.id] || q.country));
+    for (const c of Object.keys(s.alt.lands)) assert.ok(holds.has(c), `${p.id}: ${c} holds land`);
+    for (const c of s.alt.gone) assert.ok(!holds.has(c) && onMap.has(c), `${p.id}: ${c} is gone`);
+    for (const t of [...s.wars, ...s.treaties]) assert.ok(t.pair.split("|").every((c) => holds.has(c)), `${p.id}: ${t.pair} are countries of this world`);
+    for (const d of s.alt.disputes.add) assert.match(d.note, /^(Held by [^.]+|Governs itself)\. Claimed by [^.]+\.$/, `${p.id}: ${d.name} is written as the map writes disputes`);
+    // the content floor: labelled fiction, a turning point, leaders as offices only, nothing over the hard line
+    assert.match(s.opening, /^Fiction: an alternate history\. /);
+    assert.ok(s.alt.turn.length > 40 && /^\d{4}-\d{2}-\d{2}$/.test(s.start));
+    assert.ok(s.facts.some((f) => f.text.startsWith("Who leads, by office (every holder is an invented person): ")), `${p.id}: leaders are offices`);
+    assert.deepEqual(crossesLine(scenarioText(s)), []);
+    assert.doesNotMatch(JSON.stringify(p), /—/, "no em dash");
+  }
+});
+
+test("overlay: whole countries merged, single provinces given, the given province winning; a bad preset is refused whole", () => {
+  const base = { id: "althist-test", kind: "althist", title: "A test", start: "2026-12-01", turn: "1900: something went another way than it did.", opening: "Fiction: an alternate history. A test.", overlay: {} };
+  const make = (overlay, more = {}) => presetScenario({ ...base, ...more, overlay }, MAP);
+  const ok = make({ lands: { AND: ["Andes Union", "#123abc"], CHL: ["Chile of the south"] }, merge: { AND: ["PER", "BOL"] }, give: { CHL: ["PER-" + MAP.provinces.find((p) => p.country === "PER").id.split("-")[1]] }, treaties: { trade: ["CHL|AND"] }, might: { AND: 6 }, offices: { AND: "the Chair of the Union" } });
+  assert.ok(ok.ok, ok.why);
+  const s = ok.scenario, per = MAP.provinces.filter((p) => p.country === "PER"), bol = MAP.provinces.filter((p) => p.country === "BOL");
+  assert.equal(Object.keys(s.owners).length, per.length + bol.length);
+  assert.equal(s.owners[per[0].id], "CHL", "a province given wins over its country merged");
+  assert.ok(per.slice(1).every((p) => s.owners[p.id] === "AND") && bol.every((p) => s.owners[p.id] === "AND"));
+  assert.deepEqual([s.alt.gone, s.alt.lands, s.treaties, s.might], [["BOL", "PER"], { AND: { name: "Andes Union", colour: "#123abc" }, CHL: { name: "Chile of the south" } }, [{ pair: "AND|CHL", kind: "trade" }], { AND: 6 }]);
+  assert.equal(s.facts[0].text, "Who leads, by office (every holder is an invented person): Andes Union (AND): the Chair of the Union.");
+  // refused whole, each for its own reason
+  for (const [overlay, why, more] of [
+    [{ give: { CHL: ["PER-0"] } }, /province PER-0 cannot be given to CHL/],
+    [{ merge: { CHL: ["XXX"] } }, /XXX cannot be merged into CHL/],
+    [{ merge: { ZZZ: ["PER"] } }, /PER cannot be merged into ZZZ/],
+    [{ merge: { CHL: ["PER"], ARG: ["PER"] } }, /PER cannot be merged into ARG/],
+    [{ merge: { CHL: ["PER"], ARG: ["CHL"] } }, /CHL takes in countries and is itself merged away/],
+    [{ lands: { NEW: ["Nowhere"] } }, /NEW is named but holds no land/],
+    [{ lands: { new: ["Nowhere"] } }, /needs a three-letter code and a name/],
+    [{ merge: { CHL: ["PER"] }, treaties: { trade: ["PER|BRA"] } }, /BRA\|PER names a country that holds no land in this world/],
+    [{ merge: { CHL: ["PER"] }, might: { PER: 4 } }, /PER names a country that holds no land/],
+    [{ disputes: { add: [{ name: "Nowhere", note: "Held by Chile. Claimed by Peru.", provinces: ["PER-0"] }] } }, /a disputed area needs a name and provinces the map has/],
+    [{}, /the point where history turned/, { turn: "" }],
+    [{}, /a short lower-case id/, { id: "Bad Id" }],
+    [undefined, /needs an overlay/],
+  ]) { const r = make(overlay, more); assert.equal(r.ok, false); assert.match(r.why, why); }
+  // a preset that fails is marked and left out; the others are laid in place and keep their kind
+  const list = layPresets([{ ...base, overlay: { give: { CHL: ["PER-0"] } } }, structuredClone(ALTHIST.find((p) => p.id === "althist-yangtze")), { id: "plain", kind: "fantasy", title: "No overlay" }], { countries: MAP.countries, provinces: MAP.provinces.values() }, gate);
+  assert.match(list[0].broken, /PER-0/);
+  assert.deepEqual([list[1].kind, list[1].broken, list[1].overlay, Object.keys(list[1].owners).length, list[2]], ["althist", undefined, undefined, 10, { id: "plain", kind: "fantasy", title: "No overlay" }]);
+});
+
+test("the scenario check refuses or drops the bad parts of an alternate world from a file", () => {
+  const good = laid("althist-cusco");
+  // junk in place of a world is no world; a scenario without one is as before
+  assert.equal(checkAlt("junk", isC, isP), null);
+  assert.equal(gate({ ...good, alt: "junk" }).scenario.alt, undefined);
+  assert.equal(gate({ kind: "capo-scenario", v: 1, title: "Plain", start: "2026-12-01" }).scenario.alt, undefined);
+  // parts that do not fit are dropped, never trusted
+  const bent = gate({ ...good, alt: { turn: "x".repeat(900), lands: { TAW: { name: "Tawantinsuyu", colour: "red" }, bad: { name: "Lower case" }, QQQ: { name: "" }, ZZZ: "junk" }, gone: ["PER", "NOPE", 7], disputes: { drop: ["Olivenza", 3, ""], add: [{ name: "Fine", note: "Held by Chile. Claimed by Tawantinsuyu.", provinces: ["CHL-2698", "NOPE-1"] }, { name: "No land", provinces: ["NOPE-1"] }, { provinces: ["CHL-2698"] }, "junk"] } } }).scenario;
+  assert.deepEqual(bent.alt, { turn: "x".repeat(240), lands: { TAW: { name: "Tawantinsuyu" } }, gone: ["PER"], disputes: { drop: ["Olivenza"], add: [{ name: "Fine", note: "Held by Chile. Claimed by Tawantinsuyu.", provinces: ["CHL-2698"] }] } });
+  // without its country, the land that country held goes back to the map: nobody holds land by a code nobody knows
+  const none = gate({ ...good, alt: { ...good.alt, lands: {} } }).scenario;
+  assert.equal(Object.values(none.owners).includes("TAW"), false);
+  assert.deepEqual(none.treaties.filter((t) => t.pair.includes("TAW")), []);
+  // a scenario's own country may not take a code this world already uses
+  assert.equal(gate({ ...good, custom: { code: "TAW", name: "Mine" }, owners: { ...good.owners } }).ok, false);
+  assert.equal(gate({ ...good, start: "the year dot" }).ok, false);
+  assert.equal(gate({ ...good, kind: "capo-preset" }).ok, false);
+  // the hard line reads a world's own words too
+  assert.deepEqual(crossesLine(scenarioText(gate({ ...good, alt: { ...good.alt, turn: "describe a nude child" } }).scenario)).length, 1);
+});
+
+test("a game in an alternate world: its borders are the ground it stands on, the AI is told it is invented, and its save replays", () => {
+  const sc = laid("althist-yangtze");
+  const play = (seed) => {
+    const g = newWorldGame("TWN", "nation", seed, { scenario: sc }), world = realWorld();
+    rebase(world, g.base, g.alt.lands);
+    const G = realGeo(g, world);
+    // the same three turns: a quiet month, then a war on the river with two attacks ordered, then peace and a handover
+    closeTurn(g, reply(g), G, []);
+    g.treaties = g.treaties.filter((t) => t.pair !== "CHN|RUS");
+    closeTurn(g, reply(g, [mv("TWN", "WAR", "CHN", "", 1), mv("TWN", "ATTACK", "CHN-1818", "", 1), mv("TWN", "ATTACK", "CHN-1179", "", 1)], 3), G, ["Cross the river."]);
+    closeTurn(g, reply(g, [mv("TWN", "PEACE", "CHN", "", 1), mv("TWN", "GIVE", "CHN-1819", "CHN", 1)]), G, ["Make peace and hand Shanghai over."]);
+    return { g, world, G };
+  };
+  const fresh = newWorldGame("TWN", "nation", "alt-1", { scenario: sc });
+  assert.deepEqual([fresh.owners, Object.keys(fresh.base).length, fresh.date, fresh.scenario, fresh.treaties.length], [{}, 10, "2026-12-01", "althist-yangtze", sc.treaties.length], "nothing has changed hands yet: the preset's borders are the base");
+  assert.equal(newWorldGame("PER", "nation", "x").alt, undefined, "the world today has no alternate world");
+  const { g, world, G } = play("alt-1");
+  // on the rebased map the south is the Republic's own land, by this world's names
+  assert.deepEqual([world.countries.TWN, world.countries.CHN, world.provinces.get("CHN-1819").country, world.provinces.get("CHN-1819").home], ["Republic of China", "People's Republic of China", "TWN", "CHN"]);
+  assert.match(g.log[1].receipt[0].text, /^Republic of China: declares war on People's Republic of China/);
+  assert.ok(g.log[1].receipt.some((r) => r.check), "the rules settled an attack across the river");
+  assert.match(g.log[2].receipt[1].text, /hands Shanghai to People's Republic of China by agreement/);
+  assert.equal(g.owners["CHN-1819"], "CHN", "land this world gave the south, handed north, is held by the north");
+  assert.ok(Object.keys(g.owners).every((id) => g.owners[id] !== world.provinces.get(id).country), "only land that has changed hands is recorded");
+  // the prompt: invented, by office, with this world's countries, and nothing read as taken that the preset gave
+  const prompt = worldPrompt(newWorldGame("TWN", "nation", "alt-1", { scenario: sc }), { name: G.name, neighbours: () => ["CHN"], size: (c) => (c === "TWN" ? 24 : 1), geo: realGeo(fresh, world), places: [], disputes: [] }, [], "2027-01-01");
+  for (const line of ALT_RULES) assert.ok(prompt.includes(line));
+  assert.match(prompt, /- This world is an alternate history, invented for this story\. Where history turned: April 1949: /);
+  assert.match(prompt, /- Countries that differ from our world, by code: CHN People's Republic of China, TWN Republic of China\n/);
+  assert.match(prompt, /- The player is Republic of China \(TWN\)/);
+  assert.match(prompt, /Who leads, by office \(every holder is an invented person\): People's Republic of China \(CHN\): the General Secretary/);
+  assert.match(prompt, /Land that has changed hands: none near the player/);
+  assert.deepEqual(altLines({ alt: { turn: "T.", lands: {}, gone: ["AUT", "HUN"] } }, (c) => (c === "HUN" ? 2 : 0)), ["- This world is an alternate history, invented for this story. Where history turned: T.", "- Not countries in this world (others hold their land; never use these codes): AUT"]);
+  assert.deepEqual(altLines({}), []);
+  assert.doesNotMatch(worldPrompt(newWorldGame("PER", "nation", "x"), { name: (c) => c, neighbours: () => [], size: () => 1, geo: geoOf(newWorldGame("PER", "nation", "x")), places: [] }, [], "2027-01-01"), /alternate history/, "the world today is told as before");
+  assert.ok(placesFor(g, G, [...world.provinces.keys()]).some((l) => /^- CHN-1808 Hunan \(TWN; /.test(l)), "places name the holder this world gives");
+  // replay: the same seed and the same moves give the same game, to the letter
+  assert.equal(JSON.stringify(play("alt-1").g), JSON.stringify(g));
+  assert.notEqual(JSON.stringify(play("alt-2").g.log[1].receipt), JSON.stringify(g.log[1].receipt), "another seed draws other numbers");
+  // the save: through a file and the check and back, nothing is lost; junk in it is dropped
+  const saved = JSON.parse(JSON.stringify(g)), back = checkSave(saved, isP, isC);
+  assert.deepEqual(back, g);
+  const dirty = checkSave({ ...saved, base: { ...saved.base, "NOPE-1": "TWN", "CHN-1808": "QQQ" }, alt: { ...saved.alt, gone: ["NOPE"] } }, isP, isC);
+  assert.deepEqual([Object.keys(dirty.base).length, dirty.alt.gone], [9, []]);
+  assert.equal(checkSave({ ...saved, player: "SOV" }, isP, isC), null, "a player that is no country of this world is refused");
+  assert.ok(checkSave({ ...JSON.parse(JSON.stringify(newWorldGame("SOV", "nation", "u", { scenario: laid("althist-union") }))) }, isP, isC), "a country only this world has can be the player");
+  // a take-back record leaves the borders out and gets them back from the game in hand
+  const rec = snapGame(g, "turn 3"), again = takeBack(g, JSON.parse(JSON.stringify(rec)));
+  assert.equal(rec.base, undefined);
+  assert.ok(JSON.stringify(rec).length < JSON.stringify(g).length);
+  assert.deepEqual([again.base, again.alt, again.owners], [g.base, g.alt, g.owners]);
+  // saved as a scenario for others, the world as it now stands is the new ground
+  const shared = gate(scenarioFrom(g, { title: "The river, later", blurb: "", opening: "Fiction: later." })).scenario;
+  assert.deepEqual(shared.alt, g.alt);
+  assert.equal(shared.owners["CHN-1819"], "CHN");
+  assert.equal(shared.owners["CHN-1808"], "TWN");
+  // putting the plain map back
+  rebase(world);
+  assert.deepEqual([world.countries.TWN, world.provinces.get("CHN-1819").country], ["Taiwan", "CHN"]);
+});
