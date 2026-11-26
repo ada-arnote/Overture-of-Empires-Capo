@@ -122,7 +122,9 @@ function* plan(p, dice, tier) {
     }
     return dice.pick(all);
   }
-  const noise = tier === "easy" ? 160 : 6, floor = tier === "easy" ? 420000 : 600000;
+  // the lesson's bot ("gentle", not offered at the table): it plays as easy, strikes nobody in round 1, then takes at most one province a turn, and only on good odds
+  const gentle = tier === "gentle", noise = tier === "easy" || gentle ? 160 : 6, floor = gentle ? 700000 : tier === "easy" ? 420000 : 600000;
+  if (gentle && p.phase === "attack" && (p.round < 2 || p.took)) return move(p) || { do: "end" };
   if (p.phase === "claim") return claim(p, dice);
   if (p.phase === "place") {
     const sets = setsOf(p, p.seat);
@@ -130,7 +132,7 @@ function* plan(p, dice, tier) {
   }
   if (p.phase === "place" || p.phase === "setup") return place(p, dice, noise);
   yield;
-  if (p.phase === "occupy") return { do: "occupy", n: tier === "easy" ? p.str[p.pend.from] - 1 : occupy(p) };
+  if (p.phase === "occupy") return { do: "occupy", n: tier === "easy" || gentle ? p.str[p.pend.from] - 1 : occupy(p) };
   return attack(p, dice, noise, floor) || move(p) || { do: "end" };
 }
 

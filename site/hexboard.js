@@ -19,7 +19,9 @@ function patterns(make, f) {
  * o.picture and o.fine { cells, of } for a board of provinces. Otherwise o: cells (axial), fit (the cells to frame, or all), rough[], sea[], ground(i), owner() -> seats or -1 by cell, pieces() -> standing pieces, tap(i), can(i).
  */
 export function hexBoard(T, stage, o) {
-  let b = null, svg = null, pat = false;
+  let b = null, svg = null, pat = false, room = {};
+  /** The still picture keeps to the free part of the screen too, clear of the panels. */
+  const fit = () => { if (svg) Object.assign(svg.style, { left: `${room.left || 0}px`, top: `${room.top || 0}px`, width: `calc(100% - ${(room.left || 0) + (room.right || 0)}px)`, height: `calc(100% - ${(room.top || 0) + (room.bottom || 0)}px)` }); };
   const wide = innerWidth > 820, kept = T.read();
   const still = () => {
     const list = o.fine ? o.fine.cells : o.cells, big = Math.max(...list.map(([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)))) + 2;
@@ -43,6 +45,7 @@ export function hexBoard(T, stage, o) {
     });
     svg.append(...laid, ...words);
     stage.replaceChildren(svg);
+    fit();
   };
   if (canDraw()) {
     try {
@@ -58,7 +61,7 @@ export function hexBoard(T, stage, o) {
     setLook: (k) => b?.setLook(k),
     patterns(on) { pat = !!on; if (b) b.patterns(pat); else if (svg) still(); },
     motion: (mode) => b?.motion(mode),
-    layout: (free) => b?.layout(free),
+    layout(free) { room = free; if (b) b.layout(free); else fit(); },
     zoom: (f) => b?.zoom(f), pan: (x, y) => b?.pan(x, y),
     show(order, quick) { if (b) return b.show(o.owner(), { pieces: o.pieces(), order, quick, names: o.names?.() }); still(); return 0; },
     light: (cells, chosen) => b?.preview(cells, chosen),
