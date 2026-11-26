@@ -149,6 +149,7 @@ export function createTable(G) {
     board?.destroy();
     $("stage").replaceChildren();
     board = G.board(T, $("stage"));
+    board.patterns?.(settings.patterns === "on"); board.motion?.(settings.motion);
     $("look").hidden = !board.looks.length;
     place();
   }
@@ -217,13 +218,13 @@ export function createTable(G) {
   const down = (p, s) => (G.outOf ? G.outOf(p, s) : !G.cellsOf(p, s));
   const watch = (p) => { for (let s = 0; s < T.kinds.length; s++) if (fell[s] === undefined && down(p, s)) fell[s] = p.round; };
   const still = () => settings.motion === "reduced" || (settings.motion === "system" && matchMedia("(prefers-reduced-motion: reduce)").matches);
-  /** Settings take effect at once. The board's own animations follow the system unless asked to skip them. */
+  /** Settings take effect at once. The board is told the motion choice and draws its own reduced motion. */
   function apply() {
     const h = document.documentElement;
     h.classList.toggle("still", still());
     h.classList.toggle("patterns", settings.patterns === "on");
     h.style.setProperty("--ui-scale", String(SCALE[settings.text]));
-    board?.patterns?.(settings.patterns === "on"); // the hook for a board that can draw seat patterns; none can yet
+    board?.patterns?.(settings.patterns === "on"); board?.motion?.(settings.motion);
     place();
   }
   const tally = (p) => Array.from({ length: T.kinds.length }, (_, s) => G.cellsOf(p, s));
@@ -255,7 +256,7 @@ export function createTable(G) {
     if (!T.demo) { score(); panel(); }
     G.seen?.(T, events);
     if (!T.demo && !T.hurry && speed === "normal") cue(events);
-    const rush = T.hurry || speed === "instant", took = board.show(G.order(events), rush || settings.motion === "reduced");
+    const rush = T.hurry || speed === "instant", took = board.show(G.order(events), rush);
     if (!T.demo && !rush && words.length && (!person || T.match.turn !== seat)) toast(words.slice(0, 2).join(" "));
     if (T.human()) T.hurry = false;
     await sleep(T.hurry || speed === "instant" ? 0 : T.demo ? Math.max(G.pace(T.match.position), took + 120) : speed === "fast" ? Math.max(90, took / 2) : Math.max(160, took + 60));
@@ -582,7 +583,7 @@ export function createTable(G) {
     row("Motion", ...bind("motion"), CHOICES.motion);
     if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
     row("Seat patterns", ...bind("patterns"), CHOICES.patterns);
-    box.append(el("p", "Patterns show on the score bar. The board does not draw them yet.", "about"));
+    box.append(el("p", "Patterns show on the board and the score bar.", "about"));
     row("Text size", ...bind("text"), CHOICES.text);
     return box;
   }

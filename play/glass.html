@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-kknXkDPBQvpk/YBFeLRmm2SKeuk2l4BRq1KYVGIIMyI='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-0YkbFKU7HHxsn0yiIy6cRoPvDX41t3za0sYvmqYlL0U='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Grain and Glass</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -191,11 +191,14 @@ a.quiet { display: flex; align-items: center; justify-content: center; text-alig
 
 /* seat patterns on the score bar, for telling seats apart without colour */
 .patterns #land { height: 14px }
-.patterns #fills i:nth-child(6n+2) { background-image: repeating-linear-gradient(45deg, var(--pattern) 0 2px, transparent 2px 6px) }
-.patterns #fills i:nth-child(6n+3) { background-image: radial-gradient(var(--pattern) 1.3px, transparent 1.7px); background-size: 5px 5px }
-.patterns #fills i:nth-child(6n+4) { background-image: repeating-linear-gradient(90deg, var(--pattern) 0 2px, transparent 2px 5px) }
-.patterns #fills i:nth-child(6n+5) { background-image: repeating-linear-gradient(-45deg, var(--pattern) 0 2px, transparent 2px 6px), repeating-linear-gradient(45deg, var(--pattern) 0 2px, transparent 2px 6px) }
-.patterns #fills i:nth-child(6n) { background-image: repeating-linear-gradient(0deg, var(--pattern) 0 2px, transparent 2px 5px) }
+.patterns #fills i { position: relative } .patterns #fills i::after { content: ""; position: absolute; inset: 0 } /* over the seat colour, which is set on the element itself */
+/* the same six as on the board (src/map/paint.js): /, dots, |, x, \, - */
+.patterns #fills i:nth-child(6n+1)::after { background-image: repeating-linear-gradient(135deg, var(--pattern) 0 2px, transparent 2px 6px) }
+.patterns #fills i:nth-child(6n+2)::after { background-image: radial-gradient(var(--pattern) 1.3px, transparent 1.7px); background-size: 5px 5px }
+.patterns #fills i:nth-child(6n+3)::after { background-image: repeating-linear-gradient(90deg, var(--pattern) 0 2px, transparent 2px 5px) }
+.patterns #fills i:nth-child(6n+4)::after { background-image: repeating-linear-gradient(-45deg, var(--pattern) 0 2px, transparent 2px 6px), repeating-linear-gradient(45deg, var(--pattern) 0 2px, transparent 2px 6px) }
+.patterns #fills i:nth-child(6n+5)::after { background-image: repeating-linear-gradient(45deg, var(--pattern) 0 2px, transparent 2px 6px) }
+.patterns #fills i:nth-child(6n)::after { background-image: repeating-linear-gradient(0deg, var(--pattern) 0 2px, transparent 2px 5px) }
 
 /* a phone: the tray folds to a handle with the main action still showing, the seats are one line, the board has the rest */
 .tray { display: none }
@@ -1687,7 +1690,7 @@ const VS = `#version 300 es
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS = `#version 300 es
 precision highp float; precision highp int;
-uniform sampler2D uId,uHt,uTab; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime;
+uniform sampler2D uId,uHt,uTab; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell;
 uniform vec3 uInk,uPale,uWall,uGlow; out vec4 o;
 int raw(ivec2 t){ if(t.x<0||t.y<0||t.x>=int(uSize.x)||t.y>=int(uSize.y)) return 0; vec4 v=texelFetch(uId,t,0); return int(v.r*255.+.5)+256*int(v.g*255.+.5); }
 int idAt(vec2 p){ return raw(ivec2(floor(p))); }
@@ -1701,6 +1704,15 @@ vec2 plane(vec2 uv,float Z){ float Y=(uv.y*(1.-uQ*Z*uTilt.x)+Z*uTilt.y)/max(.02,
   return uC+vec2(X*uYaw.x+Y*uYaw.y,-X*uYaw.y+Y*uYaw.x)/uS; }
 float ht(vec2 p){ return texture(uHt,p/uSize).r*255.; }
 float grain(vec2 p){ p=floor(p); return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
+// seat patterns, a second sign beside colour, the same as on the score bar: q is the ground in screen pixels, so lines keep their width at any zoom
+float hatch(float u,float P){ return 1.-smoothstep(.6,1.1+.6/uDpr,abs(fract(u/P)-.5)*P); }
+float pattern(vec2 q,int k){
+  if(k==0) return hatch((q.x+q.y)*.7071,6.5);
+  if(k==1){ vec2 g=mod(q+vec2(floor(q.y/6.)*3.,0.),6.)-3.; return 1.-smoothstep(1.2,1.9+.6/uDpr,length(g)); }
+  if(k==2) return hatch(q.x,6.);
+  if(k==3) return max(hatch((q.x+q.y)*.7071,8.),hatch((q.x-q.y)*.7071,8.));
+  if(k==4) return hatch((q.x-q.y)*.7071,6.5);
+  return hatch(q.y,5.5); }
 vec3 face(vec2 p,int id,float foot){
   vec4 a=tab(id,0),b=tab(id,1); vec3 c=a.rgb; float e=2.;
   vec2 g=vec2(ht(p+vec2(e,0.))-ht(p-vec2(e,0.)),ht(p+vec2(0.,e))-ht(p-vec2(0.,e)))/100.;
@@ -1708,11 +1720,17 @@ vec3 face(vec2 p,int id,float foot){
   c*=.965+.07*grain(p*1.5); // paper
   float wet=b.b; c=mix(c,c*c*1.15,wet*.55); // fresh ink is deeper
   if(wet>0.) c+=vec3(.10)*wet*smoothstep(.0,1.,k-1.)*2.;
-  // borders: a firm line where the owner changes, a faint one between cells of one owner
-  float w=max(1.6,foot*1.1); bool edge=false,own=false,land=false;
-  for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*(w*2.6)); if(n!=id){ edge=true; if(n<=0||abs(tab(max(n,0),0).a-a.a)>.002) own=true; if(n>0){ float m=tab(n,1).a; if((m>.99)!=(b.a>.99)) own=true; else if(abs(m-b.a)>.002) land=true; } } }
-  if(own){ bool near=false; for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*(w*1.5)); if(n!=id) near=true; }
-    float l=dot(a.rgb,vec3(.3,.6,.1)); vec3 line=l>.36?uInk:uPale; c=mix(c,near?line:mix(line,a.rgb,.55),a.a<.99?(near?.92:.5):(near?.42:.15)); }
+  bool owned=a.a<.99;
+  if(owned&&uPat>0.){ vec2 d=(p-uC)*uS; int s=((int(a.a*255.+.5)-20)*154)%211; // 154 undoes the 37 the owner was stored with
+    float l=dot(a.rgb,vec3(.2126,.7152,.0722)); c=mix(c,l>.45?uInk:uPale,pattern(vec2(d.x*uYaw.x-d.y*uYaw.y,(d.x*uYaw.y+d.y*uYaw.x)*uTilt.x),s%6)*(l>.45?.32:.27)); }
+  // borders: a firm line where the owner changes, a faint one between cells of one owner.
+  // Owned land is ringed by an ink line and a paper line, whatever its colour: paper outside where it meets dark sea, else ink.
+  float w=max(1.6,foot*1.1),px=foot*uDpr,r2=owned?max(w*2.6,min(px*3.2,uCell*.2)):w*2.6; bool edge=false,own=false,land=false,them=false,dark=false;
+  for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*r2); if(n!=id){ edge=true; float o2=tab(max(n,0),0).a; if(n<=0||abs(o2-a.a)>.002){ own=true; if(n>0&&o2<.99) them=true; if(n>0&&o2>.99&&dot(tab(n,0).rgb,vec3(.3,.6,.1))<.42) dark=true; } if(n>0){ float m=tab(n,1).a; if((m>.99)!=(b.a>.99)) own=true; else if(abs(m-b.a)>.002) land=true; } } }
+  if(own){ bool near=false; float r1=owned?max(w*1.5,min(px*1.8,uCell*.11)):w*1.5; for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*r1); if(n!=id) near=true; }
+    if(owned) c=near!=dark?uInk*.5:mix(c,uPale,dark?.9:.6);
+    // beside owned land only the owned side draws the edge, so the ink meets the ground as it is
+    else if(!them){ float l=dot(a.rgb,vec3(.3,.6,.1)); vec3 line=l>.36?uInk:uPale; c=mix(c,near?line:mix(line,a.rgb,.55),near?.42:.15); } }
   else if(edge) c=mix(c,uInk,b.a<.99?.46:.16);
   if(land) c=mix(c,uGlow,own?.6:.92);
   float gl=b.g; if(gl>0.){ float pulse=uTime<=0.?1.:.72+.28*cos(uTime*6.2832); c=mix(c,uGlow,gl*(edge?.95:.34*pulse)); }
@@ -1794,7 +1812,7 @@ class Painter {
     g.uniform1i(u.uId, 0); g.uniform1i(u.uHt, 1); g.uniform1i(u.uTab, 2);
     g.uniform2f(u.uSize, m.w, m.h); g.uniform2f(u.uView, cam.W, cam.H); g.uniform2f(u.uMid, cam.mx, cam.my); g.uniform2f(u.uC, cam.cx, cam.cy);
     g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform2f(u.uLight, -0.6, -0.8);
-    g.uniform1f(u.uS, cam.s); g.uniform1f(u.uQ, cam.q); g.uniform1f(u.uDpr, dpr); g.uniform1f(u.uUnit, o.unit); g.uniform1f(u.uMost, o.most); g.uniform1f(u.uRelief, o.relief); g.uniform1f(u.uTime, o.time);
+    g.uniform1f(u.uS, cam.s); g.uniform1f(u.uQ, cam.q); g.uniform1f(u.uDpr, dpr); g.uniform1f(u.uUnit, o.unit); g.uniform1f(u.uMost, o.most); g.uniform1f(u.uRelief, o.relief); g.uniform1f(u.uTime, o.time); g.uniform1f(u.uPat, o.pat ? 1 : 0); g.uniform1f(u.uCell, m.R);
     const f3 = (k, c) => g.uniform3f(u[k], c[0] / 255, c[1] / 255, c[2] / 255);
     f3("uInk", o.ink); f3("uPale", o.pale); f3("uWall", o.wall); f3("uGlow", o.glow);
     g.drawArrays(g.TRIANGLES, 0, 3);
@@ -1846,6 +1864,21 @@ function emblem(ctx, icon, x, y, size, flat = 1) {
   EMBLEMS[icon % EMBLEMS.length][1](ctx);
   ctx.restore();
 }
+/** The six seat patterns for things drawn on the page, the same as the painter's: /, dots, |, x, \, -. Light lines on dark colours. */
+const TILES = new Map();
+function seatPattern(ctx, seat, rgb) {
+  const k = seat % 6, light = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255 > 0.45, key = k * 2 + light;
+  if (!TILES.has(key)) {
+    const t = document.createElement("canvas"), c = t.getContext("2d");
+    t.width = t.height = 8;
+    c.strokeStyle = c.fillStyle = light ? "rgba(24,20,18,.5)" : "rgba(250,244,228,.5)"; c.lineWidth = 1.4;
+    const lines = [[[0, 8, 8, 0], [-2, 2, 2, -2], [6, 10, 10, 6]], [], [[4, 0, 4, 8]], [[0, 8, 8, 0], [0, 0, 8, 8]], [[0, 0, 8, 8], [-2, 6, 2, 10], [6, -2, 10, 2]], [[0, 4, 8, 4]]][k];
+    for (const [a, b, x, y] of lines) { c.beginPath(); c.moveTo(a, b); c.lineTo(x, y); c.stroke(); }
+    if (k === 1) { c.beginPath(); c.arc(4, 4, 1.5, 0, 7); c.fill(); }
+    TILES.set(key, t);
+  }
+  return ctx.createPattern(TILES.get(key), "repeat");
+}
 const tower = (c) => { c.beginPath(); [[-0.3, 0], [-0.22, -0.62], [-0.31, -0.7], [-0.31, -1.04], [-0.17, -1.04], [-0.17, -0.92], [-0.07, -0.92], [-0.07, -1.04], [0.07, -1.04], [0.07, -0.92], [0.17, -0.92], [0.17, -1.04], [0.31, -1.04], [0.31, -0.7], [0.22, -0.62], [0.3, 0]].forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); };
 
 /** Can this device draw the moving board at all? */
@@ -1863,13 +1896,15 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
-  const m = picture || hexPicture(cells, rough, sea, size), painter = new Painter(under), cam = new Camera(), still = matchMedia("(prefers-reduced-motion: reduce)");
+  const m = picture || hexPicture(cells, rough, sea, size), painter = new Painter(under), cam = new Camera(), system = matchMedia("(prefers-reduced-motion: reduce)");
   painter.load(m);
   const ends = m.ends || m.mid.flatMap(([x, y]) => [[x - m.R, y], [x + m.R, y], [x, y - m.R], [x, y + m.R]]);
   const show = m.mid.map((_, i) => ({ land: lands?.[i], rgb: ground(i), from: ground(i), to: ground(i), owner: -1, top: sea[i] ? 0.2 : 1, topTo: sea[i] ? 0.2 : 1, glow: 0, wet: 0, start: 0, ends: 0 }));
   const tops = new Float32Array(m.n + 1), listeners = { pick: [], hover: [] };
-  let L = LOOKS[look], lookName = look, queued = false, dirty = true, alive = true, spots = [], hovering = -1, swing = null, until = 0, lit = 0, marks = [], point = null;
+  let L = LOOKS[look], lookName = look, motion = "system", pat = false, queued = false, dirty = true, alive = true, spots = [], hovering = -1, swing = null, until = 0, lit = 0, marks = [], point = null;
 
+  /** Reduced motion is the player's choice, or the system's when they follow it. Changes then fade quickly in place instead of moving. */
+  const calm = () => motion === "reduced" || (motion === "system" && system.matches);
   const unit = () => 9 * L.rise * cam.s, most = () => unit() * 2.2, dpr = () => Math.min(2, Math.max(1.5, devicePixelRatio || 1)); // thin lines need the extra samples on a plain screen
   function redraw() { if (!queued && alive) { queued = true; requestAnimationFrame(frame); } }
 
@@ -1881,7 +1916,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       if (c.start || c.ends) {
         const k = t <= c.start ? 0 : t >= c.ends ? 1 : (t - c.start) / (c.ends - c.start);
         c.rgb = mix(c.from, c.to, ease(k));
-        c.top = c.topFrom + (c.topTo - c.topFrom) * ease(k) + Math.sin(k * Math.PI) * 0.5;
+        c.top = c.topFrom + (c.topTo - c.topFrom) * ease(k) + Math.sin(k * Math.PI) * c.hop;
         c.wet = c.soak ? Math.max(0, 1 - Math.max(0, t - c.start) / 1500) * (k > 0 ? 1 : 0) : 0;
         if (k < 1 || c.wet > 0) moving = true;
         else { c.start = c.ends = 0; c.soak = false; }
@@ -1897,10 +1932,10 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       base = cam.s;
       if (k >= 1) swing = null; else moving = true;
     }
-    const beat = still.matches || !lit ? 0 : Math.max(0, 1.5 - (t - lit) / 1000); // a preview pulses briefly, then the board is still
+    const beat = calm() || !lit ? 0 : Math.max(0, 1.5 - (t - lit) / 1000); // a preview pulses briefly, then the board is still
     if (beat > 0) moving = true;
     if (dirty) { painter.send(show); dirty = false; }
-    painter.draw(cam, dpr(), { unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [255, 226, 150] });
+    painter.draw(cam, dpr(), { unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, pat, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [255, 226, 150] });
     drawOver(t);
     if (moving) redraw();
   }
@@ -1998,7 +2033,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
         const X = x + h * 0.55, Y = y + h * 0.45, k = s.kind === "town" ? 1.25 : 0.9;
         ctx.beginPath(); [[-0.4, 0], [-0.4, -0.45], [0, -0.85], [0.4, -0.45], [0.4, 0]].forEach(([u, v], i) => ctx[i ? "lineTo" : "moveTo"](X + u * h * k, Y + v * h * k)); ctx.closePath();
         if (s.kind === "town") { ctx.moveTo(X + 0.4 * h * k, Y); ctx.lineTo(X + 0.95 * h * k, Y); ctx.lineTo(X + 0.95 * h * k, Y - 0.35 * h * k); ctx.lineTo(X + 0.4 * h * k, Y - 0.35 * h * k); }
-        ctx.fillStyle = `rgb(${s.rgb})`; ctx.fill(); ctx.lineWidth = 2.2; ctx.stroke();
+        ctx.fillStyle = `rgb(${s.rgb})`; ctx.fill(); if (pat && s.seat >= 0) { ctx.fillStyle = seatPattern(ctx, s.seat, s.rgb); ctx.fill(); } ctx.lineWidth = 2.2; ctx.stroke();
         if (s.harbour) { ctx.beginPath(); ctx.arc(X, Y - 0.32 * h * k, h * 0.1, 0, 7); ctx.fillStyle = "#fdf6e4"; ctx.fill(); }
         continue;
       }
@@ -2109,7 +2144,11 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
 
   return {
     layout, get look() { return lookName; }, on(what, f) { (listeners[what] ||= []).push(f); },
-    setLook(name) { if (!LOOKS[name]) return; const a = { tilt: cam.tilt, yaw: cam.yaw, q: cam.q }; lookName = name; L = LOOKS[name]; if (still.matches) { layout({ left: cam.left, right: cam.right, top: cam.top, bottom: cam.bottom }); return; } swing = { t: performance.now(), a }; redraw(); },
+    setLook(name) { if (!LOOKS[name]) return; const a = { tilt: cam.tilt, yaw: cam.yaw, q: cam.q }; lookName = name; L = LOOKS[name]; if (calm()) { layout({ left: cam.left, right: cam.right, top: cam.top, bottom: cam.bottom }); for (const c of [under, over]) c.animate?.([{ opacity: 0.25 }, { opacity: 1 }], { duration: 180, easing: "ease-out" }); return; } swing = { t: performance.now(), a }; redraw(); },
+    /** Seat patterns over owned land, so colour is never the only sign of whose it is. */
+    patterns(on) { pat = !!on; redraw(); },
+    /** "system" (the default) follows the system's reduced-motion wish, "reduced" and "full" override it. */
+    motion(mode) { motion = mode === "reduced" || mode === "full" ? mode : "system"; redraw(); },
     setCursor(on) { under.style.cursor = on ? "pointer" : "default"; },
     /**
      * Show a position. owner[i] is a seat or -1. `order` lists cells that change first to last, so ink spreads.
@@ -2118,13 +2157,13 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     show(owner, { pieces = [], order = [], quick = false, names = null } = {}) {
       if (names) labels = names;
       const homes = new Set(pieces.filter((p) => p.kind === "tower").map((p) => p.at)), held = new Set(pieces.map((p) => p.at));
-      const t = performance.now(), slow = !quick && !still.matches, step = Math.min(90, 900 / Math.max(1, order.length)), place = new Map(order.map((c, i) => [c, i]));
+      const t = performance.now(), slow = !quick && !calm(), fade = !quick && !slow, step = Math.min(90, 900 / Math.max(1, order.length)), place = new Map(order.map((c, i) => [c, i]));
       let last = 0;
       owner.forEach((o, i) => {
         const c = show[i], to = o < 0 ? ground(i) : mix(seats[o], ground(i), rough[i] ? 0.1 : 0), tall = sea[i] ? 0.2 : homes.has(i) ? 1.5 : o < 0 ? 0.75 : 1.2;
         if (c.owner === o && c.topTo === tall) return;
-        const wait = slow && place.has(i) ? place.get(i) * step : 0, long = slow ? 320 : 1;
-        Object.assign(c, { from: c.rgb, to, topFrom: c.top, topTo: tall, start: t + wait, ends: t + wait + long, soak: slow && o >= 0 && c.owner !== o });
+        const wait = slow && place.has(i) ? place.get(i) * step : 0, long = slow ? 320 : fade ? 200 : 1; // reduced motion: all at once, a quick fade, no hop
+        Object.assign(c, { from: c.rgb, to, topFrom: slow ? c.top : tall, topTo: tall, hop: slow ? 0.5 : 0, start: t + wait, ends: t + wait + long, soak: slow && o >= 0 && c.owner !== o });
         c.owner = o;
         last = Math.max(last, wait + long);
         marks[i] = o < 0 ? null : { seat: o, seen: 1, home: held.has(i) };
@@ -2151,7 +2190,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   };
 }
 
-$x.LOOKS = LOOKS; $x.EMBLEMS = EMBLEMS; $x.emblem = emblem; $x.canDraw = canDraw; $x.createBoard = createBoard;
+$x.LOOKS = LOOKS; $x.EMBLEMS = EMBLEMS; $x.emblem = emblem; $x.seatPattern = seatPattern; $x.canDraw = canDraw; $x.createBoard = createBoard;
 return $x; })({});
 $m[18] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -2161,7 +2200,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.5.1";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "07e33584";
+const BUILD = "5a67f472";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
 return $x; })({});
@@ -2503,6 +2542,7 @@ function createTable(G) {
     board?.destroy();
     $("stage").replaceChildren();
     board = G.board(T, $("stage"));
+    board.patterns?.(settings.patterns === "on"); board.motion?.(settings.motion);
     $("look").hidden = !board.looks.length;
     place();
   }
@@ -2571,13 +2611,13 @@ function createTable(G) {
   const down = (p, s) => (G.outOf ? G.outOf(p, s) : !G.cellsOf(p, s));
   const watch = (p) => { for (let s = 0; s < T.kinds.length; s++) if (fell[s] === undefined && down(p, s)) fell[s] = p.round; };
   const still = () => settings.motion === "reduced" || (settings.motion === "system" && matchMedia("(prefers-reduced-motion: reduce)").matches);
-  /** Settings take effect at once. The board's own animations follow the system unless asked to skip them. */
+  /** Settings take effect at once. The board is told the motion choice and draws its own reduced motion. */
   function apply() {
     const h = document.documentElement;
     h.classList.toggle("still", still());
     h.classList.toggle("patterns", settings.patterns === "on");
     h.style.setProperty("--ui-scale", String(SCALE[settings.text]));
-    board?.patterns?.(settings.patterns === "on"); // the hook for a board that can draw seat patterns; none can yet
+    board?.patterns?.(settings.patterns === "on"); board?.motion?.(settings.motion);
     place();
   }
   const tally = (p) => Array.from({ length: T.kinds.length }, (_, s) => G.cellsOf(p, s));
@@ -2609,7 +2649,7 @@ function createTable(G) {
     if (!T.demo) { score(); panel(); }
     G.seen?.(T, events);
     if (!T.demo && !T.hurry && speed === "normal") cue(events);
-    const rush = T.hurry || speed === "instant", took = board.show(G.order(events), rush || settings.motion === "reduced");
+    const rush = T.hurry || speed === "instant", took = board.show(G.order(events), rush);
     if (!T.demo && !rush && words.length && (!person || T.match.turn !== seat)) toast(words.slice(0, 2).join(" "));
     if (T.human()) T.hurry = false;
     await sleep(T.hurry || speed === "instant" ? 0 : T.demo ? Math.max(G.pace(T.match.position), took + 120) : speed === "fast" ? Math.max(90, took / 2) : Math.max(160, took + 60));
@@ -2936,7 +2976,7 @@ function createTable(G) {
     row("Motion", ...bind("motion"), CHOICES.motion);
     if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
     row("Seat patterns", ...bind("patterns"), CHOICES.patterns);
-    box.append(el("p", "Patterns show on the score bar. The board does not draw them yet.", "about"));
+    box.append(el("p", "Patterns show on the board and the score bar.", "about"));
     row("Text size", ...bind("text"), CHOICES.text);
     return box;
   }
@@ -3096,11 +3136,23 @@ $m[22] = (($x) => {
 const { LOOKS, canDraw, createBoard } = $m[13];
 const { ICONS, RGB } = $m[12];
 
+/** The seats' patterns for the still board, the same six as on the moving board and the score bar: /, dots, |, x, \, -. */
+function patterns(make, f) {
+  const defs = make("defs", {}), ink = "rgba(16,12,10,.45)", line = (d, w) => make("path", { d, stroke: ink, "stroke-width": w, fill: "none" });
+  [["M0 8L8 0M-2 2L2-2M6 10L10 6"], [], ["M4 0V8"], ["M0 8L8 0M0 0L8 8"], ["M0 0L8 8M-2 6L2 10M6-2L10 2"], ["M0 4H8"]].forEach((paths, k) => {
+    const p = make("pattern", { id: `seat-${k}`, width: 8, height: 8, patternUnits: "userSpaceOnUse", patternTransform: `scale(${f})` }); // about 8 screen pixels
+    if (k === 1) p.append(make("circle", { cx: 4, cy: 4, r: 1.6, fill: ink }));
+    for (const d of paths) p.append(line(d, 1.5));
+    defs.append(p);
+  });
+  return defs;
+}
+
 /**
  * o.picture and o.fine { cells, of } for a board of provinces. Otherwise o: cells (axial), rough[], sea[], ground(i), owner() -> seats or -1 by cell, pieces() -> standing pieces, tap(i), can(i).
  */
 function hexBoard(T, stage, o) {
-  let b = null, svg = null;
+  let b = null, svg = null, pat = false;
   const wide = innerWidth > 820, kept = T.read();
   const still = () => {
     const list = o.fine ? o.fine.cells : o.cells, big = Math.max(...list.map(([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)))) + 2;
@@ -3108,18 +3160,21 @@ function hexBoard(T, stage, o) {
     const xs = list.map(([q, r]) => W * (q + r / 2)), ys = list.map(([, r]) => S * 1.5 * r), x0 = Math.min(...xs) - W, y0 = Math.min(...ys) - S * 1.5; // the board's own extent, with a margin
     svg = make("svg", { viewBox: o.fine ? `${-W * big} ${-S * 1.6 * big} ${W * 2 * big} ${S * 3.2 * big}` : `${x0} ${y0} ${Math.max(...xs) + W - x0} ${Math.max(...ys) + S * 1.5 - y0}` });
     const where = new Map(o.pieces().map((p) => [p.at, p]));
-    const words = [];
+    if (pat) svg.append(patterns(make, svg.viewBox.baseVal.width / Math.max(240, stage.clientWidth)));
+    const words = [], laid = [];
     list.forEach(([q, r], k) => {
       const i = o.fine ? o.fine.of[k] : k, x = W * (q + r / 2), y = S * 1.5 * r;
       if (i < 0) return;
       const s = owner[i], p = !o.fine || o.fine.mid[i] === k ? where.get(i) : null, rim = o.fine && s >= 0 ? `rgb(${RGB[s]})` : o.fine ? `rgb(${o.ground(i)})` : "#12171a";
       const g = make("polygon", { points: [0, 1, 2, 3, 4, 5].map((k) => { const a = (Math.PI / 180) * (60 * k - 90); return `${x + S * Math.cos(a)},${y + S * Math.sin(a)}`; }).join(" "), fill: `rgb(${s < 0 ? o.ground(i) : RGB[s]})`, stroke: rim, "stroke-width": 2 });
+      const over = pat && s >= 0 ? make("polygon", { points: g.getAttribute("points"), fill: `url(#seat-${s % 6})`, "pointer-events": "none" }) : null;
       g.addEventListener("click", () => o.tap(i));
       svg.append(g);
+      if (over) laid.push(over);
       const text = p ? (p.kind === "army" ? String(p.count) : p.kind === "tower" ? `${p.count}⌂` : "▲".repeat(p.rank)) : o.fine ? "" : s >= 0 ? String(s + 1) : o.rough[i] ? "∧" : "";
       if (text) { const t = make("text", { x, y: y + 6, "text-anchor": "middle", "font-size": o.fine ? 40 : p ? 15 : 14, "font-weight": 700, fill: "#12171a", "pointer-events": "none" }); t.textContent = p && p.kind === "army" && p.seat >= 0 ? `${"◆●■★▲♥"[p.seat]}${text}` : text; words.push(t); }
     });
-    svg.append(...words);
+    svg.append(...laid, ...words);
     stage.replaceChildren(svg);
   };
   if (canDraw()) {
@@ -3134,6 +3189,8 @@ function hexBoard(T, stage, o) {
     get looks() { return b ? Object.entries(LOOKS).map(([k, v]) => [k, v.name]) : []; },
     get look() { return b?.look; },
     setLook: (k) => b?.setLook(k),
+    patterns(on) { pat = !!on; if (b) b.patterns(pat); else if (svg) still(); },
+    motion: (mode) => b?.motion(mode),
     layout: (free) => b?.layout(free),
     show(order, quick) { if (b) return b.show(o.owner(), { pieces: o.pieces(), order, quick, names: o.names?.() }); still(); return 0; },
     light: (cells, chosen) => b?.preview(cells, chosen),
@@ -3259,7 +3316,7 @@ createTable({
           if (q.port[at] !== NONE) out.push({ kind: "port", at, good: q.port[at] });
           if (l && q.good[at] !== WASTE) out.push({ kind: "token", at, n: q.num[at], hot: BUSY[q.rule.roll].includes(q.num[at]), lit: q.lit.includes(at) }); // lit: it yielded on the last roll
           if (q.route[at].length) out.push({ kind: "route", at, seats: q.route[at].map((s) => RGB[s]) });
-          if (q.depot[at] !== NONE) out.push({ kind: q.town[at] ? "town" : "depot", at, rgb: RGB[q.depot[at]], harbour: !!q.harbour[at] });
+          if (q.depot[at] !== NONE) out.push({ kind: q.town[at] ? "town" : "depot", at, seat: q.depot[at], rgb: RGB[q.depot[at]], harbour: !!q.harbour[at] });
         });
         if (q.gate !== NONE) out.push({ kind: "gate", at: q.gate });
         return out;

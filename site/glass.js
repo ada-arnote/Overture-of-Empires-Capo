@@ -112,7 +112,7 @@ createTable({
           if (q.port[at] !== NONE) out.push({ kind: "port", at, good: q.port[at] });
           if (l && q.good[at] !== WASTE) out.push({ kind: "token", at, n: q.num[at], hot: BUSY[q.rule.roll].includes(q.num[at]), lit: q.lit.includes(at) }); // lit: it yielded on the last roll
           if (q.route[at].length) out.push({ kind: "route", at, seats: q.route[at].map((s) => RGB[s]) });
-          if (q.depot[at] !== NONE) out.push({ kind: q.town[at] ? "town" : "depot", at, rgb: RGB[q.depot[at]], harbour: !!q.harbour[at] });
+          if (q.depot[at] !== NONE) out.push({ kind: q.town[at] ? "town" : "depot", at, seat: q.depot[at], rgb: RGB[q.depot[at]], harbour: !!q.harbour[at] });
         });
         if (q.gate !== NONE) out.push({ kind: "gate", at: q.gate });
         return out;

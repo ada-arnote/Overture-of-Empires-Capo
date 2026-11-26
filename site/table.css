@@ -181,11 +181,14 @@ a.quiet { display: flex; align-items: center; justify-content: center; text-alig
 
 /* seat patterns on the score bar, for telling seats apart without colour */
 .patterns #land { height: 14px }
-.patterns #fills i:nth-child(6n+2) { background-image: repeating-linear-gradient(45deg, var(--pattern) 0 2px, transparent 2px 6px) }
-.patterns #fills i:nth-child(6n+3) { background-image: radial-gradient(var(--pattern) 1.3px, transparent 1.7px); background-size: 5px 5px }
-.patterns #fills i:nth-child(6n+4) { background-image: repeating-linear-gradient(90deg, var(--pattern) 0 2px, transparent 2px 5px) }
-.patterns #fills i:nth-child(6n+5) { background-image: repeating-linear-gradient(-45deg, var(--pattern) 0 2px, transparent 2px 6px), repeating-linear-gradient(45deg, var(--pattern) 0 2px, transparent 2px 6px) }
-.patterns #fills i:nth-child(6n) { background-image: repeating-linear-gradient(0deg, var(--pattern) 0 2px, transparent 2px 5px) }
+.patterns #fills i { position: relative } .patterns #fills i::after { content: ""; position: absolute; inset: 0 } /* over the seat colour, which is set on the element itself */
+/* the same six as on the board (src/map/paint.js): /, dots, |, x, \, - */
+.patterns #fills i:nth-child(6n+1)::after { background-image: repeating-linear-gradient(135deg, var(--pattern) 0 2px, transparent 2px 6px) }
+.patterns #fills i:nth-child(6n+2)::after { background-image: radial-gradient(var(--pattern) 1.3px, transparent 1.7px); background-size: 5px 5px }
+.patterns #fills i:nth-child(6n+3)::after { background-image: repeating-linear-gradient(90deg, var(--pattern) 0 2px, transparent 2px 5px) }
+.patterns #fills i:nth-child(6n+4)::after { background-image: repeating-linear-gradient(-45deg, var(--pattern) 0 2px, transparent 2px 6px), repeating-linear-gradient(45deg, var(--pattern) 0 2px, transparent 2px 6px) }
+.patterns #fills i:nth-child(6n+5)::after { background-image: repeating-linear-gradient(45deg, var(--pattern) 0 2px, transparent 2px 6px) }
+.patterns #fills i:nth-child(6n)::after { background-image: repeating-linear-gradient(0deg, var(--pattern) 0 2px, transparent 2px 5px) }
 
 /* a phone: the tray folds to a handle with the main action still showing, the seats are one line, the board has the rest */
 .tray { display: none }
