@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // An Inch of Ink (working name). Each seat has one pool of strength. On your turn land cut off from
 // your home falls, your pool grows, and you pour part of it over a border, or wait.
-// That is the turn duel (Capo, and Custom on turns). Traditional ("classic") is the real-time game in live.js, with inks, places and ages.
+// That is the turn duel, played under Custom with the clock on turns. Traditional ("classic") and Capo ("ours", The Ink Dries) are
+// the real-time games in live.js.
 import { hexBoard, joined } from "../hex.js";
 import { canon, chance, seedState } from "../../core/index.js";
 import { LIVE_MAPS, PLACE_RATE, liveAllows, liveApply, liveBoardOf, liveMoves, liveSetup } from "./live.js";
@@ -10,22 +11,17 @@ const roller = (text) => chance(seedState(text));
 export const liveBoardFor = (p) => liveBoardOf(p, roller);
 
 export const NONE = -1;
-const START = 6, WALL = 1, HOME_WALL = 3, SURROUND = 4, LONG = 40;
+const START = 6, WALL = 1, HOME_WALL = 3, SURROUND = 4;
 const SHARES = { quarter: (p) => Math.floor(p / 4), third: (p) => Math.floor(p / 3), half: (p) => Math.floor(p / 2), most: (p) => Math.floor((p * 3) / 4), all: (p) => p };
-/** What the rule sets set. Custom takes each of these as it is given. */
+/** The turn duel's switches, under Custom. Each is taken as it is given; the normal ones are the duel Capo used to be. */
 export const SWITCHES = {
-  size: { values: [4, 5], normal: 5 }, cut: { values: [false, true], normal: false }, walls: { values: [false, true], normal: false },
-  shares: { values: ["four", "three"], normal: "four" }, growth: { values: ["rising", "saving"], normal: "rising" }, goal: { values: [45, 55, 60, 70], normal: 60 },
-  drawn: { values: [false, true], normal: true }, limit: { values: [10, 16, 20, 40], normal: 40 }, live: { values: [false, true], normal: false },
+  size: { values: [4, 5], normal: 4 }, cut: { values: [false, true], normal: true }, walls: { values: [false, true], normal: true },
+  shares: { values: ["four", "three"], normal: "three" }, growth: { values: ["rising", "saving"], normal: "saving" }, goal: { values: [45, 55, 60, 70], normal: 55 },
+  drawn: { values: [false, true], normal: false }, limit: { values: [10, 16, 20, 40], normal: 16 }, live: { values: [false, true], normal: false },
 };
 /** Real time in Custom: how inks are given, how many places, the ages with their marks and cards, and the easing goal. Traditional has them all. */
 export const LIVE_SWITCHES = { inks: { values: ["chosen", "drawn", "off"], normal: "chosen" }, places: { values: Object.keys(PLACE_RATE), normal: "normal" }, ages: { values: [false, true], normal: true }, ease: { values: [false, true], normal: true } };
-const SETS = {
-  classic: (o) => ({ size: 5, cut: false, walls: false, shares: "four", growth: "rising", goal: CLASSIC_PERCENT[o.seats], drawn: o.seats > 2, limit: LONG }),
-  ours: (o) => ({ size: 4, cut: true, walls: true, shares: "three", growth: "saving", goal: WIN_PERCENT[o.seats], drawn: false, limit: o.rounds }),
-};
 export const sharesOf = (p) => (p.rule.shares === "four" ? ["quarter", "half", "most", "all"] : ["third", "half", "all"]);
-const WIN_PERCENT = { 2: 55, 3: 45 }, CLASSIC_PERCENT = { 2: 60, 3: 55 };
 
 export const boardOf = (p) => hexBoard(p.rule.size);
 export const cellsOf = (p, seat) => p.owner.reduce((n, o) => n + (o === seat ? 1 : 0), 0);
@@ -136,12 +132,12 @@ function advance(p, events, dice) {
 }
 
 export const inch = {
-  id: "inch", version: "7",
-  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, rivals: { values: ["gentle", "even", "hard"], normal: "gentle" }, time: { values: [600, 800, 1800, 0], normal: 1800 }, ...LIVE_SWITCHES, ...SWITCHES },
+  id: "inch", version: "8",
+  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, rivals: { values: ["gentle", "even", "hard"], normal: "gentle" }, time: { values: [600, 800, 1800, 0], normal: 1800 }, ...LIVE_SWITCHES, ...SWITCHES },
 
   setup(o, dice) {
-    if (o.style === "classic" || (o.style === "custom" && o.live)) return liveSetup(o, dice, roller);
-    const classic = o.style !== "ours", rule = SETS[o.style] ? SETS[o.style](o) : Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]])), b = hexBoard(rule.size), homes = dice.shuffle(o.seats === 2 ? [b.corners[0], b.corners[3]] : [b.corners[0], b.corners[2], b.corners[4]]);
+    if (o.style !== "custom" || o.live) return liveSetup(o, dice, roller);
+    const classic = false, rule = Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]])), b = hexBoard(rule.size), homes = dice.shuffle(o.seats === 2 ? [b.corners[0], b.corners[3]] : [b.corners[0], b.corners[2], b.corners[4]]);
     const cost = b.cells.map(() => (dice.below(4) === 0 ? 2 : 1)), owner = Array(b.size).fill(NONE);
     homes.forEach((h, s) => { cost[h] = 1; owner[h] = s; });
     const p = { classic, style: o.style, rule, owner, cost, order: dice.shuffle(b.cells.map((_, i) => i)), pool: Array(o.seats).fill(START), home: homes, turns: Array.from({ length: o.seats }, (_, s) => s), seat: 0, step: 0, round: 1, rounds: rule.limit, over: null };

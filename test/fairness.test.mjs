@@ -43,7 +43,8 @@ test(`An Inch of Ink, real time: ${LIVE} bot games all end`, (t) => {
   }
   t.diagnostic(`inch real time: ${JSON.stringify(Object.fromEntries(wins))}`);
 });
-const DUELS = SLOW ? ["ours", "custom"] : ["ours"], duelTier = (style) => (SLOW && style === "ours" ? "normal" : "easy");
+// The turn duel is played under Custom on turns, with its normal switches (the duel Capo used to be); Capo is now real time
+const DUELS = ["custom"], duelTier = () => (SLOW ? "normal" : "easy");
 test(`An Inch of Ink, turn duel on the rules alone: ${GAMES} bot games at 2 and 3 seats all end`, (t) => {
   // Played without a match, because a match refuses the duel's pours (see the skipped tests in inch.test.mjs).
   series(t, "inch duel", (style, seats, seed) => {
@@ -52,6 +53,6 @@ test(`An Inch of Ink, turn duel on the rules alone: ${GAMES} bot games at 2 and 
     return r.over;
   }, DUELS);
 });
-test(`An Inch of Ink, turn duel through a match: ${GAMES} bot games at 2 and 3 seats all end`, { skip: refusedListed(inch, { style: "ours", seats: 2 }) && "BUG in src/games/inch/rules.js: inch.allows depends on key order, so a match refuses every pour of the turn duel (see inch.test.mjs)" }, (t) => {
+test(`An Inch of Ink, turn duel through a match: ${GAMES} bot games at 2 and 3 seats all end`, { skip: refusedListed(inch, { style: "custom", seats: 2 }) && "BUG in src/games/inch/rules.js: inch.allows depends on key order, so a match refuses every pour of the turn duel (see inch.test.mjs)" }, (t) => {
   series(t, "inch duel", (style, seats, seed) => byMatch(inch, inchBot, duelTier(style))(style, seats, seed), DUELS);
 });
