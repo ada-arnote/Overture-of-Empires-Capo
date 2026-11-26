@@ -64,8 +64,8 @@ export function page(html, css, js, home = "", fetches = false) {
 if (process.argv[1]?.endsWith("bundle.mjs")) {
   const at = (f) => readFileSync(path.join(root, "site", f), "utf8"), out = path.join(root, "dist");
   mkdirSync(out, { recursive: true });
-  for (const name of ["inch", "fable", "banners", "glass", "capo", "world"]) {
-    const fetches = ["capo", "world"].includes(name), js = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`, text = page(at(`${name}.html`), at("table.css"), js, "", fetches);
+  for (const name of ["inch", "fable", "banners", "glass", "capo", "world", "game"]) {
+    const fetches = ["capo", "world", "game"].includes(name), js = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`, text = page(at(`${name}.html`), at("table.css"), js, "", fetches);
     mkdirSync(path.join(root, "play"), { recursive: true });
     writeFileSync(path.join(root, "play", `${name}.html`), page(at(`${name}.html`), at("table.css"), js, "../site/", fetches));
     writeFileSync(path.join(out, `play-${name}.html`), text);
