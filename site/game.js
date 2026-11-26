@@ -22,6 +22,8 @@ import { aiPanel, ask, loadRoute, pasteBox as pastePanel, waitBox, watch } from 
 import { fold, sampleReply, unfold } from "../src/story/replyform.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
 import { guard } from "./guard.js";
+// features hook: the country sheet, crises, ambitions, the Turns tab (site/realm.js)
+import { NOTE, demandBox, keepMore, notices, realmSheet, stateColour, turnsTab } from "./realm.js";
 
 const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);
@@ -58,7 +60,7 @@ const save = () => {
   catch { if (!saveFailed) toast("This browser would not keep the game; it may be full. Use Game, then Save to a file."); saveFailed = true; }
 };
 const load = () => { try { return JSON.parse(localStorage.getItem(KEEP) || "null"); } catch { return null; } };
-const checkSave = (s) => checkSaveOf(s, (id) => world.provinces.has(id), (c) => onMap.has(c) || homes.has(c));
+const checkSave = (s) => keepMore(checkSaveOf(s, (id) => world.provinces.has(id), (c) => onMap.has(c) || homes.has(c)), (id) => world.provinces.has(id), (c) => onMap.has(c) || homes.has(c) || s?.custom?.code === c); // features hook: keepMore
 const keptPast = keptRecords;
 /** Move focus to a heading (or a control), so a keyboard or a screen reader is where the screen now is. */
 const land = (e) => { if (!e) return; if (e.tabIndex < 0) e.tabIndex = -1; e.focus({ preventScroll: true }); };
@@ -214,9 +216,13 @@ function geo() {
     name, all: ids, place: (id) => world.provinces.get(id), owner: ownerOf, neighbours: (id) => world.neighbours.get(id), across: (id) => world.across.get(id), coastal: (id) => world.coast.has(id),
     home: (c) => homes.get(c)?.id, holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c, hasCoast: (c) => held(c).some((id) => world.coast.has(id)), might: (c) => (state || scen())?.might?.[c],
     claims: (id, c) => (claimsOf.get(id) || []).some((d) => d.claimants.includes(c) && ownerOf(id) !== c),
+    claimed: () => [...claimsOf].flatMap(([id, ds]) => [...new Set(ds.flatMap((d) => d.claimants))].filter((c) => homes.has(c) && ownerOf(id) !== c).map((c) => [id, c])), // features hook: disputed land, as [province, claimant]
     find: (s) => { const k = String(s || "").trim(); if (world.provinces.has(k)) return k; const low = k.toLowerCase(), hits = [...world.provinces.values()].filter((p) => p.name.toLowerCase() === low); return hits.length === 1 ? hits[0].id : null; },
   };
 }
+
+// features hook: what site/realm.js borrows from this page
+const X = { g: () => state, geo, name, near: () => [...landNeighbours(state.player), ...seaNeighbours(state.player)], el, button, fmtDate, save: () => save(), toast, open, act: (t) => { state.actions = [...(state.actions || []), t]; save(); toast("Ordered: it is in your actions."); if (sheet === "actions") open("actions"); } };
 
 /** The way back to every game, when this page has one (the double-click copy does not). */
 function home() {
@@ -229,6 +235,7 @@ function home() {
 const RELATION = { you: "#d3dbe4", alliance: "#4f9a6b", defence: "#5fa08a", trade: "#4a7fa8", war: "#c9553f", none: "#4b5354" };
 function viewColour(code) {
   if (!state || view === "countries") return colourOf(code);
+  if (view === "state") return stateColour(state, code); // features hook
   if (view === "might") { const m = mightOf(geo(), code); return `hsl(${40 - m * 4} ${30 + m * 5}% ${20 + m * 5}%)`; }
   if (code === state.player) return RELATION.you;
   if (warsOf(state, state.player).includes(code)) return RELATION.war;
@@ -453,6 +460,7 @@ function begin() {
 function play() {
   stage();
   $("top").hidden = false; $("dock").hidden = false;
+  if (state.told) setTimeout(() => state?.told && toast(NOTE), 3600); // features hook: a converted game says so
   map.redraw(); showCountry(state.player);
   topBar(); dock();
 }
@@ -460,7 +468,7 @@ function play() {
 function topBar() {
   const top = $("top"), who = el("button", undefined, "who"), chip = el("span", undefined, "chip");
   chip.style.background = colourOf(state.player) || ownerColour(state.player);
-  who.append(chip, state.character?.name && state.mode !== "nation" ? `${state.character.name}, ${name(state.player)}` : name(state.player)); who.onclick = () => showCountry(state.player);
+  who.append(chip, state.character?.name && state.mode !== "nation" ? `${state.character.name}, ${name(state.player)}` : name(state.player)); who.onclick = () => { showCountry(state.player); open(sheet === "realm" ? null : "realm"); }; who.title = "Your country: its state, your ambition, crises"; // features hook
   const jumpPick = el("select", undefined, "plain");
   jumpPick.append(...JUMPS.map(([k, t]) => new Option(t, k))); jumpPick.value = jump.key; jumpPick.onchange = () => { jump = { ...jump, key: jumpPick.value }; topBar(); };
   jumpPick.setAttribute("aria-label", "How far to jump");
@@ -497,7 +505,8 @@ function open(which) {
   if (!which) { box.classList.remove("open"); land(was === "game" ? $("top").querySelector("button[aria-label^=Game]") : $("dock").children[DOCK.findIndex(([k]) => k === was)]); return; }
   if (which === "ledger" && state.seen !== state.turn) { state.seen = state.turn; save(); dock(); }
   box.replaceChildren();
-  ({ actions, chats, ledger, advisors, master, game: gameSheet }[which])(box);
+  ({ actions, chats, ledger, advisors, master, game: gameSheet, realm: (b) => realmSheet(b, X) }[which])(box); // features hook: realm
+  if (which === "actions") box.prepend(...notices(X)); // features hook: a converted game's note, a demand on you, the ambition nudge
   const head = el("div", undefined, "head"), title = box.querySelector("h2"), shut = button("", () => open(null), "ic");
   shut.append(icon("close")); shut.setAttribute("aria-label", "Close");
   head.append(title || el("h2", ""), shut); box.prepend(head);
@@ -617,6 +626,7 @@ function ledger(box) {
   const tabs = el("div", undefined, "row");
   for (const [k, t] of [["events", "Events"], ["news", "News"], ["world", "World"], ["log", "Chronicle"], ["people", "People"]]) { const b = button(t, () => { ledgerTab = k; open("ledger"); }); b.setAttribute("aria-pressed", String(ledgerTab === k)); tabs.append(b); }
   box.append(el("h2", "Ledger"), tabs);
+  { const b = button("Turns", () => { ledgerTab = "turns"; open("ledger"); }); b.setAttribute("aria-pressed", String(ledgerTab === "turns")); tabs.append(b); if (ledgerTab === "turns") { turnsTab(box, X); return; } } // features hook: every past turn in full
   const last = state.log[state.log.length - 1];
   if (ledgerTab === "world") { worldTab(box); return; }
   if (ledgerTab === "people") { peopleTab(box); return; }
@@ -998,6 +1008,7 @@ function card(p) {
   const rows = [el("h2", p.name), ...(p.disputes || []).map((a) => el("p", `${{ disputed: "Disputed", breakaway: "Breakaway", unsettled: "Unsettled" }[a.kind]}: ${a.name}. ${a.note}`, "warn")), el("p", `${name(owner)}${owner !== p.country ? `, taken from ${name(p.country)}` : ""}.${wars.length ? ` At war with ${wars.map(name).join(", ")}.` : ""}${pacts.length ? ` Treaties: ${pacts.map((x) => `${name(x.with)} (${x.kind})`).join(", ")}.` : ""}${state ? ` Its ${strengthLine(strength(state, geo(), owner))}.` : ""}`, "note"), el("p", near.children.length ? "Borders by land:" : "No land borders.", "note"), near, ...(over.children.length ? [el("p", "Across a narrow sea:", "note"), over] : [])];
   if (state && owner !== state.player) rows.push(el("div", undefined, "row")), rows[rows.length - 1].append(button(`Talk to ${name(owner)}`, () => open("chats")));
   if (state && state.mode !== "citizen" && owner !== state.player) rows.push(warsOf(state, state.player).includes(owner) ? attackBox(p) : treatyBox(owner));
+  { const d = state && demandBox(p, X); if (d) rows.push(d); } // features hook
   box.replaceChildren(...rows);
   box.style.display = "block";
   picked = p.id;

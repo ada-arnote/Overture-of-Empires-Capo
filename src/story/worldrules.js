@@ -3,6 +3,8 @@
 // Land, wars and treaties change only here. Attacks are settled by the check (check.js): might, a commander, odds out of 100.
 // A country asked for a treaty answers by rule, with its reasons (relations.js); so does one asked for peace (war.js).
 import { draw100 } from "./line.js";
+// features hook: revolt and an empty treasury stop a war or an attack
+import { barred } from "./state.js";
 import { chanceOf, check, checkLine } from "./check.js";
 import { relate, relationLines, treatyAnswer, treatyName } from "./relations.js";
 import { countTaken, endWar, mightOf, peaceAnswer, strengthOf, truceUntil } from "./war.js";
@@ -45,6 +47,7 @@ export function applyMoves(g, moves, geo, actions, months) {
       used[m.action] = (used[m.action] || 0) + 1;
       if (used[m.action] > 3) { say(m, false, `more than three moves from action ${m.action} are not allowed`); continue; }
     } else if (++rivals > 6) { say(m, false, "more than six moves by other countries in one turn are not allowed"); continue; }
+    if (barred(g, m)) { say(m, false, barred(g, m)); continue; } // features hook
     const staller = isMe ? stalledBy(g, m, receipt.length) : null;
     if (staller) { say(m, false, `${verb.toLowerCase()} held back: ${staller.name} (favour ${staller.favour}), who opposes it, stalled the order this turn`); continue; }
     const r = ({ WAR: war, PEACE: peace, TREATY: treaty, BREAK: unbind, ATTACK: attack, GIVE: give })[verb](g, m, geo, { isMe, attacks, months, spent });
