@@ -2,6 +2,17 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased: alternate histories
+
+**Players**
+- **Capo: alternate histories.** Step 1 of a new story now offers six worlds where one turn of history went another way, each on the real map with its own borders, countries, treaties and disputed land: The Kaiser's Peace (1936, the Great War ended on Berlin's terms), The Imperial Federation (Britain, Ireland, Canada, Australia and New Zealand as one state), Two Chinas (the civil war stopped at the Yangtze), The Union Treaty (1996, nine republics still one Union), The Four Quarters (the Andes were never conquered) and The European Federation (ten countries of western Europe as one). Choosing one shows its premise, the point where history turned and how it is balanced, and the map behind the panel changes to match.
+- Every alternate history is labelled fiction. Leaders appear as offices, never as real people, and the AI is told each turn that the world is invented, where it turned, which countries differ and which do not exist, and to keep to the year it is set in.
+- A game in an alternate world saves, reloads, takes back and can be saved as a scenario file like any other. A province there is "taken from" someone only when it changes hands in your story.
+- The turn prompt now always names your own treaties before your neighbours' when there are more than twelve to list.
+
+**Contributors**
+- `src/story/presets.js` is the one list of presets (`PRESETS`, `KINDS`): one import and one spread for each lane. `src/story/althist.js` holds the six alternate histories as scenario-shaped entries with an `overlay`; `src/story/overlay.js` lays an overlay over `maps/world.json` (whole countries merged, single provinces given, countries renamed or made, disputes dropped and added), checks the `alt` part of a scenario or a save, and puts a world's borders and names under the loaded map (`rebase`). A game in an alternate world carries `alt` and `base`; take-back records leave `base` out. No new map file and no download. `src/story` is about 46 of its 60 kB.
+
 ## Unreleased: worlds
 
 **Players**

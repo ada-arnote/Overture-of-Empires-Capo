@@ -9,6 +9,7 @@ import { chronicleFrom } from "./chronicle.js";
 import { keepMemory } from "./people.js";
 // presets hook: a game may be played on an invented world
 import { worldRef } from "./settings.js";
+import { checkAlt } from "./overlay.js";
 
 // Older games are converted, never refused: nothing they hold needs the old rule, their turns keep the receipts
 // they had, and every attack from the next turn on is made under these rules.
@@ -39,22 +40,25 @@ const keepChron = (c) => (c && typeof c === "object" && Array.isArray(c.eras) &&
  */
 export function checkSave(s, isProvince, isCountry) {
   if (!s || typeof s !== "object" || s.v !== 1 || typeof s.player !== "string" || (s.world && !worldRef(s.world))) return null;
-  if (!(isCountry(s.player) || s.custom?.code === s.player) || !MODES[s.mode]) return null;
+  if (!(isCountry(s.player) || s.custom?.code === s.player || (s.alt?.lands && Object.hasOwn(s.alt.lands, s.player))) || !MODES[s.mode]) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s.date || "") || !Number.isInteger(s.turn) || s.turn < 1 || typeof s.seed !== "string") return null;
-  const known = (c) => isCountry(c) || c === s.custom?.code, list = (v) => (Array.isArray(v) ? v : []);
+  // a game in a world of its own (an alternate history) keeps that world and the borders it began from
+  const alt = checkAlt(s.alt, isCountry, isProvince), fits = ([id, c]) => isProvince(id) && known(c);
+  const known = (c) => isCountry(c) || c === s.custom?.code || (!!alt && Object.hasOwn(alt.lands, c)), list = (v) => (Array.isArray(v) ? v : []);
   const owners = Object.fromEntries(Object.entries(s.owners && typeof s.owners === "object" ? s.owners : {}).filter(([id, c]) => isProvince(id) && known(c)));
   const council = s.council && typeof s.council === "object" && s.council.seats && typeof s.council.seats === "object" ? { trusted: null, ...s.council, former: list(s.council.former) } : null;
   const log = list(s.log).filter((t) => t && typeof t === "object"), word = Object.fromEntries(Object.entries(s.word && typeof s.word === "object" ? s.word : {}).filter(([c, d]) => known(c) && DATE.test(d || "")));
   const dated = (v) => Object.fromEntries(Object.entries(v && typeof v === "object" ? v : {}).filter(([p, d]) => pairOk(p, known) && DATE.test(d || "")));
   const land = (v) => (v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([id, c]) => isProvince(id) && known(c))) : null);
   const offers = list(s.offers).filter((o, i, all) => o && known(o.from) && typeof o.kind === "string" && DATE.test(o.date || "") && all.findIndex((x) => x && x.from === o.from && x.kind === o.kind) === i);
-  return mendGame({ ...s, ...(s.world ? { world: worldRef(s.world) } : {}), owners, log, wars: list(s.wars), treaties: list(s.treaties), offers, chats: list(s.chats), counsel: list(s.counsel), facts: list(s.facts), edits: list(s.edits), council, actions: list(s.actions).filter((a) => typeof a === "string"), orders: keepOrders(s.orders, isProvince, known),
-    rel: keepRel(s.rel, known), word, truce: dated(s.truce), ...keepMemory(s, known), start: land(s.start) || startOf({ ...s, owners }), branch: Number.isInteger(s.branch) && s.branch > 0 ? s.branch : 0, chron: keepChron(s.chron) || chronicleFrom(log, s.turn) });
+  return mendGame({ ...s, ...(s.world ? { world: worldRef(s.world) } : {}), ...(alt ? { alt, base: Object.fromEntries(Object.entries(s.base && typeof s.base === "object" ? s.base : {}).filter(fits)) } : { alt: undefined, base: undefined }), owners, log, wars: list(s.wars), treaties: list(s.treaties), offers, chats: list(s.chats), counsel: list(s.counsel), facts: list(s.facts), edits: list(s.edits), council, actions: list(s.actions).filter((a) => typeof a === "string"), orders: keepOrders(s.orders, isProvince, known),
+    rel: keepRel(s.rel, known), word, truce: dated(s.truce), ...keepMemory(s, known), start: land(s.start) || startOf({ ...s, owners: { ...(alt && s.base && typeof s.base === "object" ? Object.fromEntries(Object.entries(s.base).filter(fits)) : {}), ...owners } }), branch: Number.isInteger(s.branch) && s.branch > 0 ? s.branch : 0, chron: keepChron(s.chron) || chronicleFrom(log, s.turn) });
 }
 
 // A take-back record is the game without its log (the log only grows; the record keeps its length), so twenty of
 // them cost about what one whole copy used to. Each says what it takes back.
-export const snapGame = (g, why) => { const { log, ...rest } = g; return { ...structuredClone(rest), logLength: log.length, why }; };
+// Nor does it carry the borders an alternate world began from: they never change, so the game in hand lends them back.
+export const snapGame = (g, why) => { const { log, base, ...rest } = g; void base; return { ...structuredClone(rest), logLength: log.length, why }; };
 /** The game a record stands for, given the log as it is now. */
 // The log keeps at most sixty turns, so its length alone cannot say where a record ends: turns carry their number.
 export const restoreGame = (rec, log) => { const { logLength, why, ...rest } = rec; void why; return mendGame({ ...rest, log: log.every((t) => t.turn) ? log.filter((t) => t.turn < rest.turn) : log.slice(0, logLength) }); };
@@ -65,7 +69,7 @@ export const restoreGame = (rec, log) => { const { logLength, why, ...rest } = r
  */
 export function takeBack(g, rec) {
   const back = restoreGame(rec, g.log), settled = g.log.some((t) => !back.log.includes(t) && (t.receipt || []).some((x) => x.check));
-  return { ...back, branch: (g.branch || 0) + (settled ? 1 : 0), retold: g.retold || 0 };
+  return { ...back, ...(g.base ? { base: g.base } : {}), branch: (g.branch || 0) + (settled ? 1 : 0), retold: g.retold || 0 };
 }
 /** Take-back records from a save, the malformed ones left out. */
 export const keptRecords = (k) => (Array.isArray(k?.past) ? k.past.filter((r) => r && typeof r === "object" && Number.isInteger(r.logLength)).slice(-20) : []);

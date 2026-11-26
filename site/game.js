@@ -12,6 +12,7 @@ import { factWords, factsOf } from "../src/story/chronicle.js";
 import { oddsLine, partsLine } from "../src/story/check.js";
 import { crossesLine } from "../src/story/line.js";
 import { checkSave as checkSaveOf, convertNote, keptRecords, mendGame, snapGame, takeBack } from "../src/story/saves.js";
+import { layPresets, rebase } from "../src/story/overlay.js";
 import { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacter, scenarioFrom, scenarioText } from "../src/story/scenarios.js";
 import { askPrompt, chatPrompt, councilPrompt, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
 // presets hook: ready-made starts and the worlds they are set on
@@ -57,7 +58,7 @@ const save = () => {
   catch { if (!saveFailed) toast("This browser would not keep the game; it may be full. Use Game, then Save to a file."); saveFailed = true; }
 };
 const load = () => { try { return JSON.parse(localStorage.getItem(KEEP) || "null"); } catch { return null; } };
-const checkSave = (s) => checkSaveOf(s, (id) => world.provinces.has(id), (c) => homes.has(c));
+const checkSave = (s) => checkSaveOf(s, (id) => world.provinces.has(id), (c) => onMap.has(c) || homes.has(c));
 const keptPast = keptRecords;
 /** Move focus to a heading (or a control), so a keyboard or a screen reader is where the screen now is. */
 const land = (e) => { if (!e) return; if (e.tabIndex < 0) e.tabIndex = -1; e.focus({ preventScroll: true }); };
@@ -69,7 +70,7 @@ const SHELF = "capo-scenarios-1";
 const shelf = () => { try { return JSON.parse(localStorage.getItem(SHELF) || "[]"); } catch { return []; } };
 const shelve = (list) => { try { localStorage.setItem(SHELF, JSON.stringify(list.slice(-12))); } catch { toast("This browser would not keep the scenario; it works for this visit."); } };
 // ---- presets hook: ready-made starts from src/story/presets.js, and the map each one is played on ----
-const allScenarios = () => [...SCENARIOS, ...PRESETS, ...shelf()];
+const allScenarios = () => [...SCENARIOS, ...PRESETS.filter((p) => !p.broken), ...shelf()];
 const baseScen = () => allScenarios().find((x) => x.id === draft.scenario) || SCENARIOS[0];
 const scen = () => (draft ? staged(baseScen(), draft.seeds[draft.scenario]) : null);
 let earth = null, on = null; // the real map, fetched when first needed; which world is shown now ("" is the real one)
@@ -78,8 +79,11 @@ async function enter(ref) {
   const made = ref ? madeWorld(ref) : null, key = made ? made.key : "";
   if (ref && !made) return false;
   if (key === on) return true;
+  const first = !made && !earth;
   world = made ? unpackWorld(made.data) : earth || (earth = await loadWorld("../maps/world.json", "../maps/disputes.json"));
-  on = key; index(); claimsOf.clear(); claims(); map?.world(world);
+  on = key; stagedKey = null; if (!made) rebase(world, null); index(); claimsOf.clear(); claims(); map?.world(world);
+  if (first) earthOnce(); // alternate histories: the real map's countries and disputes, and the presets laid over it, once
+  stage();
   document.querySelector(".credit").textContent = made ? "A world of our own, made from a seed" : "Made with Natural Earth";
   return true;
 }
@@ -89,18 +93,46 @@ async function choose(id, seed) {
   const s = scen(), was = on;
   if (s.custom && draft.kind === "own") draft.kind = "map";
   if (!(await enter(s.world))) toast("That world could not be made.");
-  if (on !== was) { draft.country = null; draft.own.provinces.clear(); }
+  draft.country = null; if (on !== was) draft.own.provinces.clear(); // a country in one start may not exist in the next
+  stage();
   map.refresh(); startScreen(); document.querySelector("input[name=scenario]:checked")?.focus();
 }
 // ---- end of the presets hook (its other lines are marked where they stand) ----
 const custom = () => state?.custom || (draft?.kind === "own" ? { code: ownCode(), name: draft.own.name.trim() || "Your new country", colour: draft.own.colour } : scen()?.custom || null);
 const name = (code) => (custom()?.code === code ? custom().name : world.countries[code] || code);
-const colourOf = (code) => (custom()?.code === code ? custom().colour : undefined);
+const colourOf = (code) => (custom()?.code === code ? custom().colour : (state || scen())?.alt?.lands[code]?.colour);
 const ownerOf = (id) => (state ? state.owners[id] || world.provinces.get(id).country : draft?.kind === "own" && draft.own.provinces.has(id) ? ownCode() : scen()?.owners?.[id] || world.provinces.get(id).country);
 const fmtDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 
 // the largest province of each country, where the camera goes to show it
 let homes = new Map();
+
+// ---- PRESET HOOK, alternate histories (src/story/overlay.js) ----
+// An alternate world's borders, names and disputes are put under the map whenever the scenario in hand changes, so
+// everything else on this page reads the map as it always did. onMap: the plain map's countries, for checking files.
+const onMap = new Set();
+let stagedKey = null, realAreas = [];
+/** The real map's countries and disputes as loaded, and the presets laid over it: once, when it is first entered. */
+function earthOnce() {
+  for (const c of homes.keys()) onMap.add(c);
+  realAreas = world.disputes;
+  layPresets(PRESETS, { countries: world.countries, provinces: world.provinces.values() }, (s) => { const r = checkScenario(s, (c) => onMap.has(c), (id) => world.provinces.has(id)); return r.ok && crossesLine(scenarioText(r.scenario)).length ? { ok: false, why: "refused by the hard line" } : r; });
+  for (const p of PRESETS) if (p.broken) console.warn(p.broken);
+}
+function stage() {
+  const s = state || scen(), key = state ? `g:${state.seed}` : `d:${s?.id || ""}`;
+  if (on !== "" || key === stagedKey) return; // only the real map takes an alternate history's borders
+  stagedKey = key;
+  rebase(world, s?.alt ? (state ? state.base : s.owners) : null, s?.alt?.lands);
+  const d = s?.alt?.disputes, area = (a) => {
+    const path = new Path2D(), box = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const p of a.provinces.map((id) => world.provinces.get(id))) { path.addPath(p.path); p.box.forEach((v, i) => { box[i] = i < 2 ? Math.min(box[i], v) : Math.max(box[i], v); }); }
+    return { name: a.name, kind: /^Governs itself/.test(a.note) ? "breakaway" : "disputed", note: a.note, ids: a.provinces, path, box };
+  };
+  world.disputes = [...realAreas.filter((a) => !(d && (d.drop === "all" || d.drop.includes(a.name)))), ...(d?.add || []).map(area)];
+  index(); claims(); map?.refresh();
+}
+// ---- end of the preset hook ----
 // A country's home is its largest province on its main landmass (the group of its provinces joined by land that has
 // the most of them), so France is centred on France and not on an overseas region that happens to be wide.
 function index() {
@@ -149,6 +181,7 @@ function claims() {
   const byName = new Map(Object.entries(world.countries).map(([c, n]) => [n.toLowerCase(), c]));
   const code = (s) => byName.get(s.trim().replace(/^the\s+/i, "").toLowerCase()) || [...byName].find(([n]) => n.startsWith(s.trim().toLowerCase()))?.[1];
   const probe = document.createElement("canvas").getContext("2d");
+  claimsOf.clear();
   for (const d of world.disputes || []) {
     const m = d.note.match(/Claimed by ([^.]+)/), claimants = m ? m[1].split(/\s+and\s+|,\s*/).map(code).filter(Boolean) : [];
     if (!claimants.length) continue;
@@ -156,7 +189,7 @@ function claims() {
     for (const p of world.provinces.values()) {
       const b = p.box;
       if (b[2] < x0 || b[0] > x1 || b[3] < y0 || b[1] > y1) continue;
-      if (probe.isPointInPath(d.path, p.label[0], p.label[1], "evenodd") || probe.isPointInPath(p.path, mid[0], mid[1], "evenodd")) {
+      if (d.ids ? d.ids.includes(p.id) : probe.isPointInPath(d.path, p.label[0], p.label[1], "evenodd") || probe.isPointInPath(p.path, mid[0], mid[1], "evenodd")) {
         claimsOf.set(p.id, [...(claimsOf.get(p.id) || []), { name: d.name, note: d.note, claimants }]);
       }
     }
@@ -179,7 +212,7 @@ let ids = [];
 function geo() {
   return {
     name, all: ids, place: (id) => world.provinces.get(id), owner: ownerOf, neighbours: (id) => world.neighbours.get(id), across: (id) => world.across.get(id), coastal: (id) => world.coast.has(id),
-    home: (c) => homes.get(c)?.id, holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c, hasCoast: (c) => held(c).some((id) => world.coast.has(id)), might: (c) => state?.might?.[c],
+    home: (c) => homes.get(c)?.id, holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c, hasCoast: (c) => held(c).some((id) => world.coast.has(id)), might: (c) => (state || scen())?.might?.[c],
     claims: (id, c) => (claimsOf.get(id) || []).some((d) => d.claimants.includes(c) && ownerOf(id) !== c),
     find: (s) => { const k = String(s || "").trim(); if (world.provinces.has(k)) return k; const low = k.toLowerCase(), hits = [...world.provinces.values()].filter((p) => p.name.toLowerCase() === low); return hits.length === 1 ? hits[0].id : null; },
   };
@@ -212,6 +245,7 @@ const STEPS = [["scenario", "Scenario"], ["country", "Country"], ["you", "You"],
 
 function startScreen() {
   draft = draft || { step: "scenario", scenario: SCENARIOS[0].id, kind: "map", country: null, own: { name: "", code: "", colour: PALETTE[0], history: "", provinces: new Set() }, mode: "nation", character: blankCharacter(), fill: null, seeds: {} };
+  stage();
   const box = $("start-box"), pills = el("div", undefined, "row"), at = STEPS.findIndex(([k]) => k === draft.step);
   // while picking on the map, the wizard shrinks to a bar so the map can be tapped, even on a phone
   $("start").classList.toggle("min", !!draft.picking);
@@ -242,7 +276,7 @@ function stepScenario(box) {
     if (kind !== head) list.append(el("h3", head = kind)); // presets hook: a heading for each kind of start
     Object.assign(r, { type: "radio", name: "scenario", value: s.id, checked: s.id === draft.scenario });
     r.onchange = () => choose(s.id);
-    t.append(el("b", s.title), el("small", `${s.blurb || ""}${opened ? ` From a file; starts ${fmtDate(s.start)}.` : ""}`));
+    t.append(el("b", s.title), el("small", `${s.alt ? "Fiction. " : ""}${s.blurb || ""}${opened ? ` From a file; starts ${fmtDate(s.start)}.` : ""}`));
     l.append(r, t);
     if (opened) l.append(button("Remove", () => { shelve(shelf().filter((x) => x.id !== s.id)); if (draft.scenario === s.id) return choose(SCENARIOS[0].id); startScreen(); }));
     list.append(l);
@@ -261,7 +295,10 @@ function stepScenario(box) {
   };
   const openRow = el("div", undefined, "row"); openRow.append(button("Open a scenario file", () => file.click()), file);
   for (const [title, what] of SOON) { const l = el("label"), t = el("span"); l.style.opacity = ".55"; t.append(el("b", `${title}: coming soon`), el("small", what)); l.append(t); list.append(l); }
-  box.append(el("p", "Lead a country, a leader's life or an ordinary one. You decide what to do; an AI tells what happens; the rules decide wars, borders and treaties.", "note"), el("h3", "Choose where the story starts"), list, openRow);
+  const sa = scen(), about = el("div");
+  if (sa.alt) about.append(el("h3", `${sa.title}: ${fmtDate(sa.start)}`), el("p", sa.opening, "note"), el("p", `Where history turned. ${sa.alt.turn}`, "note"), ...(sa.balance ? [el("p", `How it is balanced. ${sa.balance}`, "note")] : []),
+    el("p", "An alternate history is fiction: this world never happened and is no claim about what should have. Leaders appear as offices, and every person named is invented. The map behind this panel shows its borders.", "note"));
+  box.append(el("p", "Lead a country, a leader's life or an ordinary one. You decide what to do; an AI tells what happens; the rules decide wars, borders and treaties.", "note"), el("h3", "Choose where the story starts"), list, about, openRow);
   // presets hook: a world of our own is made from a seed, and can be made again from another
   const s = scen();
   if (s.world && !Object.keys(s.owners || {}).length) {
@@ -376,7 +413,7 @@ function stepYou(box) {
 function ownName() { return draft.kind === "own" ? draft.own.name.trim() : name(draft.country); }
 async function fillCharacter() {
   const why = youProblem(); if (why) return toast(why);
-  draft.fill = { prompt: characterPrompt(ownName() || "their country", draft.mode, draft.character, scen().world?.where) };
+  draft.fill = { prompt: characterPrompt(ownName() || "their country", draft.mode, draft.character, scen().world?.where || (scen().alt ? `an alternate history that never happened, on ${fmtDate(scen().start)}. Where history turned: ${scen().alt.turn}` : undefined)) };
   if (route.route !== "address") { startScreen(); return; }
   toast("Asking the AI...");
   try { takeCharacter(await call(draft.fill.prompt, "character")); } catch (e) { draft.fill.error = e.message; startScreen(); }
@@ -414,6 +451,7 @@ function begin() {
 
 // ---- the game ----
 function play() {
+  stage();
   $("top").hidden = false; $("dock").hidden = false;
   map.redraw(); showCountry(state.player);
   topBar(); dock();

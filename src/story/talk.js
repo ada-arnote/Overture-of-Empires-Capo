@@ -5,6 +5,7 @@ import { VERBS, commandOf } from "./worldrules.js";
 import { chronicleLines } from "./chronicle.js";
 import { relOf, relWord } from "./relations.js";
 import { crosses } from "./line.js";
+import { altLines } from "./overlay.js";
 
 export const WORDS = ["favourable", "unclear", "against"];
 // Who is in the player's circle depends on their standing (ruling 59): 5 ruling, 2 an ordinary person.
@@ -35,6 +36,7 @@ function context(g, world, codes) {
   ]);
   return [
     `- The date is ${g.date}. ${g.opening || ""}`.trim(),
+    ...altLines(g, world.size).slice(0, 2), ...(g.alt ? ["- So this is not the real present day. Leaders are offices here; anyone named is invented, never a real person."] : []),
     `- The player is ${who(g, world)}.`,
     `- Between them now: ${[...new Set(rel)].join(", ") || "no wars or treaties"}`,
     `- The story so far, oldest first${story.length ? ":" : ": nothing yet"}`, ...story.map((l) => ` ${l}`),

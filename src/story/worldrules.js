@@ -155,10 +155,10 @@ export const untick = (r, list, off) => ({ ...r, moves: r.moves.filter((_, i) =>
 /** Lines for the prompt: wars, treaties, offers, relations, land that has changed hands, and last turn's receipt. */
 export function worldFacts(g, geo, near = []) {
   // a long game has hundreds of treaties: the prompt names the player's own and those among its neighbours, enemies
-  // and partners, the newest twelve of each, and counts the rest, so the list is no longer at turn 200 than at turn 20
+  // and partners, twelve of each (the player's own before any other, then the newest), and counts the rest, so the list is no longer at turn 200 than at turn 20
   const me = g.player, close = new Set([me, ...near, ...warsOf(g, me), ...treatiesOf(g, me).map((t) => t.with)]);
   const shown = (list, say) => {
-    const hit = list.filter((x) => { const [a, b] = x.pair.split("|"); return a === me || b === me || (close.has(a) && close.has(b)); }).slice(-12);
+    const hit = list.filter((x) => { const [a, b] = x.pair.split("|"); return a === me || b === me || (close.has(a) && close.has(b)); }).sort((x, y) => x.pair.split("|").includes(me) - y.pair.split("|").includes(me)).slice(-12);
     return `${hit.map(say).join(", ") || "none"}${list.length > hit.length ? `${hit.length ? ", and" : " near the player;"} ${list.length - hit.length} more elsewhere` : ""}`;
   };
   const wars = shown(g.wars, (w) => `${w.pair.replace("|", "-")} since ${w.since}`), treaties = shown(g.treaties, (t) => `${t.pair.replace("|", "-")} ${t.kind}`);

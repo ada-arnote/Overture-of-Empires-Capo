@@ -175,7 +175,7 @@ test("a game on an invented world saves, opens and replays: the same seed and mo
 });
 
 test("a scenario saved from an invented world carries its world, and one with a bad world is refused", () => {
-  const p = staged(PRESETS[1]), w = madeWorld(p.world).data, me = w.realms[2].code, g = newWorldGame(me, "nation", "s1", { scenario: p });
+  const p = staged(PRESETS.filter((x) => x.kind === "fantasy")[1]), w = madeWorld(p.world).data, me = w.realms[2].code, g = newWorldGame(me, "nation", "s1", { scenario: p });
   g.owners[w.realms[0].home] = me;
   const file = JSON.parse(JSON.stringify(scenarioFrom(g, { title: "After the audit", blurb: "", opening: "" })));
   const r = checkScenario(file, (c) => c in w.countries, (id) => w.provinces.some((x) => x.id === id));

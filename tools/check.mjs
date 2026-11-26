@@ -11,8 +11,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const KB = 1000;
 export const LIMITS = {
   file: 250 * KB, // any one shipped file, as stored
-  code: { "src/core": 12 * KB, "src/map": 45 * KB, "src/games": 90 * KB, "src/story": 60 * KB, site: 200 * KB }, // compressed. site: 200, the owner's ruling (rulings 121, 125, 134 and 137)
-  first: 600 * KB, // everything shipped, compressed (ruling 130)
+  code: { "src/core": 12 * KB, "src/map": 45 * KB, "src/games": 90 * KB, "src/story": 90 * KB, site: 200 * KB }, // compressed. site: 200, the owner's ruling (rulings 121, 125, 134 and 137)
+  first: 700 * KB, // everything shipped, compressed (rulings 130 and 139)
   map: 300 * KB, // one map file in maps/, compressed: fetched by the page that needs it, never by the first page
   lines: { "src/map": 2400, "src/games": 6500, "src/core": 700, tools: 1000 },
   // vendored assets, apart from code (lane 7's rule of thumb); still inside the 600 kB above. Each folder holds only its own kinds, plus .txt licence texts

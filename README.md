@@ -28,7 +28,7 @@ An early build, at an unlisted address: https://ada-arnote.github.io/Overture-of
 
 **Rules for rules code** (`src/core`, `src/games`): whole numbers only, no clock, no page, no chance except the one passed in. The gate enforces this, so a game replays the same on every machine.
 
-**Fonts, icons, sounds, textures and screenshots.** Only CC0, CC BY, OFL 1.1, MIT or ISC, never made by an AI, each with a row in `CREDITS.csv`. They ship only from these folders, which the gate counts apart from code (`.woff2`, `.ogg`, `.mp3`, `.png`, `.webp` at full size, since they do not compress), all inside the 600 kB total:
+**Fonts, icons, sounds, textures and screenshots.** Only CC0, CC BY, OFL 1.1, MIT or ISC, never made by an AI, each with a row in `CREDITS.csv`. They ship only from these folders, which the gate counts apart from code (`.woff2`, `.ogg`, `.mp3`, `.png`, `.webp` at full size, since they do not compress), all inside the 700 kB total:
 
 | Folder | Holds | Budget |
 |---|---|---|
