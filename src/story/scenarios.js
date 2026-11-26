@@ -54,13 +54,15 @@ export function readCharacter(text, character) {
 }
 
 // ---- scenarios as files: a starting world anyone can save, share and open ----
+/** Written into every scenario file, so a copy passed on still says what it is. */
+export const FICTION = "Fiction: a starting point for a story game. Not news and not a forecast.";
 const LIMIT = { title: 60, blurb: 200, opening: 1000, owners: 3000, wars: 60, treaties: 120, facts: 20, fact: 400, history: 500 };
 const text = (v, n) => (typeof v === "string" ? v.trim().slice(0, n) : "");
 
 /** The world as it stands in a game, as a scenario others can start from. */
 export function scenarioFrom(g, meta) {
   return {
-    kind: "capo-scenario", v: 1, id: `own-${g.seed}-${g.turn}`,
+    kind: "capo-scenario", v: 1, id: `own-${g.seed}-${g.turn}`, fiction: FICTION, rel: Object.fromEntries(Object.entries(g.rel || {}).map(([p, r]) => [p, r[0]])),
     title: text(meta.title, LIMIT.title), blurb: text(meta.blurb, LIMIT.blurb), opening: text(meta.opening, LIMIT.opening),
     start: g.date, owners: { ...(g.base || {}), ...g.owners }, ...(g.alt ? { alt: structuredClone(g.alt) } : {}), wars: g.wars.map((w) => ({ pair: w.pair, since: w.since })), treaties: g.treaties.map((t) => ({ pair: t.pair, kind: t.kind, since: t.since })),
     facts: (g.facts || []).map((f) => ({ text: f.text })), might: { ...(g.might || {}) }, custom: g.custom ? { ...g.custom } : null, ...(g.world ? { world: g.world } : {}),
@@ -91,8 +93,10 @@ export function checkScenario(s, isCountry, isProvince) {
   const treaties = (Array.isArray(s.treaties) ? s.treaties : []).filter((t) => pairOk(t?.pair) && ["trade", "defence", "alliance"].includes(t.kind)).slice(0, LIMIT.treaties).map((t) => ({ pair: t.pair.split("|").sort().join("|"), kind: t.kind, since: s.start }));
   const facts = (Array.isArray(s.facts) ? s.facts : []).map((f) => text(f?.text, LIMIT.fact)).filter(Boolean).slice(0, LIMIT.facts).map((t) => ({ text: t, turn: 0 }));
   const might = Object.fromEntries(Object.entries(s.might || {}).filter(([c, n]) => known(c) && Number.isInteger(n) && n >= 1 && n <= 10));
+  // where pairs of countries stand as the story opens, -3 to 3 (authored starts): a war or a treaty speaks for itself
+  const rel = Object.fromEntries(Object.entries(s.rel && typeof s.rel === "object" ? s.rel : {}).filter(([p, n]) => pairOk(p) && Number.isInteger(n) && n >= -3 && n <= 3 && n !== 0).slice(0, 200).map(([p, n]) => [p.split("|").sort().join("|"), n]));
   if (custom && !Object.values(owners).includes(custom.code)) return { ok: false, why: "The scenario's own country holds no land." };
-  return { ok: true, scenario: { kind: "capo-scenario", v: 1, id: text(s.id, 80) || `file-${title}`, title, blurb: text(s.blurb, LIMIT.blurb), opening: text(s.opening, LIMIT.opening), start: s.start, owners, wars, treaties, facts, might, custom, ...(world ? { world } : {}), ...(alt ? { alt, balance: text(s.balance, 500) } : {}) } };
+  return { ok: true, scenario: { kind: "capo-scenario", v: 1, id: text(s.id, 80) || `file-${title}`, title, blurb: text(s.blurb, LIMIT.blurb), opening: text(s.opening, LIMIT.opening), start: s.start, owners, wars, treaties, facts, might, rel, custom, ...(world ? { world } : {}), ...(alt ? { alt, balance: text(s.balance, 500) } : {}) } };
 }
 
 /** Every piece of text in a scenario, for the hard-line check. */

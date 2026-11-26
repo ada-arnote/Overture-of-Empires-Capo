@@ -68,7 +68,7 @@ export const restoreGame = (rec, log) => { const { logLength, why, ...rest } = r
  * and the chronicle says the turn was played again. The line number never goes down.
  */
 export function takeBack(g, rec) {
-  const back = restoreGame(rec, g.log), settled = g.log.some((t) => !back.log.includes(t) && (t.receipt || []).some((x) => x.check));
+  const back = restoreGame(rec, g.log), settled = g.log.some((t) => !back.log.includes(t) && (t.receipt || []).some((x) => x.check || x.mission)); // missions hook: a settled mission counts as a settled check
   return { ...back, ...(g.base ? { base: g.base } : {}), branch: (g.branch || 0) + (settled ? 1 : 0), retold: g.retold || 0 };
 }
 /** Take-back records from a save, the malformed ones left out. */

@@ -115,8 +115,13 @@ export function rebase(world, base, lands) {
 }
 
 // ---- what the AI is told when the world is not ours ----
+/**
+ * The stage a prompt opens on, from the game itself (ruling 143): a fictional world by its own words, an alternate
+ * history by its year and turning point, or the real world from the present day.
+ */
+export const stageOf = (g) => g.world?.where || (g.alt ? `an alternate history of our world, in ${g.date.slice(0, 4)}, that never happened. Where history turned: ${String(g.alt.turn || "").replace(/[.s]+$/, "")}` : "the real world, starting from the present day");
 export const ALT_RULES = [
-  "- This story is an alternate history: its world is not the real present day, whatever the first line says, and never happened. Where it differs from real history, FACTS and PLACES are right, and whatever you remember of the real world from after the turning point did not happen here.",
+  "- This story is an alternate history: its world is not the real present day, and never happened. Where it differs from real history, FACTS and PLACES are right, and whatever you remember of the real world from after the turning point did not happen here.",
   "- Keep to the date in FACTS: weapons, machines, money and daily life are those of that year, as this world's history would have them.",
   "- Call every leader by office, never by a real person's name. Anyone you name is invented. No real living person appears in this world.",
 ];

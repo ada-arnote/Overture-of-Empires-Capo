@@ -58,6 +58,7 @@ export function strength(g, geo, c) {
   if (wearyOf(g, c) >= WAR.slow) parts.push(["weary of war", -1]);
   if (was > 0 && now * 3 <= was * 2) parts.push(["a third of its land lost", -1]);
   if (was > 0 && now * 3 >= was * 4) parts.push(["a third more land than it began with", 1]);
+  if (g.sabot?.[c] > g.date) parts.push(["sabotaged", -1]); // missions hook: a year, from missions.js
   return { base, parts, might: Math.max(1, Math.min(10, base + parts.reduce((s, [, n]) => s + n, 0))) };
 }
 export const strengthOf = (g, geo, c) => strength(g, geo, c).might;
