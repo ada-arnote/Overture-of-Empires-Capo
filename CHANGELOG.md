@@ -2,6 +2,18 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.6.6 (2026-11-26): An Inch of Ink for every player
+
+**Players**
+- **An Inch of Ink in real time can be played without a mouse.** You choose your ink on a card before the map, then a place to start from a list of good ones named by where they are ("Europe: room for 115, nearest nation 7 away"), then where to send from a list of the empty land, neighbours and coasts in reach, each with its share of the land and its strength, and a Send button. Arrow keys, Home and End move in the lists; S tells your strength, land and goal; Space pauses (unless a button has the keyboard). Tapping the map works as before.
+- The panel no longer talks every half second. A screen reader hears the start, a nation gone, the ages, your land passing a quarter, half, three quarters and nine tenths of the goal, pausing, and the end; strength sits in a plain line that is read only when you go to it.
+- Your land on the chip reads "1525, goal 1844", not "1525/1844", so the second number is plainly what wins and not the whole map; the phone keeps the word "goal". The same in the turn duel.
+- The map shows what an order did: an arrow and a ring point at the front of your biggest attack under way, a ring marks where the chosen row would send, and the coasts your boats reach glow when you choose a boat row or a coast is too far. The panel lists what is under way ("Under way: 62 against Pell").
+- Every nation's name is written on its land (the larger ones on a phone), no nation is a near twin of your colour, and nations sharing a seat pattern differ in lightness. The leaderboard rows are buttons with the nation's name, its ink written out, and its share; the list holds still while your pointer or keyboard is on it, and a new game no longer shows the last game's standings.
+- The clock has 0.5x, 1x, 2x and 4x as a labelled choice; Pause stays Pause and shows whether it is on.
+- "Strength 5514 of 5316" now says it is over the limit and falls back slowly.
+- Messages stay up long enough to read (four seconds or more, longer for long ones), in every game.
+
 ## v0.6.5 (2026-11-26): wars that end, people who matter
 
 **Players**
