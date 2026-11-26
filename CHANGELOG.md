@@ -2,6 +2,11 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.6.1 (2026-11-26): blue and silver
+
+**Players**
+- The front page's accents turn from gold to silver: buttons, labels, the line round the live board and the glow, with cool white text on the blue.
+
 ## v0.6.0 (2026-11-26): the front page, rebuilt
 
 **Players**
