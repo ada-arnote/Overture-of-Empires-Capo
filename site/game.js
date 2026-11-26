@@ -2,7 +2,7 @@
 // Capo's game screen: the world map full-screen, a top bar, the dock and the province card, as in the original
 // Ancient Kingdom: choose any country and a mode, write actions, jump time, read what happened. The AI proposes
 // moves; the rules in src/story/worldrules.js decide which stand, and the map follows.
-import { JUMPS, MODES, jumpFrom, monthsOf, newWorldGame, readWorldReply, turnCode, worldPrompt } from "../src/story/turn.js";
+import { JUMPS, MODES, UNITS, jumpFrom, monthsBetween, newWorldGame, readWorldReply, turnCode, worldPrompt } from "../src/story/turn.js";
 import { applyMoves, mightOf, placesFor, treatiesOf, warsOf } from "../src/story/worldrules.js";
 import { crossesLine } from "../src/story/rules.js";
 import { CHARACTER, SCENARIOS, SOON, characterPrompt, readCharacter } from "../src/story/scenarios.js";
@@ -14,7 +14,7 @@ const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const button = (text, on, cls = "plain") => { const b = el("button", text, cls); b.type = "button"; b.onclick = on; return b; };
-let world, map, state = null, past = [], route = loadRoute(), sheet = null, pending = null, jump = "1m", hush = 0, ledgerTab = "events";
+let world, map, state = null, past = [], route = loadRoute(), sheet = null, pending = null, jump = { key: "1m", n: 2, unit: "weeks" }, hush = 0, ledgerTab = "events", view = "countries";
 
 // games saved before wars and treaties existed get empty lists
 const mend = (s) => ({ wars: [], treaties: [], offers: [], chats: [], counsel: [], council: null, standing: STANDING[s.mode] || 5, facts: [], might: {}, edits: [], sandbox: false, ...s });
@@ -60,6 +60,17 @@ function home() {
   const a = $("homelink").querySelector("a"), p = el("p", undefined, "note");
   if (a) { const b = a.cloneNode(true); b.textContent = "Back to all games"; p.append(b); }
   return p;
+}
+
+// ---- map views: countries in their own colours, friends and foes of the player, or might ----
+const RELATION = { you: "#e2b866", alliance: "#4f9a6b", defence: "#5fa08a", trade: "#4a7fa8", war: "#c9553f", none: "#4b5354" };
+function viewColour(code) {
+  if (!state || view === "countries") return colourOf(code);
+  if (view === "might") { const m = mightOf(geo(), code); return `hsl(${40 - m * 4} ${30 + m * 5}% ${20 + m * 5}%)`; }
+  if (code === state.player) return RELATION.you;
+  if (warsOf(state, state.player).includes(code)) return RELATION.war;
+  const t = treatiesOf(state, state.player).find((x) => x.with === code);
+  return RELATION[t?.kind || "none"];
 }
 
 // ---- the first screen: a wizard, as in the original: scenario, country, you, begin ----
@@ -247,10 +258,18 @@ function topBar() {
   chip.style.background = colourOf(state.player) || ownerColour(state.player);
   who.append(chip, state.character?.name && state.mode !== "nation" ? `${state.character.name}, ${name(state.player)}` : name(state.player)); who.onclick = () => showCountry(state.player);
   const jumpPick = el("select", undefined, "plain");
-  jumpPick.append(...JUMPS.map(([k, t]) => new Option(t, k))); jumpPick.value = jump; jumpPick.onchange = () => { jump = jumpPick.value; };
+  jumpPick.append(...JUMPS.map(([k, t]) => new Option(t, k))); jumpPick.value = jump.key; jumpPick.onchange = () => { jump = { ...jump, key: jumpPick.value }; topBar(); };
   jumpPick.setAttribute("aria-label", "How far to jump");
+  const length = [];
+  if (jump.key === "custom") {
+    const n = Object.assign(el("input", undefined, "plain"), { type: "number", min: 1, max: 3650, value: jump.n, style: "width:72px" }), unit = el("select", undefined, "plain");
+    unit.append(...UNITS.map(([k, t]) => new Option(t, k))); unit.value = jump.unit;
+    n.setAttribute("aria-label", "How many"); unit.setAttribute("aria-label", "Of what");
+    n.onchange = () => { jump = { ...jump, n: Number(n.value) || 1 }; }; unit.onchange = () => { jump = { ...jump, unit: unit.value }; };
+    length.push(n, unit);
+  }
   const date = el("span", undefined, "date"); date.append("Turn ", el("b", String(state.turn)), ", ", el("b", fmtDate(state.date)));
-  top.replaceChildren(who, el("span", MODES[state.mode][0], "mode"), ...(state.sandbox ? [el("span", "Sandbox", "mode")] : []), date, jumpPick, button("Advance", advance, "go"), button("Game", () => open("game")));
+  top.replaceChildren(who, el("span", MODES[state.mode][0], "mode"), ...(state.sandbox ? [el("span", "Sandbox", "mode")] : []), date, jumpPick, ...length, button("Advance", advance, "go"), button("Game", () => open("game")));
 }
 
 const DOCK = [["actions", "Actions"], ["chats", "Chats"], ["ledger", "Ledger"], ["advisors", "Advisors"], ["master", "Game Master"]];
@@ -278,7 +297,7 @@ function actions(box) {
   const near = landNeighbours(state.player).slice(0, 3), ideas = el("div", undefined, "row");
   for (const t of ["Strengthen the army.", "Spend on schools and hospitals.", ...near.map((c) => `Seek closer ties with ${name(c)}.`)]) ideas.append(button(t, () => { state.actions = [...(state.actions || []), t]; save(); open("actions"); }));
   const go = el("div", undefined, "row");
-  go.append(button("Add", add), button(`Advance ${JUMPS.find((j) => j[0] === jump)[1].toLowerCase()}`, advance, "go"));
+  go.append(button("Add", add), button(jump.key === "custom" ? `Advance ${jump.n} ${jump.unit}` : `Advance: ${JUMPS.find((j) => j[0] === jump.key)[1].toLowerCase()}`, advance, "go"));
   box.append(el("h2", "Actions"), el("p", "Write what you do, in your own words, as many as you like. The AI reads them all and proposes moves; the rules decide what stands: wars, peace, treaties, attacks and handovers.", "note"), list, input, go, el("h3", "Ideas"), ideas);
   if (pending) box.append(pasteBox());
 }
@@ -299,7 +318,8 @@ function advance() {
   if (bad.length) return toast(`Action ${bad.join(", ")} is refused: nothing sexual involving minors.`);
   const to = jumpFrom(state.date, jump);
   const g = geo();
-  pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]), talk: talkLines(state, { name }) }, acts, to), to, actions: acts, months: monthsOf(jump) };
+  const auto = jump.key === "auto";
+  pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]), talk: talkLines(state, { name }) }, acts, to, auto), to, auto, actions: acts };
   if (route.route === "paste") { open("actions"); return; }
   viaAddress();
 }
@@ -308,15 +328,15 @@ async function viaAddress() {
   try { finish(await ask(route, pending.prompt)); } catch (e) { pending.error = e.message; open("actions"); toast(e.message); }
 }
 function finish(text) {
-  const r = readWorldReply(text, state, (c) => homes.has(c) || custom()?.code === c, pending.to);
+  const r = readWorldReply(text, state, (c) => homes.has(c) || custom()?.code === c, pending.to, pending.auto);
   if (!r.matched) { pending.error = `That reply is not for this turn: it must start with TURN: ${turnCode(state)}.`; open("actions"); return; }
   if (!r.events.length) { pending.error = `No event could be read${r.dropped.length ? `: ${r.dropped.slice(0, 3).join("; ")}` : ""}.`; open("actions"); return; }
   past.push(structuredClone(state));
-  const receipt = applyMoves(state, r.moves, geo(), pending.actions, pending.months);
+  const receipt = applyMoves(state, r.moves, geo(), pending.actions, monthsBetween(state.date, r.stop));
   receipt.push(...moveFavour(state, receipt));
-  state.log.push({ from: state.date, to: pending.to, actions: pending.actions, events: r.events, summary: r.summary, dropped: r.dropped, receipt, advice: r.advice });
+  state.log.push({ from: state.date, to: r.stop, actions: pending.actions, events: r.events, news: r.news, summary: r.summary, dropped: r.dropped, receipt, advice: r.advice });
   state.log = state.log.slice(-60);
-  state.date = pending.to; state.turn++; state.actions = [];
+  state.date = r.stop; state.turn++; state.actions = [];
   pending = null; save(); topBar(); ledgerTab = "events"; open("ledger"); map.refresh();
   const changed = receipt.filter((x) => x.ok && / takes it from | hands /.test(x.text)).length;
   toast(`Now ${fmtDate(state.date)}.${changed ? ` ${changed} province${changed > 1 ? "s" : ""} changed hands.` : ""}`);
@@ -324,10 +344,18 @@ function finish(text) {
 
 function ledger(box) {
   const tabs = el("div", undefined, "row");
-  for (const [k, t] of [["events", "Events"], ["world", "World"], ["log", "Log"]]) { const b = button(t, () => { ledgerTab = k; open("ledger"); }); b.setAttribute("aria-pressed", String(ledgerTab === k)); tabs.append(b); }
+  for (const [k, t] of [["events", "Events"], ["news", "News"], ["world", "World"], ["log", "Log"]]) { const b = button(t, () => { ledgerTab = k; open("ledger"); }); b.setAttribute("aria-pressed", String(ledgerTab === k)); tabs.append(b); }
   box.append(el("h2", "Ledger"), tabs);
   const last = state.log[state.log.length - 1];
   if (ledgerTab === "world") { worldTab(box); return; }
+  if (ledgerTab === "news") {
+    const papers = state.log.slice().reverse().flatMap((t) => (t.news || []).map((n) => ({ ...n, when: t.to })));
+    if (!papers.length) { box.append(el("p", "No papers yet. The press writes after each turn.", "note")); return; }
+    const feed = el("ol", undefined, "feed");
+    feed.append(...papers.slice(0, 24).map((n) => { const li = el("li"); li.append(el("div", `${n.outlet}, ${fmtDate(n.when)}`, "note"), el("b", n.headline), ...(n.text ? [el("p", n.text)] : [])); return li; }));
+    box.append(el("p", "What the world's press says. Papers can be slanted or wrong; the Events tab and the rules are what is true.", "note"), feed);
+    return;
+  }
   if (ledgerTab === "log") {
     if (!state.log.length) { box.append(el("p", "Nothing yet.", "note")); return; }
     const feed = el("ol", undefined, "feed");
@@ -634,7 +662,8 @@ let picked = null;
 async function start() {
   try { world = await loadWorld("../maps/world.json"); } catch (e) { toast(`${e.message} Capo needs its web address, not a file opened by double-click.`); return; }
   index();
-  map = worldMap($("map"), world, { owner: ownerOf, name, colour: colourOf, pick: card, picked: () => picked });
+  map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked });
+  $("view").onchange = (e) => { view = e.target.value; map.refresh(); };
   $("in").onclick = () => map.zoomBy(1.6);
   $("out").onclick = () => map.zoomBy(1 / 1.6);
   $("home").onclick = () => (state ? showCountry(state.player) : map.reset());

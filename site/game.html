@@ -44,6 +44,7 @@ textarea.plain { width: 100%; box-sizing: border-box; resize: vertical }
 #card .near { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px } #card .near button { min-height: 30px; padding: 0 8px; font-size: 13px }
 .zoom { position: fixed; right: 8px; bottom: 10px; display: grid; gap: 6px; z-index: 4 }
 .zoom button { min-width: 44px; min-height: 44px; font-size: 18px }
+#view { position: fixed; right: 8px; top: 72px; z-index: 4; background: rgba(16, 21, 24, .9) }
 #start { position: fixed; left: 8px; top: 8px; bottom: 8px; width: min(470px, calc(100vw - 16px)); display: none; z-index: 6; overflow: auto }
 #start.open { display: block }
 #start.min { top: auto; bottom: 8px; overflow: visible } #start.min .box { min-height: 0; padding: 10px 14px }
@@ -53,7 +54,7 @@ textarea.plain { width: 100%; box-sizing: border-box; resize: vertical }
 .modes { display: grid; gap: 6px } #start .modes label { flex-direction: row; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--text) } .modes small { display: block; color: var(--soft) }
 #toast { position: fixed; left: 50%; top: 76px; transform: translateX(-50%); z-index: 7 }
 .credit { position: fixed; right: 64px; bottom: 2px; font-size: 10px; color: var(--soft); opacity: .6; z-index: 3 }
-@media (max-width: 640px) { #top .date { margin-left: 0; width: 100% } #dock { flex-wrap: nowrap; overflow-x: auto; right: 62px; max-width: none } #dock button { flex: none } #sheet { top: auto; height: 60vh; bottom: 68px } #card { right: 8px; bottom: 68px; width: calc(100vw - 16px); box-sizing: border-box } #toast { top: 150px } }
+@media (max-width: 640px) { #top .date { margin-left: 0; width: 100% } #dock { flex-wrap: nowrap; overflow-x: auto; right: 62px; max-width: none } #dock button { flex: none } #sheet { top: auto; height: 60vh; bottom: 68px } #card { right: 8px; bottom: 68px; width: calc(100vw - 16px); box-sizing: border-box } #toast { top: 150px } #view { top: auto; bottom: 190px } }
 </style>
 </head>
 <body>
@@ -62,6 +63,7 @@ textarea.plain { width: 100%; box-sizing: border-box; resize: vertical }
 <nav id="dock" class="glass" aria-label="Game" hidden></nav>
 <aside id="sheet" class="glass" aria-live="polite"></aside>
 <section id="card" class="glass" aria-live="polite"></section>
+<select id="view" class="plain" aria-label="Map view"><option value="countries">Map: countries</option><option value="relations">Map: friends and foes</option><option value="might">Map: might</option></select>
 <div class="zoom"><button type="button" class="plain" id="in" aria-label="Zoom in">+</button><button type="button" class="plain" id="out" aria-label="Zoom out">&minus;</button><button type="button" class="plain" id="home" aria-label="Back to my country">&#8962;</button></div>
 <div id="start"><div class="box glass" id="start-box"></div></div>
 <div id="toast" role="status" aria-live="polite"></div>

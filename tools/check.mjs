@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const KB = 1000;
 export const LIMITS = {
   file: 250 * KB, // any one shipped file, as stored
-  code: { "src/core": 12 * KB, "src/map": 45 * KB, "src/games": 90 * KB, "src/story": 40 * KB, site: 90 * KB }, // compressed; site goes back to 72 once the old Capo screen is gone
+  code: { "src/core": 12 * KB, "src/map": 45 * KB, "src/games": 90 * KB, "src/story": 40 * KB, site: 90 * KB }, // compressed; site was 72 before Capo's world screen, which alone is about a quarter of it
   first: 500 * KB, // everything shipped, compressed
   map: 300 * KB, // one map file in maps/, compressed: fetched by the page that needs it, never by the first page
   lines: { "src/map": 2400, "src/games": 6500, "src/core": 700, tools: 1000 },
