@@ -239,13 +239,13 @@ function ticked(more, ticks, seed = "v7") {
 }
 const mutable = (p) => structuredClone(p);
 
-test("version 7: saves from version 6 are refused with a plain message", () => {
+test("version 8: saves from version 7 are refused with a plain message", () => {
   const m = live({}, "old");
   m.play(m.legal()[0]);
   const old = JSON.parse(m.save());
-  old.version = "6";
-  assert.throws(() => openSave(JSON.stringify(old), [inch]), (e) => e instanceof Refusal && e.code === "version" && /version 6/.test(e.message));
-  assert.equal(inch.version, "7");
+  old.version = "7";
+  assert.throws(() => openSave(JSON.stringify(old), [inch]), (e) => e instanceof Refusal && e.code === "version" && /version 7/.test(e.message));
+  assert.equal(inch.version, "8");
 });
 test("inks: the start carries your ink; bots' inks are drawn evenly by the seed; Custom can draw yours or leave inks off", () => {
   const m = live({ nations: 12 }, "inks"), p = m.position;
@@ -298,7 +298,7 @@ test("places: dealt by the seed, about one per 120 land cells, away from bots' s
   assert.equal(held(q, 0), 3, "archive, quay and tower");
 });
 test("ages: a mark at 3:00 and a card at 7:00, each once; bots pick theirs; Flood doubles the next attack, Second wind doubles growth", () => {
-  let { p, b, d } = ticked({}, AGES[1] - 1, "ages");
+  let { p, b, d } = ticked({}, AGES[1] - 1, "ages 2");
   assert.ok(p.alive[0] && !p.over, "still playing at 3:00");
   assert.ok(!liveMoves(p, b).some((x) => x.do === "mark"));
   const tick = liveApply(p, b, { do: "tick", n: 1 }, d);

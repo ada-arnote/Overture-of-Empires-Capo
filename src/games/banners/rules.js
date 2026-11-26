@@ -2,7 +2,9 @@
 // Brass and Banners (working name). Place strength, attack with dice as often as you like, move once.
 // Three sets of rules: Traditional is the genre as it is remembered, Capo is our own quicker game, Coda is every switch by hand.
 // Expansions are added to any of them.
-import { MAPS, areaBoard } from "../areas.js";
+import { MAPS, areaBoard, bonusOf, bordersOf } from "../areas.js";
+// what a land pays is kept with the board maker, which reads the same rule to keep lands even
+export { bonusOf, bordersOf } from "../areas.js";
 import { DICE, odds as chanceOf, meet } from "./dice.js";
 
 export const NONE = -1, HAND = 5, FORT = 4;
@@ -32,14 +34,6 @@ export const cellsOf = (p, seat) => p.owner.reduce((n, o) => n + (o === seat ? 1
 export const landOf = (p) => p.owner.length;
 export const goalOf = (p) => Math.ceil((p.owner.length * p.rule.goal) / 100);
 export const nameOf = (p, i) => boardOf(p).names[i];
-const edges = new WeakMap();
-/** How many of a land's provinces border another land, by land or by a crossing. */
-export function bordersOf(b, land) {
-  if (!edges.has(b)) edges.set(b, b.sizes.map((_, k) => b.near.filter((n, i) => b.region[i] === k && n.some((m) => b.region[m] !== k)).length));
-  return edges.get(b)[land];
-}
-/** What a land pays a turn to whoever holds it whole: a third of its size and half its border provinces, halves rounded down. Every map. */
-export const bonusOf = (b, land) => Math.max(1, Math.floor((2 * b.sizes[land] + 3 * bordersOf(b, land) + 2) / 6));
 export const suitOf = (p, card) => (card >= p.owner.length ? WILD : card % 3);
 const mineOf = (p, s) => p.owner.flatMap((o, i) => (o === s ? [i] : []));
 const living = (p) => Array.from({ length: p.seats }, (_, s) => s).filter((s) => p.owner.includes(s));
@@ -261,7 +255,7 @@ export function amounts(n) {
 }
 
 export const banners = {
-  id: "banners", version: "4",
+  id: "banners", version: "5",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 4 }, map: { values: MAPS, normal: "world" },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),

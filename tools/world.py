@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Makes src/games/maps/world.js from a public-domain coast (Natural Earth 1:50m land) and our own list of provinces.
 # python tools/world.py <folder with ne_50m_land.shp>
-import math, pathlib, struct, sys
+# python tools/world.py src/games/maps/world.js   tidies the provinces already made again, without the coast file
+import math, pathlib, re, struct, sys
 from collections import deque
 
 COLS, ROWS, TOP, BOTTOM = 124, 56, 78.0, -56.0
@@ -22,8 +23,10 @@ PROVINCES = [
     ("Indus", 72, 27, 8), ("Deccan", 78, 16, 8), ("High Plateau", 90, 33, 8), ("Mekong", 102, 17, 8), ("Yellow River", 108, 37, 8), ("Yangtze", 113, 27, 8), ("Sunrise Isles", 138, 37, 8),
     ("Sunda", 106, -4, 9), ("Borneo", 114, 1, 9), ("Papua", 141, -5, 9), ("Red Centre", 127, -23, 9), ("Murray", 146, -31, 9), ("Long Cloud", 172, -42, 9),
 ]
-CROSSINGS = [("Yukon", "Kolyma"), ("Ice Cap", "Labrador"), ("Ice Cap", "Albion"), ("Gulf Plain", "Antilles"), ("Antilles", "Orinoco"), ("Sertao", "Sahel"), ("Albion", "Rhine"), ("Albion", "Fjords"), ("Iberia", "Maghreb"), ("Danube", "Anatolia"), ("Nile", "Danube"),
-             ("Rift", "Hejaz"), ("Spice Isle", "Zambezi"), ("Spice Isle", "Rift"), ("Mekong", "Sunda"), ("Sunda", "Borneo"), ("Borneo", "Papua"), ("Sunda", "Red Centre"), ("Papua", "Murray"), ("Murray", "Long Cloud"), ("Sunrise Isles", "Amur"), ("Sunrise Isles", "Yangtze"), ("Ice Cap", "Hudson"), ("Patagonia", "Karoo")]
+LEAST, RATIO = 17, 6  # every province at least LEAST small hexes, and none more than RATIO times another
+# sea crossings, only between provinces that do not touch by land
+CROSSINGS = [("Yukon", "Kolyma"), ("Ice Cap", "Labrador"), ("Ice Cap", "Albion"), ("Antilles", "Orinoco"), ("Sertao", "Sahel"), ("Albion", "Rhine"), ("Albion", "Fjords"), ("Nile", "Danube"),
+             ("Spice Isle", "Zambezi"), ("Spice Isle", "Rift"), ("Mekong", "Sunda"), ("Sunda", "Borneo"), ("Borneo", "Papua"), ("Sunda", "Red Centre"), ("Papua", "Murray"), ("Murray", "Long Cloud"), ("Sunrise Isles", "Amur"), ("Sunrise Isles", "Yangtze"), ("Ice Cap", "Hudson"), ("Patagonia", "Karoo")]
 
 
 def rings(folder):
@@ -46,9 +49,10 @@ def mercatorish(lat):  # Miller: a flat map that is not too stretched at the top
     return 1.25 * math.log(math.tan(math.pi / 4 + 0.4 * math.radians(lat)))
 
 
-def main(folder):
+def main(source):
     y0, y1 = mercatorish(TOP), mercatorish(BOTTOM)
-    edges = [(p, q) for r in rings(folder) for p, q in zip(r, r[1:])]
+    from_js = source.endswith(".js")
+    edges = [] if from_js else [(p, q) for r in rings(source) for p, q in zip(r, r[1:])]
     by_row = {}
     cells = []
     for row in range(ROWS):
@@ -71,7 +75,7 @@ def main(folder):
             for dl in (-0.3, 0, 0.3):
                 hits += land(lon + dx * h, lat + dl * (TOP - BOTTOM) / ROWS * 0.9)
         return hits
-    dry = {(r, c) for r, c, lon, lat in cells if share(r, c, lon, lat) >= 4}
+    dry = set() if from_js else {(r, c) for r, c, lon, lat in cells if share(r, c, lon, lat) >= 4}
     spot = {(r, c): (lon, lat) for r, c, lon, lat in cells}
     def near(r, c):
         s = r % 2
@@ -85,7 +89,7 @@ def main(folder):
         lon = lon + 360 if lon < -170 else lon
         return min(spot, key=lambda k: (spot[k][0] - lon) ** 2 + (1.4 * (spot[k][1] - lat)) ** 2)
     seeds = []
-    for name, lon, lat, _ in PROVINCES:
+    for name, lon, lat, _ in [] if from_js else PROVINCES:
         h = home(lon, lat)
         k = min(dry, key=lambda d: gap(d, h))
         seeds.append(k)
@@ -113,7 +117,10 @@ def main(folder):
             close = min((gap(k, o), i) for o, i in of.items())
             if close[0] < 4.2:
                 of[k] = close[1]
-    keep = {i: {k for k, v in of.items() if v == i} for i in range(len(seeds))}
+    if from_js:
+        of = read(source)
+    tidy(of, near, gap, home)
+    keep = {i: {k for k, v in of.items() if v == i} for i in range(len(PROVINCES))}
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     rows = []
     for r in range(ROWS):
@@ -142,6 +149,80 @@ def main(folder):
     print(len(of), "land cells;", "smallest", sorted((len(v), PROVINCES[i][0]) for i, v in keep.items())[:8], "largest", sorted((len(v), PROVINCES[i][0]) for i, v in keep.items())[-5:], len(text), "bytes")
     for r in range(0, ROWS, 2):
         print("".join(letters[of[(r, c)]] if (r, c) in of else " " for c in range(COLS)))
+
+
+def read(path):
+    """The provinces of a world.js made before: (row, col) to province."""
+    text = pathlib.Path(path).read_text(encoding="utf8")
+    lines = re.findall(r'^  "(.*)",$', text.split("export const CELLS")[1], re.M)
+    letters, of = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", {}
+    for r, line in enumerate(lines):
+        c, many, i = 0, "", 0
+        while i < len(line):
+            s = line[i]
+            if s == "~" or not s.isdigit():
+                if s == "~":
+                    i += 1
+                for _ in range(int(many or 1)):
+                    if line[i] != "." or s == "~":
+                        of[(r, c)] = letters.index(line[i])
+                    c += 1
+                many = ""
+            else:
+                many += s
+            i += 1
+    return of
+
+
+def pieces(cells, near):
+    """The joined pieces of a set of cells, largest first, ties by first cell."""
+    left, out = set(cells), []
+    while left:
+        start = min(left)
+        seen, q = {start}, deque([start])
+        while q:
+            for n in near(*q.popleft()):
+                if n in left and n not in seen:
+                    seen.add(n)
+                    q.append(n)
+        left -= seen
+        out.append(seen)
+    return sorted(out, key=lambda p: (-len(p), min(p)))
+
+
+def tidy(of, near, gap, home):
+    """Every province in one piece, and none more than RATIO times another: strays go to the province they touch or sink,
+    the largest give border cells to their smallest neighbours, and the smallest grow into the sea, never touching another."""
+    owned = lambda i: {k for k, v in of.items() if v == i}
+    for i in range(len(PROVINCES)):
+        for part in pieces(owned(i), near)[1:]:
+            touch = sorted((sum(1 for k in part for n in near(*k) if of.get(n, i) == j), -j) for j in {of[n] for k in part for n in near(*k) if of.get(n, i) != i})
+            for k in part:
+                if touch:
+                    of[k] = -touch[-1][1]
+                else:
+                    del of[k]
+    shore = {k for lon, lat in MARKS for m in [home(lon, lat)] for k in [m, *near(*m)]}  # where the lands' names are written stays sea
+    for i in range(len(PROVINCES)):
+        mine = owned(i)
+        while len(mine) > RATIO * LEAST:
+            size = {j: len(owned(j)) for j in {of[n] for k in mine for n in near(*k) if of.get(n, i) != i}}
+            give = sorted((size[of[n]], k, of[n]) for k in mine for n in near(*k) if of.get(n, i) != i and len(pieces(mine - {k}, near)) == 1)
+            if not give:
+                break
+            _, k, j = give[0]
+            of[k] = j
+            mine.discard(k)
+    for i, (name, lon, lat, _) in enumerate(PROVINCES):
+        mine, mid = owned(i), home(lon, lat)
+        while len(mine) < LEAST:
+            edge = {n for k in mine for n in near(*k) if n not in of and n not in shore and all(of.get(m, i) == i for m in near(*n))}
+            if not edge:
+                print("cannot grow", name)
+                break
+            k = min(edge, key=lambda n: (-sum(1 for m in near(*n) if m in mine), round(gap(n, mid), 3), n))
+            of[k] = i
+            mine.add(k)
 
 
 def flood(dry, near, k):

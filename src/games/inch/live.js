@@ -432,6 +432,13 @@ function even(b, spots) {
     for (let s = 0; s < n; s++) if (best[s][0] >= 0) spots[s] = best[s][0];
   }
   spots.splice(0, n, ...keep);
+  // a start whose ring has less than half a hexagon of land within 5 steps, or beside another, moves to the nearest place with room
+  const memo = new Map(), room = (i) => { if (!memo.has(i)) { const d = new Map([[i, 0]]), list = [i]; for (let k = 0; k < list.length; k++) for (const m of b.near[list[k]]) if (b.land[m] && !d.has(m) && d.get(list[k]) < 5) { d.set(m, d.get(list[k]) + 1); list.push(m); } memo.set(i, list.length); } return memo.get(i); };
+  const roomy = (i) => [i, ...b.near[i]].every((c) => !b.land[c] || room(c) >= 46), close = (i, s) => spots.some((j, t) => t !== s && apart(b, i, j) < 3);
+  for (let s = 0; s < n; s++) if (!roomy(spots[s]) || close(spots[s], s)) {
+    const at = b.dry.reduce((x, i) => (close(i, s) || (x >= 0 && apart(b, i, spots[s]) >= apart(b, x, spots[s])) || !roomy(i) ? x : i), -1);
+    if (at >= 0) spots[s] = at;
+  }
 }
 function claim(p, b, s, i) {
   for (const c of [i, ...b.near[i]]) if (b.land[c] && p.owner[c] === NONE) { p.owner[c] = s; p.land[s]++; }

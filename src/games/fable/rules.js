@@ -244,7 +244,7 @@ function deal(p, b, dice) {
 }
 
 export const fable = {
-  id: "fable", version: "7",
+  id: "fable", version: "8",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 }, rounds: { values: [10, 14, 18], normal: 14 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),

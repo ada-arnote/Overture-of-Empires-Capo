@@ -66,13 +66,13 @@ export const CHECKS = {
   "live.spawn": ["warn", "every nation placed at the start"],
   "live.room": ["warn", `land within 5 steps of each nation's start within ${T.liveRoom} times`],
 };
-/** Checks the current maps fail, by kind of board: the to-do list. The gate notes these and stops on any other failure. */
+/** Checks the current maps fail, by kind of board: the to-do list. The gate notes these and stops on any other failure.
+ * Left on purpose, as fixing them would change a game's feel: Arms with 6 seats, on the small island (48 land, 8 cells a
+ * home) the thin arms often leave one home a cell short of 15%; with the higher die, 5 and 6 are half of all numbers, too
+ * many to keep apart. */
 const FAILING = {
-  "banners world": "area.piece area.links area.ratio area.room", "banners grown": "area.apart area.room", "banners isles": "area.small area.bonus area.dead area.degree area.apart area.room",
-  "fable capo": "isle.room", "fable round": "isle.size", "fable lakes": "isle.size", "fable crescent": "isle.size", "fable chain": "isle.size isle.piece",
-  "fable homes round": "isle.apart isle.room", "fable homes lakes": "isle.apart isle.room", "fable homes crescent": "isle.apart isle.room", "fable homes arms": "isle.apart isle.room", "fable homes chain": "isle.piece isle.alone isle.apart isle.room",
-  ...Object.fromEntries(["small", "medium", "large"].flatMap((s) => ["sum", "high"].map((r) => [`glass ${s} ${r}`, s === "large" && r === "sum" ? "glass.busy glass.portgap" : "glass.busy glass.yield glass.portgap"]))),
-  "inch turns 4": "inch.room", "inch turns 5": "inch.room", "inch live world": "live.room", "inch live continents": "live.spawn live.room", "inch live islands": "live.spawn live.room",
+  "fable homes arms": "isle.room",
+  ...Object.fromEntries(["small", "medium", "large"].map((s) => [`glass ${s} high`, "glass.busy"])),
 };
 export const TODO = Object.entries(FAILING).flatMap(([kind, ids]) => ids.split(" ").map((id) => `${kind}|${id}`));
 

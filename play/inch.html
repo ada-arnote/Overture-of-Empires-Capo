@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xEpCgLG+rycV9KrBxWafcfBSsMP25nKBGZ5IEVbtGPA='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-r5aBJDOvpTWrPTmiPrPUmSv9sIyrxLPjj3pE+Zb1E6E='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>An Inch of Ink</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -732,61 +732,61 @@ const LANDS = ["the Northern Shield", "the Great Rivers", "the Middle Seas", "th
 const NAMES = ["Yukon", "Mackenzie", "Hudson", "Labrador", "Ice Cap", "Cascades", "Prairies", "Lakelands", "Gulf Plain", "Sonora", "Anahuac", "Isthmus", "Antilles", "Orinoco", "Amazonia", "Andes", "Sertao", "Pampas", "Patagonia", "Fjords", "Albion", "Iberia", "Rhine", "Danube", "Vistula", "Volga", "Maghreb", "Nile", "Anatolia", "Hejaz", "Zagros", "Sahel", "Congo", "Rift", "Zambezi", "Karoo", "Spice Isle", "Ob", "Turan", "Altai", "Taymyr", "Lena", "Amur", "Kolyma", "Indus", "Deccan", "High Plateau", "Mekong", "Yellow River", "Yangtze", "Sunrise Isles", "Sunda", "Borneo", "Papua", "Red Centre", "Murray", "Long Cloud"];
 const MARKS = [1746, 2642, 3612, 5357, 2034, 3272, 4891, 320, 3337, 5298];
 const REGION = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9];
-const CROSSINGS = [[0, 43], [4, 3], [4, 20], [8, 12], [12, 13], [16, 31], [20, 22], [20, 19], [21, 26], [23, 28], [27, 23], [33, 29], [36, 34], [36, 33], [47, 51], [51, 52], [52, 53], [51, 54], [53, 55], [55, 56], [50, 42], [50, 49], [4, 2], [18, 35]];
+const CROSSINGS = [[0, 43], [4, 3], [4, 20], [12, 13], [16, 31], [20, 22], [20, 19], [27, 23], [36, 34], [36, 33], [47, 51], [51, 52], [52, 53], [51, 54], [53, 55], [55, 56], [50, 42], [50, 49], [4, 2], [18, 35]];
 // One line a row. A number before a sign repeats it. A dot is sea; ~ marks a sign that is itself a number.
 const CELLS = [
   "27.5C3.17E42.o29",
-  "17.5B.8C6.15E38.7o9.2r16",
+  "23.8C6.15E38.7o9.2r16",
   "16.B7.C.2C.C9.13E37.8o10.r16",
   "15.7B.4C.3CD7.12E35.l11o5p4.r16",
-  "16.B.5B3.C.3C3D6.11E26.l4.5l11o10p3r13",
+  "16.B.5B3.C.3C3D6.11E31.5l11o10p3r13",
   "2.8A3.4B2.4B.B2C2.2C4D5.10E15.4T12.6l11o9p7r2.3r5",
-  "2.12A7B.B.B6C.4D5.8E15.6TY2Z3.Z10l11o10p14r2",
-  ".12A11B6C3.4D3.6E4.E.E10.6TY7Z10l11o9p17r",
-  "2.12A10B7C.5D4.4E6.3E9.3T.T2YZ.5Z11l10o10p13r3",
-  "2.11A10B4C4.D2.2D5.3E16.5T.4Y7Z11l9o11p12r4",
-  "2.12A9B3C6.3D7.2E17.4T.4Y7Z11l2n7o12p4r.4r6",
-  "3.2A6.2A9B4C5.6D23.4T2.4Y7Z9l5n6o11p2.r2.2r9",
-  "4.A7.2A8B6C4.6D19.U5.2T.4Y8Z8l7n4o7p3q6.2r9",
-  "13.7FB2G7C.7D17.3U3.2W2.5Y8Z7l9n3o3p5q7.2r10",
-  "14.7F4G6C9D15.4U.4WX5Y8Z2m5l11no11q5.r10",
-  "14.7F4G5CH7D21.5W3X3Y7Z6ml11nw12q16",
-  "16.5F6G2C4H4D2.D18.6W6X7Z8m9n4w9q17",
+  "2.12A7B.B.B6C.4D5.8E15.6TY2Z3.Z10l5ow5o10p14r2",
+  ".12A11B6C3.4D3.6E17.6TY7Z10l5ow5o9p17r",
+  "2.12A10B7C.5D4.4E18.3T.T2YZ.5Z11l5ow4o10p13r3",
+  "2.11A10B4C4.D2.2D5.3E16.5T.4Y7Z11l5ow3o11p12r4",
+  "2.12A9B3C6.3D7.2E17.4T.4Y7Z11l2n4ow2o12p4r.4r6",
+  "3.2A6.2A9B4C5.6D19.3U.4T2.4Y7Z9l5n3ow2o11p2.r2.2r9",
+  "4.A7.2A8B6C4.6D18.4U3.2T.4Y8Z8l7n2owo7p3q6.2r9",
+  "13.7FB2G7C.7D17.4U2.2W2.5Y8Z7l9nowo3p5q7.2r10",
+  "14.7F4G6C9D15.4U.4WX5Y8Z2m5l11nw11q5.r10",
+  "14.7F4G5CH7D17.2U2.5W3X3Y7Z6ml11nw12q16",
+  "16.5F6G2C4H4D21.6W6X7Z8m9n4w9q17",
   "16.5F7G5H5D20.V4W6X.5Z.9m8n5w8q18",
-  "16.5F7G6HD21.V.2VW.W.5X3.2cZ.10m7n6w6q2.2q15",
-  "15.6F5GI6H22.4V2.W.X.3X.2c.2ce2.e7m2n5u7w4q21",
-  "16.4F2J4G3I4H23.3V7.X.7ce.2e5m2s7u7w2.q2.3y16",
-  "16.3F5J5I3H24.V.V3a6.6c6e2m4s6u8w2.q.3y17",
-  "18.6J6I2H24.2V5a8.3c7e5s7u5w2x4.3y17",
-  "18.6J6I25.V8a.6bc3d5e6s7u3w4x24",
-  "20.5JI4.M24.V8a8b4d4e7s6uvw6x23",
-  "21.2J2K5.2M21.2V7a2f6b.5d2.2e6st4u4v5x24",
-  "22.J2K5.3M20.2V6a4f6b.7d3.3s4t2u5v3x25",
-  "22.3K2.L2.2M21.V5a6f6b.7d4.5t2.5v29",
-  "24.3KL25.V4a8f6b.5d6.3t4.5v28",
-  "27.3L22.V3a10f5b4d9.2t6.4v28",
-  "29.L4.N18.3a10f3b5h11.t8.2v28",
-  "29.3L6N16.a10f3g8h9.t6.z31",
-  "32.8N15.4f.4f5g7h17.z5.~024",
-  "31.7N3O21.f5g6h18.2z3.2~025",
-  "31.P5N5O20.7g5h19.z2.3~025",
-  "31.2P3N5O4Q17.7g3h21.2z2.~0.~04.4~116",
-  "31.4P7O5Q16.6gi2h23.z10.4~114",
-  "31.4P6O5Q17.4g3i2h29.~25.~1.~114",
+  "16.5F7G6HD21.V.2VW.W.5X3.2cZ.10m7n6w6q19",
+  "15.6F5GI6H22.4V2.W.X.3X.2c.2ce2.e7m2n5u7w4q2.2y17",
+  "16.4F2J4G3I4H23.3V7.X.7ce.2e5m2s7u7w2.q.4y16",
+  "16.3F5J5I3H24.V.V3a6.6c6e2m4s6u8w2.q.4y16",
+  "18.6J6I2H24.2V5a8.3c7e5s7u5w2x4.4y16",
+  "18.6J6I25.V8a.6bc3d5e6s7u3w4x4.3y17",
+  "20.5JI4.3M22.V8a8b4d4e7s6uvw6x23",
+  "21.2J2K4.4M20.2V7a2f6b.5d2.2e6st4u4v5x24",
+  "22.J4K3.4M19.2V6a4f6b.7d3.3s4t2u5v3x25",
+  "22.4K.2L.4M19.V5a6f6b.7d4.5t2.5v29",
+  "23.4K3L2.2M19.V4a8f6b.5d6.3t4.5v28",
+  "23.3K.4L21.V3a10f5b4d9.2t6.4v28",
+  "28.4L2.N18.3a10f3b5h11.t8.2v28",
+  "28.4L6N16.a10f3g8h9.t6.z31",
+  "32.8N15.4f.4f5g7h16.3z2.3~024",
+  "31.7N3O21.f5g6h17.4z.4~024",
+  "31.P5N5O20.7g5h18.3z.5~05.2~116",
+  "31.2P3N5O4Q17.7g3h20.3z.4~04.5~115",
+  "31.4P7O5Q16.6gi2h21.3z2.~06.5~114",
+  "31.4P6O5Q17.4g3i2h33.5~114",
   "32.4P5O5Q17.3g6ih51",
-  "32.4P5O4Q17.2g8i3.k26.3~22.~316",
-  "34.2P5O4Q18.g8i2.2k25.6~22~315",
-  "34.2P4RO4Q18.j6i3.3k23.7~24~314",
-  "35.P5R3Q20.2j5i3.2k22.9~24~313",
-  "34.8R21.5j2i27.9~25~313",
+  "32.4P5O4Q17.2g8i.3k26.3~22.~316",
+  "34.2P5O4Q18.g8i.4k24.6~22~315",
+  "34.2P4RO4Q18.j6i2.5k22.7~24~314",
+  "35.P5R3Q20.2j5i2.4k21.9~24~313",
+  "34.8R21.5j2i4.k22.9~25~313",
   "34.8R22.6j28.8~26~312",
   "34.7R23.5j29.7~26~313",
   "34.7R24.3j30.3~24.6~313",
-  "33.S5R67.4~314",
-  "33.3S2R80.2~44",
-  "33.3S72.~38.3~44",
-  "34.3S80.3~44",
-  "32.3S81.~47",
+  "33.S5R67.4~37.2~45",
+  "33.3S2R78.4~44",
+  "33.3S80.4~44",
+  "34.3S79.4~44",
+  "32.3S81.3~45",
   "33.3S88",
   "33.2S89",
   "33.2S89",
@@ -1230,6 +1230,13 @@ function even(b, spots) {
     for (let s = 0; s < n; s++) if (best[s][0] >= 0) spots[s] = best[s][0];
   }
   spots.splice(0, n, ...keep);
+  // a start whose ring has less than half a hexagon of land within 5 steps, or beside another, moves to the nearest place with room
+  const memo = new Map(), room = (i) => { if (!memo.has(i)) { const d = new Map([[i, 0]]), list = [i]; for (let k = 0; k < list.length; k++) for (const m of b.near[list[k]]) if (b.land[m] && !d.has(m) && d.get(list[k]) < 5) { d.set(m, d.get(list[k]) + 1); list.push(m); } memo.set(i, list.length); } return memo.get(i); };
+  const roomy = (i) => [i, ...b.near[i]].every((c) => !b.land[c] || room(c) >= 46), close = (i, s) => spots.some((j, t) => t !== s && apart(b, i, j) < 3);
+  for (let s = 0; s < n; s++) if (!roomy(spots[s]) || close(spots[s], s)) {
+    const at = b.dry.reduce((x, i) => (close(i, s) || (x >= 0 && apart(b, i, spots[s]) >= apart(b, x, spots[s])) || !roomy(i) ? x : i), -1);
+    if (at >= 0) spots[s] = at;
+  }
 }
 function claim(p, b, s, i) {
   for (const c of [i, ...b.near[i]]) if (b.land[c] && p.owner[c] === NONE) { p.owner[c] = s; p.land[s]++; }
@@ -1430,13 +1437,15 @@ function advance(p, events, dice) {
 }
 
 const inch = {
-  id: "inch", version: "7",
+  id: "inch", version: "8",
   options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, rivals: { values: ["gentle", "even", "hard"], normal: "gentle" }, time: { values: [600, 800, 1800, 0], normal: 1800 }, ...LIVE_SWITCHES, ...SWITCHES },
 
   setup(o, dice) {
     if (o.style === "classic" || (o.style === "custom" && o.live)) return liveSetup(o, dice, roller);
     const classic = o.style !== "ours", rule = SETS[o.style] ? SETS[o.style](o) : Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]])), b = hexBoard(rule.size), homes = dice.shuffle(o.seats === 2 ? [b.corners[0], b.corners[3]] : [b.corners[0], b.corners[2], b.corners[4]]);
-    const cost = b.cells.map(() => (dice.below(4) === 0 ? 2 : 1)), owner = Array(b.size).fill(NONE);
+    // hills turn with the homes (a half turn for two, a third for three), so every home has the same hills round it
+    const roll = b.cells.map(() => (dice.below(4) === 0 ? 2 : 1)), turn = o.seats === 2 ? 3 : 2, spin = (i, k) => { let [q, r] = b.cells[i]; for (let t = 0; t < k; t++) [q, r] = [-r, q + r]; return b.cells.findIndex(([x, y]) => x === q && y === r); };
+    const cost = b.cells.map((_, i) => roll[Math.min(i, spin(i, turn), spin(i, 2 * turn))]), owner = Array(b.size).fill(NONE);
     homes.forEach((h, s) => { cost[h] = 1; owner[h] = s; });
     const p = { classic, style: o.style, rule, owner, cost, order: dice.shuffle(b.cells.map((_, i) => i)), pool: Array(o.seats).fill(START), home: homes, turns: Array.from({ length: o.seats }, (_, s) => s), seat: 0, step: 0, round: 1, rounds: rule.limit, over: null };
     begin(p, []);
@@ -2140,7 +2149,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.5.0";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "a38686f8";
+const BUILD = "25154421";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
 return $x; })({});

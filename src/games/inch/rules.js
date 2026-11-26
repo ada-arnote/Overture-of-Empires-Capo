@@ -136,13 +136,15 @@ function advance(p, events, dice) {
 }
 
 export const inch = {
-  id: "inch", version: "7",
+  id: "inch", version: "8",
   options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, rivals: { values: ["gentle", "even", "hard"], normal: "gentle" }, time: { values: [600, 800, 1800, 0], normal: 1800 }, ...LIVE_SWITCHES, ...SWITCHES },
 
   setup(o, dice) {
     if (o.style === "classic" || (o.style === "custom" && o.live)) return liveSetup(o, dice, roller);
     const classic = o.style !== "ours", rule = SETS[o.style] ? SETS[o.style](o) : Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]])), b = hexBoard(rule.size), homes = dice.shuffle(o.seats === 2 ? [b.corners[0], b.corners[3]] : [b.corners[0], b.corners[2], b.corners[4]]);
-    const cost = b.cells.map(() => (dice.below(4) === 0 ? 2 : 1)), owner = Array(b.size).fill(NONE);
+    // hills turn with the homes (a half turn for two, a third for three), so every home has the same hills round it
+    const roll = b.cells.map(() => (dice.below(4) === 0 ? 2 : 1)), turn = o.seats === 2 ? 3 : 2, spin = (i, k) => { let [q, r] = b.cells[i]; for (let t = 0; t < k; t++) [q, r] = [-r, q + r]; return b.cells.findIndex(([x, y]) => x === q && y === r); };
+    const cost = b.cells.map((_, i) => roll[Math.min(i, spin(i, turn), spin(i, 2 * turn))]), owner = Array(b.size).fill(NONE);
     homes.forEach((h, s) => { cost[h] = 1; owner[h] = s; });
     const p = { classic, style: o.style, rule, owner, cost, order: dice.shuffle(b.cells.map((_, i) => i)), pool: Array(o.seats).fill(START), home: homes, turns: Array.from({ length: o.seats }, (_, s) => s), seat: 0, step: 0, round: 1, rounds: rule.limit, over: null };
     begin(p, []);

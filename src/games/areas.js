@@ -214,19 +214,55 @@ function earth() {
   return finish(g, of, { links: CROSSINGS, ends, region: REGION, names: WORLD_NAMES, lands: WORLD_LANDS, flat: true, marks: MARKS });
 }
 
-/** Where each seat starts: far apart, with about as much land close by. */
+/** Where each seat starts: no two side by side, then as even as can be in the provinces each has to itself within two steps
+ * (nearer to it than to any other start), then farther apart. The best of some tries, each made better a province at a time. */
 export function starts(b, seats, dice) {
+  const n = b.near.length, d = b.near.map((_, i) => steps(b.near, [i]));
+  const judge = (at) => {
+    let apart = 99;
+    for (let i = 0; i < seats; i++) for (let j = i + 1; j < seats; j++) apart = Math.min(apart, d[at[i]][at[j]]);
+    const room = at.map(() => 0), held = at.map(() => 0);
+    for (let c = 0; c < n; c++) {
+      let low = 99, who = -1;
+      for (let s = 0; s < seats; s++) { const x = d[at[s]][c]; if (x < low) { low = x; who = s; } else if (x === low) who = -1; }
+      if (who >= 0) { held[who]++; if (low <= 2) room[who]++; }
+    }
+    const uneven = Math.max(...room) - Math.min(...room), reach = Math.max(...held) - Math.min(...held);
+    return { at, apart, uneven, v: (apart >= 2 ? 1000 : 0) + (uneven <= 3 ? 500 : 0) + 8 * Math.min(apart, 4) - 4 * uneven - reach };
+  };
   let best = null;
-  for (let t = 0; t < 40; t++) {
-    const at = t === 0 ? spread(b.near, seats, dice, () => true, true) : dice.shuffle(b.near.map((_, i) => i)).slice(0, seats);
-    const ds = at.map((a) => steps(b.near, [a])), apart = Math.min(...at.flatMap((a, i) => at.map((c, j) => (i === j ? 99 : ds[i][c]))));
-    const room = ds.map((d) => d.filter((x) => x <= 2).length), uneven = Math.max(...room) - Math.min(...room);
-    const own = b.near.map((_, i) => { const v = ds.map((d) => d[i]), low = Math.min(...v); return v.filter((x) => x === low).length === 1 ? v.indexOf(low) : -1; });
-    const held = at.map((_, s) => own.filter((o) => o === s).length), reach = Math.max(...held) - Math.min(...held);
-    const v = 4 * Math.min(apart, 5) - 2 * uneven - reach;
-    if (!best || v > best.v) best = { at, v, apart, uneven };
+  for (let t = 0; t < 12; t++) {
+    let now = judge(t === 0 ? spread(b.near, seats, dice, () => true, true) : dice.shuffle(b.near.map((_, i) => i)).slice(0, seats));
+    for (let moved = true, pass = 0; moved && pass < 8; pass++) {
+      moved = false;
+      for (let s = 0; s < seats; s++) for (let c = 0; c < n; c++) {
+        if (now.at.includes(c)) continue;
+        const next = judge(now.at.map((a, k) => (k === s ? c : a)));
+        if (next.v > now.v) { now = next; moved = true; }
+      }
+    }
+    if (!best || now.v > best.v) best = now;
   }
   return best;
+}
+
+const edges = new WeakMap();
+/** How many of a land's provinces border another land, by land or by a crossing. */
+export function bordersOf(b, land) {
+  if (!edges.has(b)) edges.set(b, b.sizes.map((_, k) => b.near.filter((n, i) => b.region[i] === k && n.some((m) => b.region[m] !== k)).length));
+  return edges.get(b)[land];
+}
+/** What a land pays a turn to whoever holds it whole: a third of its size and half its border provinces, halves rounded down. Every map. */
+export const bonusOf = (b, land) => Math.max(1, Math.floor((2 * b.sizes[land] + 3 * bordersOf(b, land) + 2) / 6));
+
+/** A grown board fit to play: provinces big enough, few dead ends, links neither sparse nor crowded, and no land paying
+ * more than two and a half times another for each border province it must hold. */
+function fit(b) {
+  const cells = Array(b.n).fill(0);
+  for (const o of b.of) if (o >= 0) cells[o]++;
+  const pay = b.lands.map((_, k) => [bonusOf(b, k), Math.max(1, bordersOf(b, k))]), links = b.near.reduce((s, l) => s + l.length, 0);
+  return Math.min(...cells) >= 5 && b.near.filter((l) => l.length === 1).length <= 2 && links >= 3 * b.n && links <= 5 * b.n
+    && pay.every(([x, y]) => pay.every(([u, v]) => 2 * x * v <= 5 * u * y));
 }
 
 export const MAPS = ["world", "grown", "isles"];
@@ -237,9 +273,10 @@ export function areaBoard(key, map = "grown") {
   for (let t = 0; t < TRIES; t++) {
     const dice = chance(seedState(`areas/${id}/${t}`)), b = map === "world" ? earth() : map === "isles" ? isles(dice) : grow(dice);
     if (!b) continue;
+    if (map !== "world" && !fit(b)) continue;
     b.starts = {};
     for (const n of [2, 3, 4, 5, 6]) b.starts[n] = starts(b, n, dice);
-    if (map === "grown" && [2, 3, 4].some((n) => b.starts[n].apart < 3 || b.starts[n].uneven > 3)) continue;
+    if (map !== "world" && [2, 3, 4, 5, 6].some((n) => b.starts[n].apart < (map === "grown" && n <= 4 ? 3 : 2) || b.starts[n].uneven > 3)) continue;
     if (joined(b.near, 0, () => true).length !== b.n) continue;
     for (const n of [2, 3, 4, 5, 6]) b.starts[n] = b.starts[n].at;
     const done = Object.freeze({ ...b, tries: t + 1 });

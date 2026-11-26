@@ -210,20 +210,47 @@ function island(rule, dice, seats) {
   // numbers: how often each comes up, spread over the producing hexes, the busiest kept apart. Two dice added never put
   // a 7 on the island: a 7 is the raid roll.
   const faces = rule.roll === "sum" ? [2, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 12] : [1, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6];
-  const busy = BUSY[rule.roll];
-  for (let t = 0; t < 30; t++) {
-    const work = cells.slice(wastes), list = [];
-    while (list.length < work.length) list.push(...dice.shuffle(faces));
-    work.forEach((c, k) => { num[c] = list[k]; });
-    if (!work.some((c) => busy.includes(num[c]) && b.near[c].some((m) => busy.includes(num[m]) && good[m] !== WASTE))) break;
+  const busy = BUSY[rule.roll], work = cells.slice(wastes), list = [];
+  while (list.length < work.length) list.push(...dice.shuffle(faces));
+  const hot = list.slice(0, work.length).filter((x) => busy.includes(x)), cool = dice.shuffle(list.slice(0, work.length).filter((x) => !busy.includes(x)));
+  // the busiest go first, on hexes none of which touch: the best of a few tries at picking hexes apart, then the
+  // ones left over (only where too many of them come up to keep apart) where they touch the fewest
+  let apart = [];
+  for (let t = 0; t < 60 && apart.length < hot.length; t++) {
+    const got = [], open = new Set(dice.shuffle(work));
+    for (const c of open) if (got.length < hot.length && !b.near[c].some((m) => got.includes(m))) got.push(c);
+    if (got.length > apart.length) apart = got;
   }
-  const coast = [...dry].filter((i) => b.near[i].length < 6 || b.near[i].some((m) => !dry.has(m))), port = b.cells.map(() => NONE), ports = dice.shuffle(coast).slice(0, Math.max(4, Math.round(land / 9)));
+  while (apart.length < hot.length) apart.push(work.filter((c) => !apart.includes(c)).reduce((x, y) => (b.near[y].filter((m) => apart.includes(m)).length < b.near[x].filter((m) => apart.includes(m)).length ? y : x)));
+  apart.forEach((c, k) => { num[c] = hot[k]; });
+  work.filter((c) => !apart.includes(c)).forEach((c, k) => { num[c] = cool[k]; });
+  // then each good about as much as another: swap goods between the most and least made until within 1.5 times
+  const ways = (c) => (rule.roll === "sum" ? 6 - Math.abs(7 - num[c]) : 2 * num[c] - 1), made = [0, 1, 2, 3].map((g) => work.reduce((n, c) => n + (good[c] === g ? ways(c) : 0), 0));
+  for (let t = 0; t < 40; t++) {
+    const hi = made.indexOf(Math.max(...made)), lo = made.indexOf(Math.min(...made)), gap = made[hi] - made[lo];
+    if (2 * made[hi] <= 3 * made[lo]) break;
+    let best = null;
+    for (const x of work) if (good[x] === hi) for (const y of work) if (good[y] === lo) { const d = ways(x) - ways(y); if (d > 0 && d < gap && (!best || Math.abs(gap - 2 * d) < Math.abs(gap - 2 * best[2]))) best = [x, y, d]; }
+    if (!best) break;
+    [good[best[0]], good[best[1]]] = [lo, hi];
+    made[hi] -= best[2];
+    made[lo] += best[2];
+  }
+  // ports on the coast, none beside another: the most of the best of a few tries, topped up only if the coast is short
+  const coast = [...dry].filter((i) => b.near[i].length < 6 || b.near[i].some((m) => !dry.has(m))), port = b.cells.map(() => NONE), many = Math.max(4, Math.round(land / 9));
+  let ports = [];
+  for (let t = 0; t < 20 && ports.length < many; t++) {
+    const got = [];
+    for (const c of dice.shuffle(coast)) if (got.length < many && !b.near[c].some((m) => got.includes(m))) got.push(c);
+    if (got.length > ports.length) ports = got;
+  }
+  ports.push(...coast.filter((c) => !ports.includes(c)).slice(0, many - ports.length));
   ports.forEach((c, k) => { port[c] = k < 4 ? k : 4; });
   return { land: b.cells.map((_, i) => (dry.has(i) ? 1 : 0)), good, num, port, gate: cells.slice(0, wastes)[0] };
 }
 
 export const glass = {
-  id: "glass", version: "3",
+  id: "glass", version: "4",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
