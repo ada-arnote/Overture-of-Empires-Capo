@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-maOen6/cNEdX6MCnWCS/z/pKVLBqgI2ROkTlFwzqjl4='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-flgdU18MqVALrYdKYP1EKAUKa+cgPAjPaLPK0BbDEv8='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
 <title>Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -864,7 +864,8 @@ const pair = (a, b) => [a, b].sort().join("|");
 const others = (p, c) => p.split("|").find((x) => x !== c);
 const atWar = (g, a, b) => g.wars.some((w) => w.pair === pair(a, b));
 const treatyOf = (g, a, b) => g.treaties.find((t) => t.pair === pair(a, b));
-const mightOf = (geo, c) => MIGHT[c] ?? (geo.holds(c) >= 12 ? 3 : 2);
+// the Game Master may set a country's might; otherwise the table, then size
+const mightOf = (geo, c) => geo.might?.(c) ?? MIGHT[c] ?? (geo.holds(c) >= 12 ? 3 : 2);
 const warsOf = (g, c) => g.wars.filter((w) => w.pair.split("|").includes(c)).map((w) => others(w.pair, c));
 const treatiesOf = (g, c) => g.treaties.filter((t) => t.pair.split("|").includes(c)).map((t) => ({ with: others(t.pair, c), kind: t.kind }));
 
@@ -982,6 +983,7 @@ function worldFacts(g, geo) {
   const moved = Object.entries(g.owners).slice(-20).map(([id, c]) => `${id} ${geo.place(id).name}: held by ${c}, taken from ${geo.place(id).country}`);
   const last = g.log[g.log.length - 1];
   return [
+    ...(g.facts || []).map((f) => `- Told by the Game Master, and true: ${f.text}`),
     `- Wars: ${wars.join(", ") || "none"}`,
     `- Treaties: ${treaties.join(", ") || "none"}`,
     `- Offers waiting for the player: ${g.offers.map((o) => `${o.from} ${o.kind}`).join(", ") || "none"}`,
@@ -1208,7 +1210,7 @@ function newWorldGame(player, mode, seed, extra = {}) {
   const sc = extra.scenario || { id: "today", start: "2026-12-01", opening: "" };
   return { v: 1, scenario: sc.id, opening: sc.opening, player, mode: MODES[mode] ? mode : "nation", seed, date: sc.start, turn: 1,
     owners: { ...(extra.owners || {}) }, custom: extra.custom || null, character: extra.character || null, wars: [], treaties: [], offers: [], log: [],
-    standing: STANDING[mode] || 5, council: null, chats: [], counsel: [] };
+    standing: STANDING[mode] || 5, council: null, chats: [], counsel: [], facts: [], might: {}, edits: [], sandbox: false };
 }
 
 // what each mode lets the player's actions do
@@ -1630,7 +1632,7 @@ const button = (text, on, cls = "plain") => { const b = el("button", text, cls);
 let world, map, state = null, past = [], route = loadRoute(), sheet = null, pending = null, jump = "1m", hush = 0, ledgerTab = "events";
 
 // games saved before wars and treaties existed get empty lists
-const mend = (s) => ({ wars: [], treaties: [], offers: [], chats: [], counsel: [], council: null, standing: STANDING[s.mode] || 5, ...s });
+const mend = (s) => ({ wars: [], treaties: [], offers: [], chats: [], counsel: [], council: null, standing: STANDING[s.mode] || 5, facts: [], might: {}, edits: [], sandbox: false, ...s });
 const save = () => { try { localStorage.setItem(KEEP, JSON.stringify({ state, past: past.slice(-10) })); } catch { /* the game still runs for this visit */ } };
 const load = () => { try { return JSON.parse(localStorage.getItem(KEEP) || "null"); } catch { return null; } };
 function toast(t) { const b = $("toast"); b.textContent = t; b.classList.add("on"); clearTimeout(hush); hush = setTimeout(() => b.classList.remove("on"), 3400); }
@@ -1663,7 +1665,7 @@ function landNeighbours(code) {
 function geo() {
   return {
     name, place: (id) => world.provinces.get(id), owner: ownerOf, neighbours: (id) => world.neighbours.get(id), coastal: (id) => world.coast.has(id),
-    holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c, hasCoast: (c) => held(c).some((id) => world.coast.has(id)),
+    holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c, hasCoast: (c) => held(c).some((id) => world.coast.has(id)), might: (c) => state?.might?.[c],
     find: (s) => { const k = String(s || "").trim(); if (world.provinces.has(k)) return k; const low = k.toLowerCase(), hits = [...world.provinces.values()].filter((p) => p.name.toLowerCase() === low); return hits.length === 1 ? hits[0].id : null; },
   };
 }
@@ -1863,7 +1865,7 @@ function topBar() {
   jumpPick.append(...JUMPS.map(([k, t]) => new Option(t, k))); jumpPick.value = jump; jumpPick.onchange = () => { jump = jumpPick.value; };
   jumpPick.setAttribute("aria-label", "How far to jump");
   const date = el("span", undefined, "date"); date.append("Turn ", el("b", String(state.turn)), ", ", el("b", fmtDate(state.date)));
-  top.replaceChildren(who, el("span", MODES[state.mode][0], "mode"), date, jumpPick, button("Advance", advance, "go"), button("Game", () => open("game")));
+  top.replaceChildren(who, el("span", MODES[state.mode][0], "mode"), ...(state.sandbox ? [el("span", "Sandbox", "mode")] : []), date, jumpPick, button("Advance", advance, "go"), button("Game", () => open("game")));
 }
 
 const DOCK = [["actions", "Actions"], ["chats", "Chats"], ["ledger", "Ledger"], ["advisors", "Advisors"], ["master", "Game Master"]];
@@ -1970,11 +1972,88 @@ function worldTab(box) {
     el("h3", "Treaties"), list(state.treaties.map((t) => { const [a, b] = t.pair.split("|"); return `${name(a)} and ${name(b)}: ${t.kind}`; }), "No treaties."),
     el("h3", "Offers to you"), list(state.offers.map((o) => `${name(o.from)} offers ${o.kind === "peace" ? "peace" : `a ${o.kind} treaty`} (${fmtDate(o.date)}). To accept, write it in your actions.`), "None."),
     el("h3", "Land that has changed hands"), list(taken, "None yet."),
+    ...(state.facts?.length ? [el("h3", "Story facts"), list(state.facts.map((f) => f.text), "")] : []),
+    ...(state.edits?.length ? [el("h3", "Changed by hand (Sandbox)"), list(state.edits.map((e) => `${fmtDate(e.date)}: ${e.text}`), "")] : []),
     el("p", `${name(me)}: might ${mightOf(geo(), me)} of 10 (invented, for this fiction), ${held(me).length} provinces.`, "note"));
 }
 
-const later = (title, what) => (box) => box.append(el("h2", title), el("p", what, "note"));
-const master = later("Game Master", "Comes in a later step: tell the story what is true, in canonical or free mode, with undo.");
+// ---- the Game Master: facts the story must honour (canonical), or direct changes to what the rules hold (sandbox) ----
+let gmPicking = false, gmPlace = null;
+/** A box to type a country into, by name; `get()` gives its code or null. */
+function countryInput(label) {
+  const input = Object.assign(el("input", undefined, "plain"), { type: "search", placeholder: label }), id = `gm-${label.replace(/\W+/g, "-").toLowerCase()}`;
+  const dl = el("datalist"); dl.id = id; input.setAttribute("list", id); input.setAttribute("aria-label", label);
+  const byName = new Map([...homes.keys(), ...(state.custom ? [state.custom.code] : [])].map((c) => [name(c), c]));
+  dl.append(...[...byName.keys()].sort().map((n) => { const o = document.createElement("option"); o.value = n; return o; }));
+  const wrap = el("span"); wrap.append(input, dl);
+  return { el: wrap, get: () => byName.get(input.value.trim()) || null };
+}
+/** Make one sandbox change: keep the old game to undo, mark the game as edited, record what was done. */
+function edit(text, change) {
+  past.push(structuredClone(state));
+  change();
+  state.sandbox = true;
+  state.edits = [...(state.edits || []), { turn: state.turn, date: state.date, text }].slice(-60);
+  save(); topBar(); map.refresh(); open("master"); toast(text);
+}
+const pairOf = (a, b) => [a, b].sort().join("|");
+
+function master(box) {
+  box.append(el("h2", "Game Master"));
+  // story facts: the AI is told these are true, every turn, until they are removed
+  const facts = el("ul", undefined, "list");
+  facts.append(...(state.facts || []).map((f, i) => { const li = el("li"); li.append(el("span", f.text), button("Remove", () => { state.facts.splice(i, 1); save(); open("master"); })); return li; }));
+  const fact = Object.assign(el("textarea", undefined, "plain"), { rows: 2, maxLength: 400, placeholder: "Something true in this story, for example: A coup in Peru puts the army in charge." });
+  fact.setAttribute("aria-label", "A story fact");
+  const add = el("div", undefined, "row");
+  add.append(button("Tell the story", () => {
+    const t = fact.value.trim(); if (!t) return;
+    if (crossesLine([t]).length) return toast("Refused: nothing sexual involving minors.");
+    state.facts = [...(state.facts || []), { text: t, turn: state.turn }].slice(-20); save(); open("master"); toast("The AI will treat it as true.");
+  }, "go"));
+  box.append(el("h3", "Story facts"), el("p", "The AI is told these are true every turn until you remove them. They shape the story; they do not move land, wars or treaties.", "note"), facts, fact, add);
+
+  // direct changes: the rules' own facts, by hand
+  box.append(el("h3", "Change the world"), el("p", state.sandbox ? "This game is marked Sandbox: its facts have been changed by hand." : "Changes the rules' own facts directly. The first change marks this game Sandbox for good, so it is always clear the rules were overridden. Every change can be undone.", "note"));
+
+  const place = gmPlace && world.provinces.get(gmPlace), to = countryInput("New holder"), r1 = el("div", undefined, "row");
+  r1.append(button(gmPicking ? "Tap a province on the map..." : place ? `Province: ${place.name} (${name(ownerOf(place.id))})` : "Pick a province on the map", () => { gmPicking = true; open(null); toast("Tap a province on the map."); }));
+  r1.append(to.el, button("Hand it over", () => {
+    const c = to.get(); if (!place) return toast("Pick a province first."); if (!c) return toast("Choose the new holder.");
+    const from = ownerOf(place.id); if (from === c) return toast(`${name(c)} already holds it.`);
+    if (held(from).length <= 1) return toast(`It is the last land ${name(from)} holds.`);
+    edit(`${place.name} handed from ${name(from)} to ${name(c)}`, () => { if (place.country === c) delete state.owners[place.id]; else state.owners[place.id] = c; });
+  }));
+  box.append(el("div", "Hand a province to another country", "note"), r1);
+
+  const a = countryInput("First country"), b = countryInput("Second country"), kind = el("select", undefined, "plain"), r2 = el("div", undefined, "row");
+  kind.append(...["trade", "defence", "alliance"].map((k) => new Option(`${k} treaty`, k))); kind.setAttribute("aria-label", "Kind of treaty");
+  const two = () => { const x = a.get(), y = b.get(); if (!x || !y || x === y) { toast("Choose two different countries."); return null; } return [x, y]; };
+  r2.append(a.el, b.el);
+  const r3 = el("div", undefined, "row");
+  r3.append(
+    button("Start a war", () => { const p = two(); if (!p) return; if (state.wars.some((w) => w.pair === pairOf(...p))) return toast("They are already at war."); edit(`War between ${name(p[0])} and ${name(p[1])}`, () => { state.treaties = state.treaties.filter((t) => t.pair !== pairOf(...p)); state.wars.push({ pair: pairOf(...p), since: state.date, by: "gm" }); }); }),
+    button("End their war", () => { const p = two(); if (!p) return; if (!state.wars.some((w) => w.pair === pairOf(...p))) return toast("They are not at war."); edit(`Peace between ${name(p[0])} and ${name(p[1])}`, () => { state.wars = state.wars.filter((w) => w.pair !== pairOf(...p)); }); }),
+    kind,
+    button("Make a treaty", () => { const p = two(); if (!p) return; edit(`A ${kind.value} treaty between ${name(p[0])} and ${name(p[1])}`, () => { state.wars = state.wars.filter((w) => w.pair !== pairOf(...p)); state.treaties = state.treaties.filter((t) => t.pair !== pairOf(...p)); state.treaties.push({ pair: pairOf(...p), kind: kind.value, since: state.date }); }); }),
+    button("End their treaty", () => { const p = two(); if (!p) return; if (!state.treaties.some((t) => t.pair === pairOf(...p))) return toast("They have no treaty."); edit(`Treaty between ${name(p[0])} and ${name(p[1])} ended`, () => { state.treaties = state.treaties.filter((t) => t.pair !== pairOf(...p)); }); }));
+  box.append(el("div", "Wars and treaties between two countries", "note"), r2, r3);
+
+  const who = countryInput("Country"), level = el("select", undefined, "plain"), r4 = el("div", undefined, "row");
+  level.append(...Array.from({ length: 10 }, (_, i) => new Option(String(i + 1), String(i + 1)))); level.setAttribute("aria-label", "Might from 1 to 10");
+  r4.append(who.el, level, button("Set its might", () => { const c = who.get(); if (!c) return toast("Choose a country."); const n = Number(level.value); edit(`${name(c)}'s might set to ${n} (was ${mightOf(geo(), c)})`, () => { state.might = { ...(state.might || {}), [c]: n }; }); }));
+  box.append(el("div", "Might, from 1 to 10 (decides battles)", "note"), r4);
+
+  const r5 = el("div", undefined, "row");
+  r5.append(button("Undo the last change", () => { if (!past.length) return toast("Nothing to undo."); state = past.pop(); save(); topBar(); map.refresh(); open("master"); toast("Undone."); }));
+  box.append(r5);
+  if (state.edits?.length) {
+    const list = el("ul", undefined, "list");
+    list.append(...state.edits.slice(-8).reverse().map((e) => { const li = el("li"); li.append(el("span", `${fmtDate(e.date)}: ${e.text}.`)); return li; }));
+    box.append(el("h3", "Changes made by hand"), list);
+  }
+}
+
 // ---- asking an AI for chats and counsel: by address straight away, or by paste inside the open panel ----
 let asking = null;
 function askAI(prompt, take, where) {
@@ -2150,6 +2229,7 @@ function gameSheet(box) {
 function card(p) {
   const box = $("card");
   if (!p) { box.style.display = "none"; return; }
+  if (state && gmPicking) { gmPicking = false; gmPlace = p.id; picked = p.id; open("master"); return; }
   if (!state && draft?.step === "country") {
     if (draft.kind === "own") toggleOwn(p);
     else { draft.country = ownerOf(p.id); startScreen(); }

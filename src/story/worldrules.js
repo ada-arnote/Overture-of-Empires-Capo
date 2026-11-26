@@ -24,7 +24,8 @@ const pair = (a, b) => [a, b].sort().join("|");
 const others = (p, c) => p.split("|").find((x) => x !== c);
 export const atWar = (g, a, b) => g.wars.some((w) => w.pair === pair(a, b));
 export const treatyOf = (g, a, b) => g.treaties.find((t) => t.pair === pair(a, b));
-export const mightOf = (geo, c) => MIGHT[c] ?? (geo.holds(c) >= 12 ? 3 : 2);
+// the Game Master may set a country's might; otherwise the table, then size
+export const mightOf = (geo, c) => geo.might?.(c) ?? MIGHT[c] ?? (geo.holds(c) >= 12 ? 3 : 2);
 export const warsOf = (g, c) => g.wars.filter((w) => w.pair.split("|").includes(c)).map((w) => others(w.pair, c));
 export const treatiesOf = (g, c) => g.treaties.filter((t) => t.pair.split("|").includes(c)).map((t) => ({ with: others(t.pair, c), kind: t.kind }));
 
@@ -142,6 +143,7 @@ export function worldFacts(g, geo) {
   const moved = Object.entries(g.owners).slice(-20).map(([id, c]) => `${id} ${geo.place(id).name}: held by ${c}, taken from ${geo.place(id).country}`);
   const last = g.log[g.log.length - 1];
   return [
+    ...(g.facts || []).map((f) => `- Told by the Game Master, and true: ${f.text}`),
     `- Wars: ${wars.join(", ") || "none"}`,
     `- Treaties: ${treaties.join(", ") || "none"}`,
     `- Offers waiting for the player: ${g.offers.map((o) => `${o.from} ${o.kind}`).join(", ") || "none"}`,

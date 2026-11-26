@@ -30,7 +30,7 @@ export function newWorldGame(player, mode, seed, extra = {}) {
   const sc = extra.scenario || { id: "today", start: "2026-12-01", opening: "" };
   return { v: 1, scenario: sc.id, opening: sc.opening, player, mode: MODES[mode] ? mode : "nation", seed, date: sc.start, turn: 1,
     owners: { ...(extra.owners || {}) }, custom: extra.custom || null, character: extra.character || null, wars: [], treaties: [], offers: [], log: [],
-    standing: STANDING[mode] || 5, council: null, chats: [], counsel: [] };
+    standing: STANDING[mode] || 5, council: null, chats: [], counsel: [], facts: [], might: {}, edits: [], sandbox: false };
 }
 
 // what each mode lets the player's actions do
