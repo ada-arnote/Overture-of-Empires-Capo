@@ -28,13 +28,14 @@ An early build, at an unlisted address: https://ada-arnote.github.io/Overture-of
 
 **Rules for rules code** (`src/core`, `src/games`): whole numbers only, no clock, no page, no chance except the one passed in. The gate enforces this, so a game replays the same on every machine.
 
-**Fonts, icons and sounds.** Only CC0, CC BY, OFL 1.1, MIT or ISC, never made by an AI, each with a row in `CREDITS.csv`. They ship only from these folders, which the gate counts apart from code (`.woff2`, `.ogg`, `.mp3`, `.png`, `.webp` at full size, since they do not compress), all inside the 500 kB total:
+**Fonts, icons, sounds and textures.** Only CC0, CC BY, OFL 1.1, MIT or ISC, never made by an AI, each with a row in `CREDITS.csv`. They ship only from these folders, which the gate counts apart from code (`.woff2`, `.ogg`, `.mp3`, `.png`, `.webp` at full size, since they do not compress), all inside the 500 kB total:
 
 | Folder | Holds | Budget |
 |---|---|---|
 | `site/fonts/<family>/` | `.woff2`, with the licence text and copyright line in a `.txt` beside it (the font's own `OFL.txt`) | 110 kB |
 | `site/icons/` (a folder per set) | `.svg`, `.png`, `.webp`: icons, signs and ornament | 25 kB |
 | `site/sounds/` | `.ogg`, `.mp3` | 60 kB |
+| `site/textures/` | `.webp`, `.png`: small seamless tiles (wood, canvas, cork, paper) | 32 kB |
 
 Each font, and each OFL, MIT or ISC file, is named in `NOTICES.md` by its path or its folder; MIT and ISC sets also keep their copyright line and permission text there. Pages name an asset by its whole path from `site/`, in quotes or `url()` (`"sounds/move.ogg"`, `url("fonts/spectral/spectral-400.woff2")`), never built from pieces: `node tools/bundle.mjs` points `play/` pages back at `../site/` and puts the file itself inside each `dist/play-*.html` as `data:`, so every font a page names makes each double-click page larger by about four thirds of its size. Page rules allow fonts and sounds only from the page's own site (`font-src 'self'; media-src 'self'`), or from inside the page (`data:`) for double-click pages.
 

@@ -55,10 +55,10 @@ export function bundle(entry) {
 
 const KINDS = { woff2: "font/woff2", ogg: "audio/ogg", mp3: "audio/mpeg", svg: "image/svg+xml", png: "image/png", webp: "image/webp" };
 
-/** Points a page at the site's fonts, icons and sounds, named as whole quoted or url() paths relative to site/ ("sounds/move.ogg"):
+/** Points a page at the site's fonts, icons, sounds and textures, named as whole quoted or url() paths relative to site/ ("sounds/move.ogg"):
  *  from the site when served (home is the way back to site/), or inlined as data: when the page has to stand alone. */
 export function assets(text, home, from) {
-  return text.replace(/(["'(])(?:\.\/)?((?:fonts|icons|sounds)\/[\w./-]+?\.(woff2|ogg|mp3|svg|png|webp))(?=["')])/g, (_, q, ref, ext) => {
+  return text.replace(/(["'(])(?:\.\/)?((?:fonts|icons|sounds|textures)\/[\w./-]+?\.(woff2|ogg|mp3|svg|png|webp))(?=["')])/g, (_, q, ref, ext) => {
     const file = path.join(from, ref);
     if (ref.split("/").includes("..") || !existsSync(file)) throw new Error(`${ref}: no such file in site/`);
     return q + (home ? home + ref : `data:${KINDS[ext]};base64,${readFileSync(file).toString("base64")}`);
