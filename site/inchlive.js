@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // An Inch of Ink in real time, on the table: a clock, a share to send, a click on where it goes, and a leaderboard.
 // Traditional adds an ink to choose at the start, places on the map, and a mark and a card that wait in gold.
-import { AGES, CARDS, INKS, MARKS, NONE, PCTS, PLACES, SAFE, TICK_MS, ageOf, bordersOf, cardDue, cityPrice, gainOf, goalOf, inkOf, landingPrice, landings, markDue, markOf, maxOf, rangeOf } from "../src/games/inch/live.js";
+// Capo, The Ink Dries, adds a capital drawn as a tower and a page that dries from its edges.
+import { CARDS, DRIES, INKS, MARKS, NONE, PCTS, PLACES, SAFE, TICK_MS, ageOf, agesOf, bordersOf, cardDue, cityPrice, dryRank, driedOf, gainOf, goalOf, inkOf, landingPrice, landings, markDue, markOf, maxOf, rangeOf, wetAt, wetOf } from "../src/games/inch/live.js";
 import { liveBoardFor } from "../src/games/inch/rules.js";
 import { $, RGB, el, radio, sheet, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
 import { areaPicture } from "../src/map/areas.js";
 import { ledger, note, title } from "./ledger.js";
 
-const SEA = [64, 104, 128], LAND = [[214, 204, 170], [206, 198, 162], [220, 210, 178]], HILL = [178, 160, 128], GLYPH = ["cairn", "port", "fort", "depot"];
+const SEA = [64, 104, 128], DRY = [238, 232, 216], LAND = [[214, 204, 170], [206, 198, 162], [220, 210, 178]], HILL = [178, 160, 128], GLYPH = ["cairn", "port", "fort", "depot"];
 let pct = 40, paused = false, speed = 1, clock = 0, building = false, box = null, ink = "draw", me = null;
 
 /** Colours for every nation: yours first, the rest spread round the wheel. */
@@ -60,6 +61,7 @@ export function tap(T, i) {
   if (!T.ready()) return undefined;
   const p = T.match.position, b = liveBoardFor(p), spot = placeAt(p, i);
   if (i < 0 || !b.land[i]) return toast("That is sea.");
+  if (!wetAt(p, b, i)) return toast("That land has dried. Nobody can hold it now.");
   if (spot) toast(`${PLACES[spot[1]].name}: ${PLACES[spot[1]].line}`);
   if (p.phase === "spawn") {
     const want = p.choose ? INKS[ink === "draw" ? p.ink[0] : ink].id : undefined, m = T.match.legal().find((x) => x.at === i && x.ink === want);
@@ -84,11 +86,16 @@ export function board(T, stage) {
   const p = T.match.position, b = liveBoardFor(p), cs = colours(p), slot = new Map(b.dry.map((c, k) => [c, k])), of = b.cells.map((_, i) => (slot.has(i) ? slot.get(i) : -1));
   const picture = areaPicture(b.cells, of, b.dry, 9, true);
   document.body.classList.add("atlas");
+  // dried land is drawn as one more seat, the colour of bare paper; a capital is a tower showing its nation's strength
+  const rank = dryRank(b), n = cs.length;
   return hexBoard(T, stage, {
-    picture, cells: [], rough: [], sea: [...b.dry.map(() => false), true], seats: cs, plain: true, fine: { cells: b.cells, of, mid: b.dry },
+    picture, cells: [], rough: [], sea: [...b.dry.map(() => false), true], seats: [...cs, DRY], plain: true, fine: { cells: b.cells, of, mid: b.dry },
     ground: (k) => (k >= b.dry.length ? SEA : b.hill[b.dry[k]] ? HILL : LAND[k % 3]),
-    owner: () => [...b.dry.map((c) => T.match.position.owner[c]), NONE],
-    pieces: () => { const q = T.match.position, rgb = (at) => cs[q.owner[at]] || [180, 170, 150]; return [...q.cities.map((at) => ({ kind: "town", at: slot.get(at), rgb: rgb(at) })), ...q.places.map(([at, k]) => ({ kind: GLYPH[k], at: slot.get(at), rgb: rgb(at), good: 4 }))]; },
+    owner: () => { const q = T.match.position, k = driedOf(q); return [...b.dry.map((c) => (rank[c] < k ? n : q.owner[c])), NONE]; },
+    pieces: () => {
+      const q = T.match.position, rgb = (at) => cs[q.owner[at]] || [180, 170, 150], towers = q.cap ? q.cap.flatMap((at, s) => (at >= 0 && q.land[s] ? [{ kind: "tower", at: slot.get(at), rgb: cs[s], count: q.troops[s], now: s === q.human }] : [])) : [];
+      return [...q.cities.map((at) => ({ kind: "town", at: slot.get(at), rgb: rgb(at) })), ...q.places.map(([at, k]) => ({ kind: GLYPH[k], at: slot.get(at), rgb: rgb(at), good: 4 })), ...towers];
+    },
     names() { // a nation's name sits in the middle of its land, larger the more it holds
       const q = T.match.position, sum = q.troops.map(() => [0, 0, 0]);
       q.owner.forEach((o, i) => { if (o >= 0) { const [x, y] = picture.at[i]; sum[o][0] += x; sum[o][1] += y; sum[o][2]++; } });
@@ -126,7 +133,7 @@ export function panel(T) {
   if (p.phase === "spawn") {
     const pick = ink === "draw" ? p.ink[0] : ink;
     $("status").textContent = p.choose ? "Choose your ink, then tap empty land to start" : "Tap empty land to start your nation";
-    c.querySelector(".live-info").textContent = `${p.ink[0] >= 0 ? `${INKS[pick].name}: ${INKS[pick].line} ` : ""}${p.troops.length - 1} other nations are on the map. Choose a place with room to grow.`;
+    c.querySelector(".live-info").textContent = `${p.ink[0] >= 0 ? `${INKS[pick].name}: ${INKS[pick].line} ` : ""}${p.troops.length - 1} other nations are on the map. Choose a place with room to grow.${p.dries ? " Your first cell is your capital, and the page dries from its edges inward." : ""}`;
     if (p.choose) radio(c.inks, [{ value: "draw", label: "Draw for me" }, ...INKS.map((k, v) => ({ value: v, label: k.name, rgb: k.rgb }))], ink, (v) => { ink = v; T.refresh(); });
     c.due.hidden = true;
     return;
@@ -134,7 +141,8 @@ export function panel(T) {
   due(T, p);
   const going = p.attacks.filter((a) => a.by === s), out = !p.alive[s], mine = inkOf(p, s);
   $("status").textContent = out ? (paused ? "You are out. Paused" : "You are out. Watching") : paused ? "Paused" : `Strength ${p.troops[s]} of ${maxOf(p, s)}`;
-  c.querySelector(".live-info").textContent = out ? "The other nations play on to the end. Speed up the clock, or start again from the menu." : `${mine.name ? `${mine.name}: ${mine.line} ` : ""}+${gainOf(p, s)} every half second. ${going.length ? `${going.length} ${going.length === 1 ? "attack" : "attacks"} under way, ${going.reduce((n, a) => n + a.left, 0)} strength in them.` : "Tap a neighbour to attack with the share below."}`;
+  const page = p.dries ? (p.tick < DRIES.from ? `The page dries from ${clockOf(DRIES.from)}. ` : `${Math.round((100 * wetOf(p)) / p.total)}% of the page is still wet. `) : "";
+  c.querySelector(".live-info").textContent = out ? "The other nations play on to the end. Speed up the clock, or start again from the menu." : `${page}${mine.name ? `${mine.name}: ${mine.line} ` : ""}+${gainOf(p, s)} every half second. ${going.length ? `${going.length} ${going.length === 1 ? "attack" : "attacks"} under way, ${going.reduce((n, a) => n + a.left, 0)} strength in them.` : "Tap a neighbour to attack with the share below."}`;
   const top = p.land.map((n, k) => [n, k]).filter(([n]) => n).sort((x, y) => y[0] - x[0]).slice(0, 8), cs = colours(p);
   me ??= title();
   if (!top.some(([, k]) => k === s) && p.land[s]) top.push([p.land[s], s]);
@@ -142,7 +150,7 @@ export function panel(T) {
     const li = el("li"), dot = el("i", undefined, "dot"), sw = el("i", undefined, "dot"), i = inkOf(p, k);
     dot.style.background = `rgb(${cs[k]})`;
     if (i.rgb) { sw.style.background = `rgb(${i.rgb})`; sw.title = i.name; }
-    li.append(dot, el("b", k === s && me ? `${p.names[k]}, ${me}` : p.names[k]), ...(i.rgb ? [sw] : []), el("span", `${Math.round((100 * n) / p.total)}%`));
+    li.append(dot, el("b", k === s && me ? `${p.names[k]}, ${me}` : p.names[k]), ...(i.rgb ? [sw] : []), el("span", `${Math.round((100 * n) / wetOf(p))}%`));
     li.onclick = () => card(p, k);
     li.style.cursor = "pointer";
     if (k === s) li.className = "me";
@@ -162,12 +170,12 @@ export function summary(T) {
   if (!lead.some(([, s]) => s === p.human)) lead.push([0, p.human]);
   return `${p.names[r.winners[0]]} ${r.why}, after ${m < 1 ? "less than a minute" : `${m} ${m === 1 ? "minute" : "minutes"}`} of game time. ${lead.map(([, s]) => `${p.names[s]}${who(s) ? `: ${who(s)}` : ""}`).join("; ")}.`;
 }
-export const lineOf = (e, p) => (e.kind === "out" ? (e.seat === p.human ? "You are out." : `${p.names[e.seat]} is gone.`) : e.kind === "city" ? "You build a city." : e.kind === "boat" ? (e.landed ? "Your boats land." : `Your boats are thrown back. They lose ${e.lost ?? 0}; the rest come home.`) : e.kind === "age" ? (e.age === 2 ? "Age II, Ink: choose your mark." : "Age III, Seal: your card is ready, and the goal begins to ease.") : e.kind === "mark" || e.kind === "card" ? `You take ${[...MARKS, ...CARDS].find((k) => k.id === e[e.kind]).name}.` : "");
+export const lineOf = (e, p) => (e.kind === "dries" ? "The page begins to dry from its edges." : e.kind === "capital" ? (e.seat === p.human ? "Your capital is lost: it moves to your largest land, and a quarter of your strength goes with it." : "") : e.kind === "out" ? (e.seat === p.human ? "You are out." : `${p.names[e.seat]} is gone.`) : e.kind === "city" ? "You build a city." : e.kind === "boat" ? (e.landed ? "Your boats land." : `Your boats are thrown back. They lose ${e.lost ?? 0}; the rest come home.`) : e.kind === "age" ? (e.age === 2 ? "Age II, Ink: choose your mark." : "Age III, Seal: your card is ready, and the goal begins to ease.") : e.kind === "mark" || e.kind === "card" ? `You take ${[...MARKS, ...CARDS].find((k) => k.id === e[e.kind]).name}.` : "");
 /** When you lose your last cell the game goes on without you: watch it to the end, or start again. The open sheet holds the clock.
  *  When a game you played ends, the ledger notes it. */
 export function seen(T, events) {
   const p = T.match.position;
-  if (p.over && events.some((e) => e.kind === "end") && !T.demo && T.kinds[0] === "you") note({ seed: T.match.seed, map: p.map, rivals: p.rivals, ticks: p.tick, ink: p.ink[0], mark: p.mark[0], nations: p.troops.length, won: p.over.winners[0] === p.human }) && (me = null);
+  if (p.over && events.some((e) => e.kind === "end") && !T.demo && T.kinds[0] === "you" && !p.dries) note({ seed: T.match.seed, map: p.map, rivals: p.rivals, ticks: p.tick, ink: p.ink[0], mark: p.mark[0], nations: p.troops.length, won: p.over.winners[0] === p.human }) && (me = null);
   if (p.over || !events.some((e) => e.kind === "out" && e.seat === p.human)) return;
   const box = el("div", undefined, "stack"), again = button("Restart", "main");
   again.onclick = () => { $("sheet").close(); $("again").click(); };
@@ -175,9 +183,10 @@ export function seen(T, events) {
   sheet("You are out", box, "Watch");
 }
 export const leave = () => { if (box) box.hidden = true; for (const id of ["targets", "shares"]) $(id).hidden = false; $("pour").parentElement.hidden = false; };
-export const liveGoal = goalOf;
-/** The time line: the age, then game time. */
-export const time = (p) => `${p.ages ? `Age ${"I".repeat(ageOf(p))}, ` : ""}${Math.floor(p.tick / 120)}:${String(Math.floor((p.tick / 2) % 60)).padStart(2, "0")}`;
+export const liveGoal = goalOf, liveLand = wetOf;
+const clockOf = (tick) => `${Math.floor(tick / 120)}:${String(Math.floor((tick / 2) % 60)).padStart(2, "0")}`;
+/** The time line: the age, then game time; in The Ink Dries, whether the page is drying. */
+export const time = (p) => `${p.ages ? `Age ${"I".repeat(ageOf(p))}, ` : ""}${clockOf(p.tick)} of game time${p.dries && p.tick > DRIES.from ? ", drying" : ""}`;
 /** The ledger, from the menu. */
 const show = () => { me = null; sheet("Your record", ledger(show)); };
 export const record = { label: "Your record", body: () => ledger(show) };
@@ -191,9 +200,26 @@ export function key(T, k) {
   return true;
 }
 
-/** The rules sheet for real time, read from the same table as the rules. With no game yet, Traditional's. */
-export function rules(p) {
-  const limit = p ? p.limit : SAFE, ages = p ? p.ages : true, inks = p ? p.ink.some((k) => k >= 0) : true, places = p ? p.places.length > 0 : true, ease = p ? p.ease : true;
+/** The rules sheet for The Ink Dries, read from the same table as the rules. */
+const driesRules = (p) => [
+  "Capo: The Ink Dries. A short real-time game for 12 nations on a map drawn for the game. The clock runs on its own; pause it, or run it faster, with the buttons.",
+  "Tap empty land to start your nation. That first cell is your capital, drawn as a tower with your strength on it. Strength grows every half second: more for more land, a little more for saving, up to a limit set by your land.",
+  "Choose a share with the slider, then tap a neighbour, or empty land beside yours. That share of your strength goes, and the border creeps forward until it is spent.",
+  `Each cell costs 2, 3 more on hills, and more where the owner holds much strength on little land. A capital and the cells around it cost ${DRIES.wall} times as much.`,
+  `Land cut off from your capital fades to empty after ${DRIES.fade / 2} seconds unless you join it up again.${!p || p.boats ? " Where boats sail, land with a coast stays yours while your capital's land has a coast too." : ""}`,
+  "If your capital is taken, or dries, it moves to your largest piece of land and you lose a quarter of your strength.",
+  `${PLACES[0].name}s on the map give +${PLACES[0].grow} growth to whoever holds them.`,
+  `From ${clockOf(DRIES.from)} the page dries from its edges inward, the land farthest from the middle first, until a tenth is left. Dried land is lost to everyone and no longer counts.`,
+  `Win by holding ${DRIES.goal}% of the land still wet, or by being the last one left. At ${clockOf(DRIES.from + DRIES.span)} the biggest nation wins.`,
+  ...[({ gentle: "Rivals are gentle: they grow slower than you and leave you alone for the first three minutes.", even: "Rivals are even: they grow as fast as you.", hard: "Rivals are hard: they grow faster than you and attack sooner." })[p ? p.rivals : "gentle"]],
+  ...(!p || p.boats ? [`Boats: where the map has more than one landmass, tap a coast across the water${p ? `, up to ${rangeOf(p, liveBoardFor(p), p.human)} cells of sea or dried land away` : ""}. Landing costs double the cell.`] : []),
+  "Keys: 1 to 0 choose the share, Space pauses.",
+];
+
+/** The rules sheet for real time, read from the same table as the rules. With no game yet, Traditional's, or The Ink Dries' when asked. */
+export function rules(p, dries = false) {
+  if (p ? p.dries : dries) return driesRules(p);
+  const limit = p ? p.limit : SAFE, ages = p ? p.ages : true, inks = p ? p.ink.some((k) => k >= 0) : true, places = p ? p.places.length > 0 : true, ease = p ? p.ease : true, at = agesOf(p || { map: "world" });
   return [
     "Real time: the clock runs on its own. Pause it, or run it faster, with the buttons.",
     `${inks ? "Choose an ink, or Draw for me, then tap" : "Tap"} empty land to start your nation. Your strength grows every half second: more for more land, a little more for saving, up to a limit set by your land.`,
@@ -201,8 +227,8 @@ export function rules(p) {
     "Each cell costs 2, 3 more on hills, and more where the owner holds much strength on little land. Taking a cell costs its owner some strength too.",
     ...(inks ? ["Every nation has an ink with one rule. Tap a nation in the list to see its ink.", ...INKS.map((k) => `${k.name}: ${k.line}`)] : []),
     ...(places ? ["Places on the map help whoever holds them. Take the cell to take the place; tap one to read it.", ...PLACES.map((k) => `${k.name}: ${k.line}`)] : []),
-    ...(ages ? [`Three ages. At 3:00 choose a mark: ${MARKS.map((k) => `${k.name} (${k.line.toLowerCase().replace(/\.$/, "")})`).join(" or ")}. At 7:00 you get one card to play when you like: ${CARDS.map((k) => `${k.name} (${k.line.toLowerCase().replace(/\.$/, "")})`).join(" or ")}. A choice waits in gold; the game never stops for it.`] : []),
-    `Win by holding 80% of the land, or by being the last one left.${ease ? ` From ${AGES[2] / 120}:00 the goal eases a point every 30 seconds, down to 66%.` : ""}`,
+    ...(ages ? [`Three ages. At ${clockOf(at[1])} choose a mark: ${MARKS.map((k) => `${k.name} (${k.line.toLowerCase().replace(/\.$/, "")})`).join(" or ")}. At ${clockOf(at[2])} you get one card to play when you like: ${CARDS.map((k) => `${k.name} (${k.line.toLowerCase().replace(/\.$/, "")})`).join(" or ")}. A choice waits in gold; the game never stops for it.`] : []),
+    `Win by holding 80% of the land, or by being the last one left.${ease ? ` From ${clockOf(at[2])} the goal eases a point every 30 seconds, down to 66%.` : ""}`,
     limit ? `If nobody has after ${Math.floor(limit / 120)} minutes${limit % 120 ? ` ${(limit % 120) / 2} seconds` : ""}, the biggest nation wins.` : "There is no time limit.",
     "Land wholly inside one nation, with no sea beside it, soaks into that nation a ring every half second. A landing on the ring breaks the circle.",
     "If you lose all your land you are out: watch the others play on to the end, or start again.",

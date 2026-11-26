@@ -1,22 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// An Inch of Ink, as its rules stand: the turn duel (Capo, and Custom with its normal switches) and the real-time game
-// (Traditional, and Custom with live on). These check what should survive coming tweaks to growth and turn order:
+// An Inch of Ink, as its rules stand: the turn duel (Custom on turns, with its normal switches and with the others) and the
+// real-time games (Traditional, Capo's The Ink Dries, and Custom with live on). These check what should survive coming tweaks to growth and turn order:
 // no win rates, prices, turn orders or whole-game fingerprints are written down here.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Refusal, canon, chance, createMatch, fingerprint, openSave, packGame, seedState, unpackGame } from "../src/core/index.js";
 import { NONE, SWITCHES, boardOf, cellsOf, goalOf, inch, liveBoardFor } from "../src/games/inch/rules.js";
-import { AGES, CARDS, INKS, MARKS, NONE as N, PCTS, PLACES, SAFE, apart, bordersOf, cityPrice, costOf, gainOf, goalPercent, held, landingPrice, landings, liveAllows, liveApply, liveMoves, maxOf, rangeOf } from "../src/games/inch/live.js";
+import { AGE_AT, CARDS, DRIES, INKS, LIVE_MAPS, MARKS, NONE as N, PCTS, PLACES, SAFE, agesOf, apart, bordersOf, cityPrice, costOf, driedOf, dryRank, gainOf, goalOf as liveGoalOf, goalPercent, held, landingPrice, landings, liveAllows, liveApply, liveMoves, maxOf, rangeOf, wetAt, wetOf } from "../src/games/inch/live.js";
 import { TIERS, choose } from "../src/games/inch/bot.js";
 import { SLOW, botGame, direct, ended, inList, passive, refused, refusedListed, replays, same, sameEachStep } from "./fixtures/bots.js";
 
-const DUELS = ["ours", "custom"]; // Capo, and Custom with its normal switches; Traditional is the real-time game
-const duel = (seats = 2, style = "ours", seed = "d", more = {}) => createMatch(inch, { seed, options: { seats, style, ...more } });
+// The turn duel lives under Custom with the clock on turns: its normal switches (the duel Capo used to be), and the other value of each
+const PLAIN = Object.fromEntries(Object.entries(SWITCHES).filter(([k]) => k !== "live").map(([k, o]) => [k, o.values.find((v) => v !== o.normal)]));
+const DUELS = ["custom", "plain"], opts = (style) => (style === "plain" ? { style: "custom", ...PLAIN } : { style });
+const duel = (seats = 2, style = "custom", seed = "d", more = {}) => createMatch(inch, { seed, options: { seats, ...opts(style), ...more } });
 const live = (more = {}, seed = "L") => createMatch(inch, { seed, options: { style: "classic", ...more } });
 
 // The turn duel's quick check compares a move as JSON text, so the order of its keys matters. A match hands it each move
 // with its keys sorted, so a pour listed as {do, to, share} arrives as {do, share, to} and is refused.
-const BUG = refusedListed(inch, { style: "ours", seats: 2 }) && "BUG in src/games/inch/rules.js: inch.allows compares moves with JSON.stringify, which depends on key order; match.play passes it the move with sorted keys ({do, share, to}) while moves() lists {do, to, share}, so every pour in the turn duel is refused through a match. Comparing with canon() would fix it.";
+const BUG = refusedListed(inch, { style: "custom", seats: 2 }) && "BUG in src/games/inch/rules.js: inch.allows compares moves with JSON.stringify, which depends on key order; match.play passes it the move with sorted keys ({do, share, to}) while moves() lists {do, to, share}, so every pour in the turn duel is refused through a match. Comparing with canon() would fix it.";
 
 /** What must hold after every move of a turn duel. */
 function soundDuel(p) {
@@ -41,33 +43,33 @@ function soundLive(m) {
 // ---- the turn duel ----
 test("turn duel: every rule set and seat count, bots play to an end through a match, and the save replays", { skip: BUG }, () => {
   for (const style of DUELS) for (const n of [2, 3]) {
-    const m = botGame(inch, choose, { seed: `all ${style} ${n}`, options: { seats: n, style }, tiers: SLOW || (style === "ours" && n === 2) ? ["normal", "easy", "random"] : ["easy", "random"], each: (x) => soundDuel(x.position) });
+    const m = botGame(inch, choose, { seed: `all ${style} ${n}`, options: { seats: n, ...opts(style) }, tiers: SLOW || (style === "custom" && n === 2) ? ["normal", "easy", "random"] : ["easy", "random"], each: (x) => soundDuel(x.position) });
     ended(m, n);
     replays(m, [inch]);
   }
 });
 test("turn duel: the same seed and bots play the same game through a match, and replay through the same positions", { skip: BUG }, () => {
-  const run = (seed) => botGame(inch, choose, { seed, options: { seats: 3, style: "ours" }, tiers: ["easy", "random", "easy"] });
+  const run = (seed) => botGame(inch, choose, { seed, options: { seats: 3, style: "custom" }, tiers: ["easy", "random", "easy"] });
   const a = run("same");
   assert.ok(same(a.list, run("same").list)); assert.notEqual(run("other").fingerprint(), a.fingerprint());
   sameEachStep(a);
 });
 test("turn duel, on the rules alone: every rule set and seat count plays to an end, every bot move is in the list, the same seed gives the same end", () => {
   for (const style of DUELS) for (const n of [2, 3]) for (const tiers of SLOW ? [["normal"], ["easy", "random"]] : [["easy", "random"], ["random"]]) {
-    const run = () => direct(inch, choose, { seed: `rules ${style} ${n}`, options: { seats: n, style }, tiers, each: soundDuel });
+    const run = () => direct(inch, choose, { seed: `rules ${style} ${n}`, options: { seats: n, ...opts(style) }, tiers, each: soundDuel });
     const a = run();
     assert.ok(a.over, `${style} ${n}: no end after ${a.list.length} moves`);
     assert.ok(a.over.winners.length >= 1 && a.over.winners.every((w) => w >= 0 && w < n));
     assert.equal(run().fingerprint, a.fingerprint);
   }
-  const strong = direct(inch, choose, { seed: "strong", options: { seats: 2, style: "ours" }, tiers: ["normal", "easy"], each: soundDuel });
+  const strong = direct(inch, choose, { seed: "strong", options: { seats: 2, style: "custom" }, tiers: ["normal", "easy"], each: soundDuel });
   assert.ok(strong.over);
 });
 test("turn duel: every pour offered takes something, spends no more than its share, and takes only joined land", () => {
   let pours = 0;
   for (const style of DUELS) for (const n of [2, 3]) {
     direct(inch, choose, {
-      seed: "pour " + style + n, options: { seats: n, style }, tiers: ["random"],
+      seed: "pour " + style + n, options: { seats: n, ...opts(style) }, tiers: ["random"],
       each(p, events, move, before) {
         const seen = new Set();
         for (const x of inch.moves(before)) if (x.do === "pour") { const k = x.to + ":" + x.share; assert.ok(!seen.has(k)); seen.add(k); }
@@ -86,7 +88,7 @@ test("turn duel: every pour offered takes something, spends no more than its sha
 });
 test("turn duel: a game where everyone waits ends after its rounds, each round every seat moves once, and most land wins", () => {
   for (const style of DUELS) for (const seats of [2, 3]) {
-    const m = duel(seats, style, "idle", { rounds: 10, ...(style === "custom" ? { limit: 10 } : {}) }), turns = new Map();
+    const m = duel(seats, style, "idle", { limit: 10 }), turns = new Map();
     passive(m, undefined, (events) => { for (const e of events) if (e.kind === "grow") { const r = m.position.round; turns.set(r, [...(turns.get(r) || []), e.seat]); } });
     const p = m.position, all = Array.from({ length: seats }, (_, s) => s), most = Math.max(...all.map((s) => cellsOf(p, s)));
     assert.ok(p.over); assert.equal(p.round, p.rounds + 1); assert.equal(m.list.length, p.rounds * seats);
@@ -95,16 +97,17 @@ test("turn duel: a game where everyone waits ends after its rounds, each round e
     replays(m, [inch]);
   }
 });
-test("turn duel: rule sets, Capo fixes its own rules, Custom takes each switch as given, Traditional is the real-time game", () => {
-  const odd = Object.fromEntries(Object.entries(SWITCHES).filter(([k]) => k !== "live").map(([k, o]) => [k, o.values.find((v) => v !== o.normal)]));
+test("turn duel: it lives under Custom on turns, whose normal switches are the duel Capo used to be; Traditional and Capo are real time", () => {
   const pos = (o) => createMatch(inch, { seed: "s", options: { seats: 2, ...o } }).position;
   const normal = Object.fromEntries(Object.entries(SWITCHES).map(([k, o]) => [k, o.normal]));
-  assert.deepEqual(pos({ style: "custom", ...odd }).rule, { ...odd, live: false });
+  assert.deepEqual(pos({ style: "custom", ...PLAIN }).rule, { ...PLAIN, live: false });
   assert.deepEqual(pos({ style: "custom" }).rule, normal);
-  assert.deepEqual(pos({ style: "ours", ...odd }).rule, pos({ style: "ours" }).rule);
-  assert.equal(pos({ style: "ours", rounds: 10 }).rounds, 10);
-  for (const o of [{ style: "ours" }, { style: "custom" }]) assert.ok(!pos(o).live);
-  for (const o of [{ style: "classic" }, { style: "custom", live: true }]) assert.equal(pos(o).live, true);
+  assert.deepEqual(normal, { size: 4, cut: true, walls: true, shares: "three", growth: "saving", goal: 55, drawn: false, limit: 16, live: false });
+  assert.equal(pos({ style: "custom", limit: 10 }).rounds, 10);
+  assert.ok(!pos({ style: "custom" }).live);
+  for (const o of [{ style: "classic" }, { style: "ours" }, { style: "custom", live: true }]) assert.equal(pos(o).live, true);
+  assert.equal(pos({ style: "ours" }).dries, true);
+  assert.throws(() => pos({ style: "custom", rounds: 10 }), refused("option"), "the old Capo length is gone");
 });
 test("turn duel: cut-off land falls at the start of its seat's turn only where the cut rule is on", () => {
   for (const cut of [true, false]) {
@@ -120,14 +123,14 @@ test("turn duel: cut-off land falls at the start of its seat's turn only where t
   }
 });
 test("turn duel: illegal moves are refused and change nothing", () => {
-  const m = duel(2, "ours", "bad"), before = m.fingerprint(), s = m.position.seat;
+  const m = duel(2, "custom", "bad"), before = m.fingerprint(), s = m.position.seat;
   for (const bad of [{ do: "pour", to: s, share: "all" }, { do: "pour", to: NONE, share: "most of it" }, { do: "pour", to: 7, share: "all" }, { do: "wait", now: 1 }, { do: "tick", n: 1 }, { do: "spawn", at: 0 }, { do: "fly" }]) assert.throws(() => m.play(bad), refused("illegal"), JSON.stringify(bad));
   for (const bad of [undefined, 0.5, () => 1]) assert.throws(() => m.play(bad), refused("shape"));
   assert.equal(m.fingerprint(), before);
   assert.ok(!inList(m.legal(), { do: "pour", to: s, share: "all" }));
 });
 test("turn duel: a pour listed is a move the match takes", { skip: BUG }, () => {
-  const m = duel(2, "ours", "take"), x = m.legal().find((y) => y.do === "pour");
+  const m = duel(2, "custom", "take"), x = m.legal().find((y) => y.do === "pour");
   assert.ok(m.isLegal(x));
   m.play(x);
   assert.equal(m.list.length, 1);
@@ -222,14 +225,14 @@ test("real time: a player who attacks, builds and sails keeps every count true, 
 test("bot tiers: each answers in the turn duel and in real time with a move the rules list", () => {
   const d = chance(seedState("tiers"));
   for (const tier of TIERS) {
-    const p = duel(3, "ours", "t " + tier).position, l = live({}, "t " + tier).position;
+    const p = duel(3, "custom", "t " + tier).position, l = live({}, "t " + tier).position;
     assert.ok(inList(inch.moves(p), choose(p, d, tier)));
     assert.ok(liveAllows(l, liveBoardFor(l), choose(l, d, tier)));
   }
   assert.ok(goalOf(duel().position) > boardOf(duel().position).size / 2, "the duel's goal is more than half the board");
 });
 
-// ---- Traditional's own rules (version 7): inks, places, ages, the easing goal, soaking ----
+// ---- Traditional's own rules (version 7, ages by map in 8): inks, places, ages, the easing goal, soaking ----
 /** A position after the start, ticked by the rules alone, with seeded dice. */
 function ticked(more, ticks, seed = "v7") {
   const m = live(more, seed), b = liveBoardFor(m.position), d = chance(seedState("v7 " + seed));
@@ -239,13 +242,13 @@ function ticked(more, ticks, seed = "v7") {
 }
 const mutable = (p) => structuredClone(p);
 
-test("version 7: saves from version 6 are refused with a plain message", () => {
+test("version 8: saves from version 7 are refused with a plain message", () => {
   const m = live({}, "old");
   m.play(m.legal()[0]);
   const old = JSON.parse(m.save());
-  old.version = "6";
-  assert.throws(() => openSave(JSON.stringify(old), [inch]), (e) => e instanceof Refusal && e.code === "version" && /version 6/.test(e.message));
-  assert.equal(inch.version, "7");
+  old.version = "7";
+  assert.throws(() => openSave(JSON.stringify(old), [inch]), (e) => e instanceof Refusal && e.code === "version" && /version 7/.test(e.message));
+  assert.equal(inch.version, "8");
 });
 test("inks: the start carries your ink; bots' inks are drawn evenly by the seed; Custom can draw yours or leave inks off", () => {
   const m = live({ nations: 12 }, "inks"), p = m.position;
@@ -297,9 +300,11 @@ test("places: dealt by the seed, about one per 120 land cells, away from bots' s
   assert.ok(costOf(q, b, ring, 1) >= before + 3, "a tower guards its ring");
   assert.equal(held(q, 0), 3, "archive, quay and tower");
 });
-test("ages: a mark at 3:00 and a card at 7:00, each once; bots pick theirs; Flood doubles the next attack, Second wind doubles growth", () => {
+test("ages: a mark at Age II and a card at Age III, each once; bots pick theirs; Flood doubles the next attack, Second wind doubles growth", () => {
+  const AGES = AGE_AT.world;
   let { p, b, d } = ticked({}, AGES[1] - 1, "ages");
-  assert.ok(p.alive[0] && !p.over, "still playing at 3:00");
+  assert.deepEqual(agesOf(p), AGES);
+  assert.ok(p.alive[0] && !p.over, "still playing at Age II");
   assert.ok(!liveMoves(p, b).some((x) => x.do === "mark"));
   const tick = liveApply(p, b, { do: "tick", n: 1 }, d);
   p = tick.position;
@@ -322,7 +327,7 @@ test("ages: a mark at 3:00 and a card at 7:00, each once; bots pick theirs; Floo
   assert.equal(sent.armed[0], 0);
 });
 test("the goal eases in the last age only where easing is on; Traditional ends at 30 minutes; Custom's switches", () => {
-  const p = live({}, "ease").position;
+  const p = live({}, "ease").position, AGES = agesOf(p);
   assert.equal(p.limit, SAFE);
   const at = (tick, more = {}) => goalPercent({ ...p, ...more, tick });
   assert.deepEqual([at(0), at(AGES[2]), at(AGES[2] + 60), at(AGES[2] + 600), at(AGES[2] + 14 * 60), at(SAFE)], [80, 80, 79, 70, 66, 66]);
@@ -367,4 +372,103 @@ test("soaking: on gentle, your land does not soak during the truce", () => {
   assert.equal(liveApply(p, b, { do: "tick", n: 1 }, d).position.owner[mine], 0);
   p.tick = 400;
   assert.ok(blob.some((i) => b.near[i].some((x) => rim.includes(x)) && liveApply(p, b, { do: "tick", n: 1 }, d).position.owner[i] === 1), "after the truce it soaks");
+});
+
+test("ages come by the map: each map's ages are in order, the world's last longest, and the age a position is in follows its map", () => {
+  for (const map of LIVE_MAPS) {
+    const a = AGE_AT[map], p = live({ map }, "by map " + map).position;
+    assert.ok(a[0] === 0 && a[0] < a[1] && a[1] < a[2] && a[2] < SAFE, map);
+    assert.deepEqual(agesOf(p), a);
+    assert.ok(a[2] <= AGE_AT.world[2], "no map's last age comes later than the world's");
+  }
+});
+
+// ---- Capo: The Ink Dries ----
+const dries = (more = {}, seed = "D") => createMatch(inch, { seed, options: { style: "ours", ...more } });
+/** What must hold in The Ink Dries, besides what holds in any real-time game. */
+function soundDries(m) {
+  soundLive(m);
+  const p = m.position, b = liveBoardFor(p);
+  for (let i = 0; i < b.n; i++) if (p.owner[i] !== N) assert.ok(wetAt(p, b, i), "nobody holds dried land");
+  if (p.phase === "play") for (let s = 0; s < p.troops.length; s++) if (p.land[s] && p.tick > 0) assert.equal(p.owner[p.cap[s]], s, "a nation with land holds its capital");
+  assert.equal(liveGoalOf(p), Math.ceil((wetOf(p) * DRIES.goal) / 100));
+}
+
+test("The Ink Dries: twelve nations, a map drawn by the seed, wells only, no inks, ages or marks, and a capital for each start", () => {
+  const maps = new Set();
+  for (let k = 0; k < 12; k++) maps.add(dries({}, "maps " + k).position.map);
+  assert.ok(maps.size >= 2, "the map is drawn");
+  const m = dries({ rivals: "even" }), p = m.position;
+  assert.equal(p.troops.length, DRIES.nations);
+  assert.ok(p.dries && !p.ages && !p.ease && p.ink.every((k) => k === N));
+  assert.ok(p.places.length > 0 && p.places.every(([, k]) => k === 0), "wells only");
+  assert.equal(p.limit, DRIES.from + DRIES.span);
+  assert.equal(p.rivals, "even");
+  for (let s = 1; s < p.troops.length; s++) assert.equal(p.owner[p.cap[s]], s);
+  assert.equal(p.cap[0], N);
+  assert.ok(m.legal().every((x) => x.do === "spawn" && !("ink" in x)));
+  m.play(m.legal()[0]);
+  assert.equal(m.position.cap[0], m.list[0].at);
+  assert.ok(!liveMoves(m.position, liveBoardFor(m.position)).some((x) => x.do === "mark" || x.do === "card" || x.do === "city"));
+});
+test("The Ink Dries: bots play to an end, dried land is held by nobody, capitals stay held, and the save replays", () => {
+  for (const seed of SLOW ? ["a", "b", "c", "d"] : ["a", "b"]) {
+    const m = botGame(inch, choose, { seed: "dries " + seed, options: { style: "ours" }, each: soundDries });
+    ended(m, m.position.troops.length);
+    assert.ok(m.position.tick <= m.position.limit);
+    replays(m, [inch]);
+  }
+});
+test("The Ink Dries: the page dries from its edges at a steady rate until a tenth is left, and the goal counts only wet land", () => {
+  const { p, b } = (() => { const m = dries({}, "page"); m.play(m.legal()[0]); return { p: m.position, b: liveBoardFor(m.position) }; })();
+  const at = (tick) => driedOf({ ...p, tick });
+  assert.equal(at(DRIES.from), 0);
+  assert.ok(at(DRIES.from + 60) > 0 && at(DRIES.from + 120) > at(DRIES.from + 60));
+  assert.equal(at(DRIES.from + DRIES.span), p.total - Math.floor(p.total / DRIES.core));
+  assert.equal(at(SAFE), at(DRIES.from + DRIES.span));
+  const rank = dryRank(b), first = b.dry.find((i) => rank[i] === 0), last = b.dry.find((i) => rank[i] === p.total - 1);
+  const mid = (i) => b.dry.reduce((n, j) => n + apart(b, i, j), 0);
+  assert.ok(mid(first) > mid(last), "the first cell to dry lies farther out than the last");
+  assert.equal(liveGoalOf({ ...p, tick: DRIES.from + 300 }), Math.ceil((wetOf({ ...p, tick: DRIES.from + 300 }) * DRIES.goal) / 100));
+  // a nation holding the cells about to dry loses them
+  const q = mutable(p), soon = b.dry.filter((i) => rank[i] < at(DRIES.from + 1) && q.owner[i] === N).slice(0, 3);
+  for (const i of soon) { q.owner[i] = 1; q.land[1]++; }
+  q.tick = DRIES.from;
+  const r = liveApply(q, b, { do: "tick", n: 1 }, chance(seedState("dry"))).position;
+  for (const i of soon) assert.equal(r.owner[i], N);
+});
+test("The Ink Dries: a capital and its ring cost triple; a lost capital moves to the largest land and costs a quarter; cut-off land fades", () => {
+  const m = dries({ rivals: "even" }, "cap"), b = liveBoardFor(m.position), d = chance(seedState("cap"));
+  m.play(m.legal()[0]);
+  for (let k = 0; k < 6; k++) m.play({ do: "tick", n: 4 });
+  const p = mutable(m.position), s = 1, cap = p.cap[s], ring = b.near[cap].find((i) => p.owner[i] === s), far = b.dry.find((i) => p.owner[i] === s && apart(b, i, cap) > 1);
+  const plain = { ...p, cap: p.cap.map(() => N) };
+  assert.equal(costOf(p, b, cap, 0), costOf(plain, b, cap, 0) * DRIES.wall);
+  assert.equal(costOf(p, b, ring, 0), costOf(plain, b, ring, 0) * DRIES.wall);
+  if (far !== undefined) assert.equal(costOf(p, b, far, 0), costOf(plain, b, far, 0));
+  // take the capital away: it moves to the largest land, and a quarter of the strength goes
+  const q = mutable(p);
+  q.attacks = [];
+  // the capital and its ring go to another nation, too strong to be taken back this tick (a lone cell would soak straight back)
+  for (const i of [cap, ...b.near[cap]]) if (b.land[i] && q.owner[i] === s) { q.owner[i] = 2; q.land[s]--; q.land[2]++; }
+  q.troops[2] = 100000;
+  const had = q.troops[s], r = liveApply(q, b, { do: "tick", n: 1 }, d);
+  assert.ok(r.events.some((e) => e.kind === "capital" && e.seat === s));
+  assert.notEqual(r.position.cap[s], cap);
+  assert.equal(r.position.owner[r.position.cap[s]], s);
+  assert.ok(r.position.troops[s] < had);
+  // a lone cell far from the capital, with no coast, fades after its time, not before
+  const lone = b.dry.find((i) => p.owner[i] === N && b.near[i].length === 6 && b.near[i].every((x) => b.land[x] && p.owner[x] === N && b.near[x].every((y) => b.land[y])) && apart(b, i, p.cap[s]) > 6);
+  const t = mutable(p);
+  t.attacks = [];
+  t.owner[lone] = s; t.land[s]++;
+  let x = t;
+  for (let k = 0; k < DRIES.fade; k++) { x = liveApply(x, b, { do: "tick", n: 1 }, d).position; if (x.owner[lone] !== s) break; }
+  assert.equal(x.owner[lone], s, "still held just before it fades");
+  x = liveApply(x, b, { do: "tick", n: 1 }, d).position;
+  assert.notEqual(x.owner[lone], s, "faded");
+  // land joined to the capital does not fade
+  const kept = b.dry.filter((i) => p.owner[i] === s);
+  for (let k = 0; k < DRIES.fade + 2; k++) x = liveApply(x, b, { do: "tick", n: 1 }, d).position;
+  assert.ok(kept.filter((i) => x.owner[i] === s).length > 0);
 });
