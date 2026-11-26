@@ -26,6 +26,16 @@ const THEME = "capo-tent-theme";
 const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["away", "A friend, by link"]];
 // gentle is the lessons' bot, not offered in the setup
 const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
+// what each table game grew from, named by its family of games only: no titles, characters or art of anyone else's
+const FAMILY = {
+  banners: "classic world-conquest board games, where armies spread over a map and battles are fought with dice",
+  fable: "hex island strategy games, where villages pay their soldiers' wages and the woods creep over idle land",
+  glass: "settle-and-trade board games, where hexes yield goods on a roll of the dice and routes and towns score points",
+  inch: "real-time territory games played in a browser, where borders creep across a map as strength grows",
+};
+/** The save promise, said beside the save controls. */
+const SAVED = "Your games are kept only in this browser and are never sent anywhere. Save to a file to keep a copy or move it.";
+const familyLine = (key) => FAMILY[key] && `Inspired by the family of games such as ${FAMILY[key]}. Not affiliated with or endorsed by the makers of any of them: the rules text, names and art are our own.`;
 const store = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* files still work */ } };
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 
@@ -39,16 +49,20 @@ export function sign(seat, rgb = RGB[seat], icon = ICONS[seat]) {
 }
 /** The ink that stands out more on a colour. */
 const inkOf = (rgb) => (rgb.reduce((s, v, i) => s + [0.21, 0.72, 0.07][i] * (v / 255) ** 2.2, 0) > 0.19 ? "#1a1411" : "#fdf6e4");
-/** A row of choices that acts as one control: arrows move, the chosen one is marked. */
-export function radio(host, items, chosen, pick) {
-  const had = host.contains(document.activeElement), left = host.scrollLeft;
-  host.replaceChildren(...items.map(({ value, label, note, rgb, off }) => {
+/**
+ * A row of choices that acts as one control: arrows, Home and End move, the chosen one is marked and kept in view.
+ * `tabs` makes it a row of tabs. A row marked `soon` can be pressed to read about it but is not offered: the arrows pass it by.
+ */
+export function radio(host, items, chosen, pick, tabs = false) {
+  const had = host.contains(document.activeElement), left = host.scrollLeft, state = tabs ? "aria-selected" : "aria-checked";
+  host.replaceChildren(...items.map(({ value, label, note, rgb, off, soon }) => {
     const b = el("button");
     b.type = "button";
-    b.setAttribute("role", "radio");
-    b.setAttribute("aria-checked", String(value === chosen));
+    b.setAttribute("role", tabs ? "tab" : "radio");
+    b.setAttribute(state, String(value === chosen));
     b.tabIndex = value === chosen || (chosen === null && value === items[0].value) ? 0 : -1;
     b.disabled = !!off;
+    if (soon) b.setAttribute("aria-disabled", "true");
     if (rgb) { const d = el("i", undefined, "dot"); d.style.background = `rgb(${rgb})`; b.append(d); }
     b.append(label);
     if (note) b.append(el("small", note));
@@ -56,17 +70,25 @@ export function radio(host, items, chosen, pick) {
     return b;
   }));
   host.scrollLeft = left;
+  const now = host.querySelector(`[${state}=true]`);
+  // a long row scrolls: when the rows change under it, the chosen one is brought into view
+  if (now && (host.scrollWidth > host.clientWidth || host.scrollHeight > host.clientHeight)) {
+    const h = host.getBoundingClientRect(), c = now.getBoundingClientRect();
+    if (c.left < h.left || c.right > h.right) host.scrollLeft += c.left < h.left ? c.left - h.left - 8 : c.right - h.right + 8;
+    if (c.top < h.top || c.bottom > h.bottom) host.scrollTop += c.top < h.top ? c.top - h.top - 4 : c.bottom - h.bottom + 4;
+  }
   host.onkeydown = (e) => {
-    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
-    if (!step) return;
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key], end = { Home: 0, End: -1 }[e.key];
+    if (!step && end === undefined) return;
     e.preventDefault();
-    const on = items.filter((x) => !x.off), at = on.findIndex((x) => x.value === chosen);
-    if (on.length) pick(on[(at + step + on.length) % on.length].value);
+    const on = items.filter((x) => !x.off && !x.soon), at = on.findIndex((x) => x.value === chosen);
+    if (on.length) pick((end === undefined ? on[(at + step + on.length) % on.length] : on.at(end)).value);
   };
-  if (had) host.querySelector("[aria-checked=true]")?.focus();
+  if (had) now?.focus();
 }
 let hush = 0;
-export function toast(t) { const b = $("toast"); b.textContent = t; b.classList.add("on"); clearTimeout(hush); hush = setTimeout(() => b.classList.remove("on"), Math.max(4000, 70 * t.length)); } // long enough to read
+/** A line over the board for a few seconds. `spoken` false keeps it from a screen reader: a bot's move, which the recap at your turn says again. */
+export function toast(t, spoken = true) { const b = $("toast"); b.setAttribute("aria-live", spoken ? "polite" : "off"); b.textContent = t; b.classList.add("on"); clearTimeout(hush); hush = setTimeout(() => b.classList.remove("on"), Math.max(4000, 70 * t.length)); } // long enough to read
 /** One sheet at a time. `kind` widens it (the menu, the end); no `close` leaves the closing to the sheet's own buttons and Escape. */
 export function sheet(title, body, close = "Close", kind = "") {
   $("sheet").className = kind === "paper" ? kind : `panel ${kind}`; // paper for what is read, lacquer for the rest
@@ -75,14 +97,18 @@ export function sheet(title, body, close = "Close", kind = "") {
   $("sheet-close").parentNode.hidden = !close;
   $("sheet-close").textContent = close;
   $("sheet-close").className = close === "Close" || close === "Resume" ? "main" : "quiet";
-  if (!$("sheet").open) $("sheet").showModal();
+  if (!$("sheet").open) { opener ||= document.activeElement; $("sheet").showModal(); }
 }
+/** What had the keyboard when the first of a run of sheets opened: given back when the last one closes. */
+let opener = null;
 const closeSheet = () => { if ($("sheet").open) $("sheet").close(); };
 
 /**
  * G: game, key, title, cellsOf, landOf, goalOf, stats(p, seat), line(event, p), about[style], rules(classic), pace(p), thinking, choose,
  *    board(T) -> { show(order, quick) -> ms, layout(free), setLook(name), look, looks, destroy(), clear() },
- *    panel(T), tapped(T, cell), key(T, key, event), changed(T) when a new position arrives.
+ *    panel(T), tapped(T, cell), key(T, key, event), changed(T) when a new position arrives,
+ *    realtime: true, or a test of the position, for a game played on a clock: it has no turns to end or take back.
+ *    Without it, a position marked `live` is real time.
  */
 export function createTable(G) {
   $("broken")?.remove();
@@ -101,13 +127,17 @@ export function createTable(G) {
   ahead.type = "button"; ahead.hidden = true;
   ahead.onclick = () => { T.hurry = true; ahead.hidden = true; };
   // what happened while you waited (said once, politely), and the log: docked beside the board on wide screens, one tap away on narrow ones
-  const news = el("div"), hide = el("button", "×", "shut"), told = el("button", "Since your last turn", "head"), dock = el("aside", undefined, "panel"), fold = el("button", "What happened", "head"), list = el("ol"), logs = $("menu").cloneNode(true);
-  news.id = "news"; news.setAttribute("role", "status");
-  hide.type = fold.type = told.type = "button"; hide.setAttribute("aria-label", "Hide");
+  // the summary's words are the one spoken region; its two buttons sit outside it, so they are not read with it
+  const news = el("div", undefined, "none"), recap = el("div"), hide = el("button", "×", "shut"), told = el("button", "Since your last turn", "head"), dock = el("aside", undefined, "panel"), fold = el("button", "What happened", "head"), list = el("ol"), logs = $("menu").cloneNode(true);
+  news.id = "news"; recap.setAttribute("role", "status");
+  news.append(told, recap, hide);
+  hide.type = fold.type = told.type = "button"; hide.setAttribute("aria-label", "Hide the summary");
   // the summary is one line until it is opened, so on a phone it never takes the board; a wide screen starts with it open
   const unfold = (open) => { news.classList.toggle("open", open); told.setAttribute("aria-expanded", String(open)); place(); };
+  const unbrief = () => { recap.replaceChildren(); news.classList.add("none"); };
+  const briefed = () => !news.classList.contains("none");
   told.onclick = () => unfold(!news.classList.contains("open"));
-  hide.onclick = () => { news.replaceChildren(); place(); };
+  hide.onclick = () => { unbrief(); place(); refocus(); }; // the button goes with the summary, so the keyboard goes back to the move
   dock.id = "record"; dock.hidden = true; list.reversed = true;
   dock.append(fold, list); document.body.append(dock);
   logs.id = "logs"; logs.setAttribute("aria-label", "What happened");
@@ -127,6 +157,10 @@ export function createTable(G) {
   zoom.hidden = true; zoom.setAttribute("role", "group"); zoom.setAttribute("aria-label", "Zoom the board");
   for (const [t, name, f] of [["+", "Zoom in", 1.4], ["−", "Zoom out", 1 / 1.4], ["⌂", "Show the whole board", 0]]) { const b = el("button", t, "quiet"); b.type = "button"; b.setAttribute("aria-label", name); b.onclick = () => board?.zoom(f); zoom.append(b); }
   document.body.append(zoom);
+  // the status line is spoken, and every redraw writes it: the same words written again are left alone, so they are not said again
+  // ("Saffron is thinking" once a turn, not at every move). The games write it plainly; this one element takes care of it.
+  const text = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
+  Object.defineProperty($("status"), "textContent", { configurable: true, get() { return text.get.call(this); }, set(v) { if (text.get.call(this) !== String(v ?? "")) text.set.call(this, v); } });
   const stage = $("stage");
   stage.removeAttribute("aria-hidden"); stage.tabIndex = 0; stage.setAttribute("role", "group");
   stage.setAttribute("aria-label", "The board. Plus and minus zoom, 0 shows all of it, arrows move it. The lists in the move panel choose places.");
@@ -138,13 +172,15 @@ export function createTable(G) {
   banner.id = "turn"; banner.hidden = true; banner.setAttribute("aria-hidden", "true");
   say.setAttribute("aria-live", "polite");
   tray.type = setButton.type = "button";
-  tabs.setAttribute("role", "radiogroup"); tabs.setAttribute("aria-label", "Menu");
+  tabs.setAttribute("role", "tablist"); tabs.setAttribute("aria-label", "Menu");
+  pane.id = "menu-pane"; pane.setAttribute("role", "tabpanel");
   menuBox.append(tabs, pane);
   $("act").prepend(tray);
   document.body.append(banner, say);
   $("title").querySelector(".links").append(setButton);
   const KEY = `capo-${G.key}-2`, LOOK = `capo-${G.key}-look`, many = G.seats || [2, 3], setup = { seats: G.normal || 2, style: "classic", rounds: G.lengths[1]?.[0], who: ["you", "normal", "normal", "normal", "normal", "normal"], look: LOOK0.map((x) => [...x]), extra: Object.fromEntries([...(G.choices || []), ...(G.switches || [])].map((c) => [c.key, c.normal])), on: {} };
   let fitted = 0; // where the phone's tray began when the board was last fitted
+  let resting = false; // the title's board was held still
   let sureEnd = 0, log = [], land = [], board = null, run = 0, mark = 0, drawn = -1, fell = [], heralded = "", tab = "game";
   const T = {
     match: null, kinds: [], look: LOOK0, hurry: false, link: null, demo: true, busy: false, RGB, NAMES, read: () => read(LOOK),
@@ -153,8 +189,13 @@ export function createTable(G) {
     human: () => !!T.match && T.match.turn !== null && T.kinds[T.match.turn] === "you",
     ready: () => !T.demo && T.human() && !T.busy,
     solo: () => T.kinds.filter((k) => k === "you" || k === "away").length === 1 || (!!T.link && T.kinds.filter((k) => k === "you").length === 1),
-    play, refresh: panel,
+    play, refresh: panel, realtime: () => realtime(),
   };
+  /** Is this game played on a clock? Then there are no turns: no turn keys, no taking back, no turn banner. */
+  function realtime(p = T.match?.position) {
+    if (!p) return false;
+    return typeof G.realtime === "function" ? !!G.realtime(p) : G.realtime === undefined ? !!p.live : !!G.realtime;
+  }
   function docked() {
     dock.hidden = T.demo || T.catching || innerWidth <= 1180;
     zoom.hidden = T.demo || !board?.looks.length; // the still board is all in view already
@@ -193,7 +234,9 @@ export function createTable(G) {
     if ((at !== document.body && at.getClientRects().length && !at.disabled) || $("sheet").open || !T.ready()) return;
     const was = !held || held === "end" ? null : $(held), ok = (e) => e && !e.disabled && e.getClientRects().length;
     const to = ok(was) && was.matches("button") ? was : was?.querySelector("[aria-checked=true], [tabindex='0']");
-    (ok(to) ? to : $("choice").querySelector("[role=radio][tabindex='0']:not(:disabled), button.main:not(:disabled), button:not(:disabled):not(#back)"))?.focus({ preventScroll: true });
+    // else the chosen row of the first list in sight, else the main button: a game may keep rows it is not showing (Grain and Glass's build tabs)
+    const first = (q) => [...$("choice").querySelectorAll(q)].find(ok);
+    (ok(to) ? to : first("[role=radio][tabindex='0']:not(:disabled)") || first("button.main:not(:disabled)") || first("button:not(:disabled):not(#back)"))?.focus({ preventScroll: true });
   }
   function panel() {
     const at = document.activeElement;
@@ -201,13 +244,14 @@ export function createTable(G) {
     sendBox();
     ahead.hidden = T.demo || T.hurry || T.catching || T.match.turn === null || T.human() || T.away();
     const over = T.match.turn === null, me = T.human() && !T.busy;
-    if (!T.human() && news.firstChild) { news.replaceChildren(); place(); }
+    if (!T.human() && briefed()) { unbrief(); place(); }
     $("choice").hidden = !me;
     $("after").hidden = !over;
     if (over) { $("status").textContent = ending(); board.clear(); } else if (!me) {
-      $("status").textContent = T.away() ? `Waiting for ${NAMES[T.match.turn]}` : T.human() ? "" : `${NAMES[T.match.position.seat]} is thinking`;
+      // while your own move plays out the line stays as it is, so it is not blanked and said again after
+      if (!T.human()) $("status").textContent = T.away() ? `Waiting for ${NAMES[T.match.turn]}` : `${NAMES[T.match.position.seat]} is thinking`;
       board.clear();
-    } else { back.hidden = !canUndo() || !!T.match.position.live; G.panel(T); refocus(); }
+    } else { back.hidden = !canUndo(); G.panel(T); refocus(); }
     lesson?.check();
   }
   function score() {
@@ -234,14 +278,15 @@ export function createTable(G) {
     if (!show.length) return;
     u.append(...show.map((t) => el("li", t)));
     told.textContent = `Since your last turn (${all.length})`;
-    news.replaceChildren(told, u, ...(all.length > show.length ? [el("small", `${all.length - show.length} more in the log.`)] : []), hide);
+    recap.replaceChildren(u, ...(all.length > show.length ? [el("small", `${all.length - show.length} more in the log.`)] : []));
+    news.classList.remove("none");
     unfold(innerWidth > 820 && innerHeight > 860); // open where there is room for it beside the board
   }
   /** A person's turn starts: said once, a bell, and at normal speed a banner for under a second. Real time has no turns. */
   let gone = 0;
   const unherald = () => { clearTimeout(gone); banner.hidden = true; };
   function herald() {
-    const p = T.match.position, s = T.match.turn, k = T.demo || T.catching || !T.human() || p.live ? "" : turnKey(T.match.seed, p.round, s, T.solo());
+    const p = T.match.position, s = T.match.turn, k = T.demo || T.catching || !T.human() || realtime(p) ? "" : turnKey(T.match.seed, p.round, s, T.solo());
     if (!k || k === heralded) return;
     heralded = k;
     say.textContent = `${T.solo() ? "Your turn" : `${NAMES[s]}, your turn`}. Round ${p.round}.`;
@@ -266,6 +311,7 @@ export function createTable(G) {
     h.style.setProperty("--ui-scale", String(SCALE[settings.text]));
     board?.patterns?.(settings.patterns === "on"); board?.motion?.(settings.motion);
     place();
+    if (resting && T.demo && !still()) next();
   }
   const tally = (p) => Array.from({ length: T.kinds.length }, (_, s) => G.cellsOf(p, s));
   const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, look: T.look, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo && !lesson?.owns()) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds, look: T.look })); };
@@ -285,7 +331,10 @@ export function createTable(G) {
   async function play(move) {
     const mine = run, seat = T.match.turn, person = T.human(), speed = T.demo || person ? "normal" : settings.speed;
     T.busy = true;
-    const events = T.match.play(move), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
+    let events;
+    // a key can ask for a move the rules do not allow just now (E in an opening that has no end of turn): it is refused, and nothing is lost
+    try { events = T.match.play(move); } catch (e) { if (!(e instanceof Refusal) || T.demo || !person) throw e; T.busy = false; toast("That cannot be done now."); return; }
+    const words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
     // in a game by link, a move that rolled dice is final: nobody can look at the dice, take it back and choose again
     if (T.link && T.match.rolled) T.link.floor = T.match.list.length;
     log.push(...words);
@@ -298,7 +347,7 @@ export function createTable(G) {
     G.seen?.(T, events);
     if (!T.demo && !T.hurry && speed === "normal") cue(events);
     const rush = T.hurry || speed === "instant", took = board.show(G.order(events), rush);
-    if (!T.demo && !rush && words.length && (!person || T.match.turn !== seat)) toast(words.slice(0, 2).join(" "));
+    if (!T.demo && !rush && words.length && (!person || T.match.turn !== seat)) toast(words.slice(0, 2).join(" "), person);
     if (T.human()) T.hurry = false;
     await sleep(T.hurry || speed === "instant" ? 0 : T.demo ? Math.max(G.pace(T.match.position), took + 120) : speed === "fast" ? Math.max(90, took / 2) : Math.max(160, took + 60));
     if (mine !== run) return;
@@ -309,6 +358,9 @@ export function createTable(G) {
   }
   async function next() {
     const mine = run;
+    // with motion reduced, the board behind the title holds still; it plays on when motion is wanted again (apply)
+    if (T.demo && still()) { resting = true; return; }
+    resting = false;
     if (T.match.turn === null) { if (T.demo) { await sleep(2500); if (mine === run && T.demo) attract(); } return; }
     if (T.human()) return;
     if (T.away()) { panel(); return; }
@@ -398,10 +450,12 @@ export function createTable(G) {
   /** Link play: this game's link, a pasted one, and the games kept here. Shown alone from the title and as a tab of the menu. */
   function linkBox() {
     const box = el("div", undefined, "stack"), t = el("textarea"), go = el("button", "Open the link", "main"), all = linkGames.list(G.key);
-    t.rows = 3; t.className = "paste"; t.placeholder = "Paste a link here"; t.setAttribute("aria-label", "Paste a link here");
+    const named = el("label", undefined, "stack");
+    named.append(el("span", "A link from a friend"), t);
+    t.rows = 3; t.className = "paste"; t.placeholder = "Paste it here";
     go.type = "button"; go.onclick = () => { const v = t.value; closeSheet(); openLink(v); };
     if (T.link && !T.demo) box.append(el("p", ready?.url ? "This game is played by link. Its newest link is ready in the move panel." : "This game is played by link. The move panel offers the link when it is a friend's turn."));
-    box.append(el("p", "To start one, choose \"A friend, by link\" for a player. Links hold the whole game. Without a password, anyone who has the link can read it. A friend set on cheating could try a turn more than once, so play with people you trust."), t, go);
+    box.append(el("p", "To start one, choose \"A friend, by link\" for a player. Links hold the whole game. Without a password, anyone who has the link can read it. A friend set on cheating could try a turn more than once, so play with people you trust."), named, go);
     for (const r of all) {
       let m;
       try { m = openSave(r.save, [G.game]).match; } catch { continue; }
@@ -433,7 +487,7 @@ export function createTable(G) {
       G.seen?.(T, events);
       score();
       const took = board.show(G.order(events), false);
-      if (words.length) toast(words.slice(0, 2).join(" "));
+      if (words.length) toast(words.slice(0, 2).join(" "), false); // the summary after says it
       await sleep(Math.max(G.pace(show.position) * 0.7, took + 80));
       if (mine !== run) return;
     }
@@ -455,7 +509,7 @@ export function createTable(G) {
     Object.assign(T, { demo: false, busy: false, catching: false, match: m, kinds: k, link });
     G.fresh?.(T);
     log = []; land = []; mark = -1; drawn = -1; fell = []; held = "";
-    news.replaceChildren();
+    unbrief();
     const again = createMatch(G.game, { seed: m.seed, options: m.options });
     land.push(tally(again.position));
     m.list.forEach((mv, i) => { if (i === from) mark = log.length; log.push(...again.play(mv).map((e) => G.line(e, again.position)).filter(Boolean)); land.push(tally(again.position)); watch(again.position); });
@@ -541,7 +595,7 @@ export function createTable(G) {
     const hero = el("div", undefined, "hero"), arms = el("div", undefined, "arms"), words = el("div");
     arms.append(...r.winners.filter(signed).slice(0, 3).map((s) => sign(s)));
     const why = String(r.why || "played to the end");
-    words.append(el("b", r.winners.map(nameOf).join(" and ")), el("p", ending()), el("p", G.summary?.(T) || (r.winners.length > 1 ? `They ${why}.` : `${why[0].toUpperCase()}${why.slice(1)}, in ${last} rounds.`)));
+    words.append(el("b", r.winners.map(nameOf).join(" and ")), el("p", ending()), el("p", G.summary?.(T) || (r.winners.length > 1 ? `They ${why}.` : `${why[0].toUpperCase()}${why.slice(1)}, in ${last} round${last === 1 ? "" : "s"}.`)));
     hero.append(arms, words);
     // what next: the same three in the same places every time, then two smaller ones
     const go = el("div", undefined, "go ends"), all = el("a", "All games", "quiet"), change = el("button", "Change setup", "quiet"), again = el("button", "Rematch", "main");
@@ -560,7 +614,7 @@ export function createTable(G) {
   const seed = () => [...crypto.getRandomValues(new Uint32Array(2))].map((v) => v.toString(36)).join("");
   const restart = () => begin(createMatch(G.game, { seed: seed(), options: T.match.options }), [...T.kinds], T.link ? { id: newId(), roles: T.kinds.map((x) => (x === "you" ? "host" : x === "away" ? "friend" : x)), pass: T.link.pass, floor: 0 } : null);
   const floor = () => (T.link ? T.link.floor : 0);
-  const canUndo = () => !T.catching && T.match.list.length > floor() && T.kinds.includes("you");
+  const canUndo = () => !T.catching && !realtime() && T.match.list.length > floor() && T.kinds.includes("you");
   function undo() {
     if (!canUndo()) return;
     const had = T.match.list;
@@ -578,12 +632,18 @@ export function createTable(G) {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
   function showLog() { const o = el("ol"); o.id = "log"; o.reversed = true; o.append(...log.slice().reverse().map((t) => el("li", t))); sheet("What happened", log.length ? o : el("p", "Nothing yet."), "Close", "paper"); }
-  function rules() { const u = el("ul"); u.append(...G.rules(T.demo ? setup.style === "classic" : T.match.position.classic, T.demo ? null : T.match.position).map((t) => el("li", t))); sheet("How to play", u, "Close", "paper"); }
+  function rules() {
+    const u = el("ul"), kin = G.family || familyLine(G.key);
+    u.append(...G.rules(T.demo ? setup.style === "classic" : T.match.position.classic, T.demo ? null : T.match.position).map((t) => el("li", t)));
+    sheet("How to play", kin ? (() => { const box = el("div"); box.append(u, el("p", kin, "about")); return box; })() : u, "Close", "paper");
+  }
   /** One menu, the same in every table game: Game, Settings, Link play, About. */
   function menu(at = tab) {
     tab = at;
     if (!$("sheet").open || !$("sheet-body").contains(menuBox)) sheet(G.title, menuBox, T.demo ? "Close" : "Resume", "wide");
-    radio(tabs, [["game", "Game"], ["settings", "Settings"], ["link", "Link play"], ["about", "About"]].map(([value, label]) => ({ value, label })), tab, menu);
+    radio(tabs, [["game", "Game"], ["settings", "Settings"], ["link", "Link play"], ["about", "About"]].map(([value, label]) => ({ value, label })), tab, menu, true);
+    for (const b of tabs.children) b.setAttribute("aria-controls", pane.id);
+    pane.setAttribute("aria-label", tabs.querySelector("[aria-selected=true]").textContent);
     pane.replaceChildren({ game: gameTab, settings: settingsTab, link: linkBox, about: aboutTab }[tab]());
   }
   function gameTab() {
@@ -600,9 +660,9 @@ export function createTable(G) {
       sheet("The board as a list", box, "Close", "paper");
     });
     if (G.more) add(G.more.label, () => sheet(G.more.label, G.more.body(T)));
-    add("Take back your last move", undo).disabled = !canUndo();
+    if (!realtime()) add("Take back your last move", undo).disabled = !canUndo();
     add("Save to a file", save);
-    box.append(el("hr"));
+    box.append(el("p", SAVED, "about"), el("hr"));
     sure("Start again with the same players", restart);
     sure("Leave to the title", home);
     return box;
@@ -639,20 +699,21 @@ export function createTable(G) {
     return box;
   }
   function aboutTab() {
-    const box = el("div", undefined, "stack"), src = el("a", "Read the source code");
+    const box = el("div", undefined, "stack"), src = el("a", "Read the source code"), where = el("p", /^https:\/\//.test(SOURCE_URL) ? undefined : "The source address is not set in this copy yet.");
     src.href = SOURCE_URL;
     box.append(
       el("p", `${G.title}, one of the table games of Overture of Empires: Capo. Version ${VERSION}, build ${BUILD}.`),
-      /^https:\/\//.test(SOURCE_URL) ? el("p") : el("p", "The source address is not set in this copy yet."),
+      ...(G.family || familyLine(G.key) ? [el("p", G.family || familyLine(G.key))] : []),
+      where,
       el("p", "Free software under the GNU Affero General Public License, version 3 or later (AGPL-3.0-or-later): you may read, change and share it, and a changed copy that others use over a network must offer them its source."),
       el("p", "Credits: the rules, maps, pieces, emblems and sounds are the project's own work; the sounds are made in code as the game runs. The coastlines are drawn from Natural Earth, which is in the public domain. Anything borrowed is listed with its licence in CREDITS.csv, ADAPTED.csv and NOTICES.md beside the source."),
     );
-    if (/^https:\/\//.test(SOURCE_URL)) box.children[1].append(src);
+    if (/^https:\/\//.test(SOURCE_URL)) where.append(src);
     return box;
   }
   function titleCard() {
     radio($("count"), many.map((n) => ({ value: n, label: String(n) })), setup.seats, (v) => { setup.seats = v; titleCard(); });
-    radio($("style"), Object.entries(STYLES).filter(([k]) => G.about[k]).map(([value, label]) => ({ value, label, note: value === "coda" ? "coming soon" : undefined })), setup.style, (v) => { if (v === setup.style) return; setup.style = v; titleCard(); if (v !== "coda") attract(); });
+    radio($("style"), Object.entries(STYLES).filter(([k]) => G.about[k]).map(([value, label]) => ({ value, label, note: value === "coda" ? "coming soon" : undefined, soon: value === "coda" })), setup.style, (v) => { if (v === setup.style) return; setup.style = v; titleCard(); if (v !== "coda") attract(); });
     const soon = setup.style === "coda";
     $("about").replaceChildren(...G.about[setup.style].split("\n").map((x) => el("span", x)));
     for (const id of ["count", "who"]) $(id).closest(".line, ul").hidden = soon || !!G.alone?.(setup.style, setup.extra);
@@ -717,10 +778,12 @@ export function createTable(G) {
       const s = JSON.parse(read(KEY) || "null");
       if (!s) return null;
       const { match: m } = openSave(s.save, [G.game]);
-      return Array.isArray(s.kinds) && s.kinds.length === m.options.seats && s.kinds.every((k) => k !== "away" && Object.hasOwn(WORDS, k)) ? { m, kinds: s.kinds, look: s.look || LOOK0 } : null;
+      // one kind a seat; a game that names its own players (real time: you, and nations the rules play) keeps as many as it named
+      const seats = G.kindsOf?.(m.options)?.length ?? m.options.seats, fits = realtime(m.position) ? s.kinds?.length >= 1 : s.kinds?.length === seats;
+      return Array.isArray(s.kinds) && fits && s.kinds.every((k) => k !== "away" && Object.hasOwn(WORDS, k)) ? { m, kinds: s.kinds, look: s.look || LOOK0 } : null;
     } catch { return null; }
   }
-  const resumeButton = () => { const k = kept(); $("resume").hidden = !k; if (k) $("resume").textContent = `Continue, round ${k.m.position.round}`; };
+  const resumeButton = () => { const k = kept(), when = k && G.roundText?.(k.m.position); $("resume").hidden = !k; if (k) $("resume").textContent = when ? `Continue: ${when}` : `Continue, round ${k.m.position.round}`; };
 
   const launch = (o, all, who, words = "") => begin(createMatch(G.game, { seed: G.seedOf?.(all) || seed(), options: o }), who, who.includes("away") ? { id: newId(), roles: who.map((k) => (k === "you" ? "host" : k === "away" ? "friend" : k)), pass: canLock() ? words : "", floor: 0 } : null, -1, setup.look.map((x) => [...x]));
   $("start").onclick = () => launch(chosen(), chosen(true), G.kindsOf?.(chosen()) || setup.who.slice(0, setup.seats), passField.value.trim());
@@ -758,6 +821,16 @@ export function createTable(G) {
   $("review").onclick = () => { $("act").hidden = true; toast("Open the menu to start again."); };
   $("again").onclick = restart;
   $("sheet-close").onclick = closeSheet;
+  // a sheet that closes gives the keyboard back to what opened it, or else to the move panel; one opened straight after keeps it waiting
+  $("sheet").addEventListener("close", () => {
+    if ($("sheet").open) return;
+    const o = opener, at = document.activeElement;
+    opener = null;
+    if (at && at !== document.body) return;
+    if (o && o !== document.body && o.isConnected && o.getClientRects().length && !o.disabled) o.focus({ preventScroll: true }); else refocus();
+  });
+  // a game on a clock is kept every few ticks; leaving the page keeps it to the tick
+  addEventListener("pagehide", () => { if (T.match && !T.demo && !T.catching && !T.busy) keep(); });
   $("sheet").onclick = (e) => { if (e.target === $("sheet")) closeSheet(); };
   $("look").onclick = () => menu("settings"); // the looks, all in view, with the other settings
   $("open").onclick = () => $("file").click();
@@ -767,7 +840,7 @@ export function createTable(G) {
     if (!f) return;
     try {
       const { match: m, warning } = openSave(await f.text(), [G.game]);
-      begin(m, Array.from({ length: m.options.seats }, (_, i) => (i ? "normal" : "you")));
+      begin(m, G.kindsOf?.(m.options) || Array.from({ length: m.options.seats }, (_, i) => (i ? "normal" : "you")));
       if (warning) sheet("Opened with a warning", el("p", warning));
     } catch (e) {
       if (!(e instanceof Refusal)) throw e;
@@ -778,8 +851,10 @@ export function createTable(G) {
     const k = e.key.toLowerCase();
     if (T.demo || $("sheet").open || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input:not([type=range]), select, textarea")) return;
     if (k.length === 1 && settings.keys === "off") return; // single letters only; Enter and Escape stay
-    if (k === "u") undo();
-    else if (k === "e" && T.ready() && performance.now() > sureEnd) { sureEnd = performance.now() + 4000; toast("End your turn? Press E again."); }
+    // a game on a clock has no turn to end or take back: its letters are all its own
+    const turns = !realtime();
+    if (k === "u" && turns) undo();
+    else if (k === "e" && turns && T.ready() && performance.now() > sureEnd) { sureEnd = performance.now() + 4000; toast("End your turn? Press E again."); }
     else if (T.ready()) { sureEnd = 0; G.key && G.keys?.(T, k, e); }
   });
   addEventListener("resize", place);

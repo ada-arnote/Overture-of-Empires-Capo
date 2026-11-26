@@ -2,6 +2,22 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### The table games' shared screen
+
+**Players**
+- **A real-time An Inch of Ink survives a reload.** The game was kept but Continue stayed hidden; it now shows, with the game time ("Continue: Age I, 2:30 of game time"), and leaving the page keeps the game to the tick.
+- **Real time has no turn keys.** E no longer asks "End your turn?" and U no longer takes back ticks of a game on a clock; the menu leaves out "Take back your last move" there. Turn games are unchanged.
+- **The keyboard stays in the move panel.** Closing "Since your last turn" with its × gives focus back to the move panel; closing a sheet gives it back to what opened it (Menu after How to play); Grain and Glass now starts with focus on its first list, not on the page.
+- **Fewer repeats for screen readers.** "Saffron is thinking" is said once a turn, your own moves no longer blank and repeat the status line, bots' moves are shown but not read (the summary at your turn reads them), and the summary's buttons are no longer read with it.
+- **Lists and menus.** Home and End jump to the ends of any list of choices, a long strip of choices scrolls to the one chosen, the menu's tabs are real tabs, and "Coda, coming soon" is passed over by the arrows.
+- **Smaller things.** With reduced motion the board behind the title holds still. A key that asks for a move the rules do not allow just now says "That cannot be done now." instead of failing. "in 1 rounds" reads "in 1 round". The Link games box has a label you can see. The arrows on "What happened" are not read aloud. Summary, log and footer links are 44 px targets; a dialog's sticky buttons no longer cover the row Tab reaches; seat colours keep their colours when the system forces colours.
+- **About and How to play** say which family of games each table game is inspired by, in genre words only, and the Game menu says that games are kept only in this browser, never sent anywhere, and can be saved to a file.
+
+**Contributors**
+- A game says it is played on a clock with `G.realtime` (true, or a test of the position); without it, a position marked `live` counts as real time. `T.realtime()` asks the same. `radio()` takes a fifth argument for tabs and a `soon` flag on a row.
+
 ## v0.7.0 (2026-11-26): new worlds, and a deeper Capo
 
 ### A deeper Capo: gauges, ambitions, crises, causes for war, the press
