@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ZTZvfeWva1Ny/VmI6uLLTbmVERlssPG0GWniyEvH48I='; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-66/y49mey7gR3a0DrFlL7JXfyb2qYsLs9vLq1XKd5Ss='; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <title>Capo world map</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -209,6 +209,11 @@ async function loadWorld(url, disputesUrl = "") {
   const lines = arcs.map((pts) => { const l = new Path2D(); pts.forEach(([x, y], i) => (i ? l.lineTo(x, y) : l.moveTo(x, y))); return l; });
   const neighbours = new Map([...byId.keys()].map((id) => [id, []]));
   for (const [a, b] of w.neighbours) { neighbours.get(a).push(b); neighbours.get(b).push(a); }
+  // narrow seas: coasts close across water, far apart by land
+  const across = new Map([...byId.keys()].map((id) => [id, []]));
+  for (const [a, b, km] of w.sea || []) { across.get(a).push(b); across.get(b).push(a); void km; }
+  const straits = new Path2D();
+  for (const [a, b] of w.sea || []) { const p = byId.get(a).label, q = byId.get(b).label; if (Math.abs(p[0] - q[0]) < w.width / 2) { straits.moveTo(p[0], p[1]); straits.lineTo(q[0], q[1]); } }
   // a province on the coast has a line with nobody on the other side
   const coast = new Set(sides.filter((ids) => ids.length === 1).map((ids) => ids[0]));
   const areas = disputes.areas.map((a) => {
@@ -216,7 +221,7 @@ async function loadWorld(url, disputesUrl = "") {
     for (const r of a.rings) { for (let i = 0; i < r.length; i += 2) { const x = r[i], y = r[i + 1]; if (i) path.lineTo(x, y); else path.moveTo(x, y); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } path.closePath(); }
     return { ...a, path, box: [x0, y0, x1, y1] };
   });
-  return { width: w.width, height: w.height, countries: w.countries, source: w.source, provinces: byId, lines, sides, neighbours, coast, disputes: areas };
+  return { width: w.width, height: w.height, countries: w.countries, source: w.source, provinces: byId, lines, sides, neighbours, across, straits, coast, disputes: areas };
 }
 
 let tile = null;
@@ -288,6 +293,8 @@ function worldMap(canvas, world, o) {
     c.lineJoin = "round"; c.lineCap = "round";
     if (s > 0.6) { c.strokeStyle = "rgba(255,244,214,.16)"; c.lineWidth = 0.8 / s; c.stroke(layers.inner); }
     c.strokeStyle = "rgba(10,16,18,.55)"; c.lineWidth = 1.1 / s; c.stroke(layers.coast);
+    // narrow seas, as faint dotted lines once the map is close enough to read them
+    if (s > 1.4 && world.straits) { c.strokeStyle = "rgba(226,184,102,.45)"; c.lineWidth = 1.2 / s; c.setLineDash([2 / s, 4 / s]); c.stroke(world.straits); c.setLineDash([]); }
     // disputed areas: hatched, with a dashed edge, so they read as unsettled whatever the colours underneath
     if (world.disputes?.length) {
       // the pattern is undone from the map's scale so its lines stay the same size on screen at every zoom

@@ -5,7 +5,7 @@
 import { JUMPS, MODES, UNITS, jumpFrom, monthsBetween, newWorldGame, readWorldReply, turnCode, worldPrompt } from "../src/story/turn.js";
 import { applyMoves, mightOf, placesFor, treatiesOf, warsOf } from "../src/story/worldrules.js";
 import { crossesLine } from "../src/story/rules.js";
-import { CHARACTER, SCENARIOS, SOON, characterPrompt, readCharacter } from "../src/story/scenarios.js";
+import { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacter, scenarioFrom, scenarioText } from "../src/story/scenarios.js";
 import { STANDING, askPrompt, chatPrompt, councilPrompt, moveFavour, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
 import { loadWorld, ownerColour, worldMap } from "./worldmap.js";
 import { ask, forgetKey, loadRoute, saveRoute } from "./ai.js";
@@ -23,10 +23,16 @@ const load = () => { try { return JSON.parse(localStorage.getItem(KEEP) || "null
 function toast(t) { const b = $("toast"); b.textContent = t; b.classList.add("on"); clearTimeout(hush); hush = setTimeout(() => b.classList.remove("on"), 3400); }
 // a country still being made goes by YOU (no country on the map uses it) until it has a code of its own
 const ownCode = () => (/^[A-Z]{3}$/.test(draft?.own.code || "") ? draft.own.code : "YOU");
-const custom = () => state?.custom || (draft?.kind === "own" ? { code: ownCode(), name: draft.own.name.trim() || "Your new country", colour: draft.own.colour } : null);
+// scenarios opened from files are kept in this browser beside the built-in ones
+const SHELF = "capo-scenarios-1";
+const shelf = () => { try { return JSON.parse(localStorage.getItem(SHELF) || "[]"); } catch { return []; } };
+const shelve = (list) => { try { localStorage.setItem(SHELF, JSON.stringify(list.slice(-12))); } catch { toast("This browser would not keep the scenario; it works for this visit."); } };
+const allScenarios = () => [...SCENARIOS, ...shelf()];
+const scen = () => (draft ? allScenarios().find((x) => x.id === draft.scenario) || SCENARIOS[0] : null);
+const custom = () => state?.custom || (draft?.kind === "own" ? { code: ownCode(), name: draft.own.name.trim() || "Your new country", colour: draft.own.colour } : scen()?.custom || null);
 const name = (code) => (custom()?.code === code ? custom().name : world.countries[code] || code);
 const colourOf = (code) => (custom()?.code === code ? custom().colour : undefined);
-const ownerOf = (id) => (state ? state.owners[id] || world.provinces.get(id).country : draft?.kind === "own" && draft.own.provinces.has(id) ? ownCode() : world.provinces.get(id).country);
+const ownerOf = (id) => (state ? state.owners[id] || world.provinces.get(id).country : draft?.kind === "own" && draft.own.provinces.has(id) ? ownCode() : scen()?.owners?.[id] || world.provinces.get(id).country);
 const fmtDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 
 // the largest province of each country, where the camera goes to show it
@@ -45,11 +51,17 @@ function landNeighbours(code) {
   for (const id of held(code)) for (const n of world.neighbours.get(id)) { const o = ownerOf(n); if (o !== code) out.add(o); }
   return [...out];
 }
+/** Countries across a narrow sea from this one, that it does not also border by land. */
+function seaNeighbours(code) {
+  const out = new Set(), land = new Set(landNeighbours(code));
+  for (const id of held(code)) for (const n of world.across.get(id)) { const o = ownerOf(n); if (o !== code && !land.has(o)) out.add(o); }
+  return [...out];
+}
 
 /** What the rules may ask of the map. */
 function geo() {
   return {
-    name, place: (id) => world.provinces.get(id), owner: ownerOf, neighbours: (id) => world.neighbours.get(id), coastal: (id) => world.coast.has(id),
+    name, place: (id) => world.provinces.get(id), owner: ownerOf, neighbours: (id) => world.neighbours.get(id), across: (id) => world.across.get(id), coastal: (id) => world.coast.has(id),
     holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c, hasCoast: (c) => held(c).some((id) => world.coast.has(id)), might: (c) => state?.might?.[c],
     find: (s) => { const k = String(s || "").trim(); if (world.provinces.has(k)) return k; const low = k.toLowerCase(), hits = [...world.provinces.values()].filter((p) => p.name.toLowerCase() === low); return hits.length === 1 ? hits[0].id : null; },
   };
@@ -103,15 +115,29 @@ const nextRow = (label, ok, to) => { const r = el("div", undefined, "row"); r.ap
 function ready(i) { return (i <= 1 || !countryProblem()) && (i <= 2 || !youProblem()); }
 
 function stepScenario(box) {
-  const kept = load(), list = el("div", undefined, "modes");
-  for (const s of SCENARIOS) {
-    const l = el("label"), r = el("input"), t = el("span");
+  const kept = load(), list = el("div", undefined, "modes"), mine = shelf();
+  for (const s of allScenarios()) {
+    const l = el("label"), r = el("input"), t = el("span"), opened = mine.some((x) => x.id === s.id);
     Object.assign(r, { type: "radio", name: "scenario", value: s.id, checked: s.id === draft.scenario });
-    r.onchange = () => { draft.scenario = s.id; };
-    t.append(el("b", s.title), el("small", s.blurb)); l.append(r, t); list.append(l);
+    r.onchange = () => { draft.scenario = s.id; if (s.custom && draft.kind === "own") draft.kind = "map"; map.refresh(); };
+    t.append(el("b", s.title), el("small", `${s.blurb || ""}${opened ? ` From a file; starts ${fmtDate(s.start)}.` : ""}`));
+    l.append(r, t);
+    if (opened) l.append(button("Remove", () => { shelve(shelf().filter((x) => x.id !== s.id)); if (draft.scenario === s.id) draft.scenario = SCENARIOS[0].id; map.refresh(); startScreen(); }));
+    list.append(l);
   }
+  const file = el("input"); file.type = "file"; file.accept = ".json,application/json"; file.hidden = true;
+  file.onchange = async () => {
+    const f = file.files[0]; if (!f) return;
+    if (f.size > 400000) return toast("That file is too big to be a scenario.");
+    let raw; try { raw = JSON.parse(await f.text()); } catch { return toast("That file is not a Capo scenario."); }
+    const r = checkScenario(raw, (c) => homes.has(c), (id) => world.provinces.has(id));
+    if (!r.ok) return toast(r.why);
+    if (crossesLine(scenarioText(r.scenario)).length) return toast("That scenario is refused: nothing sexual involving minors.");
+    shelve([...shelf().filter((x) => x.id !== r.scenario.id), r.scenario]); draft.scenario = r.scenario.id; map.refresh(); startScreen(); toast(`Opened: ${r.scenario.title}.`);
+  };
+  const openRow = el("div", undefined, "row"); openRow.append(button("Open a scenario file", () => file.click()), file);
   for (const [title, what] of SOON) { const l = el("label"), t = el("span"); l.style.opacity = ".55"; t.append(el("b", `${title}: coming soon`), el("small", what)); l.append(t); list.append(l); }
-  box.append(el("p", "Lead a country, a leader's life or an ordinary one. You decide what to do; an AI tells what happens; the rules decide wars, borders and treaties.", "note"), el("h3", "Choose where the story starts"), list, nextRow("Next: your country", () => "", "country"));
+  box.append(el("p", "Lead a country, a leader's life or an ordinary one. You decide what to do; an AI tells what happens; the rules decide wars, borders and treaties.", "note"), el("h3", "Choose where the story starts"), list, openRow, nextRow("Next: your country", () => "", "country"));
   if (kept?.state) { const r = el("div", undefined, "row"); r.append(button(`Continue as ${kept.state.custom?.name || name(kept.state.player)}, ${fmtDate(kept.state.date)}`, () => { state = mend(kept.state); past = (kept.past || []).map(mend); draft = null; $("start").classList.remove("open"); play(); })); box.append(el("h3", "Or carry on"), r); }
 }
 
@@ -128,12 +154,17 @@ function countryProblem() {
 
 function stepCountry(box) {
   const tabs = el("div", undefined, "row");
-  for (const [k, t] of [["map", "A country on the map"], ["own", "One of your own"]]) { const b = button(t, () => { draft.kind = k; map.refresh(); startScreen(); }); b.setAttribute("aria-pressed", String(draft.kind === k)); tabs.append(b); }
+  for (const [k, t] of [["map", "A country on the map"], ["own", "One of your own"]]) {
+    if (k === "own" && scen()?.custom) continue;
+    const b = button(t, () => { draft.kind = k; map.refresh(); startScreen(); }); b.setAttribute("aria-pressed", String(draft.kind === k)); tabs.append(b);
+  }
+  if (scen()?.custom) box.append(el("p", `This scenario has a country of its own, ${scen().custom.name}; you can play it, or any country on the map.`, "note"));
   box.append(el("h3", "Your country"), tabs);
   if (draft.kind === "map") {
     const pick = el("input", undefined, "plain"), list = el("datalist");
     list.id = "countries";
     const byName = new Map(Object.entries(world.countries).filter(([c]) => homes.has(c)).map(([c, n]) => [n, c]));
+    if (scen()?.custom) byName.set(scen().custom.name, scen().custom.code);
     list.append(...[...byName.keys()].sort().map((n) => { const o = document.createElement("option"); o.value = n; return o; }));
     Object.assign(pick, { type: "search", placeholder: "Type a country, or tap one on the map", value: draft.country ? name(draft.country) : "" });
     pick.setAttribute("list", "countries"); pick.setAttribute("aria-label", "Your country");
@@ -223,7 +254,7 @@ function takeCharacter(text) {
 }
 
 function stepBegin(box) {
-  const s = SCENARIOS.find((x) => x.id === draft.scenario), c = draft.character, who = draft.mode === "nation" ? "the nation" : `${c.name || "a person the AI will name"}, ${MODES[draft.mode][0].toLowerCase()}`;
+  const s = scen(), c = draft.character, who = draft.mode === "nation" ? "the nation" : `${c.name || "a person the AI will name"}, ${MODES[draft.mode][0].toLowerCase()}`;
   const list = el("ul", undefined, "list");
   for (const t of [`Scenario: ${s.title}, from ${fmtDate(s.start)}.`, `Country: ${ownName()}${draft.kind === "own" ? ` (${draft.own.code}), your own, with ${draft.own.provinces.size} province${draft.own.provinces.size > 1 ? "s" : ""}` : ""}.`, `You play as ${who}.`]) { const li = el("li"); li.append(el("span", t)); list.append(li); }
   const r = el("div", undefined, "row");
@@ -233,11 +264,11 @@ function stepBegin(box) {
 
 function begin() {
   const why = countryProblem() || youProblem(); if (why) return toast(why);
-  const s = SCENARIOS.find((x) => x.id === draft.scenario), own = draft.kind === "own", seed = [...crypto.getRandomValues(new Uint32Array(2))].map((v) => v.toString(36)).join("");
+  const s = scen(), own = draft.kind === "own", seed = [...crypto.getRandomValues(new Uint32Array(2))].map((v) => v.toString(36)).join("");
   const o = draft.own, code = own ? o.code : draft.country;
   const character = draft.mode === "nation" ? null : Object.fromEntries(Object.entries(draft.character).map(([k, v]) => [k, v.trim()]));
   state = newWorldGame(code, draft.mode, seed, {
-    scenario: { id: s.id, start: s.start, opening: s.opening },
+    scenario: s,
     owners: own ? Object.fromEntries([...o.provinces].map((id) => [id, code])) : {},
     custom: own ? { code, name: o.name.trim(), colour: o.colour, history: o.history.trim() } : null,
     character,
@@ -319,7 +350,7 @@ function advance() {
   const to = jumpFrom(state.date, jump);
   const g = geo();
   const auto = jump.key === "auto";
-  pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]), talk: talkLines(state, { name }) }, acts, to, auto), to, auto, actions: acts };
+  pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, across: seaNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]), talk: talkLines(state, { name }) }, acts, to, auto), to, auto, actions: acts };
   if (route.route === "paste") { open("actions"); return; }
   viaAddress();
 }
@@ -632,7 +663,21 @@ function gameSheet(box) {
     button("Save to a file", () => { const a = el("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: "application/json" })); a.download = `capo-${state.player}-turn-${state.turn}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }),
     button("Open a file", () => file.click()),
     button("New game", () => { if (confirm("Leave this game? It stays saved until you begin another.")) { open(null); $("top").hidden = true; $("dock").hidden = true; state = null; draft = null; map.refresh(); startScreen(); } }));
+  const sTitle = Object.assign(el("input", undefined, "plain"), { type: "text", maxLength: 60, placeholder: "Title, for example: The Andean War of 2027" });
+  const sBlurb = Object.assign(el("input", undefined, "plain"), { type: "text", maxLength: 200, placeholder: "One line on what it is" });
+  const sOpen = Object.assign(el("textarea", undefined, "plain"), { rows: 3, maxLength: 1000, value: state.log[state.log.length - 1]?.summary || state.opening || "", placeholder: "How the story begins" });
+  sTitle.setAttribute("aria-label", "Scenario title"); sBlurb.setAttribute("aria-label", "Scenario line"); sOpen.setAttribute("aria-label", "Scenario opening");
+  const sRow = el("div", undefined, "row");
+  sRow.append(button("Save as a scenario", () => {
+    const s = scenarioFrom(state, { title: sTitle.value, blurb: sBlurb.value, opening: sOpen.value });
+    if (!s.title) return toast("Give the scenario a title.");
+    if (crossesLine(scenarioText(s)).length) return toast("Refused: nothing sexual involving minors.");
+    const a = el("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(s)], { type: "application/json" }));
+    a.download = `capo-scenario-${s.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "untitled"}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast("Saved. Open it from the first screen, or share the file.");
+  }));
   box.append(el("h2", "Game"), home(), el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back.`, "note"), saves, file,
+    el("h3", "Save the world as a scenario"), el("p", `A starting point others can play: today's date, who holds what, wars, treaties, story facts and might${state.custom ? `, and ${state.custom.name}` : ""}. Not your actions, chats or council.`, "note"), sTitle, sBlurb, sOpen, sRow,
     el("h3", "How Capo reaches an AI"), line("Route", pick), line("Address", base), line("Model", model), line("Key", key), keepLine, aiRow,
     el("p", `Today: ${route.calls || 0} calls, about ${route.sent || 0} tokens sent and ${route.got || 0} received.`, "note"),
     el("p", "A key goes only to the address you give, straight from this page. Capo has no server and never sees it.", "note"));
@@ -650,8 +695,10 @@ function card(p) {
   }
   const owner = ownerOf(p.id), near = el("div", undefined, "near");
   for (const id of world.neighbours.get(p.id)) { const n = world.provinces.get(id); near.append(button(n.name, () => { card(n); map.show(n.id); })); }
+  const over = el("div", undefined, "near");
+  for (const id of world.across.get(p.id)) { const n = world.provinces.get(id); over.append(button(`${n.name} (${name(ownerOf(n.id))})`, () => { card(n); map.show(n.id); })); }
   const wars = state ? warsOf(state, owner) : [], pacts = state ? treatiesOf(state, owner) : [];
-  const rows = [el("h2", p.name), ...(p.disputes || []).map((a) => el("p", `${{ disputed: "Disputed", breakaway: "Breakaway", unsettled: "Unsettled" }[a.kind]}: ${a.name}. ${a.note}`, "warn")), el("p", `${name(owner)}${owner !== p.country ? `, taken from ${name(p.country)}` : ""}.${wars.length ? ` At war with ${wars.map(name).join(", ")}.` : ""}${pacts.length ? ` Treaties: ${pacts.map((x) => `${name(x.with)} (${x.kind})`).join(", ")}.` : ""}`, "note"), el("p", near.children.length ? "Borders by land:" : "No land borders: reached by sea.", "note"), near];
+  const rows = [el("h2", p.name), ...(p.disputes || []).map((a) => el("p", `${{ disputed: "Disputed", breakaway: "Breakaway", unsettled: "Unsettled" }[a.kind]}: ${a.name}. ${a.note}`, "warn")), el("p", `${name(owner)}${owner !== p.country ? `, taken from ${name(p.country)}` : ""}.${wars.length ? ` At war with ${wars.map(name).join(", ")}.` : ""}${pacts.length ? ` Treaties: ${pacts.map((x) => `${name(x.with)} (${x.kind})`).join(", ")}.` : ""}`, "note"), el("p", near.children.length ? "Borders by land:" : "No land borders.", "note"), near, ...(over.children.length ? [el("p", "Across a narrow sea:", "note"), over] : [])];
   if (state && owner !== state.player) rows.push(el("div", undefined, "row")), rows[rows.length - 1].append(button(`Talk to ${name(owner)}`, () => open("chats")));
   box.replaceChildren(...rows);
   box.style.display = "block";

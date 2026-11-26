@@ -16,7 +16,7 @@ export const VERBS = {
   PEACE: "make peace with a country it is at war with (target: its country code)",
   TREATY: "sign a treaty with a country (target: its country code; detail: trade, defence or alliance)",
   BREAK: "end a treaty (target: the other country's code)",
-  ATTACK: "attack one province held by a country it is at war with, next to land it holds (target: the province id)",
+  ATTACK: "attack one province held by a country it is at war with, next to land it holds or across a narrow sea from it (target: the province id)",
   GIVE: "hand one of its own provinces to another country by agreement (target: the province id; detail: the receiving country's code)",
 };
 const KINDS = ["trade", "defence", "alliance"];
@@ -104,16 +104,20 @@ function attack(g, m, geo, { attacks, months }) {
   const o = geo.owner(id), place = geo.place(id).name;
   if (o === c) return { ok: false, why: `${place} is already its own` };
   if (!atWar(g, c, o)) return { ok: false, why: `attack on ${place} refused: not at war with ${geo.name(o)}, which holds it` };
-  const byLand = geo.neighbours(id).some((n) => geo.owner(n) === c), bySea = !byLand && geo.coastal(id) && mightOf(geo, c) >= 6 && geo.hasCoast(c);
-  if (!byLand && !bySea) return { ok: false, why: `attack on ${place} refused: it touches no land ${geo.name(c)} holds, and ${geo.name(c)} cannot cross the sea in strength` };
+  // by land; across a narrow sea (any country may, a little harder); or across open sea (only a strong power)
+  const byLand = geo.neighbours(id).some((n) => geo.owner(n) === c);
+  const byStrait = !byLand && (geo.across?.(id) || []).some((n) => geo.owner(n) === c);
+  const bySea = !byLand && !byStrait && geo.coastal(id) && mightOf(geo, c) >= 6 && geo.hasCoast(c);
+  if (!byLand && !byStrait && !bySea) return { ok: false, why: `attack on ${place} refused: it touches no land ${geo.name(c)} holds, no narrow sea joins them, and ${geo.name(c)} cannot cross open sea in strength` };
   const most = Math.max(1, Math.ceil(months));
   attacks[c] = (attacks[c] || 0) + 1;
   if (attacks[c] > most) return { ok: false, why: `attack on ${place} refused: no more than ${most} attack${most > 1 ? "s" : ""} in a turn this long` };
-  const home = geo.place(id).country === c ? 0.15 : 0, sea = bySea ? -0.1 : 0;
+  const home = geo.place(id).country === c ? 0.15 : 0, sea = bySea ? -0.1 : byStrait ? -0.05 : 0;
   const luck = Math.min(1, Math.max(0, draw(g.seed, `${g.turn}:attack:${id}:${c}`) + home + sea));
   const a = mightOf(geo, c), d = mightOf(geo, o), wins = (a / d) * (0.5 + luck) > 1;
-  const how = `might ${a} against ${d}, luck ${Math.round(luck * 100)} of 100${home ? " (its own land, +15)" : ""}${sea ? " (by sea, -10)" : ""}`;
-  if (!wins) return { ok: true, why: `attacks ${place}${bySea ? " from the sea" : ""} and is thrown back (${how})` };
+  const how = `might ${a} against ${d}, luck ${Math.round(luck * 100)} of 100${home ? " (its own land, +15)" : ""}${bySea ? " (by open sea, -10)" : byStrait ? " (across a narrow sea, -5)" : ""}`;
+  const from = bySea ? " from the sea" : byStrait ? " across the strait" : "";
+  if (!wins) return { ok: true, why: `attacks ${place}${from} and is thrown back (${how})` };
   if (geo.place(id).country === c) delete g.owners[id]; else g.owners[id] = c;
   const also = [];
   if (geo.holds(o) === 0) {
@@ -121,7 +125,7 @@ function attack(g, m, geo, { attacks, months }) {
     g.treaties = g.treaties.filter((t) => !t.pair.split("|").includes(o));
     also.push(`${geo.name(o)}: has lost the last of its land`);
   }
-  return { ok: true, why: `attacks ${place}${bySea ? " from the sea" : ""} and takes it from ${geo.name(o)} (${how})`, also, taken: id };
+  return { ok: true, why: `attacks ${place}${from} and takes it from ${geo.name(o)} (${how})`, also, taken: id };
 }
 
 function give(g, m, geo) {
@@ -156,7 +160,7 @@ export function worldFacts(g, geo) {
 /** The provinces worth naming in the prompt: the player's, the land next to them, and both sides of every front. */
 export function placesFor(g, geo, all) {
   const want = new Set(), me = g.player;
-  for (const id of all) if (geo.owner(id) === me) { want.add(id); for (const n of geo.neighbours(id)) want.add(n); }
+  for (const id of all) if (geo.owner(id) === me) { want.add(id); for (const n of [...geo.neighbours(id), ...(geo.across?.(id) || [])]) want.add(n); }
   for (const w of g.wars) {
     const [a, b] = w.pair.split("|");
     for (const id of all) if (geo.owner(id) === a || geo.owner(id) === b) for (const n of geo.neighbours(id)) { const o = geo.owner(n); if ((o === a || o === b) && o !== geo.owner(id)) { want.add(id); want.add(n); } }

@@ -46,9 +46,11 @@ export const monthsBetween = (a, b) => Math.max(0.25, (Date.parse(`${b}T00:00:00
  */
 export function newWorldGame(player, mode, seed, extra = {}) {
   const sc = extra.scenario || { id: "today", start: "2026-12-01", opening: "" };
+  // a scenario may carry a whole starting world: land, wars, treaties, story facts, might and a country of its own
   return { v: 1, scenario: sc.id, opening: sc.opening, player, mode: MODES[mode] ? mode : "nation", seed, date: sc.start, turn: 1,
-    owners: { ...(extra.owners || {}) }, custom: extra.custom || null, character: extra.character || null, wars: [], treaties: [], offers: [], log: [],
-    standing: STANDING[mode] || 5, council: null, chats: [], counsel: [], facts: [], might: {}, edits: [], sandbox: false };
+    owners: { ...(sc.owners || {}), ...(extra.owners || {}) }, custom: extra.custom || sc.custom || null, character: extra.character || null,
+    wars: structuredClone(sc.wars || []), treaties: structuredClone(sc.treaties || []), offers: [], log: [],
+    standing: STANDING[mode] || 5, council: null, chats: [], counsel: [], facts: structuredClone(sc.facts || []), might: { ...(sc.might || {}) }, edits: [], sandbox: false };
 }
 
 // what each mode lets the player's actions do
@@ -93,6 +95,7 @@ export function worldPrompt(g, world, actions, to, auto = false) {
     ...(g.custom ? [`- ${g.custom.name} (${g.custom.code}) is a country of the player's own making, real in this story. Its history: ${g.custom.history || "not told"}`] : []),
     ...(g.character && g.mode !== "nation" ? [`- The player's character: ${Object.entries(g.character).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join("; ")}`] : []),
     `- ${world.name(me)} holds ${world.size(me)} province${world.size(me) === 1 ? "" : "s"} and borders by land: ${near}.`,
+    ...(world.across?.(me).length ? [`- Across a narrow sea from ${world.name(me)}: ${world.across(me).map((c) => `${world.name(c)} (${c})`).join(", ")}.`] : []),
     ...worldFacts(g, world.geo),
     "", "RECENT (the last turns, oldest first)",
     ...(recent.length ? recent : ["- nothing yet: this is the first turn"]),

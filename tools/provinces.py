@@ -14,6 +14,8 @@ FLOOR = 12          # a country keeps at least this many it can fold (or all it 
 WIDTH = 4000        # map units from 180 west to 180 east
 TOLERANCE = 1.1     # map units a simplified line may stray
 SPECK = 3.0         # square map units: smaller islands are left out (never a province's largest piece)
+SEA_KM = 150        # coasts closer than this across water are linked: a narrow sea
+HOPS = 4            # ...if they are more than this many land borders apart
 LEAVE_OUT = {"ATA"}  # Antarctica
 
 
@@ -239,14 +241,55 @@ def main(folder, count):
             last = p
         packed.append(line)
     pairs = sorted({(codes[a], codes[b]) for gs in sides.values() if len(gs) == 2 for a, b in [gs]})
+    sea = sea_links(arcs, sides, set(live), members)
     countries = {r["adm0_a3"]: r["admin"] for r in rows}
     height = round(miller(0, -89.9)[1])
     world = {"source": "Natural Earth 1:10m admin-1 states and provinces, version 5.1.1, public domain. Simplified and merged by tools/provinces.py.",
-             "width": WIDTH, "height": height, "countries": countries, "provinces": out_provinces, "neighbours": [list(p) for p in pairs], "arcs": packed}
+             "width": WIDTH, "height": height, "countries": countries, "provinces": out_provinces, "neighbours": [list(p) for p in pairs],
+             "sea": [[codes[a], codes[b], round(km)] for (a, b), km in sorted(sea.items(), key=lambda t: (codes[t[0][0]], codes[t[0][1]]))], "arcs": packed}
+    print(f"{len(sea)} sea links of up to {SEA_KM} km")
     out = pathlib.Path(__file__).resolve().parent.parent / "maps" / "world.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(world, ensure_ascii=False, separators=(",", ":")), encoding="utf8")
     print(f"{len(out_provinces)} provinces in {len(countries)} countries, {len(packed)} arcs, {len(pairs)} land neighbours, {dropped} small islands left out, {out.stat().st_size // 1000} kB")
+
+
+def sea_links(arcs, sides, live, members):
+    """Provinces whose coasts come within SEA_KM of each other across water, and which are far apart by land
+    (more than HOPS borders, or not joined at all): a narrow sea, crossable. A bay is a few borders around, so it is
+    never a sea link; the Strait of Gibraltar is the long way round through Egypt, so it is."""
+    land = defaultdict(set)
+    for gs in sides.values():
+        if len(gs) == 2: land[gs[0]].add(gs[1]); land[gs[1]].add(gs[0])
+    reach = {}
+    def near_by_land(g):
+        if g not in reach:
+            seen, edge = {g}, [g]
+            for _ in range(HOPS):
+                edge = [h for x in edge for h in land[x] if h not in seen]
+                seen.update(edge)
+            reach[g] = seen
+        return reach[g]
+    cell = 1.4  # degrees: just over SEA_KM of latitude
+    grid = defaultdict(list)
+    for k in live:
+        line = arcs[k]
+        gs = sides[(min(line[0], line[1]), max(line[0], line[1]))]
+        if len(gs) != 1: continue
+        for lon, lat in simplify(line, 0.02):
+            for shift in ((0,) + ((-360,) if lon > 178 else (360,) if lon < -178 else ())):  # across the 180 degree line too
+                grid[(math.floor((lon + shift) / cell), math.floor(lat / cell))].append((lon + shift, lat, gs[0]))
+    best = {}
+    for (cx, cy), pts in grid.items():
+        wide = math.ceil(1 / max(0.15, math.cos(math.radians((cy + 0.5) * cell))))
+        near = [q for dx in range(-wide, wide + 1) for dy in (-1, 0, 1) for q in grid.get((cx + dx, cy + dy), ())]
+        for lon, lat, g in pts:
+            k = math.cos(math.radians(lat)) * 111.32
+            for lon2, lat2, h in near:
+                if h <= g: continue
+                d = math.hypot((lon2 - lon) * k, (lat2 - lat) * 110.57)
+                if d < SEA_KM and d < best.get((g, h), 1e9): best[(g, h)] = d
+    return {pair: d for pair, d in best.items() if pair[1] not in near_by_land(pair[0])}
 
 
 if __name__ == "__main__":

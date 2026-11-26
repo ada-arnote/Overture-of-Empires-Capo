@@ -16,7 +16,7 @@ export const SCENARIOS = [
 export const SOON = [
   ["Alternate histories", "The same world, with one turn of history gone another way."],
   ["Fantasy worlds", "Three worlds of our own, each with its own map and peoples."],
-  ["Your own scenarios", "Write a starting world, share it as a file, play others' scenarios."],
+  ["Finding others' scenarios", "Browse scenarios other players have shared, from inside the game. For now, share them as files: save one from the Game menu, open one below."],
 ];
 
 export const CHARACTER = [
@@ -49,3 +49,45 @@ export function readCharacter(text, character) {
   }
   return out;
 }
+
+// ---- scenarios as files: a starting world anyone can save, share and open ----
+const LIMIT = { title: 60, blurb: 200, opening: 1000, owners: 3000, wars: 60, treaties: 120, facts: 20, fact: 400, history: 500 };
+const text = (v, n) => (typeof v === "string" ? v.trim().slice(0, n) : "");
+
+/** The world as it stands in a game, as a scenario others can start from. */
+export function scenarioFrom(g, meta) {
+  return {
+    kind: "capo-scenario", v: 1, id: `own-${g.seed}-${g.turn}`,
+    title: text(meta.title, LIMIT.title), blurb: text(meta.blurb, LIMIT.blurb), opening: text(meta.opening, LIMIT.opening),
+    start: g.date, owners: { ...g.owners }, wars: g.wars.map((w) => ({ pair: w.pair, since: w.since })), treaties: g.treaties.map((t) => ({ pair: t.pair, kind: t.kind, since: t.since })),
+    facts: (g.facts || []).map((f) => ({ text: f.text })), might: { ...(g.might || {}) }, custom: g.custom ? { ...g.custom } : null,
+  };
+}
+
+/**
+ * Check a scenario read from a file before anything uses it. `isCountry(code)` and `isProvince(id)` answer for the map.
+ * Returns {ok: true, scenario} with only the parts that passed, or {ok: false, why}.
+ */
+export function checkScenario(s, isCountry, isProvince) {
+  if (!s || s.kind !== "capo-scenario" || s.v !== 1) return { ok: false, why: "That file is not a Capo scenario." };
+  const title = text(s.title, LIMIT.title);
+  if (!title) return { ok: false, why: "The scenario has no title." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s.start || "") || Number.isNaN(Date.parse(`${s.start}T00:00:00Z`))) return { ok: false, why: "The scenario's start date is not a date." };
+  let custom = null;
+  if (s.custom) {
+    const c = s.custom;
+    if (!/^[A-Z]{3}$/.test(c.code || "") || isCountry(c.code)) return { ok: false, why: "The scenario's own country has a code the map already uses." };
+    custom = { code: c.code, name: text(c.name, 40) || c.code, colour: /^#[0-9a-f]{6}$/i.test(c.colour || "") ? c.colour : "#c9553f", history: text(c.history, LIMIT.history) };
+  }
+  const known = (c) => isCountry(c) || c === custom?.code, pairOk = (p) => typeof p === "string" && p.split("|").length === 2 && p.split("|").every(known) && p.split("|")[0] !== p.split("|")[1];
+  const owners = Object.fromEntries(Object.entries(s.owners || {}).filter(([id, c]) => isProvince(id) && known(c)).slice(0, LIMIT.owners));
+  const wars = (Array.isArray(s.wars) ? s.wars : []).filter((w) => pairOk(w?.pair)).slice(0, LIMIT.wars).map((w) => ({ pair: w.pair.split("|").sort().join("|"), since: s.start, by: "scenario" }));
+  const treaties = (Array.isArray(s.treaties) ? s.treaties : []).filter((t) => pairOk(t?.pair) && ["trade", "defence", "alliance"].includes(t.kind)).slice(0, LIMIT.treaties).map((t) => ({ pair: t.pair.split("|").sort().join("|"), kind: t.kind, since: s.start }));
+  const facts = (Array.isArray(s.facts) ? s.facts : []).map((f) => text(f?.text, LIMIT.fact)).filter(Boolean).slice(0, LIMIT.facts).map((t) => ({ text: t, turn: 0 }));
+  const might = Object.fromEntries(Object.entries(s.might || {}).filter(([c, n]) => known(c) && Number.isInteger(n) && n >= 1 && n <= 10));
+  if (custom && !Object.values(owners).includes(custom.code)) return { ok: false, why: "The scenario's own country holds no land." };
+  return { ok: true, scenario: { kind: "capo-scenario", v: 1, id: text(s.id, 80) || `file-${title}`, title, blurb: text(s.blurb, LIMIT.blurb), opening: text(s.opening, LIMIT.opening), start: s.start, owners, wars, treaties, facts, might, custom } };
+}
+
+/** Every piece of text in a scenario, for the hard-line check. */
+export const scenarioText = (s) => [s.title, s.blurb, s.opening, s.custom?.name, s.custom?.history, ...s.facts.map((f) => f.text)].filter(Boolean);
