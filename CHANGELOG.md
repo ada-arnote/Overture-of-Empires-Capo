@@ -2,6 +2,22 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased: countries with a state of their own
+
+**Players**
+- **Your country has a state, kept by the rules.** Three gauges in words: stability (in revolt, shaken, steady, calm, united), treasury (empty to overflowing) and mandate (rejected to acclaimed). Each moves one step a turn at most and always for a reason the receipt gives: land lost, a year at war, peace, a year of trade, land taken, an attack thrown back. A country in revolt declares no war and makes no attack; an empty treasury declares no new war. Tap your country's name in the top bar to see them, and "Map: stability" to see the world's.
+- **A war wants a cause.** Land taken from you, a treaty ended on you, land you claim, a treaty partner under attack: each is a cause, and the sheet lists yours and your neighbours'. A war begun without one shakes your stability.
+- **Crises.** From a foreign province's card you can demand it. Its holder answers by rule on a set day, and the card shows the answer and its reasons before you ask (strength, a cause, another war to fight, trouble at home, a protector, its heartland). It yields the province or refuses; a refusal costs you a step of mandate and of relations. After six quiet months the rules may open a crisis on their own over land that changed hands or is in dispute. When the demand is on you, the answer is yours: Refuse or Yield, at the top of Actions.
+- **Ambitions.** Choose a goal from a fixed list (a greater country, what was ours, a ring of friends, a trading power, a golden age, the long peace, unbroken; for a citizen, a name in the land). The rules count it, the AI is told how far along you are, and only the rules can call it met. The game goes on and you may choose another.
+- **The reckoning.** Your game so far in five lines, counted by the game: turns, land gained and lost, wars, treaties, the state of the country, ambitions met. Copy it to share.
+- **The turn's beat.** On about four turns in ten the rules pick one authored moment that fits the state of your country (a strike when the treasury is strained, the wounded coming home in wartime, a festival when the country is calm) and the AI writes it. A beat changes no fact.
+- **The press has stances.** Four papers are fixed for each game: one close to the government, one against it, one for trade, one foreign. The AI is told to keep each in character.
+- **Every past turn in full.** The Ledger has a Turns tab: each turn the game still holds opens to its actions, events, press and what the rules decided.
+- Games saved before this are brought up to date with a note at the top of Actions: nothing in their past changes.
+
+**Contributors**
+- New rules, each under 150 lines: `src/story/state.js` (gauges and causes), `crisis.js`, `ambitions.js`, `beats.js`, with `more.js` as the one door the turn calls. The page part is `site/realm.js`. Hooks in existing files are single lines marked "features hook".
+
 ## v0.6.3 (2026-11-26): the game screens in blue and silver
 
 **Players**

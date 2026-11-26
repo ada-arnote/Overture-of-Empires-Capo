@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-eiyCxAmLWLLwA+pqQSCxUXTvprYDohITeNuYatq4PnE='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-I9nYFTI3Nsr0S7qCFnCHTQMD//dPpcNalpXlKKOUtEM='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -379,7 +379,7 @@ html, body { height: 100%; margin: 0; overflow: hidden }
 <nav id="dock" class="glass" aria-label="Game" hidden></nav>
 <aside id="sheet" class="glass" aria-label="Panel"></aside>
 <section id="card" class="glass" aria-label="Province"></section>
-<select id="view" class="plain" aria-label="Map view"><option value="countries">Map: countries</option><option value="relations">Map: friends and foes</option><option value="might">Map: might</option></select>
+<select id="view" class="plain" aria-label="Map view"><option value="countries">Map: countries</option><option value="relations">Map: friends and foes</option><option value="might">Map: might</option><option value="state">Map: stability</option></select>
 <div class="zoom"><button type="button" class="plain" id="in" aria-label="Zoom in">+</button><button type="button" class="plain" id="out" aria-label="Zoom out">&minus;</button><button type="button" class="plain" id="home" aria-label="Back to my country">&#8962;</button></div>
 <div id="start"><div class="box glass" id="start-box"></div></div>
 <section id="guide" class="paper" role="dialog" aria-live="polite" aria-label="Guide"></section>
@@ -602,6 +602,119 @@ function relationLines(g) {
 
 $x.REL = REL; $x.NEED = NEED; $x.treatyName = treatyName; $x.monthsApart = monthsApart; $x.relOf = relOf; $x.relWord = relWord; $x.relate = relate; $x.settleRelations = settleRelations; $x.treatyAnswer = treatyAnswer; $x.relationLines = relationLines;
 return $x; })({});
+$m[6] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The state of a country, kept by the rules: three gauges in words, and the causes countries hold against each
+// other. Whole numbers, no chance, no AI. Every gauge runs 0 to 4, starts in the middle, moves at most one step a
+// turn and always for a reason the receipt gives.
+//   Stability: land lost -1 (never below shaken), a war begun without a cause -1, peace +1 (to calm), an attack
+//     thrown back +1, a quiet year after trouble +1, a year at war on an empty treasury -1.
+//   Treasury: a year at war -1; a year at peace +1 up to sound, to full with a treaty, to overflowing with three.
+//   Mandate: land taken +1, a demand met +1, a failed attack -1, a demand refused -1; after two years it drifts
+//     back to the middle.
+// What they do: a country in revolt (stability 0) declares no war and makes no attack; an empty treasury declares
+// no war. Crises, ambitions and the turn's beat read them too.
+// A cause for war lasts five years: land taken from you, a treaty ended on you, a demand refused. Land that was
+// yours, land you claim and a treaty partner under attack are causes for as long as they are so. Peace settles
+// the causes between two countries.
+const { monthsApart } = $m[5];
+
+const GAUGES = {
+  s: ["Stability", ["in revolt", "shaken", "steady", "calm", "united"]],
+  t: ["Treasury", ["empty", "strained", "sound", "full", "overflowing"]],
+  m: ["Mandate", ["rejected", "doubted", "accepted", "trusted", "acclaimed"]],
+};
+const MID = 2, LAPSE = 60;
+const gaugeOf = (g, c, k) => g.gauge?.[c]?.[k]?.[0] ?? MID;
+const gaugeWord = (k, n) => GAUGES[k][1][n];
+/** A country's three gauges in words: "shaken, sound, trusted". */
+const gaugeWords = (g, c) => Object.keys(GAUGES).map((k) => gaugeWord(k, gaugeOf(g, c, k))).join(", ");
+const fights = (g, c) => g.wars.filter((w) => w.pair.split("|").includes(c)).map((w) => w.pair.split("|").find((x) => x !== c));
+const bound = (g, c, trade) => g.treaties.filter((t) => t.pair.split("|").includes(c) && (trade || t.kind !== "trade")).map((t) => t.pair.split("|").find((x) => x !== c));
+
+/** Why `a` may go to war with `b` on the day `now`, in a few words, or "" when it has no cause. */
+function causeOf(g, geo, a, b, now = g.date) {
+  const kept = g.cause?.[`${a}>${b}`];
+  if (kept && monthsApart(kept[1], now) < LAPSE) return kept[0];
+  for (const [id, o] of Object.entries(g.owners || {})) if (o === b && geo.place(id)?.country === a) return `${geo.place(id).name} was its own`;
+  const claim = (geo.claimed?.() || []).find(([id, who]) => who === a && geo.owner(id) === b);
+  if (claim) return `it claims ${geo.place(claim[0]).name}`;
+  const friend = bound(g, a).find((p) => p !== b && fights(g, p).includes(b));
+  return friend ? `its treaty with ${geo.name(friend)}` : "";
+}
+const setCause = (g, a, b, why, now) => { g.cause = { ...(g.cause || {}), [`${a}>${b}`]: [why, now] }; };
+
+/** The reason the rules stop a move before it is judged, or "": revolt at home, or an empty treasury. */
+function barred(g, m) {
+  if (m.verb !== "WAR" && m.verb !== "ATTACK") return "";
+  if (gaugeOf(g, m.country, "s") === 0) return `${m.verb.toLowerCase()} refused: it is in revolt at home, and no army marches`;
+  return m.verb === "WAR" && gaugeOf(g, m.country, "t") === 0 ? "war refused: its treasury is empty" : "";
+}
+
+/**
+ * The end of a turn, on its last day `to`: read what the rules let happen (the receipt's own facts), let time
+ * pass, and move each gauge at most one step. Returns receipt lines for the player's country and its enemies.
+ */
+function settleState(g, receipt, to, geo) {
+  const push = new Map(), me = g.player, year = to.slice(0, 4), stamp = new Set();
+  const add = (c, k, d, why, cap = 4, floor = 0) => { const key = `${c}:${k}`; push.set(key, [...(push.get(key) || []), [d, why, cap, floor]]); };
+  for (const r of receipt) {
+    const [kind, a, b] = r.fact || [];
+    if (r.check?.band === "failed") { add(r.country, "m", -1, "an attack thrown back"); const o = geo.owner(r.check.key.split(":")[2]); if (o && o !== r.country) add(o, "s", 1, "an attack thrown back"); }
+    if (r.crisis) { const [how, x, y] = r.crisis; if (how === "yield") { add(y, "s", -1, "land yielded under threat"); add(x, "m", 1, "a demand met"); } else add(x, "m", -1, "a demand refused"); }
+    if (kind === "war") { if (!causeOf(g, geo, a, b, to)) add(a, "s", -1, `a war on ${geo.name(b)} without a cause`); stamp.add(a).add(b); }
+    else if (kind === "took") { add(a, "m", 1, "land taken"); add(b, "s", -1, "land lost", 4, 1); setCause(g, b, a, `land taken in ${year}`, to); }
+    else if (kind === "broke") setCause(g, b, a, `a treaty ended in ${year}`, to);
+    else if (kind === "peace") { for (const c of [a, b]) { add(c, "s", 1, "peace", 3); stamp.add(c); } for (const k of [`${a}>${b}`, `${b}>${a}`]) delete g.cause?.[k]; }
+    else if (kind === "fell") { delete g.gauge?.[a]; for (const k of Object.keys(g.cause || {})) if (k.split(">").includes(a)) delete g.cause[k]; }
+  }
+  g.gauge ||= {};
+  const live = new Set([me, ...g.wars.flatMap((w) => w.pair.split("|")), ...Object.keys(g.gauge), ...[...push.keys()].map((k) => k.split(":")[0])]);
+  for (const c of live) {
+    if (!geo.known(c) || geo.holds(c) === 0) { delete g.gauge[c]; continue; }
+    const e = (g.gauge[c] ||= {}), war = fights(g, c).length > 0, due = (k, n) => monthsApart(e[k][1], to) >= n;
+    for (const k of Object.keys(GAUGES)) { e[k] ||= [MID, to, ""]; if (k === "t" && stamp.has(c)) e[k][1] = to; }
+    const [s, t, m] = ["s", "t", "m"].map((k) => e[k][0]), deals = bound(g, c, true).length, top = deals >= 3 ? 4 : deals ? 3 : 2;
+    if (due("t", 12)) { if (war) add(c, "t", -1, "a year at war"); else if (t < top) add(c, "t", 1, deals ? "a year of trade" : "a year of peace"); else if (t > top) add(c, "t", -1, "trade lost"); }
+    if (due("s", 12)) { if (war && t === 0) add(c, "s", -1, "a year at war on an empty treasury"); else if (!war && s < MID) add(c, "s", 1, "a quiet year"); }
+    if (m !== MID && due("m", 24)) add(c, "m", m > MID ? -1 : 1, "time passes");
+  }
+  const lines = [], foes = fights(g, me);
+  for (const [key, list] of push) {
+    const [c, k] = key.split(":"), e = g.gauge[c], net = Math.sign(list.reduce((n, [d]) => n + d, 0));
+    if (!e || !net) continue;
+    const [, why, cap, floor] = list.find(([d]) => d === net), old = e[k][0], next = Math.max(Math.min(old, floor), Math.min(Math.max(old, cap), old + net));
+    if (next === old) continue;
+    e[k] = [next, to, why];
+    if (c === me || foes.includes(c)) lines.push({ ok: true, country: c, text: `${geo.name(c)}: its ${GAUGES[k][0].toLowerCase()} ${next > old ? "rises" : "falls"} to ${gaugeWord(k, next)} (${why})` });
+  }
+  // a country at rest, in the middle on every gauge and with no treaty to grow rich on, is not kept
+  for (const [c, e] of Object.entries(g.gauge)) if (c !== me && !fights(g, c).length && !bound(g, c, true).length && Object.values(e).every(([n]) => n === MID)) delete g.gauge[c];
+  return lines;
+}
+
+/** Lines for the prompt: the state of the player's country and of those it fights, and the causes it holds. */
+function stateLines(g, geo, near = []) {
+  const me = g.player, list = [me, ...fights(g, me), ...near.filter((c) => g.gauge?.[c])].filter((c, i, all) => all.indexOf(c) === i).slice(0, 8);
+  const causes = [...new Set([...near, ...Object.keys(g.cause || {}).filter((k) => k.startsWith(`${me}>`)).map((k) => k.split(">")[1])])].map((c) => [c, causeOf(g, geo, me, c)]).filter(([c, why]) => why && c !== me).slice(0, 6);
+  return [
+    `- The state of countries, kept by the rules (stability, treasury, mandate; any other country is steady, sound, accepted): ${list.map((c) => `${c} ${gaugeWords(g, c)}`).join("; ")}`,
+    `- Causes for war the player's country holds (a war begun without one shakes it at home): ${causes.map(([c, why]) => `against ${c} (${why})`).join("; ") || "none"}`,
+  ];
+}
+
+/** Gauges and causes from a save: only countries on the map, whole numbers 0 to 4, each with its date. */
+function keepState(s, known) {
+  const DATE = /^\d{4}-\d{2}-\d{2}$/, obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
+  const cell = (v) => Array.isArray(v) && Number.isInteger(v[0]) && v[0] >= 0 && v[0] <= 4 && DATE.test(v[1] || "");
+  const gauge = Object.fromEntries(Object.entries(obj(s.gauge)).filter(([c, e]) => known(c) && e && typeof e === "object" && Object.keys(GAUGES).every((k) => cell(e[k])))
+    .map(([c, e]) => [c, Object.fromEntries(Object.keys(GAUGES).map((k) => [k, [e[k][0], e[k][1], String(e[k][2] || "").slice(0, 80)]]))]));
+  const cause = Object.fromEntries(Object.entries(obj(s.cause)).filter(([k, v]) => k.split(">").length === 2 && k.split(">").every(known) && Array.isArray(v) && typeof v[0] === "string" && DATE.test(v[1] || "")).map(([k, v]) => [k, [v[0].slice(0, 80), v[1]]]));
+  return { gauge, cause };
+}
+
+$x.GAUGES = GAUGES; $x.gaugeOf = gaugeOf; $x.gaugeWord = gaugeWord; $x.gaugeWords = gaugeWords; $x.causeOf = causeOf; $x.setCause = setCause; $x.barred = barred; $x.settleState = settleState; $x.stateLines = stateLines; $x.keepState = keepState;
+return $x; })({});
 $m[2] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The rules of the world game: the AI proposes moves, these rules accept, trim or refuse each one and say why.
@@ -610,6 +723,8 @@ $m[2] = (($x) => {
 const { draw100 } = $m[3];
 const { chanceOf, check, checkLine } = $m[4];
 const { relate, relationLines, treatyAnswer, treatyName } = $m[5];
+// features hook: revolt and an empty treasury stop a war or an attack
+const { barred } = $m[6];
 
 // Invented numbers for a fiction, from 1 to 10. Countries not listed get 2, or 3 if they hold twelve provinces or more.
 const MIGHT = {
@@ -658,6 +773,7 @@ function applyMoves(g, moves, geo, actions, months) {
       used[m.action] = (used[m.action] || 0) + 1;
       if (used[m.action] > 3) { say(m, false, `more than three moves from action ${m.action} are not allowed`); continue; }
     } else if (++rivals > 6) { say(m, false, "more than six moves by other countries in one turn are not allowed"); continue; }
+    if (barred(g, m)) { say(m, false, barred(g, m)); continue; } // features hook
     const staller = isMe ? stalledBy(g, m, receipt.length) : null;
     if (staller) { say(m, false, `${verb.toLowerCase()} held back: ${staller.name} (favour ${staller.favour}), who opposes it, stalled the order this turn`); continue; }
     const r = ({ WAR: war, PEACE: peace, TREATY: treaty, BREAK: unbind, ATTACK: attack, GIVE: give })[verb](g, m, geo, { isMe, attacks, months, spent });
@@ -936,7 +1052,7 @@ function leaks(g) {
 
 $x.MIGHT = MIGHT; $x.VERBS = VERBS; $x.atWar = atWar; $x.treatyOf = treatyOf; $x.mightOf = mightOf; $x.warsOf = warsOf; $x.treatiesOf = treatiesOf; $x.applyMoves = applyMoves; $x.ownMoves = ownMoves; $x.worldFacts = worldFacts; $x.placesFor = placesFor; $x.APPROACHES = APPROACHES; $x.GENERALS = GENERALS; $x.commandOf = commandOf; $x.turnKey = turnKey; $x.commanders = commanders; $x.attackPlan = attackPlan; $x.adviceFor = adviceFor; $x.leaks = leaks;
 return $x; })({});
-$m[7] = (($x) => {
+$m[8] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The chronicle: the story's memory, built by code and never by an AI call. Each turn leaves one line: what the
 // rules decided (from the receipt's own records) and the one sentence the turn was told in. The newest nine turns
@@ -1015,12 +1131,12 @@ function chronicleLines(g, name) {
 
 $x.KEEP = KEEP; $x.joinFacts = joinFacts; $x.factsOf = factsOf; $x.factWords = factWords; $x.remember = remember; $x.chronicleFrom = chronicleFrom; $x.chronicleLines = chronicleLines;
 return $x; })({});
-$m[6] = (($x) => {
+$m[7] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Talking in Capo: chats with countries or people, and the council. Words only: nothing said here changes
 // land, wars or treaties. What was said goes into the next turn's prompt, and favour moves by rule.
 const { VERBS, commandOf } = $m[2];
-const { chronicleLines } = $m[7];
+const { chronicleLines } = $m[8];
 const { relOf, relWord } = $m[5];
 const { crosses } = $m[3];
 
@@ -1225,16 +1341,339 @@ function changeStanding(g, change) {
 
 $x.WORDS = WORDS; $x.STANDING = STANDING; $x.SEATS = SEATS; $x.seatsFor = seatsFor; $x.chatPrompt = chatPrompt; $x.readChat = readChat; $x.councilPrompt = councilPrompt; $x.readCouncil = readCouncil; $x.askPrompt = askPrompt; $x.readAsk = readAsk; $x.moveFavour = moveFavour; $x.talkLines = talkLines; $x.changeStanding = changeStanding;
 return $x; })({});
+$m[10] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Crises: one country demands one province of another, with a day by which it must be answered. Rules only.
+// The country asked adds up a score and says it, as it does for a treaty: the gap in might (at most 3 either way),
+// +2 when the asker has a cause, +1 when the country asked has another war to fight, +1 or +2 when it is shaken or
+// in revolt at home, -2 when a treaty partner at least as strong as the asker stands behind it, -2 for its
+// heartland, -2 when the same demand was made in the last two years. At 4 or more it yields the province rather
+// than fight; otherwise it refuses. The player answers for their own country. One crisis is open at a time.
+// A yielded province leaves the pair bitter and gives the loser a cause. A refusal costs the asker a step of
+// mandate and a step of relations, and keeps alive the cause it already had; a demand made without a cause never
+// makes one.
+// The world also moves on its own: after six quiet months the rules may open a crisis over land that changed
+// hands or land in dispute (an even chance each turn, drawn from the game's seed), near the player when they can.
+const { draw100, hash32 } = $m[3];
+const { monthsApart } = $m[5];
+const { atWar, mightOf, treatiesOf, treatyOf, turnKey, warsOf } = $m[2];
+const { causeOf, gaugeOf, gaugeWord, setCause } = $m[6];
+
+const CRISIS = { need: 4, quiet: 6, chance: 50, due: 3, mine: 1, again: 24 };
+const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
+/** A date some whole months on, never past the 28th, so every month has it. */
+function addMonths(iso, n) {
+  const [y, m, d] = iso.split("-").map(Number), k = y * 12 + (m - 1) + n;
+  return `${Math.floor(k / 12)}-${String((k % 12) + 1).padStart(2, "0")}-${String(Math.min(d, 28)).padStart(2, "0")}`;
+}
+
+/**
+ * What `b` would answer if `a` demanded the province `id` on the day `now`, and why, before it is asked or after.
+ * Returns {no} when the demand cannot be made at all, else {ok, score, need, parts, why}.
+ */
+function demandAnswer(g, geo, a, b, id, now = g.date) {
+  const place = geo.place(id)?.name;
+  if (!place || geo.owner(id) !== b || a === b || !geo.holds(a)) return { no: "that land is not held by another country" };
+  if (atWar(g, a, b)) return { no: `at war with ${geo.name(b)}: land is taken by arms now` };
+  if (treatyOf(g, a, b)) return { no: `bound to ${geo.name(b)} by treaty; it must be ended first` };
+  if (geo.holds(b) <= 1) return { no: `${place} is the last land ${geo.name(b)} holds` };
+  const ma = mightOf(geo, a), mb = mightOf(geo, b), s = gaugeOf(g, b, "s"), cause = causeOf(g, geo, a, b, now), asked = g.asked?.[`${a}>${b}`];
+  const shield = treatiesOf(g, b).find((t) => t.kind !== "trade" && t.with !== a && mightOf(geo, t.with) >= ma);
+  const parts = [[`might ${ma} against ${mb}`, Math.max(-3, Math.min(3, ma - mb))]];
+  if (cause) parts.push([`a cause (${cause})`, 2]);
+  if (warsOf(g, b).length) parts.push(["another war to fight", 1]);
+  if (s < 2) parts.push([`${gaugeWord("s", s)} at home`, 2 - s]);
+  if (shield) parts.push([`${geo.name(shield.with)} stands behind it`, -2]);
+  if (geo.home?.(b) === id) parts.push(["its heartland", -2]);
+  if (asked && monthsApart(asked, now) < CRISIS.again) parts.push(["a demand made before", -2]);
+  const score = parts.reduce((n, [, v]) => n + v, 0);
+  return { ok: score >= CRISIS.need, score, need: CRISIS.need, cause, parts, why: `${parts.map(([l, n]) => `${l} ${signed(n)}`).join(", ")}: ${score}, needing ${CRISIS.need}` };
+}
+
+/** The player demands a province by card. text is the action that carries it. Returns {ok, why}. */
+function demand(g, geo, id, text) {
+  const me = g.player, b = geo.owner(id);
+  if (g.mode === "citizen") return { ok: false, why: "As a citizen you do not speak for the country." };
+  if (g.crisis) return { ok: false, why: "Another crisis is still open: one at a time." };
+  if (![...geo.neighbours(id), ...(geo.across?.(id) || [])].some((n) => geo.owner(n) === me)) return { ok: false, why: "You can demand only land next to your own, or across a narrow sea from it." };
+  const a = demandAnswer(g, geo, me, b, id);
+  if (a.no) return { ok: false, why: `Refused: ${a.no}.` };
+  g.crisis = { a: me, b, id, since: g.date, due: addMonths(g.date, CRISIS.mine), by: "you", text };
+  return { ok: true, why: a.why };
+}
+
+const sour = (g, a, b, n, to) => { const k = [a, b].sort().join("|"); g.rel = { ...(g.rel || {}), [k]: [Math.max(-3, n), to] }; if (!n) delete g.rel[k]; };
+const stored = (g, a, b) => g.rel?.[[a, b].sort().join("|")]?.[0] || 0;
+
+/**
+ * The end of a turn, on its last day `to`: an open crisis is answered once its day has come, and after a quiet
+ * stretch the rules may open one. actions are the turn's actions. Returns receipt lines.
+ */
+function settleCrisis(g, to, geo, actions = []) {
+  const k = g.crisis, lines = [], me = g.player, name = geo.name;
+  if (k) {
+    const place = geo.place(k.id)?.name, opened = k.by === "you" && k.since === g.date, ans = demandAnswer(g, geo, k.a, k.b, k.id, to);
+    if (opened && !actions.includes(k.text)) { g.crisis = null; return lines; }
+    if (ans.no) { g.crisis = null; g.calm = to; return [{ ok: true, country: k.a, text: `${name(k.a)}: its demand for ${place || "the province"} is overtaken by events` }]; }
+    if (opened) lines.push({ ok: true, country: k.a, text: `${name(k.a)}: demands ${place} from ${name(k.b)}, to be answered by ${k.due}` });
+    if (to < k.due) return lines;
+    const own = k.b === me && g.mode !== "citizen", yes = own ? k.answer === "yield" : ans.ok, year = to.slice(0, 4), why = own ? "your own answer" : ans.why;
+    if (yes) {
+      if (geo.place(k.id).country === k.a) delete g.owners[k.id]; else g.owners[k.id] = k.a;
+      sour(g, k.a, k.b, Math.min(stored(g, k.a, k.b), -2), to);
+      setCause(g, k.b, k.a, `land yielded under threat in ${year}`, to);
+      lines.push({ ok: true, country: k.b, text: `${name(k.b)}: yields ${place} to ${name(k.a)} rather than fight (${why})`, fact: ["gave", k.b, k.a, 1], crisis: ["yield", k.a, k.b] });
+    } else {
+      sour(g, k.a, k.b, stored(g, k.a, k.b) - 1, to);
+      if (ans.cause) setCause(g, k.a, k.b, `its demand for ${place} was refused in ${year}`, to);
+      lines.push({ ok: true, country: k.b, text: `${name(k.b)}: refuses ${name(k.a)}'s demand for ${place} (${why})`, crisis: ["refuse", k.a, k.b] });
+    }
+    g.asked = { ...(g.asked || {}), [`${k.a}>${k.b}`]: to }; g.calm = to; g.crisis = null;
+    return lines;
+  }
+  if (!g.calm) { g.calm = to; return lines; }
+  if (monthsApart(g.calm, to) < CRISIS.quiet || draw100(g.seed, `${turnKey(g)}:crisis`) > CRISIS.chance) return lines;
+  // who might press whom: the old holder of land that changed hands, and the claimant of land in dispute
+  const pool = [[], []], seen = new Set(), stakes = [...Object.keys(g.owners || {}).map((id) => [id, geo.place(id)?.country]), ...(geo.claimed?.() || [])];
+  for (const [id, a] of stakes) {
+    const b = geo.owner(id), key = `${a}>${b}`;
+    if (!a || a === me || a === b || seen.has(key) || !geo.known(a) || !geo.holds(a) || gaugeOf(g, a, "s") === 0 || mightOf(geo, a) < mightOf(geo, b) - 1) continue;
+    const ans = demandAnswer(g, geo, a, b, id, to);
+    if (ans.no || ans.score < CRISIS.need - 2) continue;
+    seen.add(key);
+    pool[b === me || geo.neighbours(id).some((n) => geo.owner(n) === me) ? 0 : 1].push([a, b, id]);
+  }
+  const from = (pool[0].length ? pool[0] : pool[1]).sort((x, y) => (x[2] < y[2] ? -1 : 1));
+  if (!from.length) return lines;
+  const [a, b, id] = from[hash32(g.seed, `${turnKey(g)}:crisis:pick`) % from.length];
+  g.crisis = { a, b, id, since: to, due: addMonths(to, CRISIS.due), by: "rules" };
+  return [{ ok: true, country: a, text: `${name(a)}: demands ${geo.place(id).name} from ${name(b)}, to be answered by ${g.crisis.due}` }];
+}
+
+/** A line for the prompt while a crisis is open. */
+const crisisLines = (g, geo) => (g.crisis ? [`- A crisis, kept by the rules: ${g.crisis.a} demands ${g.crisis.id} ${geo.place(g.crisis.id)?.name || ""} from ${g.crisis.b}, to be answered by ${g.crisis.due}. Write the tension and the talk around it; never say how it ends. The rules answer on that day, and you will read it under RECEIPT.`] : []);
+
+/** A crisis from a save: both countries and the province on the map, dates as dates; otherwise none. */
+function keepCrisis(s, known, isProvince) {
+  const DATE = /^\d{4}-\d{2}-\d{2}$/, k = s.crisis, ok = k && typeof k === "object" && known(k.a) && known(k.b) && isProvince(k.id) && DATE.test(k.since || "") && DATE.test(k.due || "");
+  const asked = Object.fromEntries(Object.entries(s.asked && typeof s.asked === "object" ? s.asked : {}).filter(([p, d]) => p.split(">").length === 2 && p.split(">").every(known) && DATE.test(d || "")));
+  return { crisis: ok ? { a: k.a, b: k.b, id: k.id, since: k.since, due: k.due, by: k.by === "you" ? "you" : "rules", ...(typeof k.text === "string" ? { text: k.text.slice(0, 300) } : {}), ...(k.answer === "yield" ? { answer: "yield" } : {}) } : null, asked, calm: DATE.test(s.calm || "") ? s.calm : "" };
+}
+
+$x.CRISIS = CRISIS; $x.addMonths = addMonths; $x.demandAnswer = demandAnswer; $x.demand = demand; $x.settleCrisis = settleCrisis; $x.crisisLines = crisisLines; $x.keepCrisis = keepCrisis;
+return $x; })({});
+$m[11] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Ambitions: a goal the player chooses from a fixed list, which only the rules can call met. No chance, no AI.
+// Each is a count the rules already keep (provinces, treaties, gauges, years, standing) against a number fixed on
+// the day it is chosen. The AI is told the ambition and how far along it is, so the story can lean toward it; it
+// cannot say it is met. When it is, the receipt says so, the game goes on, and another may be chosen.
+// The reckoning is the game so far in a few lines, counted by code from what the rules decided.
+const { monthsApart } = $m[5];
+const { gaugeOf, gaugeWords } = $m[6];
+
+const pacts = (g, trade) => g.treaties.filter((t) => t.pair.split("|").includes(g.player) && (trade || t.kind !== "trade")).length;
+const atWar = (g) => g.wars.some((w) => w.pair.split("|").includes(g.player));
+const years = (o, now) => Math.floor(monthsApart(o.mark, now) / 12);
+/** Provinces the player's country claims or once held, and does not hold: at most twelve. */
+const wanted = (g, geo) => [...new Set([...Object.keys(g.owners || {}).filter((id) => geo.place(id)?.country === g.player), ...(geo.claimed?.() || []).filter(([, who]) => who === g.player).map(([id]) => id)])].filter((id) => geo.owner(id) !== g.player).sort().slice(0, 12);
+
+// modes: n nation, l leader, c citizen. begin fixes the numbers on the day it is chosen; have counts today.
+const AMBITIONS = {
+  grow: { title: "A greater country", modes: "nl", begin: (g, geo) => { const base = geo.holds(g.player); return { need: base + Math.max(2, Math.ceil(base / 4)) }; }, said: (o) => `Hold ${o.need} provinces`, have: (g, geo) => geo.holds(g.player) },
+  restore: { title: "What was ours", modes: "nl", begin: (g, geo) => { const ids = wanted(g, geo); return { ids, need: ids.length }; }, said: (o) => `Hold the ${o.need} province${o.need > 1 ? "s" : ""} you claim or have lost`, have: (g, geo, o) => o.ids.filter((id) => geo.owner(id) === g.player).length },
+  friends: { title: "A ring of friends", modes: "nl", begin: () => ({ need: 3 }), said: () => "Hold three defence or alliance treaties at once", have: (g) => pacts(g, false) },
+  trade: { title: "A trading power", modes: "nl", begin: () => ({ need: 6 }), said: () => "Hold five treaties of any kind, with a full treasury", have: (g) => Math.min(5, pacts(g, true)) + (gaugeOf(g, g.player, "t") >= 3 ? 1 : 0) },
+  golden: { title: "A golden age", modes: "nl", begin: () => ({ need: 3 }), said: () => "Stability calm, treasury full and mandate trusted, all at once", have: (g) => ["s", "t", "m"].filter((k) => gaugeOf(g, g.player, k) >= 3).length },
+  peace: { title: "The long peace", modes: "nlc", begin: () => ({ need: 5 }), said: () => "Five years without a war", have: (g, geo, o, now) => years(o, now), broken: (g) => atWar(g) },
+  whole: { title: "Unbroken", modes: "nl", begin: () => ({ need: 10 }), said: () => "Ten years without holding less land than today", have: (g, geo, o, now) => years(o, now), broken: (g, geo, o) => geo.holds(g.player) < o.base },
+  rise: { title: "A name in the land", modes: "c", begin: () => ({ need: 4 }), said: () => "Become a national figure (standing 4 of 5)", have: (g) => g.standing || 2 },
+};
+
+/** The ambitions open to this game today: [{id, title, said}]. One already met in this game is not offered again. */
+function ambitionsFor(g, geo) {
+  const met = new Set((g.done || []).map((d) => d.id));
+  return Object.entries(AMBITIONS).filter(([id, a]) => a.modes.includes(g.mode[0]) && !met.has(id)).map(([id, a]) => ({ id, title: a.title, o: a.begin(g, geo) }))
+    .filter((x) => x.o.need > 0 && AMBITIONS[x.id].have(g, geo, { ...x.o, mark: g.date }, g.date) < x.o.need).map((x) => ({ id: x.id, title: x.title, said: AMBITIONS[x.id].said(x.o) }));
+}
+/** Choose one. Returns true when it was open to choose. */
+function chooseAmbition(g, geo, id) {
+  if (!ambitionsFor(g, geo).some((x) => x.id === id)) return false;
+  g.goal = { id, since: g.date, mark: g.date, base: geo.holds(g.player), ...AMBITIONS[id].begin(g, geo) };
+  return true;
+}
+/** Where the ambition stands on the day `now`: {title, said, have, need}, or null when none is chosen. */
+function progress(g, geo, now = g.date) {
+  const o = g.goal, a = o && AMBITIONS[o.id];
+  return a ? { title: a.title, said: a.said(o), have: Math.max(0, Math.min(o.need, a.have(g, geo, o, now))), need: o.need } : null;
+}
+
+/** The end of a turn: count what the turn did for the reckoning, and say so when the ambition is met. */
+function settleAmbition(g, receipt, to, geo) {
+  const me = g.player, t = (g.tally ||= { from: g.date, base: geo.holds(me), wars: 0, won: 0, lost: 0, pacts: 0, peaces: 0 }), o = g.goal, a = o && AMBITIONS[o.id];
+  for (const { fact: [kind, x, y] = [] } of receipt) {
+    if (kind === "war" && (x === me || y === me)) t.wars++;
+    if (kind === "peace" && (x === me || y === me)) t.peaces++;
+    if (kind === "treaty" && (x === me || y === me)) t.pacts++;
+    if ((kind === "took" && x === me) || (kind === "gave" && y === me)) t.won++;
+    if ((kind === "took" && y === me) || (kind === "gave" && x === me)) t.lost++;
+  }
+  if (!a) return [];
+  if (a.broken?.(g, geo, o)) o.mark = to;
+  const p = progress(g, geo, to);
+  if (p.have < p.need) return [];
+  g.done = [...(g.done || []), { id: o.id, said: p.said, turn: g.turn, date: to }].slice(-12);
+  g.goal = null;
+  return [{ ok: true, country: me, text: `${geo.name(me)}: its ambition is met, "${p.title}" (${p.said.toLowerCase()})` }];
+}
+
+/** A line for the prompt: the ambition and how far along it is. */
+function ambitionLines(g, geo) {
+  const p = progress(g, geo);
+  return p ? [`- The player's ambition, counted by the rules: ${p.said} (now ${p.have} of ${p.need}). The story may lean toward it. Only the rules say when it is met.`] : [];
+}
+
+/** The game so far in a few lines, counted by code. */
+function reckoning(g, geo, fmt = (d) => d) {
+  const me = g.player, t = g.tally || { from: g.date, base: geo.holds(me), wars: 0, won: 0, lost: 0, pacts: 0, peaces: 0 }, n = g.turn - 1;
+  return [
+    `${geo.name(me)}, ${fmt(t.from)} to ${fmt(g.date)}: ${n} turn${n === 1 ? "" : "s"}${g.branch ? `, ${g.branch} played again after a take-back` : ""}.`,
+    `Land: ${t.base} provinces then, ${geo.holds(me)} now (${t.won} gained, ${t.lost} lost).`,
+    `Wars begun or joined: ${t.wars}. Wars ended in peace: ${t.peaces}. Treaties signed: ${t.pacts}.`,
+    `The country today: ${gaugeWords(g, me)} (stability, treasury, mandate).`,
+    `Ambitions met: ${(g.done || []).map((d) => `${d.said} (${d.date.slice(0, 4)})`).join("; ") || "none yet"}.`,
+  ];
+}
+
+/** An ambition, the ones met and the tally from a save, checked against the map. */
+function keepAmbition(s, isProvince) {
+  const DATE = /^\d{4}-\d{2}-\d{2}$/, o = s.goal, int = (n) => (Number.isInteger(n) && n >= 0 ? n : 0);
+  const ok = o && typeof o === "object" && AMBITIONS[o.id] && DATE.test(o.since || "") && DATE.test(o.mark || "") && Number.isInteger(o.need) && o.need > 0;
+  const goal = ok ? { id: o.id, since: o.since, mark: o.mark, base: int(o.base), need: o.need, ...(o.id === "restore" ? { ids: (Array.isArray(o.ids) ? o.ids : []).filter(isProvince).slice(0, 12) } : {}) } : null;
+  const done = (Array.isArray(s.done) ? s.done : []).filter((d) => d && AMBITIONS[d.id] && typeof d.said === "string" && DATE.test(d.date || "")).map((d) => ({ id: d.id, said: d.said.slice(0, 120), turn: int(d.turn), date: d.date })).slice(-12);
+  const t = s.tally, tally = t && typeof t === "object" && DATE.test(t.from || "") ? { from: t.from, base: int(t.base), wars: int(t.wars), won: int(t.won), lost: int(t.lost), pacts: int(t.pacts), peaces: int(t.peaces) } : undefined;
+  return { goal: goal && (goal.id !== "restore" || goal.ids.length === goal.need) ? goal : null, done, ...(tally ? { tally } : {}) };
+}
+
+$x.AMBITIONS = AMBITIONS; $x.ambitionsFor = ambitionsFor; $x.chooseAmbition = chooseAmbition; $x.progress = progress; $x.settleAmbition = settleAmbition; $x.ambitionLines = ambitionLines; $x.reckoning = reckoning; $x.keepAmbition = keepAmbition;
+return $x; })({});
+$m[12] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The turn's beat, and the press. Rules choose; the AI writes.
+// A beat is one authored moment from a fixed list, each with a condition on what the rules already keep (war,
+// the three gauges, treaties, the way the player plays). On four turns in ten, drawn from the game's seed, the
+// rules pick one whose condition holds and that has not come in the last ten turns, and the AI is told to write it
+// as one event. A beat changes no fact: no land, no gauge, no treaty.
+// The press is four papers fixed for the game, each with a stance it keeps.
+const { draw100, hash32 } = $m[3];
+const { gaugeOf } = $m[6];
+const { turnKey } = $m[2];
+
+const BEAT = { chance: 40, rest: 10 };
+// [id, when it may come, what the AI is asked to write]
+const BEATS = [
+  ["scandal", (x) => x.m <= 2, "a scandal breaks around someone close to the government"],
+  ["harvest", (x) => !x.war && x.t >= 2, "a bumper harvest fills the markets and lowers prices"],
+  ["strike", (x) => x.t <= 1, "unpaid wages bring a strike in the ports"],
+  ["debt", (x) => x.t <= 1, "an old lender calls in a debt at the worst moment"],
+  ["wounded", (x) => x.war, "the wounded come home, and families ask what the war is for"],
+  ["defector", (x) => x.war, "an officer from the other side crosses the lines with something to tell"],
+  ["march", (x) => x.s <= 1, "a march in the capital ends in broken windows and arrests"],
+  ["festival", (x) => x.s >= 3, "a national festival fills the streets, and for a day nobody argues"],
+  ["cheers", (x) => x.m >= 3, "crowds cheer the government's name after its successes"],
+  ["envoy", (x) => !x.war && x.pacts > 0, "an envoy from a treaty partner arrives with a private request"],
+  ["storm", () => true, "a great storm closes roads and ports for days"],
+  ["census", (x) => !x.war, "a new count of the people shows the country changing faster than its laws"],
+  ["rival", (x) => x.mode === "leader", "a rival inside the government lets it be known they are ready to serve"],
+  ["letter", (x) => x.mode === "citizen", "a letter arrives from someone the player has not heard from in years"],
+];
+
+/** The beat for the turn in hand, or null. The same game and turn always give the same one. */
+function beatFor(g) {
+  if (draw100(g.seed, `${turnKey(g)}:beat`) > BEAT.chance) return null;
+  const me = g.player, has = (list) => list.some((x) => x.pair.split("|").includes(me));
+  const x = { war: has(g.wars), pacts: g.treaties.filter((t) => t.pair.split("|").includes(me)).length, s: gaugeOf(g, me, "s"), t: gaugeOf(g, me, "t"), m: gaugeOf(g, me, "m"), mode: g.mode };
+  const open = BEATS.filter(([id, when]) => when(x) && !(g.beats || []).some(([old, turn]) => old === id && g.turn - turn <= BEAT.rest));
+  return open.length ? open[hash32(g.seed, `${turnKey(g)}:beat:pick`) % open.length] : null;
+}
+/** Remember the beat a finished turn carried, so it rests for a while. */
+function noteBeat(g) {
+  const b = beatFor(g);
+  if (b) g.beats = [...(g.beats || []), [b[0], g.turn]].slice(-BEATS.length);
+  return b;
+}
+
+const SHEETS = [["National Gazette", "State Herald", "Official Journal"], ["Free Press", "Daily Tribune", "Evening Courier"], ["Exchange", "Commercial Ledger", "Merchant"], ["Overseas Dispatch", "Foreign Wire", "World Observer"]];
+/** The game's four papers: [name, stance]. */
+function papers(g, geo) {
+  const pick = (i) => `the ${SHEETS[i][hash32(g.seed, `paper:${i}`) % 3]}`;
+  return [[pick(0), "close to the government"], [pick(1), "against the government"], [pick(2), "for trade and a full treasury"], [pick(3), `foreign, and wary of ${geo.name(g.player)}`]];
+}
+
+/** Lines for the prompt: the turn's beat, when there is one, and the press. */
+function beatLines(g, geo) {
+  const b = beatFor(g);
+  return [
+    ...(b ? [`- This turn's beat, chosen by the rules: ${b[2]}. Write it as one of your EVENT lines for ${g.player}, in your own words. It changes no fact.`] : []),
+    `- The press, fixed for this game. NEWS lines come from these papers, each keeping its stance, and none may give a result the rules did not decide: ${papers(g, geo).map(([n, s]) => `${n} (${s})`).join("; ")}.`,
+  ];
+}
+
+$x.BEAT = BEAT; $x.BEATS = BEATS; $x.beatFor = beatFor; $x.noteBeat = noteBeat; $x.papers = papers; $x.beatLines = beatLines;
+return $x; })({});
+$m[9] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// One door for four small systems the turn calls: the state of countries and their causes (state.js), crises
+// (crisis.js), ambitions (ambitions.js), and the turn's beat and the press (beats.js). The turn, the rules and the
+// page each call one function here, so those files carry one line apiece.
+const { keepState, settleState, stateLines } = $m[6];
+const { crisisLines, keepCrisis, settleCrisis } = $m[10];
+const { ambitionLines, keepAmbition, settleAmbition } = $m[11];
+const { BEATS, beatLines, noteBeat } = $m[12];
+
+// Which of these systems a saved game has met. 1: gauges, causes, crises, ambitions, beats and the press.
+const MORE = 1;
+
+/** Lines for the turn prompt's FACTS. near: the countries beside the player's, by land or narrow sea. */
+const moreFacts = (g, geo, near = []) => [...stateLines(g, geo, near), ...ambitionLines(g, geo), ...crisisLines(g, geo), ...beatLines(g, geo)];
+
+/**
+ * The end of a turn, after the rules have judged its moves: a crisis is answered or opened, gauges move, the
+ * ambition is counted, the beat is remembered. receipt is the turn's receipt so far. Returns the lines to add.
+ */
+function settleMore(g, receipt, to, geo, actions = []) {
+  const crisis = settleCrisis(g, to, geo, actions), all = [...receipt, ...crisis];
+  const lines = [...crisis, ...settleState(g, all, to, geo), ...settleAmbition(g, all, to, geo)];
+  noteBeat(g);
+  g.more = MORE;
+  return lines;
+}
+
+/** The words for a game saved before these systems, or "" when it needs none. A game not yet begun needs none. */
+const NOTE = "This game was saved before countries had a state of their own. It has been brought up to date, and nothing in its past changes. From now on the rules keep each country's stability, treasury and mandate, a war wants a cause, a crisis may open over disputed land, and you may choose an ambition under your country's name.";
+const moreNote = (s) => (s && typeof s === "object" && s.turn > 1 && s.more !== MORE ? NOTE : "");
+
+/** A checked game with these systems' parts checked too: what does not fit the map is dropped, what is missing starts empty. */
+function keepMore(s, isProvince, known) {
+  if (!s) return s;
+  const beats = (Array.isArray(s.beats) ? s.beats : []).filter((b) => Array.isArray(b) && BEATS.some(([id]) => id === b[0]) && Number.isInteger(b[1])).slice(-BEATS.length);
+  return { ...s, ...keepState(s, known), ...keepCrisis(s, known, isProvince), ...keepAmbition(s, isProvince), beats, ...(moreNote(s) ? { told: 1 } : {}), more: MORE };
+}
+
+$x.MORE = MORE; $x.moreFacts = moreFacts; $x.settleMore = settleMore; $x.NOTE = NOTE; $x.moreNote = moreNote; $x.keepMore = keepMore;
+return $x; })({});
 $m[1] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The world turn: the player's actions go to an AI, which writes what happened across the world and proposes
 // moves (wars, peace, treaties, attacks, handovers). The rules in worldrules.js decide which moves stand.
 const { VERBS, applyMoves, leaks, ownMoves, worldFacts } = $m[2];
-const { STANDING, WORDS, changeStanding, moveFavour } = $m[6];
-const { chronicleLines, remember } = $m[7];
+const { STANDING, WORDS, changeStanding, moveFavour } = $m[7];
+const { chronicleLines, remember } = $m[8];
 const { settleRelations } = $m[5];
 const { crosses } = $m[3];
 const { RULES } = $m[4];
+// features hook: gauges, causes, crises, ambitions, beats, the press
+const { moreFacts, settleMore } = $m[9];
 
 const JUMPS = [["1w", "A week", 0, 7], ["1m", "A month", 1, 0], ["3m", "Three months", 3, 0], ["6m", "Six months", 6, 0], ["1y", "A year", 12, 0], ["custom", "Other length", 0, 0], ["auto", "Until something happens", 12, 0]];
 const UNITS = [["days", "days"], ["weeks", "weeks"], ["months", "months"], ["years", "years"]];
@@ -1331,6 +1770,7 @@ function worldPrompt(g, world, actions, to, auto = false) {
     ...(g.character && g.mode !== "nation" ? [`- The player's character: ${Object.entries(g.character).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join("; ")}`] : []),
     `- ${world.name(me)} holds ${world.size(me)} province${world.size(me) === 1 ? "" : "s"} and borders by land: ${near}.`,
     ...(world.across?.(me).length ? [`- Across a narrow sea from ${world.name(me)}: ${world.across(me).map((c) => `${world.name(c)} (${c})`).join(", ")}.`] : []),
+    ...moreFacts(g, world.geo, [...world.neighbours(me), ...(world.across?.(me) || [])]), // features hook
     ...worldFacts(g, world.geo, [...world.neighbours(me), ...(world.across?.(me) || [])]),
     "", "CHRONICLE (the story so far, oldest first: what the rules decided, then how the turn was told)",
     ...(recent.length ? recent : ["- nothing yet: this is the first turn"]),
@@ -1364,6 +1804,7 @@ function closeTurn(g, r, geo, actions) {
   const leaked = leaks(g);
   g.leaks = [...(g.leaks || []), ...leaked.map((l) => ({ ...l, turn: g.turn + 1 }))].slice(-10);
   receipt.push(...leaked.map((l) => ({ ok: true, text: `${l.name}: leaks your plans to the press` })), ...settleRelations(g, r.stop, geo.name));
+  receipt.push(...settleMore(g, receipt, r.stop, geo, actions)); // features hook
   if ((g.branch || 0) > (g.retold || 0)) { g.retold = g.branch; receipt.push({ ok: true, text: `This turn was played again after a take-back, so its checks drew fresh numbers (line ${g.branch + 1} of this game)` }); }
   const entry = { turn: g.turn, from: g.date, to: r.stop, actions, events: r.events, news: r.news, summary: r.summary, dropped: r.dropped, receipt, advice: r.advice, ...(g.branch ? { branch: g.branch } : {}) };
   g.log = [...g.log, entry].slice(-60);
@@ -1456,15 +1897,15 @@ function readWorldReply(text, g, known, to, auto = false, codeOf = (s) => s) {
 
 $x.JUMPS = JUMPS; $x.UNITS = UNITS; $x.MODES = MODES; $x.jumpFrom = jumpFrom; $x.monthsBetween = monthsBetween; $x.newWorldGame = newWorldGame; $x.turnCode = turnCode; $x.worldPrompt = worldPrompt; $x.closeTurn = closeTurn; $x.isoDate = isoDate; $x.readWorldReply = readWorldReply;
 return $x; })({});
-$m[8] = (($x) => {
+$m[13] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's saves: what a game holds, how a save from the browser or a file is checked before use, and the small
 // take-back records that stand in for whole copies.
 const { MODES } = $m[1];
-const { STANDING } = $m[6];
+const { STANDING } = $m[7];
 const { APPROACHES } = $m[2];
 const { RULES } = $m[4];
-const { chronicleFrom } = $m[7];
+const { chronicleFrom } = $m[8];
 
 // Older games are converted, never refused: nothing they hold needs the old rule, their turns keep the receipts
 // they had, and every attack from the next turn on is made under these rules.
@@ -1524,7 +1965,7 @@ const keptRecords = (k) => (Array.isArray(k?.past) ? k.past.filter((r) => r && t
 
 $x.convertNote = convertNote; $x.mendGame = mendGame; $x.checkSave = checkSave; $x.snapGame = snapGame; $x.restoreGame = restoreGame; $x.takeBack = takeBack; $x.keptRecords = keptRecords;
 return $x; })({});
-$m[9] = (($x) => {
+$m[14] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The scenarios a Capo game can start from. Each sets the date, the opening and who may be played.
 // Fiction: not news and not a forecast.
@@ -1623,7 +2064,7 @@ const scenarioText = (s) => [s.title, s.blurb, s.opening, s.custom?.name, s.cust
 
 $x.SCENARIOS = SCENARIOS; $x.SOON = SOON; $x.CHARACTER = CHARACTER; $x.characterPrompt = characterPrompt; $x.readCharacter = readCharacter; $x.scenarioFrom = scenarioFrom; $x.checkScenario = checkScenario; $x.scenarioText = scenarioText;
 return $x; })({});
-$m[10] = (($x) => {
+$m[15] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The province map for Capo's story worlds: maps/world.json drawn on one canvas, with drag, wheel, pinch and tap.
 // The file holds arcs (shared lines, drawn once) and provinces made of arcs, so neighbours always meet exactly.
@@ -1860,7 +2301,7 @@ function worldMap(canvas, world, o) {
 
 $x.loadWorld = loadWorld; $x.ownerColour = ownerColour; $x.worldMap = worldMap;
 return $x; })({});
-$m[11] = (($x) => {
+$m[16] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // How Capo reaches an AI. Two routes for now: paste by hand into any AI you use, or an address you give it
 // (any service that speaks the common chat-completions form, including one running on your own computer).
@@ -1917,7 +2358,7 @@ async function ask(r, prompt, signal) {
 
 $x.loadRoute = loadRoute; $x.saveRoute = saveRoute; $x.forgetKey = forgetKey; $x.ask = ask;
 return $x; })({});
-$m[12] = (($x) => {
+$m[17] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Where this copy's source code can be read. Anyone who runs a changed copy puts their own address here.
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
@@ -1925,11 +2366,11 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.6.3";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "5cbda7f3";
+const BUILD = "4f1a6e69";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
 return $x; })({});
-$m[13] = (($x) => {
+$m[18] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
 // Daylight or lamplight, as the front page's lantern last left it; every page starts here.
@@ -1949,6 +2390,94 @@ function guard() {
 
 $x.guard = guard;
 return $x; })({});
+$m[19] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Capo's page for what the rules keep about your country: its three gauges, your ambition, an open crisis, causes
+// for war, the press, the reckoning, and every past turn in full. The rules live in src/story (state.js,
+// crisis.js, ambitions.js, beats.js); this file only shows them and takes orders. x is what the game page lends:
+// {g() the game, geo(), name(code), near() neighbouring countries, el, button, fmtDate, save(), toast(text),
+// open(sheet), act(text) adds an action, drop(text) removes one}.
+const { GAUGES, causeOf, gaugeOf, gaugeWord } = $m[6];
+const { demand, demandAnswer } = $m[10];
+const { ambitionsFor, chooseAmbition, progress, reckoning } = $m[11];
+const { papers } = $m[12];
+const { NOTE } = $m[9];
+$x.NOTE = $m[9].NOTE; $x.keepMore = $m[9].keepMore;
+
+const rows = (x, items, empty) => {
+  const ul = x.el("ul", undefined, "list");
+  ul.append(...(items.length ? items : [empty]).map((t) => { const li = x.el("li"); li.append(...[t].flat().map((p) => (typeof p === "string" ? x.el("span", p) : p))); return li; }));
+  return ul;
+};
+const facing = (g, me) => g.crisis && g.crisis.b === me && g.mode !== "citizen";
+
+/** The crisis in words, with the answer buttons when it is the player's to answer. */
+function crisisRow(x, back) {
+  const g = x.g(), k = g.crisis, G = x.geo(), place = G.place(k.id).name, a = demandAnswer(g, G, k.a, k.b, k.id);
+  const said = `${x.name(k.a)} demands ${place} from ${x.name(k.b)}, to be answered by ${x.fmtDate(k.due)}.`;
+  if (!facing(g, g.player)) return [`${said} ${a.no ? "It may be overtaken by events." : `By the rules today ${x.name(k.b)} would ${a.ok ? "yield" : "refuse"} (${a.why}).`}`];
+  const pick = (v, t) => { const b = x.button(t, () => { if (v) k.answer = v; else delete k.answer; x.save(); x.open(back); }); b.setAttribute("aria-pressed", String((k.answer || "") === v)); return b; };
+  return [`${said} The answer is yours. Refuse, and they lose face but keep a grievance; yield, and the province is theirs on that day.`, pick("", "Refuse"), pick("yield", "Yield")];
+}
+
+/** The sheet under the country's name. */
+function realmSheet(box, x) {
+  const g = x.g(), G = x.geo(), me = g.player, { el, button } = x, again = () => { x.save(); x.open("realm"); }, p = progress(g, G);
+  const gauges = Object.entries(GAUGES).map(([k, [title]]) => { const e = g.gauge?.[me]?.[k], n = gaugeOf(g, me, k); return `${title}: ${gaugeWord(k, n)} (${n + 1} of 5)${e?.[2] ? `. Since ${x.fmtDate(e[1])}: ${e[2]}` : ""}.`; });
+  const open = ambitionsFor(g, G).map((a) => [`${a.title}. ${a.said}.`, button("Choose", () => { chooseAmbition(g, G, a.id); again(); })]);
+  const mine = x.near().map((c) => [c, causeOf(g, G, me, c), causeOf(g, G, c, me)]).filter(([, a, b]) => a || b).map(([c, a, b]) => `${x.name(c)}: ${[a && `you have a cause (${a})`, b && `it has a cause against you (${b})`].filter(Boolean).join("; ")}.`);
+  const tale = reckoning(g, G, x.fmtDate);
+  box.append(el("h2", x.name(me)), el("p", "Kept by the rules, never by the AI. The AI is told all of it each turn and writes the story around it.", "note"),
+    el("h3", "The state of the country"), rows(x, gauges),
+    el("p", "Each gauge moves one step a turn at most, always for a reason. In revolt: no war and no attack. An empty treasury: no new war. A year at war drains the treasury; treaties fill it in peace. A war begun without a cause shakes stability.", "note"),
+    el("h3", "Your ambition"), ...(p ? [rows(x, [[`${p.title}. ${p.said}: ${p.have} of ${p.need}.`, button("Give it up", () => { g.goal = null; again(); })]])] : [el("p", "Choose a goal. The rules count it, and only they can call it met.", "note"), rows(x, open, "Nothing left to choose.")]),
+    ...(g.done?.length ? [rows(x, g.done.map((d) => `Met on ${x.fmtDate(d.date)}: ${d.said}.`))] : []),
+    el("h3", "Crisis"), g.crisis ? rows(x, [crisisRow(x, "realm")]) : el("p", "None open. You can demand a province beside your own from its card. After quiet months the rules may open a crisis over land that changed hands or is in dispute.", "note"),
+    el("h3", "Causes for war"), rows(x, mine, "None with your neighbours."),
+    el("h3", "The press"), rows(x, papers(g, G).map(([n, s]) => `${n[0].toUpperCase()}${n.slice(1)}: ${s}.`)),
+    el("h3", "The reckoning"), rows(x, tale), button("Copy", async () => { try { await navigator.clipboard.writeText(tale.join("\n")); x.toast("Copied."); } catch { x.toast("This browser would not copy it."); } }));
+}
+
+/** What should be seen at the top of Actions: a converted game's note, a demand to answer, an ambition to choose. */
+function notices(x) {
+  const g = x.g(), out = [];
+  // a demand whose action was removed was never made
+  if (g.crisis?.by === "you" && g.crisis.since === g.date && !(g.actions || []).includes(g.crisis.text)) g.crisis = null;
+  if (g.told) out.push(x.el("p", NOTE, "warn"), x.button("Understood", () => { delete g.told; x.save(); x.open("actions"); }));
+  if (facing(g, g.player)) out.push(x.el("h3", "A demand on you"), rows(x, [crisisRow(x, "actions")]));
+  if (!g.goal && !g.done?.length) out.push(x.button("Choose an ambition", () => x.open("realm")));
+  return out;
+}
+
+/** On a foreign province's card: what its holder would answer to a demand for it, and the order. Null when it cannot be asked. */
+function demandBox(p, x) {
+  const g = x.g(), G = x.geo(), me = g.player, b = G.owner(p.id);
+  if (g.mode === "citizen" || b === me || ![...G.neighbours(p.id), ...G.across(p.id)].some((n) => G.owner(n) === me)) return null;
+  const a = demandAnswer(g, G, me, b, p.id), box = x.el("div"), text = `Demand ${p.name} (${p.id}) from ${x.name(b)}, to be answered in a month.`;
+  if (a.no) return null;
+  box.append(x.el("h3", "Demand"), x.el("p", `Its answer, by the rules: would ${a.ok ? "yield" : "refuse"} (${a.why}). A refusal costs you a step of mandate and of relations.`, "note"),
+    x.button(g.crisis ? "A crisis is already open" : "Demand it", () => { const r = demand(g, G, p.id, text); if (!r.ok) return x.toast(r.why); x.act(text); }));
+  return box;
+}
+
+/** Every turn the game still holds, newest first, each opening to its actions, events, press and receipt. */
+function turnsTab(box, x) {
+  const g = x.g(), { el } = x;
+  if (!g.log.length) { box.append(el("p", "Nothing yet.", "note")); return; }
+  box.append(el("p", "Every turn the game still holds, in full. Open one to read it again.", "note"), ...g.log.slice().reverse().map((t) => {
+    const d = el("details"), s = el("summary", `Turn ${t.turn || "?"}, ${x.fmtDate(t.from)} to ${x.fmtDate(t.to)}: ${t.summary || `${t.events.length} events`}`);
+    d.append(s, ...(t.actions?.length ? [el("p", `You: ${t.actions.join(" ")}`, "note")] : []), ...t.events.map((e) => el("p", `${x.fmtDate(e.date)}, ${x.name(e.at)}. ${e.text}`)),
+      ...(t.news || []).map((n) => el("p", `${n.outlet}: ${n.headline}. ${n.text}`, "note")), rows(x, (t.receipt || []).map((r) => `${r.ok ? "" : "Refused. "}${r.text}.`), "The rules decided nothing."));
+    return d;
+  }));
+}
+
+const STATE = ["#b2452f", "#c98a3c", "#5d6b6e", "#4d8f77", "#3f9a5c"];
+/** A country's colour on the stability view. */
+const stateColour = (g, code) => STATE[gaugeOf(g, code, "s")];
+
+$x.realmSheet = realmSheet; $x.notices = notices; $x.demandBox = demandBox; $x.turnsTab = turnsTab; $x.stateColour = stateColour;
+return $x; })({});
 $m[0] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's game screen: the world map full-screen, a top bar, the dock and the province card, as in the original
@@ -1957,16 +2486,18 @@ $m[0] = (($x) => {
 const { JUMPS, MODES, UNITS, closeTurn, jumpFrom, monthsBetween, newWorldGame, readWorldReply, turnCode, worldPrompt } = $m[1];
 const { APPROACHES, attackPlan, commanders, mightOf, placesFor, treatiesOf, warsOf } = $m[2];
 const { NEED, relOf, relWord, treatyAnswer, treatyName } = $m[5];
-const { factWords, factsOf } = $m[7];
+const { factWords, factsOf } = $m[8];
 const { oddsLine, partsLine } = $m[4];
 const { crossesLine } = $m[3];
-const { checkSave: checkSaveOf, convertNote, keptRecords, mendGame, snapGame, takeBack } = $m[8];
-const { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacter, scenarioFrom, scenarioText } = $m[9];
-const { askPrompt, chatPrompt, councilPrompt, readAsk, readChat, readCouncil, seatsFor, talkLines } = $m[6];
-const { loadWorld, ownerColour, worldMap } = $m[10];
-const { ask, forgetKey, loadRoute, saveRoute } = $m[11];
-const { BUILD, SOURCE_URL, VERSION } = $m[12];
-const { guard } = $m[13];
+const { checkSave: checkSaveOf, convertNote, keptRecords, mendGame, snapGame, takeBack } = $m[13];
+const { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacter, scenarioFrom, scenarioText } = $m[14];
+const { askPrompt, chatPrompt, councilPrompt, readAsk, readChat, readCouncil, seatsFor, talkLines } = $m[7];
+const { loadWorld, ownerColour, worldMap } = $m[15];
+const { ask, forgetKey, loadRoute, saveRoute } = $m[16];
+const { BUILD, SOURCE_URL, VERSION } = $m[17];
+const { guard } = $m[18];
+// features hook: the country sheet, crises, ambitions, the Turns tab (site/realm.js)
+const { NOTE, demandBox, keepMore, notices, realmSheet, stateColour, turnsTab } = $m[19];
 
 const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);
@@ -2003,7 +2534,7 @@ const save = () => {
   catch { if (!saveFailed) toast("This browser would not keep the game; it may be full. Use Game, then Save to a file."); saveFailed = true; }
 };
 const load = () => { try { return JSON.parse(localStorage.getItem(KEEP) || "null"); } catch { return null; } };
-const checkSave = (s) => checkSaveOf(s, (id) => world.provinces.has(id), (c) => homes.has(c));
+const checkSave = (s) => keepMore(checkSaveOf(s, (id) => world.provinces.has(id), (c) => homes.has(c)), (id) => world.provinces.has(id), (c) => homes.has(c) || s?.custom?.code === c); // features hook: keepMore
 const keptPast = keptRecords;
 function toast(t) { const b = $("toast"); b.textContent = t; b.classList.add("on"); clearTimeout(hush); hush = setTimeout(() => b.classList.remove("on"), 3400); }
 // a country still being made goes by YOU (no country on the map uses it) until it has a code of its own
@@ -2101,9 +2632,13 @@ function geo() {
     name, place: (id) => world.provinces.get(id), owner: ownerOf, neighbours: (id) => world.neighbours.get(id), across: (id) => world.across.get(id), coastal: (id) => world.coast.has(id),
     home: (c) => homes.get(c)?.id, holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c, hasCoast: (c) => held(c).some((id) => world.coast.has(id)), might: (c) => state?.might?.[c],
     claims: (id, c) => (claimsOf.get(id) || []).some((d) => d.claimants.includes(c) && ownerOf(id) !== c),
+    claimed: () => [...claimsOf].flatMap(([id, ds]) => [...new Set(ds.flatMap((d) => d.claimants))].filter((c) => homes.has(c) && ownerOf(id) !== c).map((c) => [id, c])), // features hook: disputed land, as [province, claimant]
     find: (s) => { const k = String(s || "").trim(); if (world.provinces.has(k)) return k; const low = k.toLowerCase(), hits = [...world.provinces.values()].filter((p) => p.name.toLowerCase() === low); return hits.length === 1 ? hits[0].id : null; },
   };
 }
+
+// features hook: what site/realm.js borrows from this page
+const X = { g: () => state, geo, name, near: () => [...landNeighbours(state.player), ...seaNeighbours(state.player)], el, button, fmtDate, save: () => save(), toast, open, act: (t) => { state.actions = [...(state.actions || []), t]; save(); toast("Ordered: it is in your actions."); if (sheet === "actions") open("actions"); } };
 
 /** The way back to every game, when this page has one (the double-click copy does not). */
 function home() {
@@ -2116,6 +2651,7 @@ function home() {
 const RELATION = { you: "#e2b866", alliance: "#4f9a6b", defence: "#5fa08a", trade: "#4a7fa8", war: "#c9553f", none: "#4b5354" };
 function viewColour(code) {
   if (!state || view === "countries") return colourOf(code);
+  if (view === "state") return stateColour(state, code); // features hook
   if (view === "might") { const m = mightOf(geo(), code); return `hsl(${40 - m * 4} ${30 + m * 5}% ${20 + m * 5}%)`; }
   if (code === state.player) return RELATION.you;
   if (warsOf(state, state.player).includes(code)) return RELATION.war;
@@ -2319,6 +2855,7 @@ function begin() {
 // ---- the game ----
 function play() {
   $("top").hidden = false; $("dock").hidden = false;
+  if (state.told) setTimeout(() => state?.told && toast(NOTE), 3600); // features hook: a converted game says so
   map.redraw(); showCountry(state.player);
   topBar(); dock();
 }
@@ -2326,7 +2863,7 @@ function play() {
 function topBar() {
   const top = $("top"), who = el("button", undefined, "who"), chip = el("span", undefined, "chip");
   chip.style.background = colourOf(state.player) || ownerColour(state.player);
-  who.append(chip, state.character?.name && state.mode !== "nation" ? `${state.character.name}, ${name(state.player)}` : name(state.player)); who.onclick = () => showCountry(state.player);
+  who.append(chip, state.character?.name && state.mode !== "nation" ? `${state.character.name}, ${name(state.player)}` : name(state.player)); who.onclick = () => { showCountry(state.player); open(sheet === "realm" ? null : "realm"); }; who.title = "Your country: its state, your ambition, crises"; // features hook
   const jumpPick = el("select", undefined, "plain");
   jumpPick.append(...JUMPS.map(([k, t]) => new Option(t, k))); jumpPick.value = jump.key; jumpPick.onchange = () => { jump = { ...jump, key: jumpPick.value }; topBar(); };
   jumpPick.setAttribute("aria-label", "How far to jump");
@@ -2362,7 +2899,7 @@ function open(which) {
   if (!which) { box.classList.remove("open"); return; }
   if (which === "ledger" && state.seen !== state.turn) { state.seen = state.turn; save(); dock(); }
   box.replaceChildren();
-  ({ actions, chats, ledger, advisors, master, game: gameSheet }[which])(box);
+  ({ actions, chats, ledger, advisors, master, game: gameSheet, realm: (b) => realmSheet(b, X) }[which])(box); // features hook: realm
   const head = el("div", undefined, "head"), title = box.querySelector("h2"), shut = button("", () => open(null), "ic");
   shut.append(icon("close")); shut.setAttribute("aria-label", "Close");
   head.append(title || el("h2", ""), shut); box.prepend(head);
@@ -2394,7 +2931,7 @@ function actions(box) {
       button("Decline", () => { state.offers = state.offers.filter((x) => x !== o); const old = (state.orders || []).find((x) => x.verb === verb && x.target === o.from); state.orders = (state.orders || []).filter((x) => x !== old); state.actions = (state.actions || []).filter((x) => x !== old?.text); save(); open("actions"); }));
     return li;
   }));
-  box.append(el("h2", "Actions"), ...(state.offers.length ? [el("h3", "Offers to you"), offers] : []), el("p", "Write what you do, in your own words, as many as you like. The AI reads them all and proposes moves; the rules decide what stands: wars, peace, treaties, attacks and handovers.", "note"), list, input, go, el("h3", "Ideas"), ideas);
+  box.append(el("h2", "Actions"), ...notices(X), ...(state.offers.length ? [el("h3", "Offers to you"), offers] : []), el("p", "Write what you do, in your own words, as many as you like. The AI reads them all and proposes moves; the rules decide what stands: wars, peace, treaties, attacks and handovers.", "note"), list, input, go, el("h3", "Ideas"), ideas);
   if (pending) box.append(pasteBox());
 }
 
@@ -2462,10 +2999,11 @@ function finish(text) {
 
 function ledger(box) {
   const tabs = el("div", undefined, "row");
-  for (const [k, t] of [["events", "Events"], ["news", "News"], ["world", "World"], ["log", "Chronicle"]]) { const b = button(t, () => { ledgerTab = k; open("ledger"); }); b.setAttribute("aria-pressed", String(ledgerTab === k)); tabs.append(b); }
+  for (const [k, t] of [["events", "Events"], ["news", "News"], ["world", "World"], ["log", "Chronicle"], ["turns", "Turns"]]) { const b = button(t, () => { ledgerTab = k; open("ledger"); }); b.setAttribute("aria-pressed", String(ledgerTab === k)); tabs.append(b); }
   box.append(el("h2", "Ledger"), tabs);
   const last = state.log[state.log.length - 1];
   if (ledgerTab === "world") { worldTab(box); return; }
+  if (ledgerTab === "turns") { turnsTab(box, X); return; } // features hook
   if (ledgerTab === "news") {
     const papers = state.log.slice().reverse().flatMap((t) => { const front = (t.receipt || []).filter((x) => x.check).map((x) => `${x.check.band}: ${x.text.replace(/[.!?]$/, "")}.`); return [...(front.length ? [{ outlet: "From the front, as the rules decided", headline: `${front.length} attack${front.length > 1 ? "s" : ""} settled`, text: front.join(" "), when: t.to }] : []), ...(t.news || []).map((n) => ({ ...n, when: t.to }))]; });
     if (!papers.length) { box.append(el("p", "No papers yet. The press writes after each turn.", "note")); return; }
@@ -2845,6 +3383,7 @@ function card(p) {
   const rows = [el("h2", p.name), ...(p.disputes || []).map((a) => el("p", `${{ disputed: "Disputed", breakaway: "Breakaway", unsettled: "Unsettled" }[a.kind]}: ${a.name}. ${a.note}`, "warn")), el("p", `${name(owner)}${owner !== p.country ? `, taken from ${name(p.country)}` : ""}.${wars.length ? ` At war with ${wars.map(name).join(", ")}.` : ""}${pacts.length ? ` Treaties: ${pacts.map((x) => `${name(x.with)} (${x.kind})`).join(", ")}.` : ""}`, "note"), el("p", near.children.length ? "Borders by land:" : "No land borders.", "note"), near, ...(over.children.length ? [el("p", "Across a narrow sea:", "note"), over] : [])];
   if (state && owner !== state.player) rows.push(el("div", undefined, "row")), rows[rows.length - 1].append(button(`Talk to ${name(owner)}`, () => open("chats")));
   if (state && state.mode !== "citizen" && owner !== state.player) rows.push(warsOf(state, state.player).includes(owner) ? attackBox(p) : treatyBox(owner));
+  { const d = state && demandBox(p, X); if (d) rows.push(d); } // features hook
   box.replaceChildren(...rows);
   box.style.display = "block";
   picked = p.id;

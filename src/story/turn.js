@@ -7,6 +7,8 @@ import { chronicleLines, remember } from "./chronicle.js";
 import { settleRelations } from "./relations.js";
 import { crosses } from "./line.js";
 import { RULES } from "./check.js";
+// features hook: gauges, causes, crises, ambitions, beats, the press
+import { moreFacts, settleMore } from "./more.js";
 
 export const JUMPS = [["1w", "A week", 0, 7], ["1m", "A month", 1, 0], ["3m", "Three months", 3, 0], ["6m", "Six months", 6, 0], ["1y", "A year", 12, 0], ["custom", "Other length", 0, 0], ["auto", "Until something happens", 12, 0]];
 export const UNITS = [["days", "days"], ["weeks", "weeks"], ["months", "months"], ["years", "years"]];
@@ -103,6 +105,7 @@ export function worldPrompt(g, world, actions, to, auto = false) {
     ...(g.character && g.mode !== "nation" ? [`- The player's character: ${Object.entries(g.character).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join("; ")}`] : []),
     `- ${world.name(me)} holds ${world.size(me)} province${world.size(me) === 1 ? "" : "s"} and borders by land: ${near}.`,
     ...(world.across?.(me).length ? [`- Across a narrow sea from ${world.name(me)}: ${world.across(me).map((c) => `${world.name(c)} (${c})`).join(", ")}.`] : []),
+    ...moreFacts(g, world.geo, [...world.neighbours(me), ...(world.across?.(me) || [])]), // features hook
     ...worldFacts(g, world.geo, [...world.neighbours(me), ...(world.across?.(me) || [])]),
     "", "CHRONICLE (the story so far, oldest first: what the rules decided, then how the turn was told)",
     ...(recent.length ? recent : ["- nothing yet: this is the first turn"]),
@@ -136,6 +139,7 @@ export function closeTurn(g, r, geo, actions) {
   const leaked = leaks(g);
   g.leaks = [...(g.leaks || []), ...leaked.map((l) => ({ ...l, turn: g.turn + 1 }))].slice(-10);
   receipt.push(...leaked.map((l) => ({ ok: true, text: `${l.name}: leaks your plans to the press` })), ...settleRelations(g, r.stop, geo.name));
+  receipt.push(...settleMore(g, receipt, r.stop, geo, actions)); // features hook
   if ((g.branch || 0) > (g.retold || 0)) { g.retold = g.branch; receipt.push({ ok: true, text: `This turn was played again after a take-back, so its checks drew fresh numbers (line ${g.branch + 1} of this game)` }); }
   const entry = { turn: g.turn, from: g.date, to: r.stop, actions, events: r.events, news: r.news, summary: r.summary, dropped: r.dropped, receipt, advice: r.advice, ...(g.branch ? { branch: g.branch } : {}) };
   g.log = [...g.log, entry].slice(-60);
