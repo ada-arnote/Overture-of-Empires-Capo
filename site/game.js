@@ -14,6 +14,22 @@ const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const button = (text, on, cls = "plain") => { const b = el("button", text, cls); b.type = "button"; b.onclick = on; return b; };
+const ICONS = {
+  actions: "M4 20l4.5-1L19 8.5 15.5 5 5 15.5z M13.5 7l3.5 3.5",
+  chats: "M4 5h11v8H9l-4 3v-3H4z M18 9h2v8h-1.5v3l-3-3H11v-2",
+  ledger: "M6 4h10a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2z M6 18a2 2 0 0 1 2-2h10 M10 8h5 M10 11h5",
+  advisors: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M3.5 20a5.5 5.5 0 0 1 11 0 M16 5.5a3 3 0 0 1 0 5.5 M17.5 14.5a5 5 0 0 1 3 5.5",
+  master: "M4 4h16v16H4z M8.5 8.5h.01 M15.5 8.5h.01 M12 12h.01 M8.5 15.5h.01 M15.5 15.5h.01",
+  game: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M12 3v2.5 M12 18.5V21 M3 12h2.5 M18.5 12H21 M5.6 5.6l1.8 1.8 M16.6 16.6l1.8 1.8 M5.6 18.4l1.8-1.8 M16.6 7.4l1.8-1.8",
+  go: "M5 12h13 M13 6l6 6-6 6",
+  close: "M6 6l12 12 M18 6L6 18",
+};
+function icon(key) {
+  const ns = "http://www.w3.org/2000/svg", s = document.createElementNS(ns, "svg"), path = document.createElementNS(ns, "path");
+  s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("class", "i"); s.setAttribute("aria-hidden", "true");
+  path.setAttribute("d", ICONS[key]); s.append(path);
+  return s;
+}
 let world, map, state = null, past = [], route = loadRoute(), sheet = null, pending = null, jump = { key: "1m", n: 2, unit: "weeks" }, hush = 0, ledgerTab = "events", view = "countries";
 
 // games saved before wars and treaties existed get empty lists
@@ -306,7 +322,7 @@ function begin() {
     character,
   });
   past = []; draft = null; save();
-  $("start").classList.remove("open"); map.refresh(); play();
+  $("start").classList.remove("open"); map.refresh(); play(); guideOnce();
 }
 
 // ---- the game ----
@@ -331,13 +347,21 @@ function topBar() {
     n.onchange = () => { jump = { ...jump, n: Number(n.value) || 1 }; }; unit.onchange = () => { jump = { ...jump, unit: unit.value }; };
     length.push(n, unit);
   }
-  const date = el("span", undefined, "date"); date.append("Turn ", el("b", String(state.turn)), ", ", el("b", fmtDate(state.date)));
-  top.replaceChildren(who, el("span", MODES[state.mode][0], "mode"), ...(state.sandbox ? [el("span", "Sandbox", "mode")] : []), date, jumpPick, ...length, button("Advance", advance, "go"), button("Game", () => open("game")));
+  const date = el("span", undefined, "date"); date.append(el("b", fmtDate(state.date)), el("small", `Turn ${state.turn}`));
+  const go = button("Advance", advance, "go"); go.append(icon("go"));
+  const menu = button("", () => open(sheet === "game" ? null : "game"), "ic"); menu.append(icon("game")); menu.setAttribute("aria-label", "Game: saves, scenarios and the AI"); menu.title = "Game";
+  top.replaceChildren(who, el("span", MODES[state.mode][0], "mode"), ...(state.sandbox ? [el("span", "Sandbox", "mode sandbox")] : []), date, jumpPick, ...length, go, menu);
 }
 
 const DOCK = [["actions", "Actions"], ["chats", "Chats"], ["ledger", "Ledger"], ["advisors", "Advisors"], ["master", "Game Master"]];
 function dock() {
-  $("dock").replaceChildren(...DOCK.map(([k, t]) => { const b = button(t, () => open(sheet === k ? null : k)); b.setAttribute("aria-pressed", String(sheet === k)); return b; }));
+  const unread = state && state.log.length > (state.seen || 0);
+  $("dock").replaceChildren(...DOCK.map(([k, t]) => {
+    const label = k === "chats" && state?.mode === "citizen" ? "Contacts" : k === "advisors" && state?.mode === "citizen" ? "Circle" : t;
+    const b = button("", () => open(sheet === k ? null : k), ""); b.append(icon(k), el("span", label)); b.setAttribute("aria-pressed", String(sheet === k));
+    if (k === "ledger" && unread) { b.append(el("span", undefined, "dot")); b.setAttribute("aria-label", "Ledger, new"); }
+    return b;
+  }));
 }
 
 function open(which) {
@@ -345,8 +369,12 @@ function open(which) {
   const box = $("sheet");
   dock();
   if (!which) { box.classList.remove("open"); return; }
-  box.replaceChildren(button("Close", () => open(null), "plain shut"));
+  if (which === "ledger" && state.seen !== state.log.length) { state.seen = state.log.length; save(); dock(); }
+  box.replaceChildren();
   ({ actions, chats, ledger, advisors, master, game: gameSheet }[which])(box);
+  const head = el("div", undefined, "head"), title = box.querySelector("h2"), shut = button("", () => open(null), "ic");
+  shut.append(icon("close")); shut.setAttribute("aria-label", "Close");
+  head.append(title || el("h2", ""), shut); box.prepend(head);
   box.classList.add("open");
 }
 
@@ -365,6 +393,13 @@ function actions(box) {
   if (pending) box.append(pasteBox());
 }
 
+/** How the paste route goes, in three steps. */
+function steps() {
+  const ol = el("ol", undefined, "steps");
+  for (const s of route.route === "paste" ? ["Copy the prompt.", "Paste it into a new chat with any AI you use.", "Paste the whole reply back here, and read it."] : ["The AI at your address did not answer.", "Ask again, or copy the prompt into any AI chat.", "Paste the reply back here."]) ol.append(el("li", s));
+  return ol;
+}
+
 function pasteBox() {
   const wrap = el("div"), out = el("textarea", undefined, "plain paste"), back = el("textarea", undefined, "plain paste");
   out.value = pending.prompt; out.readOnly = true; out.setAttribute("aria-label", "The prompt");
@@ -372,7 +407,7 @@ function pasteBox() {
   const go = el("div", undefined, "row");
   go.append(button("Copy the prompt", async () => { try { await navigator.clipboard.writeText(pending.prompt); toast("Copied. Paste it into a new chat."); } catch { out.select(); } }), button("Read the reply", () => finish(back.value), "go"), button("Cancel", () => { pending = null; open("actions"); }));
   if (route.route === "address") go.prepend(button("Ask again", () => viaAddress()));
-  wrap.append(el("h3", route.route === "paste" ? "Paste this into a new chat" : "The AI did not answer"), ...(pending.error ? [el("p", pending.error, "warn")] : []), el("p", "Start a new chat for every turn. Paste the whole reply back.", "note"), out, back, go);
+  wrap.append(el("h3", route.route === "paste" ? "Paste this into a new chat" : "The AI did not answer"), ...(pending.error ? [el("p", pending.error, "warn")] : []), steps(), out, back, go);
   return wrap;
 }
 
@@ -433,13 +468,14 @@ function ledger(box) {
   const feed = el("ol", undefined, "feed");
   for (const e of last.events) {
     const li = el("li"), when = button(`${fmtDate(e.date)}, ${name(e.at)}`, () => showCountry(e.at), "when");
+    when.style.setProperty("--c", colourOf(e.at) || ownerColour(e.at));
     li.append(when, el("p", e.text)); feed.append(li);
   }
   box.append(el("p", last.summary, "note"), feed);
   if (last.advice) box.append(el("h3", `Your trusted adviser, ${last.advice.name}`), el("p", `${last.advice.word}: ${last.advice.text}`));
   if (last.receipt?.length) {
     const list = el("ul", undefined, "list");
-    list.append(...last.receipt.map((x) => { const li = el("li"); li.append(el("span", `${x.ok ? "✓" : "✗"} ${x.text.replace(/[.!?]$/, "")}.`)); if (!x.ok) li.style.opacity = ".7"; return li; }));
+    list.append(...last.receipt.map((x) => { const li = el("li", undefined, x.ok ? "yes" : "no"); li.append(el("span", x.ok ? "✓" : "✗", "mark"), el("span", `${x.text.replace(/[.!?]$/, "")}.`)); return li; }));
     box.append(el("h3", "What the rules decided"), list);
   }
   if (last.dropped.length) box.append(el("p", `Left out of the reply: ${last.dropped.join("; ")}.`, "note"));
@@ -554,7 +590,7 @@ function askBox() {
   const go = el("div", undefined, "row");
   if (route.route === "address") go.append(button("Ask again", () => askAI(asking.prompt, asking.take, asking.where)));
   go.append(button("Copy the prompt", async () => { try { await navigator.clipboard.writeText(asking.prompt); toast("Copied. Paste it into a new chat."); } catch { out.select(); } }), button("Read the reply", () => settle(back.value), "go"), button("Cancel", () => { const w = asking.where; asking = null; open(w); }));
-  wrap.append(el("h3", route.route === "paste" ? "Paste this into a new chat" : "Waiting for the AI"), ...(asking.error ? [el("p", asking.error, "warn")] : []), out, back, go);
+  wrap.append(el("h3", route.route === "paste" ? "Paste this into a new chat" : "Waiting for the AI"), ...(asking.error ? [el("p", asking.error, "warn")] : []), steps(), out, back, go);
   return wrap;
 }
 const talkWorld = () => ({ name });
@@ -712,12 +748,55 @@ function gameSheet(box) {
     a.download = `capo-scenario-${s.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "untitled"}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     toast("Saved. Open it from the first screen, or share the file.");
   }));
-  box.append(el("h2", "Game"), home(), el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back.`, "note"), saves, file,
+  const again = el("div", undefined, "row"); again.append(button("Show the guide", () => { open(null); guide(0); }));
+  box.append(el("h2", "Game"), home(), again, el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back.`, "note"), saves, file,
     el("h3", "Save the world as a scenario"), el("p", `A starting point others can play: today's date, who holds what, wars, treaties, story facts and might${state.custom ? `, and ${state.custom.name}` : ""}. Not your actions, chats or council.`, "note"), sTitle, sBlurb, sOpen, sRow,
     el("h3", "How Capo reaches an AI"), line("Route", pick), line("Address", base), line("Model", model), line("Key", key), keepLine, aiRow,
     el("p", `Today: ${route.calls || 0} calls, about ${route.sent || 0} tokens sent and ${route.got || 0} received.`, "note"),
     el("p", "A key goes only to the address you give, straight from this page. Capo has no server and never sees it.", "note"));
 }
+
+// ---- the guide: one turn, start to finish, pointing at each part of the screen; once, and again from the Game menu ----
+const GUIDED = "capo-guide-1";
+const dockButton = (i) => () => $("dock").children[i];
+const GUIDE = [
+  [() => null, "Welcome to Capo", () => `You lead ${name(state.player)}. This shows one turn, start to finish: about a minute.`],
+  [() => $("map"), "The world", () => "Drag to move and pinch or scroll to zoom. Tap any province to see who holds it, its neighbours, and anything disputed. Your land has a gold edge."],
+  [dockButton(0), "1. Decide", () => "Write what you do in Actions, in your own words, as many as you like. Ideas are there to start you off."],
+  [() => $("top").querySelector("select"), "2. Choose how far", () => "Jump a week, a month, a year, any length, or until something happens."],
+  [() => $("top").querySelector("button.go"), "3. Advance", () => "Capo writes a prompt. Copy it into a new chat with any AI you use and paste the whole reply back. Or give Capo an AI's address in the Game menu, and it asks for you."],
+  [dockButton(2), "4. Read what happened", () => "The Ledger shows the events, the papers, and what the rules decided: which moves stood, which were refused, and why. The AI tells the story; the rules keep the facts."],
+  [dockButton(3), "Your people", () => "Form a council in Advisors and choose whom you trust. In Chats, talk with any country. Words only: only actions change the world."],
+  [dockButton(4), "Game Master", () => "Tell the story something true, or change the world by hand. Hand changes mark the game Sandbox, and every one can be undone."],
+  [() => $("top").querySelector("button.ic"), "That's it", () => "Saves, scenario files and the AI's address are in the Game menu, along with this guide. Good luck."],
+];
+let guideAt = -1, lit = null;
+function guide(i) {
+  const box = $("guide");
+  if (lit) { lit.classList.remove("lit"); lit = null; }
+  if (i < 0 || i >= GUIDE.length) { guideAt = -1; box.classList.remove("open"); try { localStorage.setItem(GUIDED, "1"); } catch { /* shown again next time */ } return; }
+  guideAt = i;
+  const [target, title, words] = GUIDE[i], t = target();
+  if (t && t !== $("map")) { lit = t; lit.classList.add("lit"); }
+  const row = el("div", undefined, "row");
+  row.append(el("span", `${i + 1} of ${GUIDE.length}`, "count"));
+  if (i > 0) row.append(button("Back", () => guide(i - 1)));
+  if (i < GUIDE.length - 1) row.append(button("Skip", () => guide(-1)));
+  row.append(button(i === GUIDE.length - 1 ? "Done" : "Next", () => guide(i + 1 < GUIDE.length ? i + 1 : -1), "go"));
+  box.replaceChildren(el("h2", title), el("p", words()), row);
+  box.classList.add("open");
+  // beside what it points at, inside the screen; centred when it points at nothing in particular
+  const w = box.offsetWidth, h = box.offsetHeight, vw = innerWidth, vh = innerHeight;
+  let x = (vw - w) / 2, y = (vh - h) / 2;
+  if (t && t !== $("map")) {
+    const r = t.getBoundingClientRect();
+    x = Math.min(vw - w - 12, Math.max(12, r.left + r.width / 2 - w / 2));
+    y = r.bottom + 12 + h < vh ? r.bottom + 12 : Math.max(12, r.top - h - 12);
+  }
+  box.style.left = `${Math.round(x)}px`; box.style.top = `${Math.round(y)}px`;
+  row.querySelector("button.go")?.focus();
+}
+const guideOnce = () => { let seen = false; try { seen = localStorage.getItem(GUIDED) === "1"; } catch { /* treat as unseen */ } if (!seen) setTimeout(() => guide(0), 400); };
 
 // ---- the province card ----
 function card(p) {
@@ -753,4 +832,5 @@ async function start() {
   const kept = load();
   if (kept?.state && (homes.has(kept.state.player) || kept.state.custom?.code === kept.state.player)) { state = mend(kept.state); past = (kept.past || []).map(mend); play(); } else startScreen();
 }
+addEventListener("keydown", (e) => { if (e.key === "Escape" && guideAt >= 0) guide(-1); });
 start();

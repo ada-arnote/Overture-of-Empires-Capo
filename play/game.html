@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-NvAzwmAP6DA3gfGvE54sPjV1oVUZ26hJvjvLYvWfu8Y='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-UrSDBeJuVpbamavcAf8FPyXyd5FtDYmloTSaqbmf9Os='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
 <title>Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -149,48 +149,92 @@ dialog > .go { background: #161c1e; margin: 0 -22px -22px; padding: 10px 22px 18
 html, body { height: 100%; margin: 0; overflow: hidden }
 #map { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; display: block }
 #map:active { cursor: grabbing }
-.glass { background: rgba(16, 21, 24, .9); border: 1px solid var(--line); border-radius: 14px; backdrop-filter: blur(6px) }
+/* one surface for every floating panel, as in the table games */
+.glass { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 14px 40px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 244, 214, .06); backdrop-filter: blur(14px) saturate(1.1); -webkit-backdrop-filter: blur(14px) saturate(1.1) }
 button.plain { min-height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 244, 214, .05); color: var(--text); font: inherit; font-size: 14px }
+button.plain:hover { background: rgba(255, 244, 214, .1) }
 button.plain[aria-pressed=true] { border-color: var(--gold); background: rgba(226, 184, 102, .17) }
-button.go { min-height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--gold); background: var(--gold); color: #1a1408; font-weight: 700 }
-select.plain, input.plain, textarea.plain { min-height: 40px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line2); background: #1c2426; color: var(--text); font: inherit; font-size: 14px }
-textarea.plain { width: 100%; box-sizing: border-box; resize: vertical }
-#top { position: fixed; top: 8px; left: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 8px; z-index: 4 }
-#top .who { display: flex; gap: 8px; align-items: center; font: 500 18px/1.1 var(--serif, Georgia, serif); background: none; border: 0; color: var(--text); padding: 0 4px; min-height: 40px }
-#top .chip { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(255, 244, 214, .5) }
-#top .mode { font-size: 12px; padding: 3px 8px; border-radius: 99px; border: 1px solid var(--line2); color: var(--soft) }
-#top .date { margin-left: auto; font-size: 14px; color: var(--soft) } #top .date b { color: var(--text) }
-#dock { position: fixed; left: 8px; bottom: 10px; display: flex; gap: 6px; padding: 6px; z-index: 4; flex-wrap: wrap; max-width: calc(100vw - 70px) }
-#sheet { position: fixed; left: 8px; top: 72px; bottom: 70px; width: min(430px, calc(100vw - 16px)); padding: 14px; overflow: auto; z-index: 5; display: none; box-sizing: border-box }
+button.go { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--gold); background: linear-gradient(var(--gold2), var(--gold)); color: var(--on); font-weight: 700 }
+button.go:hover { filter: brightness(1.06) }
+button.ic { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 244, 214, .05); color: var(--text) }
+svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; display: block }
+select.plain, input.plain, textarea.plain { min-height: 40px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line2); background: rgba(10, 14, 16, .6); color: var(--text); font: inherit; font-size: 14px }
+textarea.plain { width: 100%; box-sizing: border-box; resize: vertical; line-height: 1.45 }
+
+/* top bar: who you are, when it is, and the turn's one big button */
+#top { position: fixed; top: max(8px, env(safe-area-inset-top)); left: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding: 6px 8px; z-index: 4 }
+#top .who { display: flex; gap: 10px; align-items: center; font: 500 19px/1.1 var(--serif); background: none; border: 0; color: var(--text); padding: 0 6px; min-height: 40px }
+#top .chip { width: 14px; height: 14px; border-radius: 4px; box-shadow: 0 0 0 2px rgba(226, 184, 102, .55) }
+#top .mode { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--line2); color: var(--soft) }
+#top .mode.sandbox { border-color: #c9873f; color: #f0b670 }
+#top .date { margin-left: auto; display: grid; justify-items: end; line-height: 1.15 } #top .date b { font: 500 17px/1.15 var(--serif); color: var(--text) } #top .date small { color: var(--soft); font-size: 12px }
+
+/* the dock: five places, each with its own mark */
+#dock { position: fixed; left: 8px; bottom: max(10px, env(safe-area-inset-bottom)); display: flex; gap: 4px; padding: 5px; z-index: 4; max-width: calc(100vw - 70px) }
+#dock button { position: relative; display: grid; justify-items: center; gap: 2px; min-width: 70px; padding: 6px 8px 5px; border-radius: 11px; border: 1px solid transparent; background: none; color: var(--soft); font: inherit; font-size: 12px }
+#dock button:hover { color: var(--text); background: rgba(255, 244, 214, .06) }
+#dock button[aria-pressed=true] { color: var(--text); border-color: var(--line2); background: rgba(226, 184, 102, .14) }
+#dock button svg.i { width: 22px; height: 22px }
+#dock .dot { position: absolute; top: 5px; right: 16px; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 2px var(--table) }
+
+/* the open panel */
+#sheet { position: fixed; left: 8px; top: 76px; bottom: 78px; width: min(440px, calc(100vw - 16px)); padding: 0 16px 16px; overflow: auto; z-index: 5; display: none; box-sizing: border-box }
 #sheet.open { display: block }
-#sheet h2 { margin: 0 0 8px; font: 500 22px/1.2 var(--serif, Georgia, serif) } #sheet h3 { margin: 14px 0 6px; font: 600 15px/1.2 inherit }
-#sheet .shut { float: right }
+#sheet .head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -16px 6px; padding: 12px 12px 8px 16px; background: linear-gradient(rgba(19, 24, 26, .97) 75%, rgba(19, 24, 26, 0)) }
+#sheet h2 { margin: 0; font: 500 23px/1.2 var(--serif) }
+#sheet h3 { margin: 18px 0 6px; font: 600 11px/1.2 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--gold) }
 .note { color: var(--soft); font-size: 14px; margin: 6px 0 }
 .warn { color: #f2a08c; font-size: 14px }
 .list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px }
 .list li { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px } .list li span { flex: 1 }
+.list li.yes { border-left: 3px solid #8fbf7a } .list li.no { border-left: 3px solid #c9765f; color: var(--soft) }
+.list li .mark { flex: none; font-weight: 700 } .list li.yes .mark { color: #9fd08a } .list li.no .mark { color: #e08a72 }
 .feed { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px }
-.feed li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 244, 214, .03) }
-.feed .when { color: var(--gold); font-size: 13px; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted }
+.feed li { padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 244, 214, .03) }
+.feed .when { display: inline-flex; align-items: center; gap: 6px; color: var(--gold); font-size: 13px; background: none; border: 0; padding: 0; cursor: pointer }
+.feed .when::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: var(--c, var(--gold)) }
 .feed p { margin: 4px 0 0 }
+.feed b { font: 500 17px/1.3 var(--serif) }
 .row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 }
-.paste { min-height: 130px; font-size: 12px }
-#card { position: fixed; right: 64px; bottom: 10px; width: min(330px, calc(100vw - 80px)); padding: 12px 14px; z-index: 4; display: none }
-#card h2 { margin: 0 0 4px; font: 500 20px/1.2 var(--serif, Georgia, serif) }
+.paste { min-height: 120px; font-size: 12px; font-family: ui-monospace, Consolas, monospace }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; font-size: 13px; color: var(--soft) }
+.steps li { counter-increment: s; display: flex; gap: 8px; align-items: baseline } .steps li::before { content: counter(s); flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: rgba(226, 184, 102, .2); color: var(--gold2); font-size: 12px; font-weight: 700 }
+
+/* the province card */
+#card { position: fixed; right: 64px; bottom: max(10px, env(safe-area-inset-bottom)); width: min(340px, calc(100vw - 80px)); padding: 13px 15px; z-index: 4; display: none }
+#card h2 { margin: 0 0 4px; font: 500 21px/1.2 var(--serif) }
 #card .near { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px } #card .near button { min-height: 30px; padding: 0 8px; font-size: 13px }
-.zoom { position: fixed; right: 8px; bottom: 10px; display: grid; gap: 6px; z-index: 4 }
-.zoom button { min-width: 44px; min-height: 44px; font-size: 18px }
-#view { position: fixed; right: 8px; top: 72px; z-index: 4; background: rgba(16, 21, 24, .9) }
-#start { position: fixed; left: 8px; top: 8px; bottom: 8px; width: min(470px, calc(100vw - 16px)); display: none; z-index: 6; overflow: auto }
+.zoom { position: fixed; right: 8px; bottom: max(10px, env(safe-area-inset-bottom)); display: grid; gap: 6px; z-index: 4 }
+.zoom button { min-width: 44px; min-height: 44px; font-size: 18px; background: var(--panel); backdrop-filter: blur(10px) }
+#view { position: fixed; right: 8px; top: 82px; z-index: 4; background: var(--panel); backdrop-filter: blur(10px) }
+
+/* the first screen */
+#start { position: fixed; left: 8px; top: 8px; bottom: 8px; width: min(480px, calc(100vw - 16px)); display: none; z-index: 6; overflow: auto }
 #start.open { display: block }
 #start.min { top: auto; bottom: 8px; overflow: visible } #start.min .box { min-height: 0; padding: 10px 14px }
-#start .box { padding: 18px 20px; min-height: 100%; box-sizing: border-box }
-#start h1 { margin: 0; font: 500 clamp(40px, 8vw, 60px)/1 var(--serif, Georgia, serif) }
+#start .box { padding: 20px 22px; min-height: 100%; box-sizing: border-box }
+#start h1 { margin: 0 0 4px; font: 500 clamp(44px, 8vw, 64px)/1 var(--serif); letter-spacing: -.01em }
+#start h3 { margin: 18px 0 6px; font: 600 11px/1.2 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--gold) }
 #start label { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; color: var(--soft); font-size: 14px }
-.modes { display: grid; gap: 6px } #start .modes label { flex-direction: row; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--text) } .modes small { display: block; color: var(--soft) }
-#toast { position: fixed; left: 50%; top: 76px; transform: translateX(-50%); z-index: 7 }
+.modes { display: grid; gap: 6px } #start .modes label { flex-direction: row; align-items: flex-start; gap: 10px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; color: var(--text); background: rgba(255, 244, 214, .03) }
+#start .modes label:has(input:checked) { border-color: var(--gold); background: rgba(226, 184, 102, .1) } .modes small { display: block; color: var(--soft) }
+
+/* the guide */
+#guide { position: fixed; z-index: 9; width: min(330px, calc(100vw - 24px)); padding: 14px 16px; display: none }
+#guide.open { display: block }
+#guide h2 { margin: 0 0 6px; font: 500 20px/1.2 var(--serif) } #guide p { margin: 0 0 10px; font-size: 15px }
+#guide .count { color: var(--soft); font-size: 12px; margin-right: auto }
+.lit { position: relative; z-index: 8 !important; box-shadow: 0 0 0 3px var(--gold), 0 0 0 9999px rgba(6, 9, 10, .55) !important; border-radius: 14px }
+
+#toast { position: fixed; left: 50%; top: 84px; transform: translateX(-50%); z-index: 7 }
 .credit { position: fixed; right: 64px; bottom: 2px; font-size: 10px; color: var(--soft); opacity: .6; z-index: 3 }
-@media (max-width: 640px) { #top .date { margin-left: 0; width: 100% } #dock { flex-wrap: nowrap; overflow-x: auto; right: 62px; max-width: none } #dock button { flex: none } #sheet { top: auto; height: 60vh; bottom: 68px } #card { right: 8px; bottom: 68px; width: calc(100vw - 16px); box-sizing: border-box } #toast { top: 150px } #view { top: auto; bottom: 190px } }
+@media (max-width: 640px) {
+  #top .date { margin-left: 0; justify-items: start; width: 100% } #top .who { font-size: 17px } #top select.plain { flex: 1; min-width: 0 }
+  #dock { right: 62px; max-width: none; overflow-x: auto } #dock button { flex: none; min-width: 62px; font-size: 11px }
+  #sheet { top: auto; height: 62vh; bottom: 76px } #card { right: 8px; bottom: 76px; width: calc(100vw - 16px); box-sizing: border-box }
+  #toast { top: 150px } #view { top: auto; bottom: 196px }
+  #guide { left: 12px !important; right: 12px; bottom: 84px !important; top: auto !important; width: auto }
+}
 </style>
 </head>
 <body>
@@ -202,6 +246,7 @@ textarea.plain { width: 100%; box-sizing: border-box; resize: vertical }
 <select id="view" class="plain" aria-label="Map view"><option value="countries">Map: countries</option><option value="relations">Map: friends and foes</option><option value="might">Map: might</option></select>
 <div class="zoom"><button type="button" class="plain" id="in" aria-label="Zoom in">+</button><button type="button" class="plain" id="out" aria-label="Zoom out">&minus;</button><button type="button" class="plain" id="home" aria-label="Back to my country">&#8962;</button></div>
 <div id="start"><div class="box glass" id="start-box"></div></div>
+<section id="guide" class="glass" role="dialog" aria-live="polite" aria-label="Guide"></section>
 <div id="toast" role="status" aria-live="polite"></div>
 <span id="homelink" hidden><a href="../site/" class="text">All games</a></span>
 <span class="credit">Made with Natural Earth</span>
@@ -1837,6 +1882,22 @@ const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const button = (text, on, cls = "plain") => { const b = el("button", text, cls); b.type = "button"; b.onclick = on; return b; };
+const ICONS = {
+  actions: "M4 20l4.5-1L19 8.5 15.5 5 5 15.5z M13.5 7l3.5 3.5",
+  chats: "M4 5h11v8H9l-4 3v-3H4z M18 9h2v8h-1.5v3l-3-3H11v-2",
+  ledger: "M6 4h10a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2z M6 18a2 2 0 0 1 2-2h10 M10 8h5 M10 11h5",
+  advisors: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M3.5 20a5.5 5.5 0 0 1 11 0 M16 5.5a3 3 0 0 1 0 5.5 M17.5 14.5a5 5 0 0 1 3 5.5",
+  master: "M4 4h16v16H4z M8.5 8.5h.01 M15.5 8.5h.01 M12 12h.01 M8.5 15.5h.01 M15.5 15.5h.01",
+  game: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M12 3v2.5 M12 18.5V21 M3 12h2.5 M18.5 12H21 M5.6 5.6l1.8 1.8 M16.6 16.6l1.8 1.8 M5.6 18.4l1.8-1.8 M16.6 7.4l1.8-1.8",
+  go: "M5 12h13 M13 6l6 6-6 6",
+  close: "M6 6l12 12 M18 6L6 18",
+};
+function icon(key) {
+  const ns = "http://www.w3.org/2000/svg", s = document.createElementNS(ns, "svg"), path = document.createElementNS(ns, "path");
+  s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("class", "i"); s.setAttribute("aria-hidden", "true");
+  path.setAttribute("d", ICONS[key]); s.append(path);
+  return s;
+}
 let world, map, state = null, past = [], route = loadRoute(), sheet = null, pending = null, jump = { key: "1m", n: 2, unit: "weeks" }, hush = 0, ledgerTab = "events", view = "countries";
 
 // games saved before wars and treaties existed get empty lists
@@ -2129,7 +2190,7 @@ function begin() {
     character,
   });
   past = []; draft = null; save();
-  $("start").classList.remove("open"); map.refresh(); play();
+  $("start").classList.remove("open"); map.refresh(); play(); guideOnce();
 }
 
 // ---- the game ----
@@ -2154,13 +2215,21 @@ function topBar() {
     n.onchange = () => { jump = { ...jump, n: Number(n.value) || 1 }; }; unit.onchange = () => { jump = { ...jump, unit: unit.value }; };
     length.push(n, unit);
   }
-  const date = el("span", undefined, "date"); date.append("Turn ", el("b", String(state.turn)), ", ", el("b", fmtDate(state.date)));
-  top.replaceChildren(who, el("span", MODES[state.mode][0], "mode"), ...(state.sandbox ? [el("span", "Sandbox", "mode")] : []), date, jumpPick, ...length, button("Advance", advance, "go"), button("Game", () => open("game")));
+  const date = el("span", undefined, "date"); date.append(el("b", fmtDate(state.date)), el("small", `Turn ${state.turn}`));
+  const go = button("Advance", advance, "go"); go.append(icon("go"));
+  const menu = button("", () => open(sheet === "game" ? null : "game"), "ic"); menu.append(icon("game")); menu.setAttribute("aria-label", "Game: saves, scenarios and the AI"); menu.title = "Game";
+  top.replaceChildren(who, el("span", MODES[state.mode][0], "mode"), ...(state.sandbox ? [el("span", "Sandbox", "mode sandbox")] : []), date, jumpPick, ...length, go, menu);
 }
 
 const DOCK = [["actions", "Actions"], ["chats", "Chats"], ["ledger", "Ledger"], ["advisors", "Advisors"], ["master", "Game Master"]];
 function dock() {
-  $("dock").replaceChildren(...DOCK.map(([k, t]) => { const b = button(t, () => open(sheet === k ? null : k)); b.setAttribute("aria-pressed", String(sheet === k)); return b; }));
+  const unread = state && state.log.length > (state.seen || 0);
+  $("dock").replaceChildren(...DOCK.map(([k, t]) => {
+    const label = k === "chats" && state?.mode === "citizen" ? "Contacts" : k === "advisors" && state?.mode === "citizen" ? "Circle" : t;
+    const b = button("", () => open(sheet === k ? null : k), ""); b.append(icon(k), el("span", label)); b.setAttribute("aria-pressed", String(sheet === k));
+    if (k === "ledger" && unread) { b.append(el("span", undefined, "dot")); b.setAttribute("aria-label", "Ledger, new"); }
+    return b;
+  }));
 }
 
 function open(which) {
@@ -2168,8 +2237,12 @@ function open(which) {
   const box = $("sheet");
   dock();
   if (!which) { box.classList.remove("open"); return; }
-  box.replaceChildren(button("Close", () => open(null), "plain shut"));
+  if (which === "ledger" && state.seen !== state.log.length) { state.seen = state.log.length; save(); dock(); }
+  box.replaceChildren();
   ({ actions, chats, ledger, advisors, master, game: gameSheet }[which])(box);
+  const head = el("div", undefined, "head"), title = box.querySelector("h2"), shut = button("", () => open(null), "ic");
+  shut.append(icon("close")); shut.setAttribute("aria-label", "Close");
+  head.append(title || el("h2", ""), shut); box.prepend(head);
   box.classList.add("open");
 }
 
@@ -2188,6 +2261,13 @@ function actions(box) {
   if (pending) box.append(pasteBox());
 }
 
+/** How the paste route goes, in three steps. */
+function steps() {
+  const ol = el("ol", undefined, "steps");
+  for (const s of route.route === "paste" ? ["Copy the prompt.", "Paste it into a new chat with any AI you use.", "Paste the whole reply back here, and read it."] : ["The AI at your address did not answer.", "Ask again, or copy the prompt into any AI chat.", "Paste the reply back here."]) ol.append(el("li", s));
+  return ol;
+}
+
 function pasteBox() {
   const wrap = el("div"), out = el("textarea", undefined, "plain paste"), back = el("textarea", undefined, "plain paste");
   out.value = pending.prompt; out.readOnly = true; out.setAttribute("aria-label", "The prompt");
@@ -2195,7 +2275,7 @@ function pasteBox() {
   const go = el("div", undefined, "row");
   go.append(button("Copy the prompt", async () => { try { await navigator.clipboard.writeText(pending.prompt); toast("Copied. Paste it into a new chat."); } catch { out.select(); } }), button("Read the reply", () => finish(back.value), "go"), button("Cancel", () => { pending = null; open("actions"); }));
   if (route.route === "address") go.prepend(button("Ask again", () => viaAddress()));
-  wrap.append(el("h3", route.route === "paste" ? "Paste this into a new chat" : "The AI did not answer"), ...(pending.error ? [el("p", pending.error, "warn")] : []), el("p", "Start a new chat for every turn. Paste the whole reply back.", "note"), out, back, go);
+  wrap.append(el("h3", route.route === "paste" ? "Paste this into a new chat" : "The AI did not answer"), ...(pending.error ? [el("p", pending.error, "warn")] : []), steps(), out, back, go);
   return wrap;
 }
 
@@ -2256,13 +2336,14 @@ function ledger(box) {
   const feed = el("ol", undefined, "feed");
   for (const e of last.events) {
     const li = el("li"), when = button(`${fmtDate(e.date)}, ${name(e.at)}`, () => showCountry(e.at), "when");
+    when.style.setProperty("--c", colourOf(e.at) || ownerColour(e.at));
     li.append(when, el("p", e.text)); feed.append(li);
   }
   box.append(el("p", last.summary, "note"), feed);
   if (last.advice) box.append(el("h3", `Your trusted adviser, ${last.advice.name}`), el("p", `${last.advice.word}: ${last.advice.text}`));
   if (last.receipt?.length) {
     const list = el("ul", undefined, "list");
-    list.append(...last.receipt.map((x) => { const li = el("li"); li.append(el("span", `${x.ok ? "✓" : "✗"} ${x.text.replace(/[.!?]$/, "")}.`)); if (!x.ok) li.style.opacity = ".7"; return li; }));
+    list.append(...last.receipt.map((x) => { const li = el("li", undefined, x.ok ? "yes" : "no"); li.append(el("span", x.ok ? "✓" : "✗", "mark"), el("span", `${x.text.replace(/[.!?]$/, "")}.`)); return li; }));
     box.append(el("h3", "What the rules decided"), list);
   }
   if (last.dropped.length) box.append(el("p", `Left out of the reply: ${last.dropped.join("; ")}.`, "note"));
@@ -2377,7 +2458,7 @@ function askBox() {
   const go = el("div", undefined, "row");
   if (route.route === "address") go.append(button("Ask again", () => askAI(asking.prompt, asking.take, asking.where)));
   go.append(button("Copy the prompt", async () => { try { await navigator.clipboard.writeText(asking.prompt); toast("Copied. Paste it into a new chat."); } catch { out.select(); } }), button("Read the reply", () => settle(back.value), "go"), button("Cancel", () => { const w = asking.where; asking = null; open(w); }));
-  wrap.append(el("h3", route.route === "paste" ? "Paste this into a new chat" : "Waiting for the AI"), ...(asking.error ? [el("p", asking.error, "warn")] : []), out, back, go);
+  wrap.append(el("h3", route.route === "paste" ? "Paste this into a new chat" : "Waiting for the AI"), ...(asking.error ? [el("p", asking.error, "warn")] : []), steps(), out, back, go);
   return wrap;
 }
 const talkWorld = () => ({ name });
@@ -2535,12 +2616,55 @@ function gameSheet(box) {
     a.download = `capo-scenario-${s.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "untitled"}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     toast("Saved. Open it from the first screen, or share the file.");
   }));
-  box.append(el("h2", "Game"), home(), el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back.`, "note"), saves, file,
+  const again = el("div", undefined, "row"); again.append(button("Show the guide", () => { open(null); guide(0); }));
+  box.append(el("h2", "Game"), home(), again, el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back.`, "note"), saves, file,
     el("h3", "Save the world as a scenario"), el("p", `A starting point others can play: today's date, who holds what, wars, treaties, story facts and might${state.custom ? `, and ${state.custom.name}` : ""}. Not your actions, chats or council.`, "note"), sTitle, sBlurb, sOpen, sRow,
     el("h3", "How Capo reaches an AI"), line("Route", pick), line("Address", base), line("Model", model), line("Key", key), keepLine, aiRow,
     el("p", `Today: ${route.calls || 0} calls, about ${route.sent || 0} tokens sent and ${route.got || 0} received.`, "note"),
     el("p", "A key goes only to the address you give, straight from this page. Capo has no server and never sees it.", "note"));
 }
+
+// ---- the guide: one turn, start to finish, pointing at each part of the screen; once, and again from the Game menu ----
+const GUIDED = "capo-guide-1";
+const dockButton = (i) => () => $("dock").children[i];
+const GUIDE = [
+  [() => null, "Welcome to Capo", () => `You lead ${name(state.player)}. This shows one turn, start to finish: about a minute.`],
+  [() => $("map"), "The world", () => "Drag to move and pinch or scroll to zoom. Tap any province to see who holds it, its neighbours, and anything disputed. Your land has a gold edge."],
+  [dockButton(0), "1. Decide", () => "Write what you do in Actions, in your own words, as many as you like. Ideas are there to start you off."],
+  [() => $("top").querySelector("select"), "2. Choose how far", () => "Jump a week, a month, a year, any length, or until something happens."],
+  [() => $("top").querySelector("button.go"), "3. Advance", () => "Capo writes a prompt. Copy it into a new chat with any AI you use and paste the whole reply back. Or give Capo an AI's address in the Game menu, and it asks for you."],
+  [dockButton(2), "4. Read what happened", () => "The Ledger shows the events, the papers, and what the rules decided: which moves stood, which were refused, and why. The AI tells the story; the rules keep the facts."],
+  [dockButton(3), "Your people", () => "Form a council in Advisors and choose whom you trust. In Chats, talk with any country. Words only: only actions change the world."],
+  [dockButton(4), "Game Master", () => "Tell the story something true, or change the world by hand. Hand changes mark the game Sandbox, and every one can be undone."],
+  [() => $("top").querySelector("button.ic"), "That's it", () => "Saves, scenario files and the AI's address are in the Game menu, along with this guide. Good luck."],
+];
+let guideAt = -1, lit = null;
+function guide(i) {
+  const box = $("guide");
+  if (lit) { lit.classList.remove("lit"); lit = null; }
+  if (i < 0 || i >= GUIDE.length) { guideAt = -1; box.classList.remove("open"); try { localStorage.setItem(GUIDED, "1"); } catch { /* shown again next time */ } return; }
+  guideAt = i;
+  const [target, title, words] = GUIDE[i], t = target();
+  if (t && t !== $("map")) { lit = t; lit.classList.add("lit"); }
+  const row = el("div", undefined, "row");
+  row.append(el("span", `${i + 1} of ${GUIDE.length}`, "count"));
+  if (i > 0) row.append(button("Back", () => guide(i - 1)));
+  if (i < GUIDE.length - 1) row.append(button("Skip", () => guide(-1)));
+  row.append(button(i === GUIDE.length - 1 ? "Done" : "Next", () => guide(i + 1 < GUIDE.length ? i + 1 : -1), "go"));
+  box.replaceChildren(el("h2", title), el("p", words()), row);
+  box.classList.add("open");
+  // beside what it points at, inside the screen; centred when it points at nothing in particular
+  const w = box.offsetWidth, h = box.offsetHeight, vw = innerWidth, vh = innerHeight;
+  let x = (vw - w) / 2, y = (vh - h) / 2;
+  if (t && t !== $("map")) {
+    const r = t.getBoundingClientRect();
+    x = Math.min(vw - w - 12, Math.max(12, r.left + r.width / 2 - w / 2));
+    y = r.bottom + 12 + h < vh ? r.bottom + 12 : Math.max(12, r.top - h - 12);
+  }
+  box.style.left = `${Math.round(x)}px`; box.style.top = `${Math.round(y)}px`;
+  row.querySelector("button.go")?.focus();
+}
+const guideOnce = () => { let seen = false; try { seen = localStorage.getItem(GUIDED) === "1"; } catch { /* treat as unseen */ } if (!seen) setTimeout(() => guide(0), 400); };
 
 // ---- the province card ----
 function card(p) {
@@ -2576,6 +2700,7 @@ async function start() {
   const kept = load();
   if (kept?.state && (homes.has(kept.state.player) || kept.state.custom?.code === kept.state.player)) { state = mend(kept.state); past = (kept.past || []).map(mend); play(); } else startScreen();
 }
+addEventListener("keydown", (e) => { if (e.key === "Escape" && guideAt >= 0) guide(-1); });
 start();
 
 
