@@ -11,7 +11,8 @@ export const CHOICES = {
   text: [["normal", "Normal"], ["large", "Large"], ["larger", "Larger"]],
   keys: [["on", "On"], ["off", "Off"]],
 };
-export const DEFAULTS = { sound: "on", volume: 60, speed: "normal", motion: "system", patterns: "off", text: "normal", keys: "on" };
+// seat patterns are on unless a player turns them off (accessibility): settings kept before they were (no `v`) do not carry the old "off"
+export const DEFAULTS = { sound: "on", volume: 60, speed: "normal", motion: "system", patterns: "on", text: "normal", keys: "on" }, SETTINGS_V = 2;
 /** How long bots wait, as a share of their usual pace; and how much bigger the words are. */
 export const PACE = { normal: 1, fast: 0.3, instant: 0 }, SCALE = { normal: 1, large: 1.15, larger: 1.3 };
 
@@ -20,12 +21,25 @@ export function parseSettings(text) {
   let o;
   try { o = JSON.parse(text || "{}"); } catch { o = null; }
   const s = { ...DEFAULTS }, v = Number(o?.volume);
-  for (const [k, list] of Object.entries(CHOICES)) if (list.some(([x]) => x === o?.[k])) s[k] = o[k];
+  for (const [k, list] of Object.entries(CHOICES)) if (list.some(([x]) => x === o?.[k]) && (k !== "patterns" || o.v >= SETTINGS_V)) s[k] = o[k];
   if (o?.volume !== undefined && Number.isFinite(v)) s.volume = Math.max(0, Math.min(100, Math.round(v)));
   return s;
 }
 export const settings = parseSettings((() => { try { return localStorage.getItem(SETTINGS_KEY); } catch { return null; } })());
-export function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* kept for this visit only */ } }
+export function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...settings, v: SETTINGS_V })); } catch { /* kept for this visit only */ } }
+
+/**
+ * Can the last move be taken back? Only a move of the seat now to move, played since its turn began, that drew on no chance:
+ * a roll, a draw or a steal once seen stays seen, and another seat's move (a bot's turn, a friend's) is theirs.
+ * The rules stay whole: taking back is the match's own undo, so a seed and the moves still replay the game.
+ * Returns "yes", "none" (nothing of this seat's since its turn began) or "chance" (the last move showed what chance held).
+ */
+export function takeBack(m, kinds, floor = 0) {
+  const n = m.list.length, seat = m.turn;
+  if (seat === null || kinds[seat] !== "you" || n <= floor) return "none";
+  if (m.game.turn(m.at(n - 1)) !== seat) return "none";
+  return m.rolled ? "chance" : "yes";
+}
 
 /** The turn a banner was shown for: once a round when one person plays, once a seat when several share the screen. */
 export const turnKey = (seed, round, seat, solo) => (solo ? `${seed}/${round}` : `${seed}/${round}/${seat}`);

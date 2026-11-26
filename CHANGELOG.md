@@ -2,6 +2,27 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### The table games' shell: a board that fills the screen, a game kept safe, take back that hides nothing
+
+**Players**
+- **The world map fills the screen.** In Brass and Banners and An Inch of Ink the map now opens as tall as the window allows and centred on your own land, with the panels over its far edges; the home button (and the 0 key) returns there, as do a resize and a change of the board's look. Minus still zooms out to the whole map. In real time the map goes to your land as soon as you have some.
+- **Play asks before it replaces your game.** With a game in progress, Play, Begin and opening a saved game ask first, in the page: continue that game, or start the new one. This browser keeps one game at a time.
+- **Phone on its side and small windows.** A landscape phone or a window under about 1100 wide (or under 600 tall) now has its own layout: the players in a strip under the top bar, the move panel a full-height column at the right, the board the rest, the zoom buttons a row in its corner. The row with End turn and the main button stays at the foot of the move panel however far its lists scroll, on every screen, and so does Send in An Inch of Ink. On a wide screen the zoom buttons are a row below the players' cards and no longer cover them.
+- **Take back hides nothing.** Take back now undoes only your own moves of this turn, and stops at anything chance has shown (a roll, a card drawn, a steal) and at any other player's or bot's move. It says why when it cannot, and no longer speaks of dice in games without them.
+- **Step through a finished game.** The end screen's "Step through the game", and a slider under the result in the move panel, show the board after any move of the game, one move at a time with the arrow keys or the buttons beside it.
+- **Seat patterns are on by default**, so colour is never the only sign of whose land it is. Turn them off in Settings; if you changed a setting before, they are now on until you do.
+- **Menus.** The menu always opens on Game, keeps one size from tab to tab so its tabs never move under the pointer, and a game on a clock no longer offers Bot speed or speaks of ending turns. Words from the last game no longer linger in a new one.
+
+**Contributors**
+- `takeBack(match, kinds, floor)` in `site/shell.js` decides what can be taken back ("yes", "none" or "chance"); it reads the match's own record (`turn`, `at`, `rolled`), so the rules are untouched and a seed plus the moves still replays every game. Tested in `test/shell.test.mjs`.
+- A game may give `stands`, the line said when the last move showed chance. Brass and Banners and Grain and Glass do.
+- Settings are saved with `v: 2`; a `patterns` value saved without it is ignored.
+- The end-of-game slider shows a past position by putting a view of the finished match (`Object.create`, its `position` read from `match.at(n)`) in `T.match`; any new game, or the title, puts the real one back.
+- Layout: `body.side` is set by `table.js` for the side layout; `#sheet.tabbed` is the menu; `.board-zoom` is the table games' zoom group; `--plate` is the move panel's solid ground under its sticky rows.
+- **Shell hook in `src/map/board.js`** (for the 3D lead to keep or fold in): `layout(free)` takes `free.fill` (open a wide map as tall as the free space, at most a quarter wider than the stage) and `free.at` (a cell to centre at that zoom); `zoom(0)` goes to that opening zoom, not the whole board; a look change settles there too; and a new `centre(cell)`. Without `fill` the phone opening is as before. `site/hexboard.js` adds `focus(seat)`, the cell nearest the middle of a seat's land.
+
 ## v0.8.2 (2026-11-26): Grain and Glass trades like the best
 
 ### Grain and Glass: a trade desk, counter-offers, rolls in view, sharper bots

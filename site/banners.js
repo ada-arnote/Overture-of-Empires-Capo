@@ -220,6 +220,7 @@ createTable({
   // bots do not linger: moving in and placing are quick, a fight is given time to be read
   pace: (p) => (p.phase === "occupy" ? 110 : p.phase === "attack" ? (p.owner.length > 40 ? 300 : 380) : 220),
   placeOf: (p, s) => (p.points ? 1000 * p.points[s] + cellsOf(p, s) : cellsOf(p, s)),
+  stands: "That move stands: dice once rolled, or a card once drawn, are not taken back.", // take back stops here (table.js)
   roundText: (p) => (p.points ? `Round ${Math.min(p.round, p.rounds)} of ${p.rounds}` : ""),
   report(T) {
     const { rows, bold } = record(T), p = T.match.position, box = el("div");
