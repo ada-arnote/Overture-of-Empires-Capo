@@ -6,6 +6,8 @@
 // The reckoning is the game so far in a few lines, counted by code from what the rules decided.
 import { monthsApart } from "./relations.js";
 import { gaugeOf, gaugeWords } from "./state.js";
+import { spheres } from "./pacts.js";
+import { meansOf } from "./scale.js";
 
 const pacts = (g, trade) => g.treaties.filter((t) => t.pair.split("|").includes(g.player) && (trade || t.kind !== "trade")).length;
 const atWar = (g) => g.wars.some((w) => w.pair.split("|").includes(g.player));
@@ -22,6 +24,8 @@ export const AMBITIONS = {
   golden: { title: "A golden age", modes: "nl", begin: () => ({ need: 3 }), said: () => "Stability calm, treasury full and mandate trusted, all at once", have: (g) => ["s", "t", "m"].filter((k) => gaugeOf(g, g.player, k) >= 3).length },
   peace: { title: "The long peace", modes: "nlc", begin: () => ({ need: 5 }), said: () => "Five years without a war", have: (g, geo, o, now) => years(o, now), broken: (g) => atWar(g) },
   whole: { title: "Unbroken", modes: "nl", begin: () => ({ need: 10 }), said: () => "Ten years without holding less land than today", have: (g, geo, o, now) => years(o, now), broken: (g, geo, o) => geo.holds(g.player) < o.base },
+  sphere: { title: "A sphere of your own", modes: "nl", begin: () => ({ need: 3 }), said: () => "Hold three countries in your sphere of influence", have: (g, geo) => (spheres(g, geo).get(g.player) || []).length },
+  comfort: { title: "A house in order", modes: "lc", begin: () => ({ need: 4 }), said: () => "Bring your own means to comfortable (4 of 5)", have: (g) => meansOf(g) + 1 },
   rise: { title: "A name in the land", modes: "c", begin: () => ({ need: 4 }), said: () => "Become a national figure (standing 4 of 5)", have: (g) => g.standing || 2 },
 };
 

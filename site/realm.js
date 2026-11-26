@@ -8,8 +8,14 @@ import { GAUGES, causeOf, gaugeOf, gaugeWord } from "../src/story/state.js";
 import { demand, demandAnswer } from "../src/story/crisis.js";
 import { ambitionsFor, chooseAmbition, progress, reckoning } from "../src/story/ambitions.js";
 import { papers } from "../src/story/beats.js";
-import { NOTE } from "../src/story/more.js";
-export { NOTE, keepMore } from "../src/story/more.js";
+import { NOTE, NOTE2 } from "../src/story/more.js";
+import { cardMore, reads, realmMore, sceneSheet } from "./court.js";
+export { backMore, keepMore } from "../src/story/more.js";
+export { councilMore, dimBox, gameMore, knownFor, viewFill, viewTint, viewsInit } from "./court.js";
+/** The words a converted game is told, once: which round of rules it was saved before. */
+export const noteOf = (g) => (g.told === 2 ? NOTE2 : NOTE);
+/** The sheets this lane adds to the page: the country's, and the scene. */
+export const moreSheets = (x) => ({ realm: (b) => realmSheet(b, x), scene: (b) => sceneSheet(b, x) });
 
 const rows = (x, items, empty) => {
   const ul = x.el("ul", undefined, "list");
@@ -22,7 +28,7 @@ const facing = (g, me) => g.crisis && g.crisis.b === me && g.mode !== "citizen";
 function crisisRow(x, back) {
   const g = x.g(), k = g.crisis, G = x.geo(), place = G.place(k.id).name, a = demandAnswer(g, G, k.a, k.b, k.id);
   const said = `${x.name(k.a)} demands ${place} from ${x.name(k.b)}, to be answered by ${x.fmtDate(k.due)}.`;
-  if (!facing(g, g.player)) return [`${said} ${a.no ? "It may be overtaken by events." : `By the rules today ${x.name(k.b)} would ${a.ok ? "yield" : "refuse"} (${a.why}).`}`];
+  if (!facing(g, g.player)) return [`${said} ${a.no ? "It may be overtaken by events." : reads(x, k.b) ? `By the rules today ${x.name(k.b)} would ${a.ok ? "yield" : "refuse"} (${a.why}).` : `You know too little of ${x.name(k.b)} to read its answer.`}`];
   const pick = (v, t) => { const b = x.button(t, () => { if (v) k.answer = v; else delete k.answer; x.save(); x.open(back); }); b.setAttribute("aria-pressed", String((k.answer || "") === v)); return b; };
   return [`${said} The answer is yours. Refuse, and they lose face but keep a grievance; yield, and the province is theirs on that day.`, pick("", "Refuse"), pick("yield", "Yield")];
 }
@@ -37,6 +43,7 @@ export function realmSheet(box, x) {
   box.append(el("h2", x.name(me)), el("p", "Kept by the rules, never by the AI. The AI is told all of it each turn and writes the story around it.", "note"),
     el("h3", "The state of the country"), rows(x, gauges),
     el("p", "Each gauge moves one step a turn at most, always for a reason. In revolt: no war and no attack. An empty treasury: no new war. A year at war drains the treasury; treaties fill it in peace. A war begun without a cause shakes stability.", "note"),
+    ...realmMore(x),
     el("h3", "Your ambition"), ...(p ? [rows(x, [[`${p.title}. ${p.said}: ${p.have} of ${p.need}.`, button("Give it up", () => { g.goal = null; again(); })]])] : [el("p", "Choose a goal. The rules count it, and only they can call it met.", "note"), rows(x, open, "Nothing left to choose.")]),
     ...(g.done?.length ? [rows(x, g.done.map((d) => `Met on ${x.fmtDate(d.date)}: ${d.said}.`))] : []),
     el("h3", "Crisis"), g.crisis ? rows(x, [crisisRow(x, "realm")]) : el("p", "None open. You can demand a province beside your own from its card. After quiet months the rules may open a crisis over land that changed hands or is in dispute.", "note"),
@@ -50,11 +57,16 @@ export function notices(x) {
   const g = x.g(), out = [];
   // a demand whose action was removed was never made
   if (g.crisis?.by === "you" && g.crisis.since === g.date && !(g.actions || []).includes(g.crisis.text)) g.crisis = null;
-  if (g.told) out.push(x.el("p", NOTE, "warn"), x.button("Understood", () => { delete g.told; x.save(); x.open("actions"); }));
+  if (g.plans?.length) g.plans = g.plans.filter((p) => (g.actions || []).includes(p.text));
+  if (g.told) out.push(x.el("p", noteOf(g), "warn"), x.button("Understood", () => { delete g.told; x.save(); x.open("actions"); }));
   if (facing(g, g.player)) out.push(x.el("h3", "A demand on you"), rows(x, [crisisRow(x, "actions")]));
+  if (g.unrest?.[g.player] && g.mode !== "citizen" && !g.plans?.length) out.push(x.el("p", `${g.unrest[g.player].rising ? "A rising" : "Unrest"} at home, around ${g.unrest[g.player].who}.`, "warn"), x.button("Answer it", () => x.open("realm")));
   if (!g.goal && !g.done?.length) out.push(x.button("Choose an ambition", () => x.open("realm")));
   return out;
 }
+
+/** Everything this lane adds to a province's card: terrain, what is known of its holder, a demand, pacts. */
+export const cardExtras = (p, x) => [...cardMore(p, x), ...[demandBox(p, x)].filter(Boolean)];
 
 /** On a foreign province's card: what its holder would answer to a demand for it, and the order. Null when it cannot be asked. */
 export function demandBox(p, x) {
@@ -79,6 +91,4 @@ export function turnsTab(box, x) {
   }));
 }
 
-const STATE = ["#b2452f", "#c98a3c", "#5d6b6e", "#4d8f77", "#3f9a5c"];
-/** A country's colour on the stability view. */
-export const stateColour = (g, code) => STATE[gaugeOf(g, code, "s")];
+

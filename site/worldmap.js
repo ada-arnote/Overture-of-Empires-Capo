@@ -120,6 +120,7 @@ export function worldMap(canvas, world, o) {
       if (f.box[2] < vx0 || f.box[0] > vx1 || f.box[3] < vy0 || f.box[1] > vy1) continue;
       c.fillStyle = o.colour?.(who) || ownerColour(who); c.fill(f.path, "evenodd");
     }
+    if (o.tint) for (const p of world.provinces.values()) { const t = !(p.box[2] < vx0 || p.box[0] > vx1 || p.box[3] < vy0 || p.box[1] > vy1) && o.tint(p.id); if (t) { c.fillStyle = t; c.fill(p.path, "evenodd"); } } // features hook: a map view may tint single provinces
     // province lines faint, lines between owners stronger, the coast dark
     c.lineJoin = "round"; c.lineCap = "round";
     if (s > 0.6) { c.strokeStyle = "rgba(255,244,214,.16)"; c.lineWidth = 0.8 / s; c.stroke(layers.inner); }

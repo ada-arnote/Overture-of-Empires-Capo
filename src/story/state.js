@@ -4,7 +4,8 @@
 // turn and always for a reason the receipt gives.
 //   Stability: land lost -1 (never below shaken), a war begun without a cause -1, peace +1 (to calm), an attack
 //     thrown back +1, a quiet year after trouble +1, a year at war on an empty treasury -1.
-//   Treasury: a year at war -1; a year at peace +1 up to sound, to full with a treaty, to overflowing with three.
+//   Treasury: a year at war -1; a year at peace +1 up to sound, to full with a treaty, to overflowing with three;
+//     tribute received lifts that ceiling a step, tribute paid lowers it a step (pacts.js).
 //   Mandate: land taken +1, a demand met +1, a failed attack -1, a demand refused -1; after two years it drifts
 //     back to the middle.
 // What they do: a country in revolt (stability 0) declares no war and makes no attack; an empty treasury declares
@@ -55,6 +56,7 @@ export function settleState(g, receipt, to, geo) {
   const add = (c, k, d, why, cap = 4, floor = 0) => { const key = `${c}:${k}`; push.set(key, [...(push.get(key) || []), [d, why, cap, floor]]); };
   for (const r of receipt) {
     const [kind, a, b] = r.fact || [];
+    for (const p of r.gauge || []) add(...p); // another rule's push, with its reason (home.js, pacts.js, scenes.js)
     if (r.check?.band === "failed") { add(r.country, "m", -1, "an attack thrown back"); const o = geo.owner(r.check.key.split(":")[2]); if (o && o !== r.country) add(o, "s", 1, "an attack thrown back"); }
     if (r.crisis) { const [how, x, y] = r.crisis; if (how === "yield") { add(y, "s", -1, "land yielded under threat"); add(x, "m", 1, "a demand met"); } else add(x, "m", -1, "a demand refused"); }
     if (kind === "war") { if (!causeOf(g, geo, a, b, to)) add(a, "s", -1, `a war on ${geo.name(b)} without a cause`); stamp.add(a).add(b); }
@@ -64,13 +66,13 @@ export function settleState(g, receipt, to, geo) {
     else if (kind === "fell") { delete g.gauge?.[a]; for (const k of Object.keys(g.cause || {})) if (k.split(">").includes(a)) delete g.cause[k]; }
   }
   g.gauge ||= {};
-  const live = new Set([me, ...g.wars.flatMap((w) => w.pair.split("|")), ...Object.keys(g.gauge), ...[...push.keys()].map((k) => k.split(":")[0])]);
+  const live = new Set([me, ...g.wars.flatMap((w) => w.pair.split("|")), ...Object.keys(g.gauge), ...(g.pacts || []).filter((p) => p.kind === "tribute").flatMap((p) => [p.a, p.b]), ...[...push.keys()].map((k) => k.split(":")[0])]);
   for (const c of live) {
     if (!geo.known(c) || geo.holds(c) === 0) { delete g.gauge[c]; continue; }
     const e = (g.gauge[c] ||= {}), war = fights(g, c).length > 0, due = (k, n) => monthsApart(e[k][1], to) >= n;
     for (const k of Object.keys(GAUGES)) { e[k] ||= [MID, to, ""]; if (k === "t" && stamp.has(c)) e[k][1] = to; }
-    const [s, t, m] = ["s", "t", "m"].map((k) => e[k][0]), deals = bound(g, c, true).length, top = deals >= 3 ? 4 : deals ? 3 : 2;
-    if (due("t", 12)) { if (war) add(c, "t", -1, "a year at war"); else if (t < top) add(c, "t", 1, deals ? "a year of trade" : "a year of peace"); else if (t > top) add(c, "t", -1, "trade lost"); }
+    const [s, t, m] = ["s", "t", "m"].map((k) => e[k][0]), deals = bound(g, c, true).length, dues = Math.sign((g.pacts || []).reduce((n, p) => n + (p.kind === "tribute" ? (p.a === c) - (p.b === c) : 0), 0)), top = Math.max(1, Math.min(4, (deals >= 3 ? 4 : deals ? 3 : 2) + dues));
+    if (due("t", 12)) { if (war) add(c, "t", -1, "a year at war"); else if (t < top) add(c, "t", 1, dues > 0 && t >= top - 1 ? "a year of tribute received" : deals ? "a year of trade" : "a year of peace"); else if (t > top) add(c, "t", -1, dues < 0 ? "tribute paid" : "trade lost"); }
     if (due("s", 12)) { if (war && t === 0) add(c, "s", -1, "a year at war on an empty treasury"); else if (!war && s < MID) add(c, "s", 1, "a quiet year"); }
     if (m !== MID && due("m", 24)) add(c, "m", m > MID ? -1 : 1, "time passes");
   }
@@ -84,7 +86,7 @@ export function settleState(g, receipt, to, geo) {
     if (c === me || foes.includes(c)) lines.push({ ok: true, country: c, text: `${geo.name(c)}: its ${GAUGES[k][0].toLowerCase()} ${next > old ? "rises" : "falls"} to ${gaugeWord(k, next)} (${why})` });
   }
   // a country at rest, in the middle on every gauge and with no treaty to grow rich on, is not kept
-  for (const [c, e] of Object.entries(g.gauge)) if (c !== me && !fights(g, c).length && !bound(g, c, true).length && Object.values(e).every(([n]) => n === MID)) delete g.gauge[c];
+  for (const [c, e] of Object.entries(g.gauge)) if (c !== me && !fights(g, c).length && !bound(g, c, true).length && !g.unrest?.[c] && !(g.pacts || []).some((p) => p.a === c || p.b === c) && Object.values(e).every(([n]) => n === MID)) delete g.gauge[c];
   return lines;
 }
 

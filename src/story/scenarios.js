@@ -6,6 +6,8 @@ import { crosses } from "./line.js";
 // presets hook: a scenario may be set on an invented world
 import { worldRef } from "./settings.js";
 import { altText, checkAlt } from "./overlay.js";
+// features hook: a scenario may script beats of its own (beats.js)
+import { keepScript } from "./beats.js";
 
 export const SCENARIOS = [
   {
@@ -66,6 +68,7 @@ export function scenarioFrom(g, meta) {
     title: text(meta.title, LIMIT.title), blurb: text(meta.blurb, LIMIT.blurb), opening: text(meta.opening, LIMIT.opening),
     start: g.date, owners: { ...(g.base || {}), ...g.owners }, ...(g.alt ? { alt: structuredClone(g.alt) } : {}), wars: g.wars.map((w) => ({ pair: w.pair, since: w.since })), treaties: g.treaties.map((t) => ({ pair: t.pair, kind: t.kind, since: t.since })),
     facts: (g.facts || []).map((f) => ({ text: f.text })), might: { ...(g.might || {}) }, custom: g.custom ? { ...g.custom } : null, ...(g.world ? { world: g.world } : {}),
+    ...(meta.beats?.length ? { beats: keepScript(meta.beats).map(({ text, when, from }) => ({ text, when, from })) } : {}), // features hook
   };
 }
 
@@ -96,8 +99,8 @@ export function checkScenario(s, isCountry, isProvince) {
   // where pairs of countries stand as the story opens, -3 to 3 (authored starts): a war or a treaty speaks for itself
   const rel = Object.fromEntries(Object.entries(s.rel && typeof s.rel === "object" ? s.rel : {}).filter(([p, n]) => pairOk(p) && Number.isInteger(n) && n >= -3 && n <= 3 && n !== 0).slice(0, 200).map(([p, n]) => [p.split("|").sort().join("|"), n]));
   if (custom && !Object.values(owners).includes(custom.code)) return { ok: false, why: "The scenario's own country holds no land." };
-  return { ok: true, scenario: { kind: "capo-scenario", v: 1, id: text(s.id, 80) || `file-${title}`, title, blurb: text(s.blurb, LIMIT.blurb), opening: text(s.opening, LIMIT.opening), start: s.start, owners, wars, treaties, facts, might, rel, custom, ...(world ? { world } : {}), ...(alt ? { alt, balance: text(s.balance, 500) } : {}) } };
+  return { ok: true, scenario: { kind: "capo-scenario", v: 1, id: text(s.id, 80) || `file-${title}`, title, blurb: text(s.blurb, LIMIT.blurb), opening: text(s.opening, LIMIT.opening), start: s.start, owners, wars, treaties, facts, might, rel, custom, ...(world ? { world } : {}), ...(alt ? { alt, balance: text(s.balance, 500) } : {}), ...(keepScript(s.beats).length ? { beats: keepScript(s.beats) } : {}) } }; // features hook: beats
 }
 
 /** Every piece of text in a scenario, for the hard-line check. */
-export const scenarioText = (s) => [s.title, s.blurb, s.opening, s.custom?.name, s.custom?.history, ...s.facts.map((f) => f.text), s.balance, ...altText(s.alt)].filter(Boolean);
+export const scenarioText = (s) => [s.title, s.blurb, s.opening, s.custom?.name, s.custom?.history, ...s.facts.map((f) => f.text), s.balance, ...altText(s.alt), ...(s.beats || []).map((b) => b.text)].filter(Boolean);
