@@ -6,10 +6,11 @@
 // to send to, and a button, so the game is played the same with a keyboard or a screen reader.
 // Beside them: the attacks under way, yours to call back and a rival's to answer; Find me, which shows and says where your land is;
 // five tips that follow your first minute; and, at the end, your figures and every leading nation's share over the game, read back from the moves.
-import { CARDS, DRIES, INKS, MARKS, NONE, PCTS, PLACES, SAFE, TICK_MS, ageOf, agesOf, apart, bordersOf, cardDue, cityPrice, dryRank, driedOf, gainOf, goalOf, inkOf, landingPrice, landings, markDue, markOf, maxOf, rangeOf, recallLoss, recallable, shores, wetAt, wetOf } from "../src/games/inch/live.js";
+import { CARDS, DRIES, INKS, MARKS, NONE, PACT, PCTS, PLACES, RIVALS, SAFE, TICK_MS, ageOf, agesOf, apart, bordersOf, cardDue, cityPrice, dryRank, driedOf, gainOf, goalOf, inkOf, landingPrice, landings, markDue, markOf, maxOf, pactOn, pactWhy, rangeOf, recallLoss, recallable, shores, wetAt, wetOf } from "../src/games/inch/live.js";
 import { inch, liveBoardFor } from "../src/games/inch/rules.js";
 import { createMatch } from "../src/core/index.js";
 import { $, RGB, el, radio, sheet, toast } from "./table.js";
+import { settings } from "./shell.js";
 import { hexBoard } from "./hexboard.js";
 import { areaPicture } from "../src/map/areas.js";
 import { ledger, note, title } from "./ledger.js";
@@ -27,6 +28,10 @@ const TIPS_KEY = "capo-inch-tips", TIPS = ["",
   "Tip 4 of 5. Empty land runs out. Then choose a neighbour with little strength for its land, raise the share to 50% or more, and send.",
   "Tip 5 of 5. Under way lists your attacks and any against you: call one back, or answer an attacker. Reach the goal on the bar at the top to win."];
 let found = 0, foes = new Set(), tips = (() => { try { return localStorage.getItem(TIPS_KEY) !== "off"; } catch { return true; } })(), tip = 0, sent = [false, false], tipEnds = 0;
+// the clock waits for your first order: `begun` is the game whose clock has started; `struck` until when an attack on you shows, and by whom;
+// `framed` the game whose phone view has been brought to your land; `told` when each attacker was last written in the log
+let begun = null, struck = 0, struckBy = -1, framed = null;
+const told = new Map();
 const keepTips = () => { try { localStorage.setItem(TIPS_KEY, tips ? "on" : "off"); } catch { /* the tips still work for this visit */ } };
 
 /** Colours for every nation: yours first, the rest spread round the wheel, never a near twin of yours, in two lightnesses
@@ -87,12 +92,13 @@ function startsOf(T) {
 }
 /** Where you can send: empty land beside you, each neighbour by name, and by boat each owner's coast in each part of the map. */
 function targetsOf(p, b) {
-  const h = p.human, near = bordersOf(p, b)[h], cs = colours(p), wet = wetOf(p), share = (o) => `${Math.round((100 * p.land[o]) / wet)}% of the land`, out = [];
+  const h = p.human, near = bordersOf(p, b)[h], cs = colours(p), wet = wetOf(p), share = (o) => `${Math.round((100 * p.land[o]) / wet)}% of the land`, out = [], kept = pactOn(p);
   if (near.has(NONE)) out.push({ value: "n-1", to: NONE, label: "Empty land", note: "beside you" });
-  for (const o of [...near].filter((x) => x !== NONE).sort((x, y) => p.names[x].localeCompare(p.names[y]))) out.push({ value: `n${o}`, to: o, label: p.names[o], note: `${share(o)}, strength ${p.troops[o]}`, rgb: cs[o] });
+  for (const o of [...near].filter((x) => x !== NONE && x !== kept).sort((x, y) => p.names[x].localeCompare(p.names[y]))) out.push({ value: `n${o}`, to: o, label: p.names[o], note: `${share(o)}, strength ${p.troops[o]}`, rgb: cs[o] });
   if (!p.boats) return out;
   const groups = new Map();
   for (const [at, d] of shores(p, b)) {
+    if (p.owner[at] === kept && kept !== NONE) continue;
     const o = p.owner[at], key = `b${o}:${region(p, b, at)}`, need = landingPrice(p, b, at) + 1, g = groups.get(key);
     if (!g || need < g.need || (need === g.need && d < g.d)) groups.set(key, { at, d, need, o });
   }
@@ -129,15 +135,18 @@ function controls(T) {
   slider.oninput = () => { pct = PCTS[Number(slider.value)]; out.textContent = `${pct}%`; slider.setAttribute("aria-valuetext", `${pct}%`); if (T.match) T.refresh(); };
   out.textContent = `${pct}%`;
   row.append(el("span", "Send"), slider, out);
-  pause.setAttribute("aria-pressed", "false");
-  pause.onclick = () => { paused = !paused; pause.setAttribute("aria-pressed", String(paused)); speak(paused ? "Paused. You can still send orders." : "The clock runs again."); T.refresh(); };
+  pause.onclick = () => {
+    if (T.match && waiting(T)) { begun = T.match; paused = false; speak("The clock runs."); return T.refresh(); } // before your first order the button starts the clock
+    paused = !paused; speak(paused ? "Paused. You can still send orders." : "The clock runs again."); return T.refresh();
+  };
   city.onclick = () => { building = !building; city.setAttribute("aria-pressed", String(building)); toast(building ? "Tap one of your cells to build a city there." : "Building stopped."); };
   const me = button("Find me"), help = button("Tips");
   me.onclick = () => find(T);
   help.setAttribute("aria-pressed", String(tips));
   help.onclick = () => { tips = !tips; tip = 0; sent = [false, false]; tipEnds = 0; keepTips(); help.setAttribute("aria-pressed", String(tips)); if (!tips) speak("Tips are off."); T.refresh(); };
   btns.append(pause, me, help, city);
-  const runs = el("ul"), guide = el("p", "", "live-guide");
+  const runs = el("ul"), guide = el("p", "", "live-guide"), pact = button(""), pactSay = el("p", "", "live-info");
+  pact.id = "live-pact"; pactSay.id = "live-truce";
   runs.id = "live-runs"; runs.setAttribute("aria-label", "Attacks under way");
   const fast = el("div", undefined, "line speed"), pace = el("div", undefined, "pick small");
   pace.setAttribute("role", "radiogroup"); pace.setAttribute("aria-label", "Speed of the clock");
@@ -151,18 +160,26 @@ function controls(T) {
   mine.onclick = () => inkSheet(T);
   for (const e of [list, go]) { e.addEventListener("focusin", () => T.ready() && mark(T)); e.addEventListener("focusout", () => setTimeout(() => T.ready() && mark(T))); }
   const heading = el("p", "", "live-title"); // what to do, in plain words that are not read out at every tick
-  box.append(heading, guide, el("p", "", "live-info"), due, mine, head, list, row, go, runs, btns, fast, board);
-  Object.assign(box, { city, slider, due, head, list, go, ink: mine, pause, row, btns, fast, heading, runs, guide, me, help });
+  box.append(heading, guide, el("p", "", "live-info"), due, mine, head, list, row, go, pact, pactSay, runs, btns, fast, board);
+  Object.assign(box, { city, slider, due, head, list, go, ink: mine, pause, row, btns, fast, heading, runs, guide, me, help, pact, pactSay });
   $("choice").append(box);
   return box;
 }
 
-/** The clock: a tick every half second, faster when asked, half as fast at 0.5x, never while a sheet is open or the game is paused. */
+/** Whether the clock still waits for your first order: nothing but your start and the clock in the game's moves so far. */
+function waiting(T) {
+  const m = T.match;
+  if (!m || begun === m || m.position.phase !== "play") return false;
+  if (m.list.some((x) => x.do !== "tick" && x.do !== "spawn")) { begun = m; return false; }
+  return true;
+}
+/** The clock: a tick every half second, faster when asked, half as fast at 0.5x, never while a sheet is open or the game is paused,
+ *  and not before your first order, so reading the panel costs nothing. */
 export function start(T) {
   clearInterval(clock);
   clock = setInterval(() => {
     const p = T.match?.position;
-    if (!p?.live || T.demo || paused || p.phase !== "play" || document.querySelector("#sheet").open || !T.ready()) return;
+    if (!p?.live || T.demo || paused || p.phase !== "play" || document.querySelector("#sheet").open || !T.ready() || waiting(T)) return;
     if (speed < 1 && beat++ % 2) return;
     T.flow({ do: "tick", n: Math.max(1, speed) });
   }, TICK_MS);
@@ -193,6 +210,7 @@ export function tap(T, i) {
     if (building && p.building) { const m = { do: "city", at: i }; if (p.troops[p.human] < cityPrice(p)) return toast(`A city costs ${cityPrice(p)} strength.`); building = false; box?.city.setAttribute("aria-pressed", "false"); return T.play(m); }
     return spot || toast("That land is yours. Tap a neighbour's, or empty land beside yours.");
   }
+  if (o !== NONE && o === pactOn(p)) return toast(`You keep a truce with ${p.names[o]} for ${clockOf(p.pact.until - p.tick)} more. Neither of you can attack the other.`);
   if (bordersOf(p, b)[p.human].has(o)) return send(T, { to: o });
   if (p.boats && landings(p, b).has(i)) return send(T, { boat: true, at: i });
   if (!p.boats) return toast("You can only attack land beside yours.");
@@ -256,6 +274,14 @@ function mark(T) {
       if (f >= 0 && f !== ring) { at = f; if (!arrow) arrow = [t.boat ? p.owner.reduce((x, o, i) => (o === h && b.near[i].some((m) => !b.land[m]) && (x < 0 || apart(b, i, f) < apart(b, x, f)) ? i : x), -1) : mid, f]; }
     }
     if (p.boats && (reach > performance.now() || (now && t?.boat))) glow = [...landings(p, b)];
+    // an attack on you: for a few seconds your border with the attacker glows and an arrow comes in from its land
+    if (struck > performance.now() && p.alive[struckBy]) {
+      const edge = [];
+      p.owner.forEach((o, i) => { if (o === h && b.near[i].some((m) => p.owner[m] === struckBy)) edge.push(i); });
+      const k = Math.ceil(edge.length / 200), from = front(p, b, struckBy, mid), to = from < 0 ? -1 : edge.reduce((x, i) => (x < 0 || apart(b, i, from) < apart(b, x, from) ? i : x), -1);
+      if (edge.length) glow = edge.filter((_, j) => j % k === 0);
+      if (from >= 0 && to >= 0) { arrow = [from, to]; ring = from; }
+    }
     // Find me: your border glows and your middle is ringed, for a few seconds
     if (found > performance.now()) { const edge = []; p.owner.forEach((o, i) => { if (o === h && b.near[i].some((m) => p.owner[m] !== h)) edge.push(i); }); const k = Math.ceil(edge.length / 300); glow = edge.filter((_, j) => j % k === 0); if (ring < 0) ring = mid; }
   }
@@ -268,7 +294,7 @@ function mark(T) {
 /** A nation's card: its ink, its mark and its card, opened from the leaderboard. */
 function card(p, s) {
   const u = el("ul"), i = inkOf(p, s), m = markOf(p, s);
-  u.append(...[i.name && `${i.name}: ${i.line}`, m.name && `${m.name}: ${m.line}`, p.card[s] >= 0 && `Played ${CARDS[p.card[s]].name}.`, `${p.land[s]} cells, ${p.troops[s]} strength.`].filter(Boolean).map((t) => el("li", t)));
+  u.append(...[i.name && `${i.name}: ${i.line}`, m.name && `${m.name}: ${m.line}`, p.card[s] >= 0 && `Played ${CARDS[p.card[s]].name}.`, `${p.land[s]} cells, ${p.troops[s]} strength.`, s !== p.human && pactOn(p) === s && `At truce with you for ${clockOf(p.pact.until - p.tick)} more.`].filter(Boolean).map((t) => el("li", t)));
   sheet(s === p.human ? "You" : p.names[s], u);
 }
 /** Find me: the map moves to your land when it is out of sight, your border glows, and a line says where you are and who is beside you. */
@@ -277,11 +303,19 @@ function find(T) {
   if (p.phase !== "play") return toast("You have no land yet. Choose where to start.");
   if (!p.land[h]) return toast("You have no land left.");
   const mid = centre(p, b), slot = slotOf(b).get(mid), near = [...bordersOf(p, b)[h]].filter((o) => o !== NONE).map((o) => p.names[o]).sort();
-  bring(T, slot);
+  frame(T, p, b, mid, innerWidth > 820 ? 18 : 13);
   found = performance.now() + 3000; drawn = "";
   mark(T);
   setTimeout(() => { if (T.match?.position.live && T.ready()) mark(T); }, 3100); // the glow goes even while the clock is paused
   return toast(`Your land: ${region(p, b, mid)}. ${word(p.land[h], "cell", "cells")}, ${Math.round((100 * p.land[h]) / wetOf(p)) || "under 1"}% of the land. ${near.length ? `Beside you: ${near.slice(0, 4).join(", ")}${near.length > 4 ? ` and ${near.length - 4} more` : ""}.` : "Nobody is beside you."}`);
+}
+/** Bring the map in close enough that a cell is about `px` pixels across, then slide your land to the middle. A map already closer stays as close. */
+function frame(T, p, b, mid, px) {
+  const B = T.board, slot = slotOf(b), at = (i) => B?.at(slot.get(i)), next = b.near[mid].find((i) => slot.has(i));
+  if (!B || next === undefined) return;
+  const a = at(mid), c = at(next), gap = a && c ? Math.hypot(a.x - c.x, a.y - c.y) : 0;
+  if (gap > 0 && gap < px * 0.8) B.zoom(px / gap);
+  bring(T, slot.get(mid));
 }
 /** Slide a zoomed map so that a cell sits in the middle of the free part of the screen. The board is asked only what it already
  *  tells (where a cell is, and to slide by a little), so two small trial slides measure how far a slide moves it. */
@@ -296,9 +330,24 @@ function bring(T, slot) {
   const ux = (b1.x - a1.x) / e, uy = (b1.y - a1.y) / e, vx = (b2.x - a1.x) / e, vy = (b2.y - a1.y) / e, det = ux * vy - uy * vx, dx = cx - a1.x, dy = cy - a1.y;
   if (Math.abs(det) > 1) B.pan((dx * vy - dy * vx) / det, (ux * dy - uy * dx) / det); // at the widest view nothing slides, and nothing needs to
 }
+/** A truce with the neighbour chosen in the list: a button when one can be offered, else a line saying why not, or how long the one in force has left. */
+function truce(T, p, b, t) {
+  const c = box, kept = pactOn(p), o = t && !t.boat && t.to !== NONE ? t.to : NONE, why = o === NONE ? "near" : pactWhy(p, b, o);
+  c.pact.hidden = !!why;
+  if (!why) {
+    const words = `Offer ${p.names[o]} a truce for ${span(PACT.long)}`;
+    if (c.pact.textContent !== words) c.pact.textContent = words;
+    c.pact.onclick = () => { const q = T.match.position; if (T.ready() && !pactWhy(q, liveBoardFor(q), o)) T.play({ do: "pact", to: o }); };
+  }
+  const say = kept !== NONE ? `Truce with ${p.names[kept]}: ${clockOf(p.pact.until - p.tick)} left. Neither of you can attack the other.`
+    : why === "strong" ? `${p.names[o]} holds more than ${PACT.most === 2 ? "twice" : `${PACT.most} times`} your strength and will not take a truce.`
+    : why === "wait" ? `Another truce can be offered at ${clockOf(p.pact.next)}.` : "";
+  if (c.pactSay.textContent !== say) c.pactSay.textContent = say;
+  c.pactSay.hidden = !say;
+}
 /** The attacks under way: a rival's on you first, each with Answer, then yours, each with Call back. The rows stand while their
  *  attack does, so a button keeps the keyboard; a new attacker is said once. */
-const runRows = new Map(), warned = new Map();
+const runRows = new Map();
 function under(T, p) {
   const h = p.human, c = box.runs, rows = [...p.attacks.filter((a) => a.to === h), ...p.attacks.filter((a) => a.by === h)], want = [], now = new Set();
   for (const a of rows) {
@@ -323,10 +372,14 @@ function under(T, p) {
     if (had && !c.contains(document.activeElement)) box.go.focus({ preventScroll: true }); // the attack ended under the keyboard
   }
   c.hidden = !want.length;
-  const fresh = [...now].filter((s) => !foes.has(s) && p.tick - (warned.get(s) ?? -99) > 60); // the same attacker is not announced twice in half a minute
-  for (const s of fresh) warned.set(s, p.tick);
-  if (fresh.length && p.alive[h]) toast(`${fresh.slice(0, 3).map((s) => p.names[s]).join(" and ")}${fresh.length > 3 ? " and others" : ""} ${fresh.length > 1 ? "attack" : "attacks"} you. Answer from the list under the button.`);
-  foes = now;
+  foes = now; // a new attacker is written in the log and shown on the map as it comes (seen)
+}
+/** An attack on you, as it starts: the edge of the board flashes, your border with the attacker glows, and an arrow comes in. */
+function strike(T, by) {
+  struck = performance.now() + 3000; struckBy = by; drawn = "";
+  const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  $("stage")?.animate?.([{ boxShadow: "inset 0 0 0 5px rgba(226, 74, 52, .95)" }, { boxShadow: "inset 0 0 0 5px rgba(226, 74, 52, 0)" }], { duration: calm ? 600 : 1400, easing: "ease-out" });
+  setTimeout(() => { if (T.match?.position.live && T.ready()) { drawn = ""; mark(T); } }, 3100);
 }
 /** Answer an attacker: it becomes where you send next, and the button takes the keyboard. */
 function answer(T, by) {
@@ -438,7 +491,7 @@ export function panel(T) {
     c.go.onclick = () => { if (T.ready() && at) spawn(T, at.at); };
     c.due.hidden = true;
     c.runs.hidden = true; c.me.hidden = true;
-    runRows.clear(); c.runs.replaceChildren(); foes = new Set(); warned.clear();
+    runRows.clear(); c.runs.replaceChildren(); foes = new Set(); told.clear(); struck = 0;
     if (asked !== T.match && !p.choose) { asked = T.match; sent = [false, false]; tipEnds = 0; }
     guide(T, p, b);
     band = 0;
@@ -453,7 +506,11 @@ export function panel(T) {
   const mine = inkOf(p, s), top = maxOf(p, s), have = p.troops[s];
   // the shell blanks the spoken status while a move plays out, so in play it holds only what lasts: that you are out
   state(out ? "You are out. Watching to the end" : "");
-  c.heading.textContent = out ? "" : paused ? "Paused. You can still send orders." : "Choose where to send a share of your strength.";
+  const hold = waiting(T);
+  c.heading.textContent = out ? "" : hold ? "The clock waits for your first order. Choose where to send a share of your strength." : paused ? "Paused. You can still send orders." : "Choose where to send a share of your strength.";
+  c.pause.textContent = hold ? "Start the clock" : paused ? "Resume" : "Pause";
+  // on a phone the map comes in close on your land once you have it (and on a game brought back), not the whole world in a strip
+  if (framed !== T.match && !T.demo && p.land[s]) { framed = T.match; if (innerWidth <= 820) requestAnimationFrame(() => { if (T.match?.position.live) frame(T, T.match.position, b, centre(T.match.position, b), 13); }); }
   const page = p.dries ? (p.tick < DRIES.from ? `The page dries from ${clockOf(DRIES.from)}. ` : `${Math.round((100 * wetOf(p)) / p.total)}% of the page is still wet. `) : "";
   const strength = have > top ? `Strength ${have}, over your limit of ${top}, so it falls back slowly.` : `Strength ${have} of a limit of ${top}, +${gainOf(p, s)} every half second.`;
   c.querySelector(".live-info").textContent = out ? "The other nations play on to the end. Speed up the clock, or start again from the menu." : `${strength} ${page}${mine.name ? `${mine.name}: ${mine.line}` : ""}${p.boats ? ` Your boats cross ${rangeOf(p, b, s)} cells of sea.` : ""}`;
@@ -465,12 +522,14 @@ export function panel(T) {
     const t = list.find((x) => x.value === aim), amount = Math.floor((have * pct) / 100);
     c.go.textContent = !t ? "Nothing in reach" : `Send ${pct}% (${amount}) ${t.boat ? "by boat " : ""}${t.to === NONE ? "into empty land" : `to ${p.names[t.to]}`}`;
     c.go.onclick = () => { const now = targetsOf(T.match.position, liveBoardFor(T.match.position)).find((x) => x.value === aim); if (T.ready() && now) send(T, now); };
+    truce(T, p, b, t);
     // said once each time your land passes a quarter, a half, three quarters or nine tenths of the goal, and when it falls back
     const r = p.land[s] / goalOf(p);
     if (band < STEPS.length && r >= STEPS[band][0]) { while (band < STEPS.length && r >= STEPS[band][0]) band++; speak(`${STEPS[band - 1][1]}: land ${p.land[s]}, goal ${goalOf(p)}.`); }
     else if (band > 0 && r < STEPS[band - 1][0] - 0.05) { band--; speak(`Your land falls back: ${p.land[s]}, goal ${goalOf(p)}.`); }
   }
   c.me.hidden = out;
+  if (out) c.pact.hidden = c.pactSay.hidden = true;
   under(T, p);
   guide(T, p, b);
   leaders(p);
@@ -566,36 +625,58 @@ function shares(p, st) {
   c.setAttribute("aria-label", `Share of the land over the game. Your best was ${st.best}% at ${clockOf(st.bestAt)}. At the end: ${ends.map((e) => `${p.names[e.n]} ${e.v}%`).join(", ")}.`);
   return c;
 }
-export const lineOf = (e, p) => (e.kind === "dries" ? "The page begins to dry from its edges." : e.kind === "capital" ? (e.seat === p.human ? "Your capital is lost: it moves to your largest land, and a quarter of your strength goes with it." : "") : e.kind === "out" ? (e.seat === p.human ? "You are out." : `${p.names[e.seat]} is gone.`) : e.kind === "recall" ? `You call your attack back: ${e.back} come home, ${e.lost} are lost.` : e.kind === "city" ? "You build a city." : e.kind === "boat" ? (e.landed ? "Your boats land." : `Your boats are thrown back. They lose ${e.lost ?? 0}; the rest come home.`) : e.kind === "age" ? (e.age === 2 ? "Age II, Ink: choose your mark." : "Age III, Seal: your card is ready, and the goal begins to ease.") : e.kind === "mark" || e.kind === "card" ? `You take ${[...MARKS, ...CARDS].find((k) => k.id === e[e.kind]).name}.` : "");
+/** "Holm attacks you.", once in half a minute for each attacker, so the log names who comes at you without filling up. */
+function attacked(e, p) {
+  if (e.to !== p.human) return "";
+  const key = e.kind === "soaked" ? `s${e.by}` : e.by, last = told.get(key);
+  if (last !== undefined && last <= p.tick && p.tick - last < 60) return "";
+  told.set(key, p.tick);
+  return e.kind === "soaked" ? `${p.names[e.by]} has your land surrounded: it soaks in a ring every half second.` : `${p.names[e.by]} attacks you.`;
+}
+export const lineOf = (e, p) => (e.kind === "dries" ? "The page begins to dry from its edges." : e.kind === "capital" ? (e.seat === p.human ? "Your capital is lost: it moves to your largest land, and a quarter of your strength goes with it." : "") : e.kind === "out" ? (e.seat === p.human ? (e.by >= 0 ? `You are out: ${p.names[e.by]} took your last land.` : "You are out.") : e.by === p.human ? `You finish ${p.names[e.seat]}.` : `${p.names[e.seat]} is gone.`) : e.kind === "attacked" || e.kind === "soaked" ? attacked(e, p) : e.kind === "pact" ? `You and ${p.names[e.to]} keep a truce for ${span(PACT.long)}: neither of you can attack the other.` : e.kind === "pactend" ? `Your truce with ${p.names[e.to]} is over.` : e.kind === "recall" ? `You call your attack back: ${e.back} come home, ${e.lost} are lost.` : e.kind === "city" ? "You build a city." : e.kind === "boat" ? (e.landed ? "Your boats land." : `Your boats are thrown back. They lose ${e.lost ?? 0}; the rest come home.`) : e.kind === "age" ? (e.age === 2 ? "Age II, Ink: choose your mark." : "Age III, Seal: your card is ready, and the goal begins to ease.") : e.kind === "mark" || e.kind === "card" ? `You take ${[...MARKS, ...CARDS].find((k) => k.id === e[e.kind]).name}.` : "");
 /** When you lose your last cell the game goes on without you: watch it to the end, or start again. The open sheet holds the clock.
  *  When a game you played ends, the ledger notes it. */
 export function seen(T, events) {
   const p = T.match.position;
   if (p.over && events.some((e) => e.kind === "end") && !T.demo && T.kinds[0] === "you" && !p.dries) note({ seed: T.match.seed, map: p.map, rivals: p.rivals, ticks: p.tick, ink: p.ink[0], mark: p.mark[0], nations: p.troops.length, won: p.over.winners[0] === p.human }) && (me = null);
-  if (p.over || !events.some((e) => e.kind === "out" && e.seat === p.human)) return;
+  // a new attack on you, or land of yours that has begun to soak away (said once in half a minute)
+  const hit = events.find((e) => e.to === p.human && (e.kind === "attacked" || (e.kind === "soaked" && told.get(`s${e.by}`) === p.tick)));
+  if (hit && p.alive[p.human] && !T.demo) strike(T, hit.by);
+  const end = events.find((e) => e.kind === "out" && e.seat === p.human);
+  if (p.over || !end) return;
   const box = el("div", undefined, "stack"), again = button("Restart", "main");
   again.onclick = () => { $("sheet").close(); $("again").click(); };
-  box.append(el("p", "Your last land has fallen. Watch the other nations play on to the end, or start a new game."), again);
+  box.append(el("p", `${end.by >= 0 ? `${p.names[end.by]} took your last land` : "Your last land has fallen"} at ${clockOf(p.tick)}. Watch the other nations play on to the end, or start a new game.`), again);
   sheet("You are out", box, "Watch");
 }
 /** Out of real time (a new game, or the duel): the turn game's controls back, and this game's choices forgotten. */
 export const leave = () => {
-  if (box) { box.hidden = true; box.list.dataset.keys = ""; box.pause.setAttribute("aria-pressed", "false"); }
+  if (box) { box.hidden = true; box.list.dataset.keys = ""; box.pause.textContent = "Pause"; }
   for (const id of ["targets", "shares"]) $(id).hidden = false;
   $("pour").parentElement.hidden = false;
   paused = false; home = aim = drawn = ""; band = 0; rowsOf.clear(); $("leaders")?.replaceChildren();
-  runRows.clear(); box?.runs.replaceChildren(); foes = new Set(); warned.clear(); found = 0; tip = 0; if (box) box.guide.hidden = true;
+  runRows.clear(); box?.runs.replaceChildren(); foes = new Set(); told.clear(); struck = 0; found = 0; tip = 0; if (box) box.guide.hidden = true;
 };
 export const liveGoal = goalOf, liveLand = wetOf;
+/** A stretch of the clock in words: "a minute", "30 seconds", "2 minutes". */
+const span = (t) => (t === 120 ? "a minute" : t % 120 ? `${t / 2} seconds` : `${t / 120} minutes`);
 const clockOf = (tick) => `${Math.floor(tick / 120)}:${String(Math.floor((tick / 2) % 60)).padStart(2, "0")}`;
 /** The time line: the age, then game time; in The Ink Dries, whether the page is drying. */
 export const time = (p) => `${p.ages ? `Age ${"I".repeat(ageOf(p))}, ` : ""}${clockOf(p.tick)} of game time${p.dries && p.tick > DRIES.from ? ", drying" : ""}`;
 /** The ledger, from the menu. */
 const show = () => { me = null; sheet("Your record", ledger(show)); };
 export const record = { label: "Your record", body: () => ledger(show) };
-/** Keys in real time: Space pauses (unless a button or field has it), 1 to 0 choose the share, S says where you stand, F finds your land. */
+/** Space pauses whatever has the keyboard, the Send button included (which Space would otherwise press): it is caught before
+ *  anything else sees it. Not in a text field, not while a sheet is open, not with single-key shortcuts turned off in Settings. */
+addEventListener("keydown", (e) => {
+  const T = T0, p = T?.match?.position;
+  if (e.key !== " " || !box || box.hidden || !p?.live || p.phase !== "play" || T.demo || $("sheet")?.open || e.ctrlKey || e.metaKey || e.altKey || settings.keys === "off") return;
+  if (e.target.closest?.("input:not([type=range]), select, textarea, [contenteditable]")) return;
+  e.preventDefault(); e.stopPropagation();
+  if (!e.repeat) box.pause.click();
+}, true);
+/** Keys in real time: 1 to 0 choose the share, S says where you stand, F finds your land. Space is above. */
 export function key(T, k) {
-  if (k === " ") { if (document.activeElement?.matches("button, input, select, textarea, a, summary")) return false; box?.pause.click(); return true; }
   if (k === "f") { find(T); return true; }
   if (k === "s") {
     const p = T.match.position, s = p.human, going = p.attacks.filter((a) => a.by === s);
@@ -610,20 +691,27 @@ export function key(T, k) {
   return true;
 }
 
+/** How the rivals play, in words, read from the rules' own table. "even" is Normal's saved name. */
+const rivalsLine = (p) => {
+  const k = p ? p.rivals : "gentle", t = RIVALS[k] || RIVALS.even, secs = (n) => (n % 120 ? `${n / 2} seconds` : `${n / 120} ${n === 120 ? "minute" : "minutes"}`);
+  return `Rivals are ${k === "even" ? "normal" : k}: they grow ${t.grow === 10 ? "as fast as you" : `${["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen"][t.grow] || t.grow} tenths as fast as you`}, leave you alone for the first ${secs(t.truce)} of the clock, and then ${t.pile === 1 ? "only one attacks you at a time" : `no more than ${t.pile} attack you at once`}.`;
+};
+const TRUCE = `Truce: choose a neighbour in the list and offer it a truce. It holds for ${span(PACT.long)}, kept by the rules: neither of you can attack the other, and attacks between you come home whole. One truce at a time, and ${span(PACT.gap)} after one ends before the next. A neighbour holding more than ${PACT.most === 2 ? "twice" : `${PACT.most} times`} your strength will not take one.`;
 const KEYS = "Without a mouse: the move panel lists good places to start, then the empty land, neighbours and coasts you can reach. Choose one with the arrow keys and press the button under the share. Under the button, the attacks under way: call yours back, or answer one against you. Keys: 1 to 0 choose the share, Space pauses, S tells your strength, land and goal, F finds your land.";
 /** The rules sheet for The Ink Dries, read from the same table as the rules. */
 const driesRules = (p) => [
-  "Capo: The Ink Dries. A short real-time game for 12 nations on a map drawn for the game. The clock runs on its own; pause it, or run it slower or faster, with the buttons.",
+  "Capo: The Ink Dries. A short real-time game for 12 nations on a map drawn for the game. The clock starts with your first order, then runs on its own; pause it, or run it slower or faster, with the buttons.",
   "Choose a place to start in the list, or tap empty land. That first cell is your capital, drawn as a tower with your strength on it. Strength grows every half second: more for more land, a little more for saving, up to a limit set by your land.",
   "Choose a share with the slider, then a neighbour or empty land beside yours, in the list or on the map. That share of your strength goes, and the border creeps forward until it is spent.",
   "Call an attack back from the list under the button: a quarter of what is left of it is lost, and the rest comes home.",
+  TRUCE,
   `Each cell costs 2, 3 more on hills, and more where the owner holds much strength on little land. A capital and the cells around it cost ${DRIES.wall} times as much.`,
   `Land cut off from your capital fades to empty after ${DRIES.fade / 2} seconds unless you join it up again.${!p || p.boats ? " Where boats sail, land with a coast stays yours while your capital's land has a coast too." : ""}`,
   "If your capital is taken, or dries, it moves to your largest piece of land and you lose a quarter of your strength.",
   `${PLACES[0].name}s on the map give +${PLACES[0].grow} growth to whoever holds them.`,
   `From ${clockOf(DRIES.from)} the page dries from its edges inward, the land farthest from the middle first, until a tenth is left. Dried land is lost to everyone and no longer counts.`,
   `Win by holding ${DRIES.goal}% of the land still wet, or by being the last one left. Your chip shows your land and the goal. At ${clockOf(DRIES.from + DRIES.span)} the biggest nation wins.`,
-  ...[({ gentle: "Rivals are gentle: they grow slower than you and leave you alone for the first three minutes.", even: "Rivals are even: they grow as fast as you.", hard: "Rivals are hard: they grow faster than you and attack sooner." })[p ? p.rivals : "gentle"]],
+  rivalsLine(p),
   ...(!p || p.boats ? [`Boats: where the map has more than one landmass, choose a coast across the water${p ? `, up to ${rangeOf(p, liveBoardFor(p), p.human)} cells of sea or dried land away` : ""}. Landing costs double the cell.`] : []),
   KEYS,
 ];
@@ -633,10 +721,11 @@ export function rules(p, dries = false) {
   if (p ? p.dries : dries) return driesRules(p);
   const limit = p ? p.limit : SAFE, ages = p ? p.ages : true, inks = p ? p.ink.some((k) => k >= 0) : true, places = p ? p.places.length > 0 : true, ease = p ? p.ease : true, at = agesOf(p || { map: "world" });
   return [
-    "Real time: the clock runs on its own. Pause it, or run it slower or faster, with the buttons.",
+    "Real time: the clock starts with your first order, then runs on its own. Pause it (Space, or the button), or run it slower or faster, with the buttons.",
     `${inks ? "Choose an ink, or Draw for me, then choose" : "Choose"} a place to start in the list, or tap empty land. Your strength grows every half second: more for more land, a little more for saving, up to a limit set by your land.`,
     "Choose a share with the slider, then a neighbour or empty land beside yours, in the list or on the map. That share of your strength goes, and the border creeps forward until it is spent. An arrow on the map points at your biggest attack.",
     "Call an attack back from the list under the button: a quarter of what is left of it is lost, and the rest comes home. A Flood cannot be called back.",
+    TRUCE,
     "Each cell costs 2, 3 more on hills, and more where the owner holds much strength on little land. Taking a cell costs its owner some strength too.",
     ...(inks ? ["Every nation has an ink with one rule. Choose a nation in the list to see its ink.", ...INKS.map((k) => `${k.name}: ${k.line}`)] : []),
     ...(places ? ["Places on the map help whoever holds them. Take the cell to take the place; tap one to read it.", ...PLACES.map((k) => `${k.name}: ${k.line}`)] : []),
@@ -645,7 +734,7 @@ export function rules(p, dries = false) {
     limit ? `If nobody has after ${Math.floor(limit / 120)} minutes${limit % 120 ? ` ${(limit % 120) / 2} seconds` : ""}, the biggest nation wins.` : "There is no time limit.",
     "Land wholly inside one nation, with no sea beside it, soaks into that nation a ring every half second. A landing on the ring breaks the circle.",
     "If you lose all your land you are out: watch the others play on to the end, or start again.",
-    ...[({ gentle: "Rivals are gentle: they grow slower than you and leave you alone for the first three minutes.", even: "Rivals are even: they grow as fast as you.", hard: "Rivals are hard: they grow faster than you and attack sooner." })[p ? p.rivals : "gentle"]],
+    rivalsLine(p),
     ...(p?.building ? ["Cities: tap Build a city, then one of your cells. A city holds more and grows faster; each costs more than the last."] : []),
     ...(!p || p.boats ? [`Boats: choose a coast across the water, ${p ? `up to ${rangeOf(p, liveBoardFor(p), p.human)} cells of sea away` : "within the map's reach"}. Landing costs double the cell (Indigo: only the cell); boats that cannot pay it lose one cell's price, and the rest come home.`] : []),
     "Your record and titles are kept in this browser only, under Your record in the menu. Nothing there changes a game.",

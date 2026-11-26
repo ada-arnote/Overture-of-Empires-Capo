@@ -21,12 +21,26 @@ export const agesOf = (p) => AGE_AT[p.map] || AGE_AT.world;
 export const DRIES = { nations: 12, from: 120, span: 600, core: 10, goal: 65, fade: 20, wall: 3 };
 /** How hard the bots play. grow: their growth in tenths of yours; every: they act on one tick in this many; dare and bold: how much
  *  stronger (in tenths) a calm or a fierce bot must be to attack; you: how strong you look to them, in tenths; truce: ticks before
- *  they attack you; spare: whether a full bot leaves you alone unless you are worth attacking. */
+ *  they attack you; pile: how many of them attack you at once, at most; spare: whether a full bot leaves you alone unless you are worth attacking.
+ *  Tuned in version 11 with tools/inchtiers.mjs: a newcomer wins Gentle most games in about four minutes, Normal is a fight, and
+ *  Hard opens with a 20-second truce and is won by a careful player about one game in ten. */
 export const RIVALS = {
-  gentle: { grow: 7, every: 5, dare: 16, bold: 10, you: 20, truce: 360, spare: true },
-  even: { grow: 10, every: 4, dare: 13, bold: 8, you: 10, truce: 0, spare: false },
-  hard: { grow: 13, every: 3, dare: 11, bold: 7, you: 8, truce: 0, spare: false },
+  gentle: { grow: 8, every: 5, dare: 16, bold: 10, you: 15, truce: 240, pile: 1, spare: false },
+  even: { grow: 8, every: 5, dare: 13, bold: 8, you: 12, truce: 60, pile: 2, spare: false },
+  hard: { grow: 9, every: 5, dare: 13, bold: 8, you: 10, truce: 40, pile: 3, spare: false },
 };
+/** A truce you offer a neighbour (version 11). long: ticks it holds; gap: ticks after it ends before you can offer another;
+ *  most: a neighbour holding more than this many times your strength will not take one. One at a time, kept by the rules. */
+export const PACT = { long: 120, gap: 120, most: 2 };
+/** The neighbour you keep a truce with now, or NONE. */
+export const pactOn = (p) => (p.pact && p.tick < p.pact.until && p.alive[p.pact.to] ? p.pact.to : NONE);
+/** Why you cannot offer `o` a truce now, or "" when you can: "near" (not a living neighbour), "held" (a truce holds), "wait", "strong". */
+export function pactWhy(p, b, o) {
+  if (p.over || p.phase !== "play" || !p.alive[p.human] || !Number.isInteger(o) || o < 0 || o >= p.troops.length || o === p.human || !p.alive[o] || !bordersOf(p, b)[p.human].has(o)) return "near";
+  if (pactOn(p) !== NONE) return "held";
+  if (p.pact && p.tick < p.pact.next) return "wait";
+  return p.troops[o] > PACT.most * p.troops[p.human] ? "strong" : "";
+}
 
 // ---- the one table of attributes: read by the rules, the bots and the rules sheet. Whole numbers, or [top, bottom] fractions ----
 /** Inks. empty: one empty cell in this many costs you 1 less; guard: what your land costs others more; reach: cells more a tick for each attack;
@@ -202,13 +216,13 @@ export function bordersOf(p, b) {
 }
 
 /** Start or strengthen an attack. A Flood held ready doubles it, and marks the attack (fl) as one that cannot be called back. Changes p. */
-function send(p, by, to, troops) {
+function send(p, by, to, troops, events) {
   if (troops <= 0) return;
   p.troops[by] -= troops;
   const flood = !!p.armed[by];
   if (flood) { p.armed[by] = 0; troops *= 2; }
   let a = p.attacks.find((x) => x.by === by && x.to === to);
-  if (a) a.left += troops; else p.attacks.push(a = { by, to, left: troops, got: 0 });
+  if (a) a.left += troops; else { p.attacks.push(a = { by, to, left: troops, got: 0 }); if (to === p.human && events) events.push({ kind: "attacked", by, to }); }
   if (flood) a.fl = 1;
 }
 /** What calling an attack back costs: a quarter of what is left of it, rounded up. */
@@ -224,8 +238,15 @@ function placeNear(p, b, s, o) {
   return false;
 }
 
+/** Whether a bot leaves you alone just now: during the truce, and while as many others as its tier allows (pile) are attacking you already. */
+function spared(p, s) {
+  const t = tier(p);
+  if (p.tick < t.truce || s === pactOn(p)) return true;
+  return !!t.pile && !p.attacks.some((a) => a.by === s && a.to === p.human) && p.attacks.filter((a) => a.to === p.human).length >= t.pile;
+}
+
 /** The bots: each has a temper drawn at the start, and leans the way its ink pulls. They act now and then, never on every tick. */
-function think(p, b, dice, borders) {
+function think(p, b, dice, borders, events) {
   const t = tier(p);
   for (let s = 0; s < p.troops.length; s++) {
     if (s === p.human || !p.land[s] || dice.below(t.every)) continue;
@@ -235,27 +256,27 @@ function think(p, b, dice, borders) {
     if (busy && !full) continue;
     const near = [...borders[s]], amount = Math.floor((p.troops[s] * (30 + p.temper[s] * 10)) / 100);
     // how strong a rival looks: you may look stronger than you are, and during the truce you are left alone; gold leaf and sepia see a rival with a place near as weaker
-    const rivals = near.filter((o) => o !== NONE && !(o === p.human && p.tick < t.truce)), greedy = ink.each || ink.id === "sepia";
+    const rivals = near.filter((o) => o !== NONE && !(o === p.human && spared(p, s))), greedy = ink.each || ink.id === "sepia";
     const looks = (o) => { const x = o === p.human ? Math.floor((p.troops[o] * t.you) / 10) : p.troops[o]; return greedy && p.places.length && placeNear(p, b, s, o) ? Math.floor((x * 9) / 10) : x; };
-    if (near.includes(NONE) && (!rivals.length || dice.below(ink.empty ? 6 : 3))) { send(p, s, NONE, amount); continue; }
+    if (near.includes(NONE) && (!rivals.length || dice.below(ink.empty ? 6 : 3))) { send(p, s, NONE, amount, events); continue; }
     const weak = rivals.length ? rivals.reduce((x, y) => (looks(y) * Math.max(1, p.land[x]) < looks(x) * Math.max(1, p.land[y]) ? y : x)) : null;
     const edge = (p.temper[s] > 2 ? t.bold : t.dare) - (ink.reach || ink.guard ? 1 : 0); // vermilion and iron gall dare with a tenth less
     if (weak !== null && p.troops[s] * 10 > looks(weak) * edge) {
       if (card && p.card[s] < 0) { p.card[s] = 0; p.armed[s] = 1; } // Flood goes at the weakest neighbour
-      send(p, s, weak, amount);
+      send(p, s, weak, amount, events);
       continue;
     }
     // nothing on foot worth taking: once full (indigo sooner), take to the boats, or else push at the weakest anyway
     if (!full && !ink.sail) continue;
-    if (p.boats && !near.includes(NONE) && sail(p, b, s)) continue;
+    if (p.boats && !near.includes(NONE) && sail(p, b, s, events)) continue;
     if (!full) continue;
-    if (weak !== null && !(t.spare && weak === p.human)) send(p, s, weak, amount);
+    if (weak !== null && !(t.spare && weak === p.human)) send(p, s, weak, amount, events);
   }
 }
 
 /** A bot sends half its strength by boat to the nearest coast it can take. Changes p. Returns whether it sailed. */
-function sail(p, b, s) {
-  const troops = Math.floor(p.troops[s] / 2), t = tier(p), spare = t.spare || p.tick < t.truce;
+function sail(p, b, s, events) {
+  const troops = Math.floor(p.troops[s] / 2), spare = tier(p).spare || spared(p, s);
   let best = -1, key = 0;
   for (const [at, d] of shores(p, b, s)) {
     if (troops <= landingPrice(p, b, at, s) || (spare && p.owner[at] === p.human)) continue;
@@ -263,12 +284,12 @@ function sail(p, b, s) {
     if (best < 0 || k < key) { best = at; key = k; }
   }
   if (best < 0) return false;
-  land(p, b, s, best, troops);
+  land(p, b, s, best, troops, events);
   return true;
 }
 /** Put troops ashore. A landing costs double (indigo 3/2); what is left goes on attacking. A failed landing loses one cell's price,
  *  and the rest comes home. Changes p. Returns whether it landed. */
-function land(p, b, s, at, troops) {
+function land(p, b, s, at, troops, events) {
   const was = p.owner[at], cost = landingPrice(p, b, at, s);
   if (troops <= cost) { p.troops[s] -= Math.min(troops, costOf(p, b, at, s)); return false; }
   p.troops[s] -= troops;
@@ -276,13 +297,13 @@ function land(p, b, s, at, troops) {
   p.owner[at] = s;
   p.land[s]++;
   const a = p.attacks.find((x) => x.by === s && x.to === was);
-  if (a) a.left += troops - cost; else p.attacks.push({ by: s, to: was, left: troops - cost, got: 0 });
+  if (a) a.left += troops - cost; else { p.attacks.push({ by: s, to: was, left: troops - cost, got: 0 }); if (was === p.human && s !== p.human && events) events.push({ kind: "attacked", by: s, to: was }); }
   return true;
 }
 
 /** Encircled land soaks through: a region of one owner, or of empty land, whose every neighbour is one nation's land (no sea,
  *  no edge of the map) passes its outer ring to that nation, one ring a tick. A landing on the ring breaks the circle; your land does not soak during the truce. Changes p. */
-function soak(p, b) {
+function soak(p, b, fell, events) {
   const seen = new Uint8Array(b.n), ring = [], rank = dryRank(b), k = driedOf(p);
   for (const i of b.dry) {
     if (seen[i] || rank[i] < k) continue;
@@ -298,14 +319,17 @@ function soak(p, b) {
         if (x === o) { if (!seen[m]) { seen[m] = 1; list.push(m); } } else if (by === -2) by = x; else if (by !== x) by = -3;
       }
     }
-    if (by >= 0 && !(o === p.human && p.tick < tier(p).truce)) for (const c of list) if (b.near[c].some((m) => p.owner[m] === by)) ring.push(c, by);
+    if (by >= 0 && !(o === p.human && (p.tick < tier(p).truce || by === pactOn(p))) && !(by === p.human && o === pactOn(p) && o !== NONE)) for (const c of list) if (b.near[c].some((m) => p.owner[m] === by)) ring.push(c, by);
   }
+  const closing = new Set(); // who is soaking up your land this tick
   for (let k = 0; k < ring.length; k += 2) {
     const c = ring[k], by = ring[k + 1], o = p.owner[c];
-    if (o !== NONE) { p.troops[o] = Math.max(0, p.troops[o] - Math.max(1, Math.floor(p.troops[o] / Math.max(1, p.land[o])))); p.land[o]--; }
+    if (o === p.human) closing.add(by);
+    if (o !== NONE) { p.troops[o] = Math.max(0, p.troops[o] - Math.max(1, Math.floor(p.troops[o] / Math.max(1, p.land[o])))); p.land[o]--; fell.set(o, by); }
     p.owner[c] = by;
     p.land[by]++;
   }
+  for (const by of closing) events.push({ kind: "soaked", by, to: p.human });
 }
 
 /** The Ink Dries: the cells whose turn came this tick dry out and are lost to whoever held them. Changes p. */
@@ -364,7 +388,8 @@ function tick(p, b, dice, events) {
     if (p.tick === ages[1]) for (let s = 0; s < p.troops.length; s++) if (s !== p.human && p.land[s]) p.mark[s] = p.temper[s] < 2 ? 1 : 0;
   }
   const borders = bordersOf(p, b);
-  think(p, b, dice, borders);
+  if (p.pact && p.tick === p.pact.until && p.alive[p.pact.to]) events.push({ kind: "pactend", to: p.pact.to });
+  think(p, b, dice, borders, events);
   // two nations attacking each other meet first: the smaller force is spent against the larger
   for (const a of p.attacks) {
     const o = a.to === NONE ? null : p.attacks.find((x) => x.by === a.to && x.to === a.by);
@@ -382,7 +407,7 @@ function tick(p, b, dice, events) {
       if (k !== undefined) front[k].push(m);
     }
   }
-  const done = [];
+  const done = [], fell = new Map(); // who last took land from each nation this tick
   p.attacks.forEach((a, k) => {
     const list = [...new Set(front[k])].sort((x, y) => p.order[x] - p.order[y]), many = Math.max(2, Math.ceil(list.length / 4)) + (inkOf(p, a.by).reach || 0) + (markOf(p, a.by).reach || 0);
     let taken = 0;
@@ -391,7 +416,7 @@ function tick(p, b, dice, events) {
       const cost = costOf(p, b, i, a.by, a.got);
       if (a.left < cost) { a.left = 0; break; }
       a.left -= cost;
-      if (a.to !== NONE) { p.troops[a.to] = Math.max(0, p.troops[a.to] - Math.max(1, Math.floor(p.troops[a.to] / Math.max(1, p.land[a.to])))); p.land[a.to]--; }
+      if (a.to !== NONE) { p.troops[a.to] = Math.max(0, p.troops[a.to] - Math.max(1, Math.floor(p.troops[a.to] / Math.max(1, p.land[a.to])))); p.land[a.to]--; fell.set(a.to, a.by); }
       p.owner[i] = a.by;
       p.land[a.by]++;
       taken++;
@@ -400,9 +425,9 @@ function tick(p, b, dice, events) {
     if (!list.length || !a.left || (a.to !== NONE && !p.land[a.to])) { p.troops[a.by] += a.left; done.push(k); }
   });
   p.attacks = p.attacks.filter((_, k) => !done.includes(k));
-  soak(p, b);
+  soak(p, b, fell, events);
   if (p.dries) { dry(p, b, events); hold(p, b, events); }
-  for (let s = 0; s < p.troops.length; s++) if (!p.land[s] && p.alive[s]) { p.alive[s] = 0; p.attacks = p.attacks.filter((a) => a.by !== s && a.to !== s); events.push({ kind: "out", seat: s }); }
+  for (let s = 0; s < p.troops.length; s++) if (!p.land[s] && p.alive[s]) { p.alive[s] = 0; p.attacks = p.attacks.filter((a) => a.by !== s && a.to !== s); events.push({ kind: "out", seat: s, by: fell.has(s) ? fell.get(s) : NONE }); }
   // losing all your land does not end the game: you are out, and the others play on
   const top = p.land.reduce((x, v, s) => (v > p.land[x] ? s : x), 0);
   if (p.land[top] >= goalOf(p)) return finish(p, [top], "held most of the map", events);
@@ -443,7 +468,7 @@ export function liveSetup(o, dice, chance) {
   const ours = o.style !== "custom", dries = o.style === "ours", key = dice.below(0x40000000), map = dries ? LIVE_MAPS[dice.below(LIVE_MAPS.length)] : o.map;
   const b = liveBoard(map, key, chance), n = dries ? DRIES.nations : o.nations, inks = dries ? "off" : ours ? "chosen" : o.inks;
   // boats are always on where the map has more than one landmass, so that every map can be won
-  const p = { live: true, classic: true, style: o.style, map, key: map === "world" ? 0 : key, human: 0, total: b.total, owner: Array(b.n).fill(NONE), order: dice.shuffle(b.cells.map((_, i) => i)), troops: Array(n).fill(START), land: Array(n).fill(0), alive: Array(n).fill(1), temper: Array.from({ length: n }, () => dice.below(4)), names: ["You", ...dice.shuffle(NATIONS).slice(0, n - 1)], attacks: [], cities: [], boats: !!o.boats || b.masses > 1, building: !ours && !!o.cities, rivals: RIVALS[o.rivals] ? o.rivals : "gentle", tick: 0, limit: dries ? DRIES.from + DRIES.span : ours ? SAFE : 2 * o.time, phase: "spawn", seat: 0, round: 1, over: null };
+  const p = { live: true, classic: true, style: o.style, map, key: map === "world" ? 0 : key, human: 0, total: b.total, owner: Array(b.n).fill(NONE), order: dice.shuffle(b.cells.map((_, i) => i)), troops: Array(n).fill(START), land: Array(n).fill(0), alive: Array(n).fill(1), temper: Array.from({ length: n }, () => dice.below(4)), names: ["You", ...dice.shuffle(NATIONS).slice(0, n - 1)], attacks: [], cities: [], boats: !!o.boats || b.masses > 1, building: !ours && !!o.cities, rivals: RIVALS[o.rivals] ? o.rivals : "gentle", tick: 0, limit: dries ? DRIES.from + DRIES.span : ours ? SAFE : 2 * o.time, phase: "spawn", seat: 0, round: 1, over: null, pact: null };
   p.rounds = p.limit;
   // inks drawn by the seed from an even deck, so that six nations hold one of each; yours is drawn too, for "Draw for me"
   p.ink = inks === "off" ? Array(n).fill(NONE) : dice.shuffle(Array.from({ length: Math.ceil(n / 6) * 6 }, (_, k) => k % 6)).slice(0, n);
@@ -529,9 +554,11 @@ export function liveMoves(p, b) {
   if (p.over) return [];
   if (p.phase === "spawn") return b.dry.filter((i) => startable(p, b, i)).flatMap((at) => (p.choose ? INKS.map((k) => ({ do: "spawn", at, ink: k.id })) : [{ do: "spawn", at }]));
   const out = [{ do: "tick", n: 1 }, { do: "tick", n: 2 }, { do: "tick", n: 4 }], h = p.human, near = [...bordersOf(p, b)[h]];
-  for (const to of near) for (const pct of PCTS) out.push({ do: "attack", to, pct });
+  const kept = pactOn(p);
+  for (const to of near) if (to === NONE || to !== kept) for (const pct of PCTS) out.push({ do: "attack", to, pct });
   for (const a of p.attacks) if (a.by === h && !a.fl) out.push({ do: "recall", to: a.to });
-  if (p.boats) for (const at of landings(p, b)) for (const pct of PCTS) out.push({ do: "boat", at, pct });
+  if (p.boats) for (const at of landings(p, b)) if (p.owner[at] === NONE || p.owner[at] !== kept) for (const pct of PCTS) out.push({ do: "boat", at, pct });
+  for (const to of near) if (to !== NONE && !pactWhy(p, b, to)) out.push({ do: "pact", to });
   if (p.building) for (let i = 0; i < b.n; i++) if (p.owner[i] === h && !p.cities.includes(i) && p.troops[h] >= cityPrice(p)) out.push({ do: "city", at: i });
   if (markDue(p)) for (const k of MARKS) out.push({ do: "mark", mark: k.id });
   if (cardDue(p)) for (const k of CARDS) out.push({ do: "card", card: k.id });
@@ -544,16 +571,17 @@ export const cardDue = (p) => p.ages && !!p.alive[p.human] && p.tick >= agesOf(p
 
 /** Whether a move has exactly these keys and no others. */
 const shaped = (m, ...keys) => !!m && typeof m === "object" && !Array.isArray(m) && Object.keys(m).length === keys.length && keys.every((k) => Object.hasOwn(m, k));
-const KEYS = { tick: ["n"], attack: ["to", "pct"], recall: ["to"], boat: ["at", "pct"], city: ["at"], mark: ["mark"], card: ["card"] };
+const KEYS = { tick: ["n"], attack: ["to", "pct"], recall: ["to"], pact: ["to"], boat: ["at", "pct"], city: ["at"], mark: ["mark"], card: ["card"] };
 /** A quick check, so that a tick does not have to list every move to be allowed. It allows exactly what liveMoves lists. */
 export function liveAllows(p, b, m) {
   if (p.over || !m || typeof m !== "object") return false;
   if (p.phase === "spawn") return m.do === "spawn" && shaped(m, "do", "at", ...(p.choose ? ["ink"] : [])) && Number.isInteger(m.at) && startable(p, b, m.at) && (!p.choose || INKS.some((k) => k.id === m.ink));
   if (!Object.hasOwn(KEYS, m.do) || !shaped(m, "do", ...KEYS[m.do])) return false;
   if (m.do === "tick") return [1, 2, 4].includes(m.n);
-  if (m.do === "attack") return PCTS.includes(m.pct) && (m.to === NONE || (Number.isInteger(m.to) && m.to >= 0 && m.to < p.troops.length && m.to !== p.human)) && bordersOf(p, b)[p.human].has(m.to);
+  if (m.do === "attack") return PCTS.includes(m.pct) && (m.to === NONE || (Number.isInteger(m.to) && m.to >= 0 && m.to < p.troops.length && m.to !== p.human && m.to !== pactOn(p))) && bordersOf(p, b)[p.human].has(m.to);
   if (m.do === "recall") return Number.isInteger(m.to) && !!recallable(p, m.to);
-  if (m.do === "boat") return p.boats && PCTS.includes(m.pct) && Number.isInteger(m.at) && landings(p, b).has(m.at);
+  if (m.do === "boat") return p.boats && PCTS.includes(m.pct) && Number.isInteger(m.at) && landings(p, b).has(m.at) && (p.owner[m.at] === NONE || p.owner[m.at] !== pactOn(p));
+  if (m.do === "pact") return !pactWhy(p, b, m.to);
   if (m.do === "city") return p.building && Number.isInteger(m.at) && p.owner[m.at] === p.human && !p.cities.includes(m.at) && p.troops[p.human] >= cityPrice(p);
   if (m.do === "mark") return markDue(p) && MARKS.some((k) => k.id === m.mark);
   return cardDue(p) && CARDS.some((k) => k.id === m.card);
@@ -565,7 +593,12 @@ export function liveApply(before, b, m, dice) {
   const p = copy(before), events = [], s = p.human;
   if (m.do === "spawn") { claim(p, b, s, m.at); if (p.dries) p.cap[s] = m.at; if (m.ink) p.ink[s] = INKS.findIndex((k) => k.id === m.ink); p.phase = "play"; events.push({ kind: "spawn", at: m.at }); }
   else if (m.do === "attack") { send(p, s, m.to, Math.floor((p.troops[s] * m.pct) / 100)); events.push({ kind: "attack", seat: s, to: m.to, pct: m.pct }); }
-  else if (m.do === "recall") { // the attack ends where it stands: a quarter of what is left is lost, the rest comes home
+  else if (m.do === "pact") { // a truce: attacks between you end, each side's strength coming home whole
+    for (const a of p.attacks) if ((a.by === s && a.to === m.to) || (a.by === m.to && a.to === s)) p.troops[a.by] += a.left;
+    p.attacks = p.attacks.filter((a) => !((a.by === s && a.to === m.to) || (a.by === m.to && a.to === s)));
+    p.pact = { to: m.to, until: p.tick + PACT.long, next: p.tick + PACT.long + PACT.gap };
+    events.push({ kind: "pact", seat: s, to: m.to, until: p.pact.until });
+  } else if (m.do === "recall") { // the attack ends where it stands: a quarter of what is left is lost, the rest comes home
     const a = recallable(p, m.to), lost = recallLoss(a.left);
     p.attacks = p.attacks.filter((x) => x !== a);
     p.troops[s] += a.left - lost;

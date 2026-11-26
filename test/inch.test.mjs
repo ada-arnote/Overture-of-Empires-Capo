@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Refusal, canon, chance, createMatch, fingerprint, openSave, packGame, seedState, unpackGame } from "../src/core/index.js";
 import { NONE, SWITCHES, boardOf, cellsOf, goalOf, inch, liveBoardFor } from "../src/games/inch/rules.js";
-import { AGE_AT, CARDS, DRIES, INKS, LIVE_MAPS, MARKS, NONE as N, PCTS, PLACES, SAFE, agesOf, apart, bordersOf, cityPrice, costOf, driedOf, dryRank, gainOf, goalOf as liveGoalOf, goalPercent, held, landingPrice, landings, liveAllows, liveApply, liveMoves, maxOf, rangeOf, recallLoss, recallable, wetAt, wetOf } from "../src/games/inch/live.js";
+import { AGE_AT, CARDS, DRIES, INKS, LIVE_MAPS, MARKS, NONE as N, PACT, PCTS, PLACES, RIVALS, SAFE, agesOf, apart, bordersOf, cityPrice, costOf, driedOf, dryRank, gainOf, goalOf as liveGoalOf, goalPercent, held, landingPrice, landings, liveAllows, liveApply, liveMoves, maxOf, pactOn, pactWhy, rangeOf, recallLoss, recallable, wetAt, wetOf } from "../src/games/inch/live.js";
 import { TIERS, choose } from "../src/games/inch/bot.js";
 import { SLOW, botGame, direct, ended, inList, passive, refused, refusedListed, replays, same, sameEachStep } from "./fixtures/bots.js";
 
@@ -242,13 +242,13 @@ function ticked(more, ticks, seed = "v7") {
 }
 const mutable = (p) => structuredClone(p);
 
-test("version 10: saves from version 9 are refused with a plain message", () => {
+test("version 11: saves from version 10 are refused with a plain message", () => {
   const m = live({}, "old");
   m.play(m.legal()[0]);
   const old = JSON.parse(m.save());
-  old.version = "9";
-  assert.throws(() => openSave(JSON.stringify(old), [inch]), (e) => e instanceof Refusal && e.code === "version" && /version 9/.test(e.message));
-  assert.equal(inch.version, "10");
+  old.version = "10";
+  assert.throws(() => openSave(JSON.stringify(old), [inch]), (e) => e instanceof Refusal && e.code === "version" && /version 10/.test(e.message));
+  assert.equal(inch.version, "11");
 });
 test("inks: the start carries your ink; bots' inks are drawn evenly by the seed; Custom can draw yours or leave inks off", () => {
   const m = live({ nations: 12 }, "inks"), p = m.position;
@@ -507,4 +507,73 @@ test("recall: a Flood cannot be called back, so the doubling is never cashed in"
   assert.equal(recallable(sent, to), undefined);
   assert.equal(liveAllows(sent, b, { do: "recall", to }), false);
   assert.ok(!liveMoves(sent, b).some((x) => x.do === "recall" && x.to === to));
+});
+
+// ---- version 11: the tiers retuned (tools/inchtiers.mjs measures them), a truce on every tier, a limit on how many attack you ----
+test("tiers: no rival attacks you during its tier's truce (Hard's is 20 seconds), and after it never more at once than the tier allows", () => {
+  assert.equal(RIVALS.hard.truce, 40, "Hard opens with a 20-second truce");
+  assert.ok(RIVALS.gentle.truce > RIVALS.even.truce && RIVALS.even.truce > RIVALS.hard.truce && RIVALS.hard.truce > 0);
+  assert.ok(RIVALS.gentle.pile <= RIVALS.even.pile && RIVALS.even.pile <= RIVALS.hard.pile);
+  for (const rivals of ["gentle", "even", "hard"]) {
+    const m = live({ rivals }, "pile " + rivals), b = liveBoardFor(m.position), d = chance(seedState("pile " + rivals)), t = RIVALS[rivals];
+    let p = liveApply(m.position, b, m.legal()[0], d).position, first = -1, most = 0;
+    while (!p.over && p.alive[0] && p.tick < t.truce + 400) {
+      p = liveApply(p, b, { do: "tick", n: 1 }, d).position;
+      const on = p.attacks.filter((a) => a.to === 0).length;
+      if (on && first < 0) first = p.tick;
+      most = Math.max(most, on);
+    }
+    assert.ok(first < 0 || first >= t.truce, `${rivals}: attacked at tick ${first}, truce ${t.truce}`);
+    assert.ok(most <= t.pile, `${rivals}: ${most} attacks at once, at most ${t.pile}`);
+    assert.ok(first > 0, `${rivals}: an idle player is attacked in the end`);
+  }
+});
+test("events: a rival starting an attack on you says so, once; a nation out says who took its last land", () => {
+  const m = live({ rivals: "hard" }, "told"), b = liveBoardFor(m.position), d = chance(seedState("told"));
+  let p = liveApply(m.position, b, m.legal()[0], d).position, said = [], out = null;
+  while (!p.over && !out) {
+    const was = p.attacks.filter((a) => a.to === 0).map((a) => a.by), r = liveApply(p, b, { do: "tick", n: 1 }, d);
+    for (const e of r.events) {
+      if (e.kind === "attacked") { assert.equal(e.to, 0); assert.ok(!was.includes(e.by), "only a new attack is told"); said.push(e.by); }
+      if (e.kind === "out" && e.seat === 0) out = e;
+    }
+    p = r.position;
+  }
+  assert.ok(said.length, "the attacks on you were told");
+  assert.ok(out && Number.isInteger(out.by) && out.by > 0 && out.by < p.troops.length, `who took the last land: ${JSON.stringify(out)}`);
+});
+test("truce: one neighbour at a time, kept by the rules for its span; attacks between you come home whole; then a wait; the same moves replay", () => {
+  const m = live({ rivals: "hard" }, "pact"), b = liveBoardFor(m.position);
+  m.play(m.legal()[0]);
+  while (![...bordersOf(m.position, b)[0]].some((o) => o !== N && !pactWhy(m.position, b, o))) { assert.ok(m.position.tick < 600, "a neighbour in the end"); m.play({ do: "tick", n: 2 }); }
+  const o = [...bordersOf(m.position, b)[0]].find((x) => x !== N && !pactWhy(m.position, b, x));
+  assert.ok(m.legal().some((x) => x.do === "pact" && x.to === o));
+  m.play({ do: "attack", to: o, pct: 50 });
+  const before = m.position, mine = before.attacks.find((a) => a.by === 0 && a.to === o), events = m.play({ do: "pact", to: o }), p = m.position;
+  assert.deepEqual(events, [{ kind: "pact", seat: 0, to: o, until: before.tick + PACT.long }]);
+  assert.equal(p.troops[0], before.troops[0] + (mine ? mine.left : 0), "your attack comes home whole");
+  assert.ok(!p.attacks.some((a) => (a.by === 0 && a.to === o) || (a.by === o && a.to === 0)));
+  assert.equal(pactOn(p), o);
+  assert.equal(p.tick, before.tick, "a truce takes no time");
+  for (const bad of [{ do: "attack", to: o, pct: 50 }, { do: "pact", to: o }, { do: "pact", to: 0 }, { do: "pact", to: N }, { do: "pact" }]) assert.throws(() => m.play(bad), refused("illegal"), JSON.stringify(bad));
+  assert.ok(!m.legal().some((x) => x.do === "pact" || (x.do === "attack" && x.to === o) || (x.do === "boat" && m.position.owner[x.at] === o)));
+  let ended = false;
+  while (m.position.tick < before.tick + PACT.long && m.turn !== null) {
+    const es = m.play({ do: "tick", n: 1 }), q = m.position;
+    if (q.tick < before.tick + PACT.long) assert.ok(!q.attacks.some((a) => a.by === o && a.to === 0), `tick ${q.tick}: ${o} keeps the truce`);
+    if (es.some((e) => e.kind === "pactend" && e.to === o)) ended = true;
+  }
+  if (m.turn !== null && m.position.alive[o] && m.position.alive[0]) {
+    assert.ok(ended, "the end of the truce is told");
+    assert.equal(pactOn(m.position), N);
+    const near = [...bordersOf(m.position, b)[0]].filter((x) => x !== N);
+    for (const x of near) assert.ok(["wait", "near"].includes(pactWhy(m.position, b, x)), "a wait before the next truce");
+  }
+  const again = createMatch(inch, { seed: m.seed, options: m.options });
+  for (const x of m.list) again.play(x);
+  assert.equal(fingerprint(again.position), fingerprint(m.position));
+  const strong = mutable(before);
+  strong.troops[o] = PACT.most * strong.troops[0] + 1;
+  assert.equal(pactWhy(strong, b, o), "strong", "a neighbour more than twice as strong will not take one");
+  assert.equal(liveAllows(strong, b, { do: "pact", to: o }), false);
 });

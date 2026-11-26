@@ -260,12 +260,14 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
 
   const near = () => L.near / Math.max(cam.H, cam.W * 0.8);
   function layout(free = {}) {
+    const kept = zoom > 1 ? [cam.cx, cam.cy] : null; // hook (Inch lane, p8): a zoomed view keeps its middle when the panels change size
     cam.set({ W: host.clientWidth || 1, H: host.clientHeight || 1, left: 0, right: 0, top: 0, bottom: 0, ...free });
     cam.set({ tilt: L.tilt, yaw: L.yaw, q: near() });
     cam.fit(ends, 14);
     base = cam.s;
     const tall = (cam.H - cam.top - cam.bottom) / (m.h * cam.s); // a wide map on a narrow screen starts closer in
     if (zoom === 1 && picture && cam.W < 821 && tall > 1.6) zoomed(Math.min(2.6, tall)); else zoomed(zoom);
+    if (kept) { cam.cx = kept[0]; cam.cy = kept[1]; }
     under.style.width = over.style.width = cam.W + "px";
     under.style.height = over.style.height = cam.H + "px";
     redraw();
