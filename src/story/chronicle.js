@@ -6,7 +6,7 @@
 import { treatyName } from "./relations.js";
 
 export const KEEP = { recent: 3, turns: 6, eras: 4, span: 10, line: 130, era: 110, told: 320, facts: 8 };
-const ORDER = ["fell", "war", "peace", "took", "treaty", "broke", "gave", "no"];
+const ORDER = ["fell", "war", "peace", "took", "treaty", "broke", "gave", "no", "thread"];
 const clip = (s, n) => { const t = String(s || "").replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 3).trimEnd()}...` : t; };
 const key = (f) => f.slice(0, f[0] === "treaty" || f[0] === "no" ? 4 : 3).join(":");
 const counted = (k) => k === "took" || k === "gave";
@@ -34,6 +34,7 @@ const WORDS = {
   broke: (n, a, b) => `${n(a)} ended its treaty with ${n(b)}`,
   gave: (n, a, b, k) => `${n(a)} handed ${k} province${k > 1 ? "s" : ""} to ${n(b)}`,
   no: (n, a, b, k) => `${n(b)} refused ${n(a)} ${treatyName(k)}`,
+  thread: (n, a) => `the thread "${a}" closed`,
 };
 /** Facts in words, with country names from name(code). */
 export const factWords = (facts, name) => (facts || []).map(([k, ...rest]) => WORDS[k](name, ...rest)).join("; ");
@@ -64,12 +65,13 @@ export function chronicleFrom(log, nextTurn) {
 const line = (facts, told, n) => clip([facts, told].filter(Boolean).join(". "), n);
 /**
  * The chronicle as prompt lines, oldest first: eras, then older turns, then the last three turns told more fully.
- * Never more than four eras and nine turns, each clipped, whatever the length of the game.
+ * Never more than four eras and nine turns, each clipped, whatever the length of the game. With eras false the era
+ * lines are left out: they are the first thing a prompt that has grown too long gives up.
  */
-export function chronicleLines(g, name) {
+export function chronicleLines(g, name, eras = true) {
   const c = g.chron || { eras: [], turns: [] }, cut = Math.max(0, c.turns.length - KEEP.recent);
   return [
-    ...c.eras.map((e) => `- ${e.from.slice(0, 7)} to ${e.to.slice(0, 7)}, turns ${e.t0} to ${e.t1}: ${line(factWords(e.f, name), [...new Set(e.s)].filter(Boolean).join(" ... "), KEEP.era)}`),
+    ...(eras ? c.eras : []).map((e) => `- ${e.from.slice(0, 7)} to ${e.to.slice(0, 7)}, turns ${e.t0} to ${e.t1}: ${line(factWords(e.f, name), [...new Set(e.s)].filter(Boolean).join(" ... "), KEEP.era)}`),
     ...c.turns.map((t, i) => `- ${t.from} to ${t.to}: ${line(factWords(t.f, name), t.s, i < cut ? KEEP.line : KEEP.told) || "no summary"}`),
   ];
 }

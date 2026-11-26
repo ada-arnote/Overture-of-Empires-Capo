@@ -1,19 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The rules of the world game: the AI proposes moves, these rules accept, trim or refuse each one and say why.
 // Land, wars and treaties change only here. Attacks are settled by the check (check.js): might, a commander, odds out of 100.
-// A country asked for a treaty answers by rule, with its reasons (relations.js).
+// A country asked for a treaty answers by rule, with its reasons (relations.js); so does one asked for peace (war.js).
 import { draw100 } from "./line.js";
 import { chanceOf, check, checkLine } from "./check.js";
 import { relate, relationLines, treatyAnswer, treatyName } from "./relations.js";
+import { countTaken, endWar, mightOf, peaceAnswer, strengthOf, truceUntil } from "./war.js";
+export { MIGHT, mightOf } from "./war.js";
 
-// Invented numbers for a fiction, from 1 to 10. Countries not listed get 2, or 3 if they hold twelve provinces or more.
-export const MIGHT = {
-  USA: 10, CHN: 9, RUS: 9, IND: 8, GBR: 7, FRA: 7, DEU: 7, JPN: 7, KOR: 6, TUR: 6, ISR: 6, PAK: 6, IRN: 6, BRA: 6, ITA: 6, UKR: 5,
-  EGY: 5, SAU: 5, AUS: 5, CAN: 5, IDN: 5, POL: 5, ESP: 5, VNM: 5, PRK: 5, TWN: 5, MEX: 4, THA: 4, ARG: 4, COL: 4, CHL: 4, ZAF: 4,
-  NGA: 4, ETH: 4, DZA: 4, MAR: 4, IRQ: 4, GRC: 4, SWE: 4, NOR: 4, NLD: 4, KAZ: 4, PHL: 4, MYS: 4, SGP: 4, ARE: 4, FIN: 4, BLR: 3,
-  PER: 3, VEN: 3, CUB: 3, SYR: 3, UZB: 3, MMR: 3, BGD: 3, NZL: 3, BEL: 3, CHE: 3, AUT: 3, PRT: 3, ROU: 3, CZE: 3, HUN: 3, AZE: 3,
-  ARM: 2, GEO: 2, BOL: 2, ECU: 2, PRY: 2, URY: 2,
-};
 export const VERBS = {
   WAR: "declare war on a country (target: its country code)",
   PEACE: "make peace with a country it is at war with (target: its country code)",
@@ -27,8 +21,6 @@ const pair = (a, b) => [a, b].sort().join("|");
 const others = (p, c) => p.split("|").find((x) => x !== c);
 export const atWar = (g, a, b) => g.wars.some((w) => w.pair === pair(a, b));
 export const treatyOf = (g, a, b) => g.treaties.find((t) => t.pair === pair(a, b));
-// the Game Master may set a country's might; otherwise the table, then size
-export const mightOf = (geo, c) => geo.might?.(c) ?? MIGHT[c] ?? (geo.holds(c) >= 12 ? 3 : 2);
 export const warsOf = (g, c) => g.wars.filter((w) => w.pair.split("|").includes(c)).map((w) => others(w.pair, c));
 export const treatiesOf = (g, c) => g.treaties.filter((t) => t.pair.split("|").includes(c)).map((t) => ({ with: others(t.pair, c), kind: t.kind }));
 
@@ -57,6 +49,7 @@ export function applyMoves(g, moves, geo, actions, months) {
     if (staller) { say(m, false, `${verb.toLowerCase()} held back: ${staller.name} (favour ${staller.favour}), who opposes it, stalled the order this turn`); continue; }
     const r = ({ WAR: war, PEACE: peace, TREATY: treaty, BREAK: unbind, ATTACK: attack, GIVE: give })[verb](g, m, geo, { isMe, attacks, months, spent });
     say(m, r.ok, r.why, r.check, r.fact);
+    if (r.at) receipt[receipt.length - 1].at = r.at;
     for (const extra of r.also || []) receipt.push(typeof extra === "string" ? { ok: true, text: extra } : { ok: true, text: extra.text, ...note(extra.fact) });
   }
   return receipt;
@@ -67,10 +60,11 @@ function war(g, m, geo) {
   if (!geo.known(t) || geo.holds(t) === 0 || t === c) return { ok: false, why: `war refused: "${m.target}" is not a country with land` };
   if (atWar(g, c, t)) return { ok: false, why: `already at war with ${geo.name(t)}` };
   if (treatyOf(g, c, t)) return { ok: false, why: `war on ${geo.name(t)} refused: they have a treaty; it must be ended first` };
+  if (truceUntil(g, c, t)) return { ok: false, why: `war on ${geo.name(t)} refused: a truce holds between them until ${truceUntil(g, c, t)}` };
   g.wars.push({ pair: pair(c, t), since: g.date, by: c });
   const also = [];
   for (const { with: ally, kind } of treatiesOf(g, t)) {
-    if (kind === "trade" || ally === c || atWar(g, ally, c) || treatyOf(g, ally, c)) continue;
+    if (kind === "trade" || ally === c || atWar(g, ally, c) || treatyOf(g, ally, c) || truceUntil(g, ally, c)) continue;
     g.wars.push({ pair: pair(ally, c), since: g.date, by: ally });
     also.push({ text: `${geo.name(ally)}: joins the war against ${geo.name(c)}, as its ${kind} treaty with ${geo.name(t)} requires`, fact: ["war", ally, c] });
   }
@@ -80,10 +74,14 @@ function war(g, m, geo) {
 function peace(g, m, geo, { isMe }) {
   const c = m.country, t = m.target;
   if (!atWar(g, c, t)) return { ok: false, why: `peace refused: not at war with ${geo.name(t)}` };
-  if (t === g.player && g.mode !== "citizen" && !isMe) { offer(g, c, "peace"); return { ok: false, why: "offers you peace; accept it from your actions" }; }
-  g.wars = g.wars.filter((w) => w.pair !== pair(c, t));
-  if (t === g.player || c === g.player) g.offers = g.offers.filter((o) => !(o.kind === "peace" && o.from === (c === g.player ? t : c)));
-  return { ok: true, why: `makes peace with ${geo.name(t)}; each keeps the land it holds`, fact: ["peace", ...pair(c, t).split("|")] };
+  // the side asked answers by rule, with its reasons; an offer already made to the player stands as made
+  const toMe = t === g.player && g.mode !== "citizen" && !isMe, offered = isMe && g.offers.some((o) => o.from === t && o.kind === "peace");
+  const a = toMe ? peaceAnswer(g, t, c) : peaceAnswer(g, c, t);
+  if (toMe && !a.ok) return { ok: false, why: `would offer you peace, but does not (${a.why})` };
+  if (toMe) { offer(g, c, "peace"); return { ok: false, why: "offers you peace; accept it from your actions" }; }
+  if (!a.ok && !offered) return { ok: false, why: `asks ${geo.name(t)} for peace, which refuses (${a.why})` };
+  endWar(g, c, t);
+  return { ok: true, why: `makes peace with ${geo.name(t)}${offered ? ", as offered" : `, which agrees (${a.why})`}; each keeps the land it holds`, fact: ["peace", ...pair(c, t).split("|")] };
 }
 
 function treaty(g, m, geo, { isMe }) {
@@ -95,7 +93,7 @@ function treaty(g, m, geo, { isMe }) {
   if (geo.holds(t) === 0) return { ok: false, why: `treaty refused: ${geo.name(t)} holds no land` };
   // the other side answers by rule, with its reasons; an offer already made to the player stands as made
   const offered = isMe && g.offers.some((o) => o.from === t && o.kind === kind);
-  const a = toMe ? treatyAnswer(g, t, c, kind, (x) => mightOf(geo, x)) : treatyAnswer(g, c, t, kind, (x) => mightOf(geo, x));
+  const a = toMe ? treatyAnswer(g, t, c, kind, (x) => strengthOf(g, geo, x)) : treatyAnswer(g, c, t, kind, (x) => strengthOf(g, geo, x));
   if (toMe && !a.ok) return { ok: false, why: `would offer you ${treatyName(kind)}, but does not (${a.why})` };
   if (toMe) { offer(g, c, kind); return { ok: false, why: `offers you ${treatyName(kind)}; accept it from your actions` }; }
   if (!a.ok && !offered) return { ok: false, why: `proposes ${treatyName(kind)} to ${geo.name(t)}, which refuses (${a.why})`, fact: ["no", c, t, kind] };
@@ -138,6 +136,22 @@ export function ownMoves(g, moves, actions, geo) {
   return [...add, ...moves];
 }
 
+const SAY = { WAR: "declare war on", PEACE: "make peace with", TREATY: "propose a treaty to", BREAK: "end the treaty with", ATTACK: "attack", GIVE: "hand over" };
+/**
+ * The moves a reply wrote for the player's own country, in plain words, for the player to tick before the rules run:
+ * [{i, text, card}], i the move's place in the list. card: the player ordered it by card, so it stands either way.
+ */
+export function reviewMoves(g, moves, actions, geo) {
+  if (g.mode === "citizen") return [];
+  return moves.map((m, i) => ({ m, i })).filter(({ m }) => m.country === g.player && m.action >= 1 && SAY[m.verb]).map(({ m, i }) => {
+    const id = geo.find(m.target), where = id ? geo.place(id).name : geo.known(m.target) ? geo.name(m.target) : m.target;
+    const card = (g.orders || []).some((o) => (o.verb || "ATTACK") === m.verb && o.target === (id || m.target));
+    return { i, card, text: `${SAY[m.verb][0].toUpperCase()}${SAY[m.verb].slice(1)} ${where}${m.detail ? ` (${m.detail})` : ""}, from action ${m.action}${actions[m.action - 1] ? `: "${actions[m.action - 1].slice(0, 80)}"` : ""}` };
+  });
+}
+/** A reply with the moves the player unticked taken out, each named among what was left out. off: places in the list. */
+export const untick = (r, list, off) => ({ ...r, moves: r.moves.filter((_, i) => !off.includes(i)), dropped: [...r.dropped, ...list.filter((x) => off.includes(x.i)).map((x) => `a move you did not mean: ${x.text}`)] });
+
 /** Lines for the prompt: wars, treaties, offers, relations, land that has changed hands, and last turn's receipt. */
 export function worldFacts(g, geo, near = []) {
   // a long game has hundreds of treaties: the prompt names the player's own and those among its neighbours, enemies
@@ -148,6 +162,7 @@ export function worldFacts(g, geo, near = []) {
     return `${hit.map(say).join(", ") || "none"}${list.length > hit.length ? `${hit.length ? ", and" : " near the player;"} ${list.length - hit.length} more elsewhere` : ""}`;
   };
   const wars = shown(g.wars, (w) => `${w.pair.replace("|", "-")} since ${w.since}`), treaties = shown(g.treaties, (t) => `${t.pair.replace("|", "-")} ${t.kind}`);
+  const truces = Object.keys(g.truce || {}).filter((k) => k.split("|").includes(me)).map((k) => others(k, me)).filter((c) => truceUntil(g, me, c)).map((c) => `${c} ${truceUntil(g, me, c)}`);
   const land = Object.entries(g.owners), mine = land.filter(([id, c]) => close.has(c) || close.has(geo.place(id).country)).slice(-8), far = land.length - mine.length;
   const moved = mine.map(([id, c]) => `${id} ${geo.place(id).name}: held by ${c}, taken from ${geo.place(id).country}`);
   // last turn's receipt: the player's own lines first, twelve at most, and an attack without its numbers (the story tells it in words)
@@ -157,6 +172,7 @@ export function worldFacts(g, geo, near = []) {
     ...(g.leaks || []).filter((l) => l.turn === g.turn).map((l) => `- Leaked: ${l.name}, an unhappy adviser of the player, told the press about the player's plans. Papers may report it.`),
     `- Wars: ${wars}`,
     `- Treaties: ${treaties}`,
+    ...(truces.length ? [`- Truces with the player's country (war between them is refused until): ${truces.join(", ")}`] : []),
     `- Offers waiting for the player: ${g.offers.map((o) => `${o.from} ${o.kind}`).join(", ") || "none"}`,
     ...relationLines(g),
     `- Land that has changed hands${far ? ` (and ${far} more provinces elsewhere)` : ""}: ${moved.length ? "" : "none near the player"}`, ...moved.map((l) => `  - ${l}`),
@@ -245,7 +261,7 @@ export function attackPlan(g, geo, c, id, order = {}, most = Infinity) {
     way === "sea" ? ["by open sea", -10] : way === "strait" ? ["across a narrow sea", -5] : ["", 0],
     counsel ? [`${counsel.member.name}'s counsel`, counsel.nudge] : ["", 0],
   ];
-  const plan = { mission: `attack:${id}:${c}`, checkpoint: "battle", person: boss.name, who: boss.name, role: "commander", skill: mightOf(geo, c), difficulty: mightOf(geo, o), approach: [approach, APPROACHES[approach][0]], parts };
+  const plan = { mission: `attack:${id}:${c}`, checkpoint: "battle", person: boss.name, who: boss.name, role: "commander", skill: strengthOf(g, geo, c), difficulty: strengthOf(g, geo, o), approach: [approach, APPROACHES[approach][0]], parts };
   return { ok: true, plan, chance: chanceOf(plan).chance, owner: o, place, way, boss, counsel, approach, note, cost: approach === "patient" ? 2 : 1 };
 }
 
@@ -263,8 +279,9 @@ function attack(g, m, geo, { attacks, months, spent }) {
   const from = a.way === "sea" ? " from the sea" : a.way === "strait" ? " across the strait" : "", how = `(${checkLine(beat, "might")})${a.note}`;
   const also = [];
   if (beat.band === "failed" && a.approach === "bold" && a.boss.seat !== "generals") also.push(...blame(g, a.boss.seat));
-  if (!won) return { ok: true, why: `attacks ${a.place}${from} and is thrown back ${how}`, check: beat, also };
+  if (!won) return { ok: true, why: `attacks ${a.place}${from} and is thrown back ${how}`, check: beat, also, at: id };
   if (beat.band === "costly") spent[c] = true;
+  countTaken(g, c, o);
   if (geo.place(id).country === c) delete g.owners[id]; else g.owners[id] = c;
   if (geo.holds(o) === 0) {
     g.wars = g.wars.filter((w) => !w.pair.split("|").includes(o));
@@ -273,7 +290,7 @@ function attack(g, m, geo, { attacks, months, spent }) {
     also.push({ text: `${geo.name(o)}: has lost the last of its land`, fact: ["fell", o] });
   }
   const price = beat.band === "costly" ? ", but its army is spent for the turn" : " cleanly";
-  return { ok: true, why: `attacks ${a.place}${from} and takes it from ${geo.name(o)}${price} ${how}`, also, taken: id, check: beat, fact: ["took", c, o, 1] };
+  return { ok: true, why: `attacks ${a.place}${from} and takes it from ${geo.name(o)}${price} ${how}`, also, at: id, check: beat, fact: ["took", c, o, 1] };
 }
 /** A failed bold attack costs its commander one favour; at -3 they resign, as with any other loss of favour. */
 function blame(g, seat) {

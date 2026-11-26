@@ -3,7 +3,10 @@
 // Ancient Kingdom: choose any country and a mode, write actions, jump time, read what happened. The AI proposes
 // moves; the rules in src/story/worldrules.js decide which stand, and the map follows.
 import { JUMPS, MODES, UNITS, closeTurn, jumpFrom, monthsBetween, newWorldGame, readWorldReply, turnCode, worldPrompt } from "../src/story/turn.js";
-import { APPROACHES, attackPlan, commanders, mightOf, placesFor, treatiesOf, warsOf } from "../src/story/worldrules.js";
+import { APPROACHES, attackPlan, commanders, mightOf, placesFor, reviewMoves, treatiesOf, untick, warsOf } from "../src/story/worldrules.js";
+import { peaceAnswer, strength, strengthLine, strengthOf } from "../src/story/war.js";
+import { pin } from "../src/story/people.js";
+import { suggest } from "../src/story/suggest.js";
 import { NEED, relOf, relWord, treatyAnswer, treatyName } from "../src/story/relations.js";
 import { factWords, factsOf } from "../src/story/chronicle.js";
 import { oddsLine, partsLine } from "../src/story/check.js";
@@ -53,6 +56,8 @@ const save = () => {
 const load = () => { try { return JSON.parse(localStorage.getItem(KEEP) || "null"); } catch { return null; } };
 const checkSave = (s) => checkSaveOf(s, (id) => world.provinces.has(id), (c) => homes.has(c));
 const keptPast = keptRecords;
+/** Move focus to a heading (or a control), so a keyboard or a screen reader is where the screen now is. */
+const land = (e) => { if (!e) return; if (e.tabIndex < 0) e.tabIndex = -1; e.focus({ preventScroll: true }); };
 function toast(t) { const b = $("toast"); b.textContent = t; b.classList.add("on"); clearTimeout(hush); hush = setTimeout(() => b.classList.remove("on"), 3400); }
 // a country still being made goes by YOU (no country on the map uses it) until it has a code of its own
 const ownCode = () => (/^[A-Z]{3}$/.test(draft?.own.code || "") ? draft.own.code : "YOU");
@@ -143,10 +148,11 @@ function disputeLines() {
   return [...found].slice(0, 12).map(([n, d]) => `- ${n}: ${d.note} Provinces: ${d.ids.join(", ")}`);
 }
 
+let ids = [];
 /** What the rules may ask of the map. */
 function geo() {
   return {
-    name, place: (id) => world.provinces.get(id), owner: ownerOf, neighbours: (id) => world.neighbours.get(id), across: (id) => world.across.get(id), coastal: (id) => world.coast.has(id),
+    name, all: ids, place: (id) => world.provinces.get(id), owner: ownerOf, neighbours: (id) => world.neighbours.get(id), across: (id) => world.across.get(id), coastal: (id) => world.coast.has(id),
     home: (c) => homes.get(c)?.id, holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c, hasCoast: (c) => held(c).some((id) => world.coast.has(id)), might: (c) => state?.might?.[c],
     claims: (id, c) => (claimsOf.get(id) || []).some((d) => d.claimants.includes(c) && ownerOf(id) !== c),
     find: (s) => { const k = String(s || "").trim(); if (world.provinces.has(k)) return k; const low = k.toLowerCase(), hits = [...world.provinces.values()].filter((p) => p.name.toLowerCase() === low); return hits.length === 1 ? hits[0].id : null; },
@@ -175,6 +181,7 @@ function viewColour(code) {
 const PALETTE = ["#c9553f", "#d9a43a", "#4f9a6b", "#3f7fb5", "#8a5fb5", "#c46a9a", "#5fb3b0", "#b07a43", "#6f8f3a", "#a33f5f", "#4a5fa8", "#d07f50"];
 const blankCharacter = () => Object.fromEntries(CHARACTER.map(([k]) => [k, ""]));
 let draft = null;
+let stepShown = "scenario";
 const STEPS = [["scenario", "Scenario"], ["country", "Country"], ["you", "You"], ["begin", "Begin"]];
 
 function startScreen() {
@@ -193,8 +200,9 @@ function startScreen() {
   STEPS.forEach(([k, t], i) => { const b = button(`${i + 1}. ${t}`, () => { if (i <= at || ready(i)) { draft.step = k; startScreen(); } }); b.setAttribute("aria-pressed", String(k === draft.step)); pills.append(b); });
   box.replaceChildren(el("p", "Overture of Empires", "eyebrow"), el("h1", "Capo"), pills);
   ({ scenario: stepScenario, country: stepCountry, you: stepYou, begin: stepBegin })[draft.step](box);
-  box.append(home(), el("p", "Fiction for adults. Not news and not a forecast. Real public figures may appear. Needs an AI: paste each turn into any AI you use, or give an address.", "note"));
+  box.append(home(), el("p", "Fiction for adults. Not news and not a forecast. Real public figures may appear. Needs an AI: paste each turn into any chat AI you use (a large hosted one, or one on your own computer), or give an address. To try it with no AI, the paste step offers a sample reply.", "note"));
   $("start").classList.add("open");
+  if (stepShown !== draft.step) { stepShown = draft.step; land(box.querySelector("h2") || box.querySelector("h1")); }
 }
 const nextRow = (label, ok, to) => { const r = el("div", undefined, "row"); r.append(button(label, () => { const why = ok(); if (why) return toast(why); draft.step = to; startScreen(); }, "go")); return r; };
 // can the wizard jump ahead to step i? only when every step before it is done
@@ -404,10 +412,11 @@ function dock() {
 }
 
 function open(which) {
+  const was = sheet;
   sheet = which;
   const box = $("sheet");
   dock();
-  if (!which) { box.classList.remove("open"); return; }
+  if (!which) { box.classList.remove("open"); land(was === "game" ? $("top").querySelector("button[aria-label^=Game]") : $("dock").children[DOCK.findIndex(([k]) => k === was)]); return; }
   if (which === "ledger" && state.seen !== state.turn) { state.seen = state.turn; save(); dock(); }
   box.replaceChildren();
   ({ actions, chats, ledger, advisors, master, game: gameSheet }[which])(box);
@@ -415,6 +424,7 @@ function open(which) {
   shut.append(icon("close")); shut.setAttribute("aria-label", "Close");
   head.append(title || el("h2", ""), shut); box.prepend(head);
   box.classList.add("open");
+  if (was !== which) land(head.firstChild);
 }
 
 function actions(box) {
@@ -429,8 +439,10 @@ function actions(box) {
     li.append(el("span", plan?.ok ? `${a} Odds: ${oddsLine(plan.chance)}.` : ans ? `${a} ${name(o.target)} would ${ans.ok ? "agree" : "refuse"} (${ans.why}).` : a), button("Remove", () => { state.actions.splice(i, 1); state.orders = (state.orders || []).filter((x) => x.text !== a); save(); open("actions"); }));
     return li;
   }));
-  const near = landNeighbours(state.player).slice(0, 3), ideas = el("div", undefined, "row");
-  for (const t of ["Strengthen the army.", "Spend on schools and hospitals.", ...near.map((c) => `Seek closer ties with ${name(c)}.`)]) ideas.append(button(t, () => { state.actions = [...(state.actions || []), t]; save(); open("actions"); }));
+  // suggested orders, built from the state of the game, each with the answer or the odds the rules would give today
+  const ideas = el("div", undefined, "row"), hints = el("ul", undefined, "list");
+  hints.append(...suggest(state, geo()).map(({ note, ...o }) => { const li = el("li"); li.append(el("span", `${o.text} ${note[0].toUpperCase()}${note.slice(1)}.`), button("Order", () => order(o))); return li; }));
+  for (const t of ["Strengthen the army.", "Spend on schools and hospitals."]) ideas.append(button(t, () => { state.actions = [...(state.actions || []), t]; save(); open("actions"); }));
   const go = el("div", undefined, "row");
   go.append(button("Add", add), button(jump.key === "custom" ? `Advance ${jump.n} ${jump.unit}` : `Advance: ${JUMPS.find((j) => j[0] === jump.key)[1].toLowerCase()}`, advance, "go"));
   // offers as cards: one tap accepts, and the rules carry it out whether or not the AI writes it down
@@ -442,8 +454,8 @@ function actions(box) {
       button("Decline", () => { state.offers = state.offers.filter((x) => x !== o); const old = (state.orders || []).find((x) => x.verb === verb && x.target === o.from); state.orders = (state.orders || []).filter((x) => x !== old); state.actions = (state.actions || []).filter((x) => x !== old?.text); save(); open("actions"); }));
     return li;
   }));
-  box.append(el("h2", "Actions"), ...(state.offers.length ? [el("h3", "Offers to you"), offers] : []), el("p", "Write what you do, in your own words, as many as you like. The AI reads them all and proposes moves; the rules decide what stands: wars, peace, treaties, attacks and handovers.", "note"), list, input, go, el("h3", "Ideas"), ideas);
-  if (pending) box.append(pasteBox());
+  box.append(el("h2", "Actions"), ...(state.offers.length ? [el("h3", "Offers to you"), offers] : []), el("p", "Write what you do, in your own words, as many as you like. The AI reads them all and proposes moves; the rules decide what stands: wars, peace, treaties, attacks and handovers.", "note"), list, input, go, ...(hints.children.length ? [el("h3", "Suggested, with the rules' answer"), hints] : []), el("h3", "Ideas"), ideas);
+  if (pending) box.append(pending.review ? reviewBox() : pasteBox());
 }
 
 /** How the paste route goes, in three steps. */
@@ -458,27 +470,45 @@ function waiting() {
   return w;
 }
 
+/** The moves the AI read for the player's country, each with a tick, before the rules run. */
+function reviewBox() {
+  const { r, list } = pending.review, wrap = el("div"), ul = el("ul", undefined, "list"), go = el("div", undefined, "row");
+  ul.append(...list.map((x) => { const li = el("li"), l = el("label"), c = Object.assign(el("input"), { type: "checkbox", checked: true }); c.dataset.i = x.i; l.append(c, ` ${x.text}`); li.append(l); return li; }));
+  go.append(button("Run the rules", () => settleTurn(untick(r, list, [...ul.querySelectorAll("input")].filter((c) => !c.checked).map((c) => Number(c.dataset.i)))), "go"), button("Back", () => { pending.review = null; open("actions"); }));
+  wrap.append(el("h3", "Your moves, before the rules run"), el("p", "The AI read these moves for your country out of your actions. Untick any you did not mean: it is left out, and the rules never see it.", "note"), ul, go);
+  return wrap;
+}
+/** A turn with no AI: orders by card are carried out, other countries move by rule, and no story is told. */
+function rulesOnly() {
+  if (!confirm("Advance by the rules alone? Orders you gave by card are carried out and other countries move by rule. Actions in your own words are not read, and no story is told.")) return;
+  settleTurn({ events: [], moves: [], news: [], summary: "No story was told this turn: the rules alone moved the world.", dropped: [], stop: pending.to });
+}
+
 function pasteBox() {
   if (calling) return waiting();
   const wrap = el("div"), out = el("textarea", undefined, "plain paste"), back = el("textarea", undefined, "plain paste");
   out.value = pending.prompt; out.readOnly = true; out.setAttribute("aria-label", "The prompt");
-  back.placeholder = "Paste the AI's whole reply here."; back.setAttribute("aria-label", "The AI's reply");
-  const go = el("div", undefined, "row");
-  go.append(button("Copy the prompt", async () => { try { await navigator.clipboard.writeText(pending.prompt); toast("Copied. Paste it into a new chat."); } catch { out.select(); } }), button("Read the reply", () => finish(back.value), "go"), button("Cancel", () => { pending = null; open("actions"); }));
+  back.placeholder = "Paste the AI's whole reply here."; back.setAttribute("aria-label", "The AI's reply"); back.value = pending.back || ""; out.rows = 12;
+  const go = el("div", undefined, "row"), copy = button("Copy the prompt", async () => { try { await navigator.clipboard.writeText(pending.prompt); copy.textContent = "Copied"; toast("Copied. Paste it into a new chat."); } catch { out.select(); toast("Select all of the prompt and copy it by hand."); } });
+  // a reply written by Capo itself, so the steps can be tried with no AI: three plain events and no moves
+  const sample = () => [`TURN: ${turnCode(state)}`, ...[state.player, ...landNeighbours(state.player).slice(0, 2)].map((c, i) => `EVENT: ${state.date} | ${c} | ${["The cabinet meets late into the night, and the capital waits to hear what was decided.", "Its papers watch the border and print what they can learn of its neighbour's plans.", "Ministers speak of trade and of old quarrels, and promise nothing yet."][i]}`), "SUMMARY: A sample turn, written by Capo itself to show the steps: no AI told this one.", ...(pending.auto ? [`STOP: ${pending.to} | a sample`] : []), "END"].join("\n");
+  go.append(copy, button("Read the reply", () => finish(back.value), "go"), button("Try a sample reply", () => { back.value = sample(); toast("A sample reply is in the box. Press Read the reply."); }), button("Cancel", () => { pending = null; open("actions"); }), button("Advance by the rules alone", rulesOnly));
   if (route.route === "address") go.prepend(button("Ask again", () => viaAddress()));
-  wrap.append(el("h3", route.route === "paste" ? "Paste this into a new chat" : "The AI did not answer"), ...(pending.error ? [el("p", pending.error, "warn")] : []), steps(), out, back, go);
+  wrap.append(el("h3", route.route === "paste" ? "Paste this into a new chat" : "The AI did not answer"), ...(pending.error ? [el("p", pending.error, "warn")] : []), steps(), el("p", "Any chat AI that can follow a format works: the large hosted ones, or one running on your own computer. No AI to hand? Try a sample reply, or advance by the rules alone.", "note"), out, back, go);
   return wrap;
 }
 
 function advance() {
   if (calling) return toast("Capo is already waiting for the AI.");
+  const typed = (sheet === "actions" && $("sheet").querySelector("textarea[aria-label='A new action']")?.value.trim()) || "";
+  if (typed) { state.actions = [...(state.actions || []), typed]; save(); }
   const acts = state.actions || [], bad = crossesLine(acts);
   if (bad.length) return toast(`Action ${bad.join(", ")} is refused: nothing sexual involving minors.`);
   const to = jumpFrom(state.date, jump);
   const g = geo();
   const auto = jump.key === "auto";
   pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, across: seaNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]), talk: talkLines(state, { name }), disputes: disputeLines() }, acts, to, auto), to, auto, actions: acts };
-  if (route.route === "paste") { open("actions"); return; }
+  if (route.route === "paste") { open("actions"); const b = [...$("sheet").querySelectorAll("button")].find((x) => x.textContent === "Copy the prompt"); b?.scrollIntoView({ block: "center" }); land(b); toast("Prompt ready. Copy it, paste it into your AI, then paste the reply here."); return; }
   viaAddress();
 }
 // one call to an AI at a time, which can be stopped, and which gives up after two minutes
@@ -498,9 +528,16 @@ async function viaAddress() {
   try { const text = await call(pending.prompt); finish(text); } catch (e) { if (pending) { pending.error = e.message; open("actions"); } toast(e.message); }
 }
 function finish(text) {
+  pending.back = text;
   const r = readWorldReply(text, state, (c) => homes.has(c) || custom()?.code === c, pending.to, pending.auto, codeOf);
   if (!r.matched) { pending.error = `That reply is not for this turn: it must start with TURN: ${turnCode(state)}.`; open("actions"); return; }
   if (!r.events.length) { pending.error = `No event could be read${r.dropped.length ? `: ${r.dropped.slice(0, 3).join("; ")}` : ""}.`; open("actions"); return; }
+  // moves the AI wrote for the player's country, beyond the orders given by card, are shown for a tick first
+  const list = reviewMoves(state, r.moves, pending.actions, geo()).filter((x) => !x.card);
+  if (list.length) { pending.review = { r, list }; pending.error = ""; open("actions"); return; }
+  settleTurn(r);
+}
+function settleTurn(r) {
   remember(`turn ${state.turn}`);
   const { receipt } = closeTurn(state, r, geo(), pending.actions);
   pending = null; save(); topBar(); ledgerTab = "events"; open("ledger"); map.refresh();
@@ -510,10 +547,11 @@ function finish(text) {
 
 function ledger(box) {
   const tabs = el("div", undefined, "row");
-  for (const [k, t] of [["events", "Events"], ["news", "News"], ["world", "World"], ["log", "Chronicle"]]) { const b = button(t, () => { ledgerTab = k; open("ledger"); }); b.setAttribute("aria-pressed", String(ledgerTab === k)); tabs.append(b); }
+  for (const [k, t] of [["events", "Events"], ["news", "News"], ["world", "World"], ["log", "Chronicle"], ["people", "People"]]) { const b = button(t, () => { ledgerTab = k; open("ledger"); }); b.setAttribute("aria-pressed", String(ledgerTab === k)); tabs.append(b); }
   box.append(el("h2", "Ledger"), tabs);
   const last = state.log[state.log.length - 1];
   if (ledgerTab === "world") { worldTab(box); return; }
+  if (ledgerTab === "people") { peopleTab(box); return; }
   if (ledgerTab === "news") {
     const papers = state.log.slice().reverse().flatMap((t) => { const front = (t.receipt || []).filter((x) => x.check).map((x) => `${x.check.band}: ${x.text.replace(/[.!?]$/, "")}.`); return [...(front.length ? [{ outlet: "From the front, as the rules decided", headline: `${front.length} attack${front.length > 1 ? "s" : ""} settled`, text: front.join(" "), when: t.to }] : []), ...(t.news || []).map((n) => ({ ...n, when: t.to }))]; });
     if (!papers.length) { box.append(el("p", "No papers yet. The press writes after each turn.", "note")); return; }
@@ -539,6 +577,7 @@ function ledger(box) {
     li.append(when, el("p", e.text)); feed.append(li);
   }
   box.append(el("p", last.summary, "note"), feed);
+  if (last.told?.length) box.append(el("h3", "At the front, told with the result known"), ...last.told.map((x) => el("p", `${world.provinces.get(x.at)?.name || x.at}, ${x.band}: ${x.text}`)));
   if (last.advice) box.append(el("h3", `Your trusted adviser, ${last.advice.name}`), el("p", `${last.advice.word}: ${last.advice.text}`));
   if (last.receipt?.length) {
     const list = el("ul", undefined, "list");
@@ -546,6 +585,21 @@ function ledger(box) {
     box.append(el("h3", "What the rules decided"), list);
   }
   if (last.dropped.length) box.append(el("p", `Left out of the reply: ${last.dropped.join("; ")}.`, "note"));
+}
+
+/** The story's memory beyond the chronicle: people (pin the ones to keep for good) and open threads. */
+function peopleTab(box) {
+  const ul = el("ul", undefined, "list"), th = el("ul", undefined, "list"), again = () => { save(); open("ledger"); };
+  ul.append(...state.people.slice().sort((a, b) => !!b.pin - !!a.pin || b.seen - a.seen).map((p) => {
+    const li = el("li");
+    li.append(el("span", `${p.name}${p.role ? `, ${p.role}` : ""}${p.country ? ` (${name(p.country)})` : ""}${p.line ? `: ${p.line}` : ""} First met turn ${p.first}, last heard of turn ${p.seen}.`),
+      button(p.pin ? "Unpin" : "Pin", () => { const why = pin(state, p.name, !p.pin); if (why) return toast(why); again(); }), button("Forget", () => { state.people = state.people.filter((x) => x !== p); again(); }));
+    return li;
+  }));
+  th.append(...state.threads.map((t) => { const li = el("li"); li.append(el("span", `${t.title}: ${t.state} Open since turn ${t.t0}, last touched turn ${t.t}.`), button("Close", () => { state.threads = state.threads.filter((x) => x !== t); again(); })); return li; }));
+  box.append(el("p", "Kept by the game, not by the AI. Twelve people are sent to the AI each turn: your council, the people you chat with and the people you pin, always; the rest by who was mentioned most recently. Up to six threads stay open; one that nothing touches for twelve turns closes by rule and is noted in the chronicle.", "note"),
+    el("h3", "People"), state.people.length ? ul : el("p", "Nobody yet. The AI may name people as the story goes; the game then follows each mention.", "note"),
+    el("h3", "Open threads"), state.threads.length ? th : el("p", "None yet.", "note"));
 }
 
 function worldTab(box) {
@@ -558,7 +612,7 @@ function worldTab(box) {
     el("h3", "Land that has changed hands"), list(taken, "None yet."),
     ...(state.facts?.length ? [el("h3", "Story facts"), list(state.facts.map((f) => f.text), "")] : []),
     ...(state.edits?.length ? [el("h3", "Changed by hand (Sandbox)"), list(state.edits.map((e) => `${fmtDate(e.date)}: ${e.text}`), "")] : []),
-    el("p", `${name(me)}: might ${mightOf(geo(), me)} of 10 (invented, for this fiction), ${held(me).length} provinces.`, "note"));
+    el("p", `${name(me)}: ${strengthLine(strength(state, geo(), me))}, of 10 (invented, for this fiction), ${held(me).length} provinces.`, "note"));
 }
 
 // ---- the Game Master: facts the story must honour (canonical), or direct changes to what the rules hold (sandbox) ----
@@ -702,18 +756,19 @@ const chatTitle = (c) => [...c.with.map(name), ...(c.person ? [c.person] : [])].
 function chatView(box, chat) {
   const feed = el("ol", undefined, "feed");
   for (const m of chat.messages) { const li = el("li"); li.append(el("div", m.who === "you" ? "You" : chat.with.includes(m.who) ? name(m.who) : m.who, "note"), el("p", m.text)); feed.append(li); }
-  const input = Object.assign(el("textarea", undefined, "plain"), { rows: 3, maxLength: 800, placeholder: "Say something." });
+  const input = Object.assign(el("textarea", undefined, "plain"), { rows: 3, maxLength: 800, placeholder: "Say something.", value: chat.draft || "" });
   input.setAttribute("aria-label", "Your message");
   const go = el("div", undefined, "row");
   go.append(button("Send", () => {
     const t = input.value.trim(); if (!t) return;
     if (crossesLine([t]).length) return toast("Refused: nothing sexual involving minors.");
+    chat.draft = t;
     const prompt = chatPrompt(state, talkWorld(), chat, t);
     askAI(prompt, (text) => {
       const got = readChat(text, chat, name);
       if (!got.length) return "No answer could be read: each must be a REPLY line from someone in the chat.";
       chat.messages.push({ who: "you", text: t, turn: state.turn }, ...got.map((g) => ({ ...g, turn: state.turn })));
-      chat.messages = chat.messages.slice(-60);
+      chat.messages = chat.messages.slice(-60); delete chat.draft;
       return "";
     }, "chats");
   }, "go"), button("All chats", () => { chatOpen = null; open("chats"); }), button("Close this chat", () => { state.chats = state.chats.filter((c) => c !== chat); chatOpen = null; save(); open("chats"); }));
@@ -890,7 +945,7 @@ function card(p) {
   const over = el("div", undefined, "near");
   for (const id of world.across.get(p.id)) { const n = world.provinces.get(id); over.append(button(`${n.name} (${name(ownerOf(n.id))})`, () => { card(n); map.show(n.id); })); }
   const wars = state ? warsOf(state, owner) : [], pacts = state ? treatiesOf(state, owner) : [];
-  const rows = [el("h2", p.name), ...(p.disputes || []).map((a) => el("p", `${{ disputed: "Disputed", breakaway: "Breakaway", unsettled: "Unsettled" }[a.kind]}: ${a.name}. ${a.note}`, "warn")), el("p", `${name(owner)}${owner !== p.country ? `, taken from ${name(p.country)}` : ""}.${wars.length ? ` At war with ${wars.map(name).join(", ")}.` : ""}${pacts.length ? ` Treaties: ${pacts.map((x) => `${name(x.with)} (${x.kind})`).join(", ")}.` : ""}`, "note"), el("p", near.children.length ? "Borders by land:" : "No land borders.", "note"), near, ...(over.children.length ? [el("p", "Across a narrow sea:", "note"), over] : [])];
+  const rows = [el("h2", p.name), ...(p.disputes || []).map((a) => el("p", `${{ disputed: "Disputed", breakaway: "Breakaway", unsettled: "Unsettled" }[a.kind]}: ${a.name}. ${a.note}`, "warn")), el("p", `${name(owner)}${owner !== p.country ? `, taken from ${name(p.country)}` : ""}.${wars.length ? ` At war with ${wars.map(name).join(", ")}.` : ""}${pacts.length ? ` Treaties: ${pacts.map((x) => `${name(x.with)} (${x.kind})`).join(", ")}.` : ""}${state ? ` Its ${strengthLine(strength(state, geo(), owner))}.` : ""}`, "note"), el("p", near.children.length ? "Borders by land:" : "No land borders.", "note"), near, ...(over.children.length ? [el("p", "Across a narrow sea:", "note"), over] : [])];
   if (state && owner !== state.player) rows.push(el("div", undefined, "row")), rows[rows.length - 1].append(button(`Talk to ${name(owner)}`, () => open("chats")));
   if (state && state.mode !== "citizen" && owner !== state.player) rows.push(warsOf(state, state.player).includes(owner) ? attackBox(p) : treatyBox(owner));
   box.replaceChildren(...rows);
@@ -906,7 +961,7 @@ function order(o) {
   state.orders = [...(state.orders || []).filter((x) => x !== old), o];
   save(); toast("Ordered: it is in your actions."); if (sheet === "actions") open("actions");
 }
-const answer = (c, kind) => treatyAnswer(state, state.player, c, kind, (x) => mightOf(geo(), x));
+const answer = (c, kind) => treatyAnswer(state, state.player, c, kind, (x) => strengthOf(state, geo(), x));
 const stand = (c) => { const r = relOf(state, state.player, c); return `${relWord(r)} (${r > 0 ? "+" : ""}${r})`; };
 /** Where you stand with a country, and what it would answer to each kind of treaty, before you ask. */
 function treatyBox(c) {
@@ -926,6 +981,9 @@ function attackBox(p) {
   how.append(...Object.entries(APPROACHES).map(([k, [, said]]) => new Option(`${k[0].toUpperCase()}${k.slice(1)}: ${said}`, k)));
   who.value = attackPick.seat; how.value = attackPick.approach; who.style.maxWidth = how.style.maxWidth = "100%"; who.setAttribute("aria-label", "Who leads the attack"); how.setAttribute("aria-label", "How to attack");
   who.onchange = () => { attackPick.seat = who.value; card(p); }; how.onchange = () => { attackPick.approach = how.value; card(p); };
+  const foe = ownerOf(p.id), ans = peaceAnswer(state, state.player, foe), offered = state.offers.some((o) => o.from === foe && o.kind === "peace"), talks = el("div", undefined, "row");
+  if (!offered) talks.append(button(`Peace: would ${ans.ok ? "agree" : "refuse"}`, () => order({ text: `Propose peace to ${name(foe)} (${foe}).`, verb: "PEACE", target: foe, detail: "" })));
+  box.append(el("h3", "Peace"), el("p", offered ? `${name(foe)} has offered peace: answer it under Actions.` : `Its answer, by the rules: ${ans.why}. Each side would keep the land it holds, and a truce of two years follows.`, "note"), talks);
   const a = attackPlan(state, geo(), state.player, p.id, attackPick, turnAttacks());
   if (!a.ok) { box.append(el("p", `${a.why.replace(/^attack on [^:]+ refused: /, "Cannot attack: ")}.`, "note")); return box; }
   const odds = el("p", `Odds: ${oddsLine(a.chance)}. Clean: taken. Costly: taken, but your army is spent for the turn. Failed: thrown back.`), row = el("div", undefined, "row");
@@ -941,7 +999,7 @@ function attackBox(p) {
 
 async function start() {
   try { world = await loadWorld("../maps/world.json", "../maps/disputes.json"); } catch (e) { toast(`${e.message} Capo needs its web address, not a file opened by double-click.`); return; }
-  index(); claims();
+  index(); claims(); ids = [...world.provinces.keys()];
   map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked, mine: () => state?.player });
   $("view").onchange = (e) => { view = e.target.value; map.refresh(); };
   $("in").onclick = () => map.zoomBy(1.6);

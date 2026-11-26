@@ -11,7 +11,9 @@ export const LOW = 10, HIGH = 75, COSTLY = 20, MOST_PARTS = 4;
 export const BANDS = ["clean", "costly", "failed"];
 // Which rules a game is played under. 2: attacks on the check, with odds out of 100 and a commander (ruling 124).
 // 3: relations and treaty answers by rule, a chronicle, one skill a person dealt by rule, take-backs on numbered lines.
-export const RULES = 3;
+// 4: people and threads remembered by code, peace answered by rule, wars that end by rule with a truce, strength that
+// changes, other countries moving by rule when no AI proposes for them, the player's moves reviewed, both endings told.
+export const RULES = 4;
 
 /** A roll's name: the same name always draws the same number in the same game. */
 export const drawKey = ({ turn, mission, checkpoint = "main", person = "-" }) => `${turn}:${mission}:${checkpoint}:${person}`;
