@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Refusal, canon, chance, createMatch, fingerprint, openSave, packGame, seedState, unpackGame } from "../src/core/index.js";
 import { NONE, SWITCHES, boardOf, cellsOf, goalOf, inch, liveBoardFor } from "../src/games/inch/rules.js";
-import { AGE_AT, CARDS, DRIES, INKS, LIVE_MAPS, MARKS, NONE as N, PACT, PCTS, PLACES, RIVALS, SAFE, agesOf, apart, bordersOf, cityPrice, costOf, driedOf, dryRank, gainOf, goalOf as liveGoalOf, goalPercent, held, landingPrice, landings, liveAllows, liveApply, liveMoves, maxOf, pactOn, pactWhy, rangeOf, recallLoss, recallable, wetAt, wetOf } from "../src/games/inch/live.js";
+import { AGE_AT, CARDS, ageOf, DRIES, INKS, LIVE_MAPS, MARKS, NONE as N, PACT, PCTS, PLACES, RIVALS, SAFE, agesOf, apart, bordersOf, cityPrice, costOf, driedOf, dryRank, gainOf, goalOf as liveGoalOf, goalPercent, held, landingPrice, landings, liveAllows, liveApply, liveMoves, maxOf, pactOn, pactWhy, rangeOf, recallLoss, recallable, wetAt, wetOf } from "../src/games/inch/live.js";
 import { TIERS, choose } from "../src/games/inch/bot.js";
 import { SLOW, botGame, direct, ended, inList, passive, refused, refusedListed, replays, same, sameEachStep } from "./fixtures/bots.js";
 
@@ -242,13 +242,22 @@ function ticked(more, ticks, seed = "v7") {
 }
 const mutable = (p) => structuredClone(p);
 
-test("version 11: saves from version 10 are refused with a plain message", () => {
+test("version 12: saves from version 11 are refused with a plain message", () => {
   const m = live({}, "old");
   m.play(m.legal()[0]);
   const old = JSON.parse(m.save());
-  old.version = "10";
-  assert.throws(() => openSave(JSON.stringify(old), [inch]), (e) => e instanceof Refusal && e.code === "version" && /version 10/.test(e.message));
-  assert.equal(inch.version, "11");
+  old.version = "11";
+  assert.throws(() => openSave(JSON.stringify(old), [inch]), (e) => e instanceof Refusal && e.code === "version" && /version 11/.test(e.message));
+  assert.equal(inch.version, "12");
+});
+test("version 12: the world's third age comes at 4:00, and a game that sees it still replays from its seed and moves", () => {
+  assert.deepEqual(AGE_AT.world, [0, 240, 480]);
+  const m = live({}, "age three"), ages = [];
+  m.play(m.legal()[0]);
+  while (!m.position.over && m.position.tick < 480) for (const e of m.play({ do: "tick", n: 4 })) if (e.kind === "age") ages.push([e.age, m.position.tick]);
+  assert.deepEqual(ages, [[2, 240], [3, 480]]);
+  assert.equal(ageOf(m.position), 3);
+  assert.equal(openSave(m.save(), [inch]).match.fingerprint(), m.fingerprint());
 });
 test("inks: the start carries your ink; bots' inks are drawn evenly by the seed; Custom can draw yours or leave inks off", () => {
   const m = live({ nations: 12 }, "inks"), p = m.position;

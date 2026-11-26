@@ -848,7 +848,8 @@ export function createTable(G) {
       return Array.isArray(s.kinds) && fits && s.kinds.every((k) => k !== "away" && Object.hasOwn(WORDS, k)) ? { m, kinds: s.kinds, look: s.look || LOOK0 } : null;
     } catch { return null; }
   }
-  const resumeButton = () => { const k = kept(), when = k && G.roundText?.(k.m.position); $("resume").hidden = !k; if (k) $("resume").textContent = when ? `Continue: ${when}` : `Continue, round ${k.m.position.round}`; };
+  // G.continueText: a game's own words for the button (Inch's real time says it comes back paused)
+  const resumeButton = () => { const k = kept(), when = k && G.roundText?.(k.m.position); $("resume").hidden = !k; if (k) $("resume").textContent = G.continueText?.(k.m.position) || (when ? `Continue: ${when}` : `Continue, round ${k.m.position.round}`); };
 
   const launch = (o, all, who, words = "") => begin(createMatch(G.game, { seed: G.seedOf?.(all) || seed(), options: o }), who, who.includes("away") ? { id: newId(), roles: who.map((k) => (k === "you" ? "host" : k === "away" ? "friend" : k)), pass: canLock() ? words : "", floor: 0 } : null, -1, setup.look.map((x) => [...x]));
   /** This browser keeps one game in progress. Starting another over it is asked first, in the page, and the old one can be gone back to. */

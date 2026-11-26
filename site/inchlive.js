@@ -31,6 +31,8 @@ let found = 0, foes = new Set(), tips = (() => { try { return localStorage.getIt
 // the clock waits for your first order: `begun` is the game whose clock has started; `struck` until when an attack on you shows, and by whom;
 // `framed` the game whose phone view has been brought to your land; `told` when each attacker was last written in the log
 let begun = null, struck = 0, struckBy = -1, framed = null;
+// `held` the game brought back paused (Continue, or a saved file), until its clock runs again
+let held = null;
 const told = new Map();
 const keepTips = () => { try { localStorage.setItem(TIPS_KEY, tips ? "on" : "off"); } catch { /* the tips still work for this visit */ } };
 
@@ -136,8 +138,8 @@ function controls(T) {
   out.textContent = `${pct}%`;
   row.append(el("span", "Send"), slider, out);
   pause.onclick = () => {
-    if (T.match && waiting(T)) { begun = T.match; paused = false; speak("The clock runs."); return T.refresh(); } // before your first order the button starts the clock
-    paused = !paused; speak(paused ? "Paused. You can still send orders." : "The clock runs again."); return T.refresh();
+    if (T.match && waiting(T)) { begun = T.match; paused = false; held = null; speak("The clock runs."); return T.refresh(); } // before your first order the button starts the clock
+    paused = !paused; held = null; speak(paused ? "Paused. You can still send orders." : "The clock runs again."); return T.refresh();
   };
   city.onclick = () => { building = !building; city.setAttribute("aria-pressed", String(building)); toast(building ? "Tap one of your cells to build a city there." : "Building stopped."); };
   const me = button("Find me"), help = button("Tips");
@@ -508,7 +510,7 @@ export function panel(T) {
   // the shell blanks the spoken status while a move plays out, so in play it holds only what lasts: that you are out
   state(out ? "You are out. Watching to the end" : "");
   const hold = waiting(T);
-  c.heading.textContent = out ? "" : hold ? "The clock waits for your first order. Choose where to send a share of your strength." : paused ? "Paused. You can still send orders." : "Choose where to send a share of your strength.";
+  c.heading.textContent = out ? "" : hold ? "The clock waits for your first order. Choose where to send a share of your strength." : paused ? `${held === T.match ? "Paused where you left it. Resume, or press Space, to go on." : "Paused."} You can still send orders.` : "Choose where to send a share of your strength.";
   c.pause.textContent = hold ? "Start the clock" : paused ? "Resume" : "Pause";
   // on a phone the map comes in close on your land once you have it (and on a game brought back), not the whole world in a strip
   if (framed !== T.match && !T.demo && p.land[s]) { framed = T.match; if (innerWidth <= 820) requestAnimationFrame(() => { if (T.match?.position.live) frame(T, T.match.position, b, centre(T.match.position, b), 13); }); }
@@ -548,6 +550,17 @@ export function summary(T) {
   queueMicrotask(() => figures(T)); // the end sheet is built around these words; the figures join it once it stands
   return `${p.names[r.winners[0]]} ${r.why}, after ${m < 1 ? "less than a minute" : `${m} ${m === 1 ? "minute" : "minutes"}`} of game time${who(r.winners[0]) ? `, with ${who(r.winners[0])}` : ""}.`;
 }
+/** After a quick win against gentle rivals (under three minutes of game time), the end screen suggests Normal, with a button that
+ *  starts the same game against normal rivals. */
+export function nudge(T) {
+  const m = T.match, p = m.position;
+  if (!p.live || T.demo || T.kinds[0] !== "you" || p.rivals !== "gentle" || !p.over || p.over.winners[0] !== p.human || p.tick >= QUICK) return null;
+  const wrap = el("section", undefined, "stack"), go = button("Try Normal rivals", "quiet");
+  go.onclick = () => { $("sheet").close(); T.begin(createMatch(inch, { seed: [...crypto.getRandomValues(new Uint32Array(2))].map((v) => v.toString(36)).join(""), options: { ...m.options, rivals: "even" } }), [...T.kinds]); };
+  wrap.append(el("p", `A win in ${clockOf(p.tick)}: gentle rivals may be too easy for you now. Normal rivals leave you alone for ${span(RIVALS.even.truce)}, then up to ${RIVALS.even.pile} attack you at once.`, "live-info"), go);
+  return wrap;
+}
+const QUICK = 360; // three minutes, in ticks
 /** The figures on the end table: strength, and each nation's ink and mark where the game has them. */
 export const stats = (p, s) => (p.over ? [["Strength", p.troops[s]], ...(p.ink.some((k) => k >= 0) ? [["Ink", inkOf(p, s).name || "none"]] : []), ...(p.ages ? [["Mark", markOf(p, s).name || "none"]] : [])] : [["Strength", p.troops[s]], ["Nations left", p.alive.filter(Boolean).length]]);
 /** The end, in figures: the game is played again from its seed and moves, a little at a time, and what you did is counted on the way:
@@ -651,11 +664,15 @@ export function seen(T, events) {
   sheet("You are out", box, "Watch");
 }
 /** Out of real time (a new game, or the duel): the turn game's controls back, and this game's choices forgotten. */
+/** A real-time game brought back (Continue, or a saved file) opens paused: a new game's list of moves is empty. */
+export const hold = (T) => { const m = T.match; if (m?.position.live && m.position.phase === "play" && !m.position.over && m.list.length) { paused = true; held = m; } };
+/** The Continue button's words for a kept real-time game: where it stands, and that it opens paused. */
+export const continueText = (p) => (p.live && p.phase === "play" && !p.over ? `Continue, paused at ${time(p)}` : null);
 export const leave = () => {
   if (box) { box.hidden = true; box.list.dataset.keys = ""; box.pause.textContent = "Pause"; }
   for (const id of ["targets", "shares"]) $(id).hidden = false;
   $("pour").parentElement.hidden = false;
-  paused = false; home = aim = drawn = ""; band = 0; rowsOf.clear(); $("leaders")?.replaceChildren();
+  paused = false; held = null; home = aim = drawn = ""; band = 0; rowsOf.clear(); $("leaders")?.replaceChildren();
   runRows.clear(); box?.runs.replaceChildren(); foes = new Set(); told.clear(); struck = 0; found = 0; tip = 0; if (box) box.guide.hidden = true;
 };
 export const liveGoal = goalOf, liveLand = wetOf;

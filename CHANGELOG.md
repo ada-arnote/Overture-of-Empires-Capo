@@ -2,6 +2,22 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### An Inch of Ink: the third age sooner, Continue paused, a nudge to Normal
+
+**Players**
+- **Age III comes at 4:00 on the world map** (it was 5:00), so a first game against gentle rivals, won in about four minutes, now reaches the last age: the card, and the goal that begins to ease. Continents and islands are unchanged.
+- **Continue brings a game back paused.** A real-time game opened with Continue (or from a saved file) waits for you, and the button says so: "Continue, paused at Age II, 3:12 of game time". The panel reads "Paused where you left it"; Resume or Space goes on.
+- **A quick win against gentle rivals suggests Normal.** Under three minutes of game time, the end screen says what normal rivals do and offers "Try Normal rivals", the same game against them.
+- The middle tier is called Normal everywhere it is shown (the menu, How to play, your record); games saved with it keep the name `even`.
+
+**Contributors**
+- Inch rules are version 12 (saves from 11 do not open): `AGE_AT.world` is `[0, 240, 480]`. Games stay whole-number and replay from seed and moves.
+- Measured with `tools/inchtiers.mjs`, 200 games a row, version 11 then 12. Newcomer: Gentle 87% won in a median 4:11, now 84% in 4:04; Normal 15% in 4:02, now 14% in 3:55; Hard 3% in 3:29, unchanged. Steady: Gentle 100% in 2:56, unchanged; Normal 42% in 3:30, now 41% in 3:30; Hard 7% in 3:48, unchanged. Regular: unchanged (100% in 2:20, 14% in 2:48, 1% in 3:39). No tier needed retuning.
+- Ink fairness, 1,000 bots-only games a map at Normal: world 0.68 to 1.30 (was 0.71 to 1.26), continents 0.60 to 1.46 and islands 0.82 to 1.28 (unchanged). All inside 0.5 to 1.5.
+- The table shell takes `G.continueText(position)`, a game's own words for the Continue button. Inch's page adds `hold` (a game brought back opens paused), `continueText` and `nudge` (the end screen's suggestion, through `G.report`).
+
 ## v0.9.2 (2026-11-26): An Inch of Ink waits for you, and fights fairer
 
 ### An Inch of Ink: a clock that waits, rivals that teach, attacks you can see, and a truce

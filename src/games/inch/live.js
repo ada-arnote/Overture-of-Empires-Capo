@@ -12,9 +12,10 @@ export const NONE = -1, PCTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100], TICK_M
 export const LIVE_MAPS = ["world", "continents", "islands"];
 const START = 30, GOAL = 80, RANGE = 9, DEAL = 12, SPREAD = 14, EVEN = 12;
 /** The ages start at these ticks, by map, each set at a share of how long its games run (the world's longest, continents' shortest),
- *  so that nearly every game sees Age II and the longer ones Age III. In the last the goal eases a point every EASE ticks down to LOW.
+ *  so that nearly every game sees Age II and the longer ones Age III. The world's Age III comes at 4:00 (version 12; it was 5:00),
+ *  so a newcomer's Gentle game, won in a median of about four minutes, reaches it. In the last the goal eases a point every EASE ticks down to LOW.
  *  SAFE: the safety end, 30 minutes. WIND: how long Second wind lasts. */
-export const AGE_AT = { world: [0, 240, 600], continents: [0, 150, 300], islands: [0, 180, 420] }, EASE = 60, LOW = 66, SAFE = 3600, WIND = 120;
+export const AGE_AT = { world: [0, 240, 480], continents: [0, 150, 300], islands: [0, 180, 420] }, EASE = 60, LOW = 66, SAFE = 3600, WIND = 120;
 export const agesOf = (p) => AGE_AT[p.map] || AGE_AT.world;
 /** The Ink Dries. nations: how many; from: the tick the page starts to dry; span: ticks to dry it all, though a tenth (core) stays wet;
  *  goal: the share of the wet land that wins; fade: ticks before land cut off from its capital fades; wall: what the capital and its ring cost, times. */
