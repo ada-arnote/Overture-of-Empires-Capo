@@ -78,7 +78,7 @@ button.ic { border: 1px solid var(--edge-soft); background: var(--raise) }
 .icon svg, svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; display: block }
 /* chosen: a bright edge, a bar under it and heavier words, so it never rests on colour alone; the system's own mark when colours are forced */
 [aria-pressed=true]:is(button.plain, .pick button, .wear-row button), .pick [aria-checked=true] { border-color: var(--accent); background: var(--accent-wash); box-shadow: inset 0 0 0 1px var(--accent), inset 0 -4px 0 var(--accent); font-weight: 700 }
-@media (forced-colors: active) { [aria-checked=true], [aria-pressed=true] { outline: 3px solid Highlight; outline-offset: -3px } }
+@media (forced-colors: active) { [aria-checked=true], [aria-pressed=true], [aria-selected=true] { outline: 3px solid Highlight; outline-offset: -3px } #fills i, #goal, .dot { forced-color-adjust: none } } /* seat colours stay seat colours */
 /* a row of buttons wraps before it runs off the panel; the main one takes what is left, or a row of its own */
 .go { display: flex; flex-wrap: wrap; gap: var(--sp-2) } .go > .quiet { flex: 0 1 auto; white-space: nowrap } .go > .main { flex: 1 1 9em; padding: 4px var(--sp-3); line-height: 1.15; text-wrap: balance }
 /* choices in a row: one control, arrows move in it */
@@ -94,7 +94,7 @@ button.ic { border: 1px solid var(--edge-soft); background: var(--raise) }
 /* tabs: words on a rule, the chosen one underlined in silver */
 .pick.tabs { flex-wrap: nowrap; gap: 0; margin-bottom: var(--sp-4); border-bottom: 1px solid var(--edge-soft) }
 .tabs button { flex: 1; padding: 6px 4px; border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; color: var(--text-3); font-weight: 700 }
-.tabs [aria-checked=true] { background: none; box-shadow: none; border-color: var(--accent); color: var(--text) }
+.tabs [aria-selected=true] { background: none; box-shadow: none; border-color: var(--accent); color: var(--text) }
 /* zoom, for the board (the table games) and the map (Capo): plus, minus, all of it */
 .zoom { position: fixed; z-index: 2; left: max(16px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom)); display: grid; gap: 6px } .zoom button { width: var(--tap); min-width: var(--tap); min-height: var(--tap); padding: 0; font-size: 20px; background: var(--lacquer) }
 /* fields */
@@ -106,7 +106,7 @@ input[type=range] { accent-color: var(--accent) }
 h1, h2, .seat b { font-family: var(--display); font-weight: 400 } /* names and headings; its figures are old-style, so anything with a number in it is set in the plain face */
 .eyebrow, .seat dt, .ranks tr:first-child th, #turn small, .end h2, .cap { font: 700 var(--fs-1)/1.3 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent) }
 /* sheets: one at a time, lacquer for the menu and the end, paper for what is read */
-dialog { color: var(--text); margin: auto; width: min(480px, calc((100vw - 32px) / var(--ui-scale))); max-height: min(calc(84vh / var(--ui-scale)), 640px); padding: 22px; overflow-y: auto } dialog::backdrop { background: rgba(var(--shade), .66) }
+dialog { color: var(--text); margin: auto; width: min(480px, calc((100vw - 32px) / var(--ui-scale))); max-height: min(calc(84vh / var(--ui-scale)), 640px); padding: 22px; overflow-y: auto; scroll-padding-bottom: 84px } /* a row reached by Tab is never left under the sticky buttons */ dialog::backdrop { background: rgba(var(--shade), .66) }
 dialog h2 { font-size: var(--fs-6); line-height: 1.15; margin-bottom: var(--sp-3) } dialog p, dialog li { margin-bottom: 9px } dialog ul { padding-left: 20px; margin-bottom: 12px } dialog .stack { display: grid; gap: var(--sp-2); margin-bottom: 14px }
 dialog.paper :is(p, li) { font-family: var(--serif); font-size: 17px; line-height: 1.5 }
 dialog .stack button { min-height: 48px } dialog .go { position: sticky; bottom: -22px; padding-bottom: 4px }
@@ -164,14 +164,15 @@ dialog hr { border: 0; border-top: 1px solid var(--edge); margin: 6px 0 } #sheet
 #live .live-info { color: var(--text-2); font-size: var(--fs-2); margin-bottom: var(--sp-2) } .live-row { display: flex; align-items: center; gap: 10px; margin-bottom: var(--sp-2) } .live-row input { flex: 1; height: var(--tap) } .live-row output { min-width: 3em; text-align: right; font: 700 var(--fs-4)/1 var(--sans) }
 #leaders { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 3px; font-size: var(--fs-2) } #leaders li { display: flex; align-items: center; gap: 4px } #leaders b { flex: 1; font-weight: 700 } #leaders li.me b { color: var(--accent-hi) } #live .go button[aria-pressed=true] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent) }
 /* since your last turn: a dispatch. One line until it is opened, so it never takes the board */
-#news { position: relative; margin-bottom: 10px; padding: 0 44px 0 12px; border-radius: var(--r-1); font-size: var(--fs-2); box-shadow: var(--lift-1) } #news:empty { display: none }
-#news .head { display: block; width: 100%; min-height: 40px; padding: 0; border: 0; background: none; text-align: left; font: 700 var(--fs-1)/1.3 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent) } #news .head::after { content: " \25BE" } #news .head[aria-expanded=true]::after { content: " \25B4" }
+#news { position: relative; margin-bottom: 10px; padding: 0 44px 0 12px; border-radius: var(--r-1); font-size: var(--fs-2); box-shadow: var(--lift-1) }
+#news.none { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%) } #news.none > button { display: none } /* empty, but its spoken part stays in place so the next summary is said */
+#news .head { display: block; width: 100%; min-height: var(--tap); padding: 0; border: 0; background: none; text-align: left; font: 700 var(--fs-1)/1.3 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent) } #news .head::after { content: " \25BE"; content: " \25BE" / "" } #news .head[aria-expanded=true]::after { content: " \25B4"; content: " \25B4" / "" } /* the arrows are seen, not read: the button says open or shut */
 #news ul { padding: 0 0 10px 18px; max-height: 26vh; overflow-y: auto; font-family: var(--serif); font-size: 15px } #news small { display: block; margin: -4px 0 10px; color: var(--text-3) }
 #news:not(.open) :is(li + li, small) { display: none } #news:not(.open) ul { list-style: none; padding-left: 0 } #news:not(.open) li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-#news .shut { position: absolute; top: 0; right: 0; width: var(--tap); height: 40px; border: 0; background: none; font-size: 22px; color: var(--text-3) }
+#news .shut { position: absolute; top: 0; right: 0; width: var(--tap); height: var(--tap); border: 0; background: none; font-size: 22px; color: var(--text-3) }
 /* the record of the game, docked beside the board on wide screens */
 #record { position: fixed; z-index: 2; right: max(16px, env(safe-area-inset-right)); top: 78px; width: 340px; max-height: calc(100vh - var(--ah, 300px) - 108px); display: flex; flex-direction: column; padding: 2px 4px 8px } .atlas #record { top: 180px }
-#record .head { min-height: 40px; padding: 0 12px; border: 0; background: none; text-align: left; font: 700 var(--fs-1) var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent) } #record .head::after { content: " \25B4" } #record [aria-expanded=false]::after { content: " \25BE" }
+#record .head { min-height: var(--tap); padding: 0 12px; border: 0; background: none; text-align: left; font: 700 var(--fs-1) var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent) } #record .head::after { content: " \25B4"; content: " \25B4" / "" } #record [aria-expanded=false]::after { content: " \25BE"; content: " \25BE" / "" }
 #record ol { overflow-y: auto; padding: 0 12px 0 34px; font-size: var(--fs-2); color: var(--text-2); scrollbar-width: thin; scrollbar-color: var(--edge) transparent } #record li + li { margin-top: 3px } #record li::marker { color: var(--text-3) }
 @media (min-width: 1181px) { #logs { display: none } }
 
@@ -192,7 +193,7 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
 #style small { font-size: 12px }
 #quick { min-height: 58px; font-size: 20px; letter-spacing: .04em } #preset { margin: 10px 0 4px } #own > summary { min-height: var(--tap); display: flex; align-items: center; color: var(--text-2); cursor: pointer } #own > summary::before { content: "+"; width: 1.2em; color: var(--accent) } #own[open] > summary::before { content: "\2212" } #own[open] > summary { margin-bottom: var(--sp-2) } #own .go > * { flex: 1 }
 .title .card > .text { display: block; margin: 2px 0 -6px; color: var(--accent-hi) }
-#foot { position: fixed; z-index: 5; right: 16px; bottom: 10px; display: none; gap: 14px; font-size: var(--fs-1); color: var(--text-3) } .menu #foot { display: flex } #foot a { color: inherit }
+#foot { position: fixed; z-index: 5; right: 16px; bottom: 10px; display: none; gap: 14px; font-size: var(--fs-1); color: var(--text-3) } .menu #foot { display: flex } #foot a { color: inherit; display: inline-block; padding: 13px 6px; margin: -13px -6px } /* a 44 px target in the same line */
 .broken { position: fixed; inset: auto 16px 16px; z-index: 9; padding: 12px 16px; background: #5a2318; border-radius: var(--r-2); opacity: 0; animation: late 0s 2.5s forwards } @keyframes late { to { opacity: 1 } }
 .set .line { margin-bottom: 10px } .set .pick { margin: 0 } .set input { flex: 1; max-width: 260px; height: var(--tap) } .set .about { margin: -4px 0 10px }
 
