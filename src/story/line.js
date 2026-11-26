@@ -18,9 +18,12 @@ export const crosses = (text) => {
 /** Texts that cross the hard line, by number (counting from 1). They are never sent, and never kept from a reply. */
 export const crossesLine = (texts) => texts.map((o, i) => (crosses(o) ? i + 1 : 0)).filter(Boolean);
 
-export function draw(seed, label) { // one repeatable number from 0 to 1
+/** One repeatable 32-bit whole number from the game's seed and a label. */
+export function hash32(seed, label) {
   let h = 2166136261;
   for (const ch of seed + "/" + label) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
   h = Math.imul(h ^ (h >>> 15), h | 1); h ^= h + Math.imul(h ^ (h >>> 7), h | 61);
-  return ((h ^ (h >>> 14)) >>> 0) / 4294967296;
+  return (h ^ (h >>> 14)) >>> 0;
 }
+/** One repeatable whole number from 1 to 100: the only chance the rules use (and the one Coda can repeat). */
+export const draw100 = (seed, label) => (hash32(seed, label) % 100) + 1;

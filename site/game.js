@@ -3,9 +3,10 @@
 // Ancient Kingdom: choose any country and a mode, write actions, jump time, read what happened. The AI proposes
 // moves; the rules in src/story/worldrules.js decide which stand, and the map follows.
 import { JUMPS, MODES, UNITS, jumpFrom, monthsBetween, newWorldGame, readWorldReply, turnCode, worldPrompt } from "../src/story/turn.js";
-import { adviceFor, applyMoves, leaks, mightOf, placesFor, treatiesOf, warsOf } from "../src/story/worldrules.js";
+import { APPROACHES, applyMoves, attackPlan, commanders, leaks, mightOf, placesFor, treatiesOf, warsOf } from "../src/story/worldrules.js";
+import { oddsLine, partsLine } from "../src/story/check.js";
 import { crossesLine } from "../src/story/line.js";
-import { checkSave as checkSaveOf, keptRecords, mendGame, restoreGame, snapGame } from "../src/story/saves.js";
+import { checkSave as checkSaveOf, convertNote, keptRecords, mendGame, restoreGame, snapGame } from "../src/story/saves.js";
 import { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacter, scenarioFrom, scenarioText } from "../src/story/scenarios.js";
 import { askPrompt, changeStanding, chatPrompt, councilPrompt, moveFavour, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
 import { loadWorld, ownerColour, worldMap } from "./worldmap.js";
@@ -420,7 +421,11 @@ function actions(box) {
   input.setAttribute("aria-label", "A new action");
   const add = () => { const t = input.value.trim(); if (!t) return; state.actions = [...(state.actions || []), t]; save(); open("actions"); };
   input.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); add(); } };
-  list.append(...(state.actions || []).map((a, i) => { const li = el("li"); li.append(el("span", a), button("Remove", () => { state.actions.splice(i, 1); save(); open("actions"); })); return li; }));
+  list.append(...(state.actions || []).map((a, i) => {
+    const li = el("li"), o = (state.orders || []).find((x) => x.text === a), plan = o && attackPlan(state, geo(), state.player, o.target, o, turnAttacks());
+    li.append(el("span", plan?.ok ? `${a} Odds: ${oddsLine(plan.chance)}.` : a), button("Remove", () => { state.actions.splice(i, 1); state.orders = (state.orders || []).filter((x) => x.text !== a); save(); open("actions"); }));
+    return li;
+  }));
   const near = landNeighbours(state.player).slice(0, 3), ideas = el("div", undefined, "row");
   for (const t of ["Strengthen the army.", "Spend on schools and hospitals.", ...near.map((c) => `Seek closer ties with ${name(c)}.`)]) ideas.append(button(t, () => { state.actions = [...(state.actions || []), t]; save(); open("actions"); }));
   const go = el("div", undefined, "row");
@@ -493,7 +498,7 @@ function finish(text) {
   receipt.push(...leaked.map((l) => ({ ok: true, text: `${l.name}: leaks your plans to the press` })));
   state.log.push({ from: state.date, to: r.stop, actions: pending.actions, events: r.events, news: r.news, summary: r.summary, dropped: r.dropped, receipt, advice: r.advice });
   state.log = state.log.slice(-60);
-  state.date = r.stop; state.turn++; state.actions = [];
+  state.date = r.stop; state.turn++; state.actions = []; state.orders = [];
   pending = null; save(); topBar(); ledgerTab = "events"; open("ledger"); map.refresh();
   const changed = receipt.filter((x) => x.ok && / takes it from | hands /.test(x.text)).length;
   toast(`Now ${fmtDate(state.date)}.${changed ? ` ${changed} province${changed > 1 ? "s" : ""} changed hands.` : ""}`);
@@ -506,7 +511,7 @@ function ledger(box) {
   const last = state.log[state.log.length - 1];
   if (ledgerTab === "world") { worldTab(box); return; }
   if (ledgerTab === "news") {
-    const papers = state.log.slice().reverse().flatMap((t) => (t.news || []).map((n) => ({ ...n, when: t.to })));
+    const papers = state.log.slice().reverse().flatMap((t) => { const front = (t.receipt || []).filter((x) => x.check).map((x) => `${x.check.band}: ${x.text.replace(/[.!?]$/, "")}.`); return [...(front.length ? [{ outlet: "From the front, as the rules decided", headline: `${front.length} attack${front.length > 1 ? "s" : ""} settled`, text: front.join(" "), when: t.to }] : []), ...(t.news || []).map((n) => ({ ...n, when: t.to }))]; });
     if (!papers.length) { box.append(el("p", "No papers yet. The press writes after each turn.", "note")); return; }
     const feed = el("ol", undefined, "feed");
     feed.append(...papers.slice(0, 24).map((n) => { const li = el("li"); li.append(el("div", `${n.outlet}, ${fmtDate(n.when)}`, "note"), el("b", n.headline), ...(n.text ? [el("p", n.text)] : [])); return li; }));
@@ -530,7 +535,7 @@ function ledger(box) {
   if (last.advice) box.append(el("h3", `Your trusted adviser, ${last.advice.name}`), el("p", `${last.advice.word}: ${last.advice.text}`));
   if (last.receipt?.length) {
     const list = el("ul", undefined, "list");
-    list.append(...last.receipt.map((x) => { const li = el("li", undefined, x.ok ? "yes" : "no"); li.append(el("span", x.ok ? "✓" : "✗", "mark"), el("span", `${x.text.replace(/[.!?]$/, "")}.`)); return li; }));
+    list.append(...last.receipt.map((x) => { const li = el("li", undefined, x.ok ? "yes" : "no"); li.append(el("span", x.ok ? "✓" : "✗", "mark"), ...(x.check ? [el("b", `${x.check.band}: `)] : []), el("span", `${x.text.replace(/[.!?]$/, "")}.`)); return li; }));
     box.append(el("h3", "What the rules decided"), list);
   }
   if (last.dropped.length) box.append(el("p", `Left out of the reply: ${last.dropped.join("; ")}.`, "note"));
@@ -729,7 +734,7 @@ function advisors(box) {
       li.append(r);
     } else {
       const trusted = council.trusted === seat;
-      li.append(el("div", `${label}${trusted ? ", your trusted adviser" : ""}`, "note"), el("b", m.name), ...(m.favour <= -2 ? [el("p", "Turned against you: may stall orders they dislike, and leak your plans.", "warn")] : []), el("p", `${m.traits}. Skill ${m.skill} of 5. Wants ${m.wants}. Favour ${m.favour > 0 ? "+" : ""}${m.favour}.${m.record?.n ? ` Right ${m.record.right} of ${m.record.n}.` : ""}${m.likes.length ? ` Likes you to ${m.likes.map((v) => v.toLowerCase()).join(", ")}.` : ""}${m.hates.length ? ` Dislikes ${m.hates.map((v) => v.toLowerCase()).join(", ")}.` : ""}`));
+      li.append(el("div", `${label}${trusted ? ", your trusted adviser" : ""}`, "note"), el("b", m.name), ...(m.favour <= -2 ? [el("p", "Turned against you: may stall orders they dislike, and leak your plans.", "warn")] : []), el("p", `${m.traits}. Skill ${m.skill} of 5. Wants ${m.wants}. Favour ${m.favour > 0 ? "+" : ""}${m.favour}.${state.mode === "citizen" ? "" : ` Command ${commanders(state).find((x) => x.seat === seat)?.command} of 5.`}${m.record?.n ? ` Right ${m.record.right} of ${m.record.n}.` : ""}${m.likes.length ? ` Likes you to ${m.likes.map((v) => v.toLowerCase()).join(", ")}.` : ""}${m.hates.length ? ` Dislikes ${m.hates.map((v) => v.toLowerCase()).join(", ")}.` : ""}`));
       const r = el("div", undefined, "row");
       if (!trusted) r.append(button("Trust most", () => { council.trusted = seat; save(); open("advisors"); }));
       r.append(button("Ask", () => askCouncil([[seat, m]])), button("Dismiss", () => { if (!confirm(`Dismiss ${m.name}?`)) return; council.former.push({ ...m, seat, left: state.date, why: "dismissed", favour: m.favour - 2 }); council.seats[seat] = null; if (trusted) council.trusted = null; save(); open("advisors"); }));
@@ -792,7 +797,7 @@ function gameSheet(box) {
   const aiRow = el("div", undefined, "row");
   aiRow.append(button("Save", () => { store(); toast("Saved."); }, "go"), button("Test", async () => { store(); try { const t = await ask(route, "Reply with the single word READY."); toast(`It answered: ${t.slice(0, 40)}`); } catch (e) { toast(e.message); } }), button("Forget the key", () => { route = forgetKey(route); open("game"); toast("Key forgotten."); }));
   const file = el("input"); file.type = "file"; file.accept = ".json,application/json"; file.hidden = true;
-  file.onchange = async () => { const f = file.files[0]; if (!f) return; try { const s = checkSave(JSON.parse(await f.text())); if (!s) throw new Error(); state = s; past = []; save(); toast("Opened."); open(null); play(); } catch { toast("That file is not a Capo game."); } };
+  file.onchange = async () => { const f = file.files[0]; if (!f) return; try { const raw = JSON.parse(await f.text()), s = checkSave(raw); if (!s) throw new Error(); state = s; past = []; save(); toast(convertNote(raw) || "Opened."); open(null); play(); } catch { toast("That file is not a Capo game."); } };
   const saves = el("div", undefined, "row");
   saves.append(button(past.length ? `Take back ${past[past.length - 1].why}` : "Take back the last turn", () => { if (!past.length) return toast("Nothing to take back."); state = restore(past.pop()); save(); topBar(); open("game"); map.refresh(); }),
     button("Save to a file", () => { const a = el("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: "application/json" })); a.download = `capo-${state.player}-turn-${state.turn}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }),
@@ -879,11 +884,38 @@ function card(p) {
   const wars = state ? warsOf(state, owner) : [], pacts = state ? treatiesOf(state, owner) : [];
   const rows = [el("h2", p.name), ...(p.disputes || []).map((a) => el("p", `${{ disputed: "Disputed", breakaway: "Breakaway", unsettled: "Unsettled" }[a.kind]}: ${a.name}. ${a.note}`, "warn")), el("p", `${name(owner)}${owner !== p.country ? `, taken from ${name(p.country)}` : ""}.${wars.length ? ` At war with ${wars.map(name).join(", ")}.` : ""}${pacts.length ? ` Treaties: ${pacts.map((x) => `${name(x.with)} (${x.kind})`).join(", ")}.` : ""}`, "note"), el("p", near.children.length ? "Borders by land:" : "No land borders.", "note"), near, ...(over.children.length ? [el("p", "Across a narrow sea:", "note"), over] : [])];
   if (state && owner !== state.player) rows.push(el("div", undefined, "row")), rows[rows.length - 1].append(button(`Talk to ${name(owner)}`, () => open("chats")));
+  if (state && state.mode !== "citizen" && owner !== state.player && warsOf(state, state.player).includes(owner)) rows.push(attackBox(p));
   box.replaceChildren(...rows);
   box.style.display = "block";
   picked = p.id;
 }
 let picked = null;
+
+// ---- the attack order: who leads, how, and the odds out of 100 before it is given (ruling 124) ----
+const turnAttacks = () => Math.max(1, Math.ceil(monthsBetween(state.date, jumpFrom(state.date, jump))));
+let attackPick = { seat: "", approach: "steady" };
+function attackBox(p) {
+  const box = el("div"), who = el("select", undefined, "plain"), how = el("select", undefined, "plain"), list = commanders(state);
+  if (!list.some((c) => c.seat === attackPick.seat)) attackPick.seat = (list.find((c) => c.seat === "war") || list[list.length - 1]).seat;
+  who.append(...list.map((c) => new Option(`${c.seat === "generals" ? "Your generals" : c.name}: command ${c.command}${c.off ? ", out of role (-10)" : ""}`, c.seat)));
+  how.append(...Object.entries(APPROACHES).map(([k, [, said]]) => new Option(`${k[0].toUpperCase()}${k.slice(1)}: ${said}`, k)));
+  who.value = attackPick.seat; how.value = attackPick.approach; who.style.maxWidth = how.style.maxWidth = "100%"; who.setAttribute("aria-label", "Who leads the attack"); how.setAttribute("aria-label", "How to attack");
+  who.onchange = () => { attackPick.seat = who.value; card(p); }; how.onchange = () => { attackPick.approach = how.value; card(p); };
+  const a = attackPlan(state, geo(), state.player, p.id, attackPick, turnAttacks());
+  if (!a.ok) { box.append(el("p", `${a.why.replace(/^attack on [^:]+ refused: /, "Cannot attack: ")}.`, "note")); return box; }
+  const odds = el("p", `Odds: ${oddsLine(a.chance)}. Clean: taken. Costly: taken, but your army is spent for the turn. Failed: thrown back.`), row = el("div", undefined, "row");
+  odds.setAttribute("aria-live", "polite");
+  row.append(button("Order the attack", () => {
+    const lead = list.find((c) => c.seat === a.boss.seat), text = `Attack ${p.name} (${p.id}), led by ${lead.seat === "generals" ? "our generals" : lead.name}, ${a.approach}.`;
+    const old = (state.orders || []).find((x) => x.target === p.id);
+    state.actions = [...(state.actions || []).filter((x) => x !== old?.text), text];
+    state.orders = [...(state.orders || []).filter((x) => x !== old), { text, target: p.id, seat: a.boss.seat, approach: a.approach }];
+    save(); toast("Ordered: it is in your actions."); if (sheet === "actions") open("actions");
+  }, "go"));
+  const parts = partsLine({ approach: a.plan.approach, parts: a.plan.parts.filter(([, n]) => n) });
+  box.append(el("h3", "Attack"), who, how, el("p", `Might ${a.plan.skill} against ${a.plan.difficulty}${parts ? `, ${parts}` : ""}: chance ${a.chance} of 100 (never above 75).${a.note}`, "note"), odds, row);
+  return box;
+}
 
 async function start() {
   try { world = await loadWorld("../maps/world.json", "../maps/disputes.json"); } catch (e) { toast(`${e.message} Capo needs its web address, not a file opened by double-click.`); return; }
@@ -895,7 +927,7 @@ async function start() {
   $("home").onclick = () => (state ? showCountry(state.player) : map.reset());
   const kept = load();
   const good = kept?.state ? checkSave(kept.state) : null;
-  if (good) { state = good; past = keptPast(kept); play(); }
+  if (good) { state = good; past = keptPast(kept); play(); const note = convertNote(kept.state); if (note) { save(); toast(note); } }
   else { if (kept) toast("The saved game in this browser could not be read, so a new one starts. Any game saved to a file can still be opened."); startScreen(); }
 }
 addEventListener("keydown", (e) => { if (e.key === "Escape" && guideAt >= 0) guide(-1); });
