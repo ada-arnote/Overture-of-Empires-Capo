@@ -8,9 +8,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BUDGET, CONNECT, PRESETS, allowance, ask, check, explain, forgetKeys, keyOf, loadRoute, reachable, saveRoute, scrub, setKeep, setKey } from "../site/ai.js";
+import { BUDGET, CONNECT, PRESETS, allowance, ask, check, connected, explain, forgetKeys, keyOf, loadRoute, reachable, saveRoute, scrub, setKeep, setKey } from "../site/ai.js";
 import { AI_BASES } from "../site/config.js";
-import { fold, formatOf, linesFrom, sampleReply, toolOf, unfold } from "../src/story/replyform.js";
+import * as replyform from "../src/story/replyform.js";
+const { formatOf, linesFrom, sampleReply, toolOf } = replyform;
 import { splitEvents } from "../src/story/wire.js";
 import { newWorldGame, readWorldReply, turnCode, worldPrompt } from "../src/story/turn.js";
 import { chatPrompt, readChat } from "../src/story/talk.js";
@@ -353,15 +354,33 @@ test("Check connection lists the models without spending tokens, then asks for o
   assert.match(thinking.said, /thinking/, "connected, though it thought through its whole allowance");
 });
 
-// ---- the paste route ----
-test("several questions fold into one paste and come back apart", () => {
-  const one = fold([{ title: "This turn", prompt: "T" }]);
-  assert.equal(one, "T");
-  const three = fold([{ title: "This turn", prompt: "TURN PROMPT" }, { title: "A chat message", prompt: "CHAT PROMPT" }, { title: "A question to the council", prompt: "ASK PROMPT" }]);
-  assert.match(three, /=== REQUEST 2: A chat message ===\nCHAT PROMPT/);
-  const back = unfold("Sure!\n**=== ANSWER 1 ===**\nTURN: t1\nEND\n=== ANSWER 3 ===\nSAYS: a | favourable | go\n=== ANSWER 2 ===\nREPLY: CHL | hi", 3);
-  assert.deepEqual(back, ["TURN: t1\nEND", "REPLY: CHL | hi", "SAYS: a | favourable | go"]);
-  assert.deepEqual(unfold("TURN: t1\nEND", 2), ["TURN: t1\nEND", ""], "no markers: all of it is the turn");
+// ---- no copy-and-paste route (ruling 142) ----
+test("there is no paste route: a saved one reads as not connected, nothing is sent, and nothing offers one", async () => {
+  fresh();
+  localStorage.setItem("capo-ai", JSON.stringify({ route: "paste", preset: "groq", calls: 3 }));
+  const r = loadRoute();
+  assert.equal(r.route, "none");
+  assert.equal(connected(r), false);
+  assert.equal(r.gone, true, "the settings say plainly that pasting is gone");
+  assert.equal(JSON.parse(localStorage.getItem("capo-ai")).route, "none", "kept as not connected");
+  fresh();
+  assert.equal(connected(loadRoute()), false, "a new player starts with no AI connected");
+  serve(json({ choices: [{ message: { content: "TURN: t1" }, finish_reason: "stop" }] }));
+  const e = await ask(r, "x").catch((x) => x);
+  assert.equal(e.kind, "connect");
+  assert.match(e.message, /No AI is connected/);
+  assert.equal(calls.length, 0, "nothing is sent with no AI connected");
+  // Check connection is the way to connect: it works on settings not yet connected
+  serve(json({ data: [{ id: "llama-3.3-70b-versatile" }] }), json({ choices: [{ message: { content: "READY" }, finish_reason: "stop" }] }));
+  const fresh1 = { ...loadRoute(), preset: "groq" };
+  setKey(fresh1, FAKE);
+  assert.equal((await check(fresh1)).said, "READY");
+  // and no part of the page offers pasting into a chat AI
+  const read = (f) => readFileSync(path.join(root, f), "utf8");
+  const code = read("site/ai.js") + read("site/game.js");
+  for (const gone of [/pasteBox/, /clipboard/, /Paste by hand/, /Paste the reply/, /Copy the prompt/, /Read the reply/, /Send with my next turn/, /\["paste",/, /route.route === "paste"/]) assert.doesNotMatch(code, gone);
+  assert.ok(!("fold" in replyform) && !("unfold" in replyform), "no folded paste of several questions");
+  for (const page of ["site/game.html", "site/index.html", "README.md"]) assert.doesNotMatch(read(page).replace(/pasted link/g, ""), /paste/i, `${page} offers no pasting`);
 });
 
 test("the sample reply is a whole turn the reader takes, with no moves", () => {

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// How Capo reaches an AI: paste by hand into any chat AI, or connect a service (addresses in config.js; the page's rule
-// reaches only those and this computer). A key is kept apart from the settings, in this tab only or on this device if
+// How Capo reaches an AI: a service the player connects with their own key, or a server on the player's computer
+// (addresses in config.js; the page's rule reaches only those and this computer). There is no copy-and-paste route
+// (ruling 142). A key is kept apart from the settings, in this tab only or on this device if
 // asked, and never goes in a save, a file, a web address, a message shown or the console, nor to another service.
-// The page parts at the end (settings, waiting box, paste box) are built from elements and text, never markup.
+// The page parts at the end (settings, waiting box, connect box) are built from elements and text, never markup.
 import { AI_BASES } from "./config.js";
 import { formatOf, linesFrom, toolOf } from "../src/story/replyform.js";
 import { SHAPES, splitEvents } from "../src/story/wire.js";
@@ -31,6 +32,8 @@ export const PRESETS = [
 ];
 /** These need a server in between (they turn web pages away, or this page may not reach them). Capo ships none. */
 export const NEEDS_PROXY = ["Azure OpenAI", "Amazon Bedrock", "Google Vertex AI", "SambaNova", "any service not listed"];
+/** The services that work, in a player's words: shown wherever Capo needs an AI and none is connected. */
+export const WORKS = "Free to start: OpenRouter's free models, Groq and Google Gemini have free tiers, and Cerebras a trial credit. Free and private, on your own computer: Ollama, LM Studio or a llama.cpp server. Paid by use: OpenAI, Anthropic (Claude), Mistral, DeepSeek and Together AI.";
 
 const ORIGINS = [...new Set(Object.values(AI_BASES).map((b) => new URL(b).origin).filter((o) => o.startsWith("https:")))];
 /** The page rule's connect-src, exactly: its own site, each service above, and this computer. */
@@ -47,9 +50,13 @@ const get = (k, n) => { try { return JSON.parse(shelf(k)?.getItem(n) || "null");
 const put = (k, n, v) => { try { const s = shelf(k); if (!s) return false; if (v == null) s.removeItem(n); else s.setItem(n, JSON.stringify(v)); return true; } catch { return false; } };
 let held = {}; // the keys in use this visit, by service
 
+/** Connected means a service or a server on this computer is set to answer; anything else, a saved "paste" too, is not. */
+export const connected = (r) => r?.route === "address";
 export function loadRoute() {
-  const old = get(L, PLACE) || get(S, PLACE) || {}, r = { route: "paste", preset: "openrouter", base: "", model: "", keep: "session", tools: true, calls: 0, sent: 0, got: 0, day: "", ...old };
+  const old = get(L, PLACE) || get(S, PLACE) || {}, r = { preset: "openrouter", base: "", model: "", keep: "session", tools: true, calls: 0, sent: 0, got: 0, day: "", ...old };
   if (old.route === "address" && !old.preset) r.preset = "custom"; // before presets, an address was the custom form
+  if (!connected(r)) { if (old.route === "paste") r.gone = true; r.route = "none"; } // the paste route is gone (ruling 142): a note says so until an AI is connected
+  if (old.route === "paste") saveRoute(r);
   if ("remember" in old) r.keep = old.remember ? "device" : "session";
   delete r.remember; delete r.key;
   if ("key" in old || "remember" in old) { if (old.key) setKey(r, old.key); saveRoute(r); } // the key once lived in the settings: move it out
@@ -101,7 +108,7 @@ function unreachable(p, base) {
   if (p.local || p.custom) return fail("blocked", `Nothing answered at ${base}, or it turned this page away. Is it running? ${p.about.split(". ").slice(1).join(". ") || "It must allow calls from web pages (CORS)."} Your browser may also ask whether this page may reach devices on your network: allow it.`);
   return fail("blocked", `The call to ${p.name} was blocked or did not get through. Check your connection.${p.cors === "check" ? ` ${p.name} may not accept calls from a web page (CORS); then it needs a server in between, which Capo does not ship.` : " A browser extension or the network may be blocking it."}`);
 }
-const stopped = (why) => (why === "time" ? fail("time", "The AI sent nothing for two minutes. Ask again, or copy the prompt into a chat.") : fail("stop", "Stopped."));
+const stopped = (why) => (why === "time" ? fail("time", "The AI sent nothing for two minutes. Ask again, or choose another model or service.") : fail("stop", "Stopped."));
 const pause = (ms, signal) => new Promise((ok, no) => { const t = setTimeout(ok, ms); signal?.addEventListener("abort", () => { clearTimeout(t); no(stopped("stop")); }, { once: true }); });
 
 /** One request: gives up when nothing arrives for two minutes (o.idle) or at ten in all (o.cap). */
@@ -154,10 +161,10 @@ async function once(c, o) {
  * Send one prompt and return the reply's text, in its own lines (a structured reply is turned back into them, and read
  * and judged like any other). o: kind (a key of BUDGET), onText(progress), onStatus(sentence) before a retry, idle, cap, sleep.
  * Throws an Error with a plain sentence and a kind: key, credit, model, rate, busy, blocked, time, stop, cut, empty,
- * filter, denied, address, offline, paste, other.
+ * filter, denied, address, offline, connect, other.
  */
 export async function ask(r, prompt, signal, o = {}) {
-  if (r.route !== "address") throw fail("paste", "Capo is set to paste by hand. To connect a service, open Game, How Capo reaches an AI.");
+  if (!connected(r)) throw fail("connect", "No AI is connected yet. Connect one in Game, How Capo reaches an AI.");
   const p = presetOf(r), base = baseOf(r), key = keyOf(r), kind = o.kind || "turn", model = r.model || p.models[0] || "";
   if (!reachable(base)) throw fail("address", "The address must be a server on this computer, such as http://localhost:8000/v1: this page may reach only the services it lists and this computer.");
   if (!key && !p.local && !p.custom) throw fail("key", `Give your ${p.name} key first: Game, How Capo reaches an AI.`);
@@ -176,7 +183,7 @@ export async function ask(r, prompt, signal, o = {}) {
       await (o.sleep || pause)(ms, signal);
     }
   }
-  if (a.end === "filter") throw fail("filter", `${p.name}'s safety filter stopped the reply. Ask again, or paste the prompt into another AI.`);
+  if (a.end === "filter") throw fail("filter", `${p.name}'s safety filter stopped the reply. Ask again, or choose another model or service.`);
   const text = c.tool && a.args.trim() ? linesFrom(fmt, a.args) : a.text; // a model may answer in plain lines anyway: they are read as they are
   if (kind === "check") return (text || "").trim() || (a.end === "length" ? "(it spent its allowance thinking)" : "(nothing)");
   if (text === null) throw fail("cut", "The AI's structured reply was broken or cut off. Ask again.");
@@ -200,11 +207,11 @@ export async function check(r, signal) {
     if ([401, 402, 403].includes(res.status)) { const d = await res.json().catch(() => null); throw explain(res.status, d?.error?.message || d?.message || "", { p, key }); }
     if (res.ok) models = SHAPES[p.shape].list(await res.json().catch(() => ({}))).filter((m) => typeof m === "string").slice(0, 200);
   }
-  const said = await ask({ ...r, model: r.model || (!models.length || models.includes(p.models[0]) ? p.models[0] : models[0]) || "" }, "Reply with the single word READY.", signal, { kind: "check" });
+  const said = await ask({ ...r, route: "address", model: r.model || (!models.length || models.includes(p.models[0]) ? p.models[0] : models[0]) || "" }, "Reply with the single word READY.", signal, { kind: "check" });
   return { models, said, ms: Date.now() - t0 };
 }
 
-// ---- on the page: the waiting box, the paste box and the settings, each step spoken through a polite status line ----
+// ---- on the page: the waiting box, the connect box and the settings, each step spoken through a polite status line ----
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const button = (text, on, cls = "plain") => { const b = el("button", text, cls); b.type = "button"; b.onclick = on; return b; };
 const status = (text = "", cls = "note") => { const p = el("p", text, cls); p.setAttribute("role", "status"); p.setAttribute("aria-live", "polite"); return p; };
@@ -248,56 +255,42 @@ export function waitBox(stop) {
   return wrap;
 }
 
-// ---- the paste route ----
+// ---- when a call cannot go: no AI connected yet, or the AI did not answer ----
 let shown = "";
-/** The paste box: Copy first, then the reply, then the whole prompt. o: title, prompt, route, error, read(text), cancel(), again(), hold(), sample(). */
-export function pasteBox(o) {
-  const wrap = el("div", undefined, "pastebox"), say = status(), prompt = o.prompt, connected = o.route.route === "address";
-  const out = el("textarea", undefined, "plain paste full"), back = el("textarea", undefined, "plain paste"), read = button("Read the reply", () => o.read(back.value), "go");
-  out.value = prompt; out.readOnly = true; out.rows = Math.min(60, prompt.split("\n").length + 1); out.id = uid("prompt"); out.setAttribute("aria-label", "The prompt");
-  back.rows = 6; back.value = o.back || ""; back.placeholder = "Paste the AI's whole reply here."; back.setAttribute("aria-label", "The AI's reply");
-  const copy = button("Copy the prompt", async () => {
-    try { await navigator.clipboard.writeText(prompt); copy.textContent = "Copied"; setTimeout(() => { copy.textContent = "Copy the prompt"; }, 4000); say.textContent = "Copied. Paste it into a new chat, then paste the whole reply below."; }
-    catch { out.focus(); out.select(); say.textContent = "The prompt is selected: press Ctrl+C (Cmd+C on a Mac) to copy it."; }
-  }, "go");
-  const paste = button("Paste the reply", async () => {
-    try { const t = await navigator.clipboard.readText(); if (!t.trim()) throw new Error(); back.value = t; say.textContent = `Pasted ${t.length} characters. Press Read the reply.`; read.focus(); }
-    catch { back.focus(); say.textContent = "Paste the reply into the box with Ctrl+V (Cmd+V on a Mac)."; }
-  });
-  const top = el("div", undefined, "row"), go = el("div", undefined, "row");
-  top.append(copy, paste);
-  if (o.sample) top.append(button("Try a sample reply", () => { back.value = o.sample(); say.textContent = "A sample reply by Capo, no AI, is in the box. Read it to play this turn; Take back undoes it."; read.focus(); }));
-  go.append(read, ...(connected && o.again ? [button("Ask again", o.again)] : []), ...(o.hold ? [button("Send with my next turn", o.hold)] : []), button("Cancel", o.cancel));
-  const steps = el("ol", undefined, "steps");
-  for (const s of ["Copy the prompt.", "Paste it into a new chat with any AI.", "Paste the AI's whole reply below, and read it."]) steps.append(el("li", s));
+/**
+ * What stands in for a reply that has not come. With no AI connected: what works, and the settings to connect one
+ * (o.connected() runs once a check succeeds). Connected: the error, and Ask again. o: title, route, error, again(),
+ * cancel(), connected(), note(text), more (buttons of the caller's own).
+ */
+export function connectBox(o) {
+  const wrap = el("div", undefined, "connectbox"), on = connected(o.route), row = el("div", undefined, "row"), again = on && o.again ? button("Ask again", o.again, "go") : null;
   const error = o.error ? el("p", o.error, "warn") : null;
   if (error) error.tabIndex = -1;
-  wrap.append(el("h3", o.title || (connected ? "The AI did not answer" : "Paste this into a new chat")), ...(error ? [error] : []),
-    el("p", "Any chat AI works, free ones too: ChatGPT, Claude, Gemini, Copilot, Le Chat, DeepSeek, or one on your computer. Or connect one in Game.", "note"),
-    steps, top, say, back, go,     el("h3", "The prompt"), out);
-  // a new prompt or error: scrolled into view, focus on Copy (or the error), one spoken line
-  const fresh = `${prompt.length}:${prompt.slice(-80)}:${o.error || ""}`;
+  row.append(...(again ? [again] : []), ...(o.more || []), button("Cancel", o.cancel));
+  const head = el("h3", o.title || (on ? "The AI did not answer" : "Connect an AI"));
+  head.tabIndex = -1;
+  if (on) wrap.append(head, ...(error ? [error] : []), row);
+  else wrap.append(head, ...(error ? [error] : []), el("p", `Capo needs an AI to tell the story, and asks it for you. ${WORKS}`, "note"), aiPanel(o.route, o.note, { onConnect: o.connected, title: "Your AI" }), row);
+  // something new to show: scrolled into view, focus on the error, Ask again or the heading
+  const fresh = `${on}:${o.title || ""}:${o.error || ""}`;
   if (fresh !== shown) {
     shown = fresh;
-    later(() => {
-      if (!wrap.isConnected) return;
-      wrap.scrollIntoView?.({ block: "start", behavior: "smooth" });
-      (error || copy).focus({ preventScroll: true });
-      say.textContent = o.error ? "The reply could not be used; the reason is above." : "Prompt ready. Copy it, paste it into your AI, then paste the reply here.";
-    });
+    later(() => { if (!wrap.isConnected) return; wrap.scrollIntoView?.({ block: "start", behavior: "smooth" }); (error || again || head).focus({ preventScroll: true }); });
   }
-  later(() => { if (out.isConnected && out.scrollHeight > out.clientHeight) out.style.height = `${out.scrollHeight + 4}px`; }); // the whole prompt, at full height
   return wrap;
 }
 
 // ---- the Game panel: how Capo reaches an AI ----
 const CORS = { yes: "Works from this page.", check: "Not yet seen working from a web page: Check connection tells.", local: "Runs on your computer, which must let this page in." };
-/** The settings section. r is the route object, changed in place and kept; done(text) may show a short note. */
-export function aiPanel(r, done = () => {}) {
+/**
+ * The settings section. r is the route object, changed in place and kept; done(text) may show a short note.
+ * Check connection is the one way to connect: when it succeeds, r is connected and o.onConnect() runs. o.title names it.
+ */
+export function aiPanel(r, done = () => {}, o = {}) {
   const box = el("section", undefined, "aipanel");
-  box.setAttribute("aria-labelledby", "ai-head");
   const draw = (focus) => { box.replaceChildren(...parts()); if (focus) box.querySelector(`[data-k="${focus}"]`)?.focus(); };
   const keep = () => saveRoute(r);
+  let said = ""; // what Check connection found, kept across the redraw that follows a first connection
   const line = (label, input, k) => { const l = el("label", undefined, "note field"); input.dataset.k = k; l.append(label, input); return l; };
   const radios = (legend, k, list, value, on) => {
     const f = el("fieldset", undefined, "choices"), name = uid(k); f.append(el("legend", legend, "note"));
@@ -305,11 +298,12 @@ export function aiPanel(r, done = () => {}) {
     return f;
   };
   function parts() {
-    const head = el("h3", "How Capo reaches an AI"), result = status();
-    head.id = "ai-head"; result.id = uid("result");
-    const out = [head, radios("Route", "route", [["paste", "Paste by hand: copy each prompt into any chat AI, free ones included. No key."], ["address", "Connect a service: Capo asks for you, with your key, or an AI on this computer."]], r.route, (v) => { r.route = v; keep(); draw(`route-${v}`); done(v === "paste" ? "Paste by hand." : "Connect a service."); })];
-    if (r.route !== "address") return [...out, ...tail()];
-    const p = presetOf(r), pick = el("select", undefined, "plain"), groups = [["Hosted: your own key", (x) => !x.local && !x.custom], ["On this computer: no key", (x) => x.local || x.custom]];
+    const head = el("h3", o.title || "How Capo reaches an AI"), result = status(), p = presetOf(r);
+    head.id = uid("head"); box.setAttribute("aria-labelledby", head.id); result.id = uid("result"); result.textContent = said; said = "";
+    const out = [head, connected(r) ? el("p", `Connected: ${p.name}${r.model ? `, ${r.model}` : ""}. Capo asks it for each turn, chat and question.`, "note")
+      : el("p", "No AI is connected. Choose a service, give its key if it needs one, and press Check connection.", "note")];
+    if (r.gone && !connected(r)) out.push(el("p", "Copying prompts into a chat and pasting replies back is no longer part of Capo. Connect a service or an AI on this computer here; a turn can also move by the rules alone.", "warn"));
+    const pick = el("select", undefined, "plain"), groups = [["Hosted: your own key", (x) => !x.local && !x.custom], ["On this computer: no key", (x) => x.local || x.custom]];
     for (const [label, test] of groups) { const g = el("optgroup"); g.label = label; g.append(...PRESETS.filter(test).map((x) => new Option(x.name, x.id))); pick.append(g); }
     pick.value = p.id;
     pick.onchange = () => { r.preset = pick.value; r.model = ""; keep(); draw("preset"); };
@@ -350,15 +344,21 @@ export function aiPanel(r, done = () => {}) {
       try {
         const got = await check(r, stop.signal);
         if (got.models.length) { r.seen = { ...r.seen, [p.id]: got.models.slice(0, 100) }; keep(); fill(got.models); }
+        const first = !connected(r);
+        r.route = "address"; delete r.gone; keep();
         result.textContent = `Connected to ${p.name}${r.model ? `, ${r.model}` : ""}. It answered "${got.said.slice(0, 40)}" in ${(got.ms / 1000).toFixed(1)} seconds.${got.models.length ? ` It lists ${got.models.length} models: the Model field offers them.` : ""}`;
+        if (first && o.onConnect) { done(`Connected to ${p.name}.`); o.onConnect(); return; }
+        if (first) { said = result.textContent; draw("check"); }
       } catch (e) {
         result.className = "warn"; result.textContent = e.message;
         const at = { key: fields.key, credit: fields.key, denied: fields.key, model: fields.model, address: fields.address || fields.model }[e.kind];
         if (at) { at.setAttribute("aria-invalid", "true"); at.setAttribute("aria-describedby", result.id); }
       } finally { clearTimeout(t); ask.disabled = false; ask.textContent = "Check connection"; ask.focus(); }
     }, "go");
+    ask.dataset.k = "check";
     const row = el("div", undefined, "row");
     row.append(ask, button("Forget my key", () => { forgetKeys(); draw("key"); done("Every key is forgotten: none is kept in this browser now."); }));
+    if (connected(r)) row.append(button("Disconnect", () => { r.route = "none"; keep(); draw("preset"); done("Disconnected: Capo calls no AI until you connect one again."); }));
     out.push(row, result, el("p", `Today: ${r.calls || 0} calls, about ${r.sent || 0} tokens sent and ${r.got || 0} received.`, "note"));
     return [...out, ...tail()];
   }

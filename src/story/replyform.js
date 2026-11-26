@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The shape of Capo's replies, apart from how they travel: a reply as a structured tool call and back to its lines,
-// several questions folded into one paste, and a sample turn Capo writes itself. Whatever route a reply takes, the
-// same reader reads its lines and the rules judge them; nothing here decides anything.
+// and a sample turn Capo writes itself. Whatever service a reply comes from, the same reader reads its lines and the
+// rules judge them; nothing here decides anything.
 import { turnCode } from "./turn.js";
 
 /** The line kinds a prompt asks for (after "Reply with only ...": LABEL: field | field), or null. */
@@ -45,22 +45,7 @@ export function linesFrom(fmt, args) {
   return out.join("\n");
 }
 
-/** One prompt that asks several things at once; each answer comes back under its own marker. */
-export function fold(parts) {
-  if (parts.length === 1) return parts[0].prompt;
-  return [`This message holds ${parts.length} separate requests. Answer every one, in order, in one reply.`,
-    `Begin each answer with its marker line, from === ANSWER 1 === to === ANSWER ${parts.length} ===, then exactly the lines that request asks for.`,
-    ...parts.flatMap((x, i) => ["", `=== REQUEST ${i + 1}: ${x.title} ===`, x.prompt])].join("\n");
-}
-/** A folded reply split into its n answers ("" for one missing). A reply with no markers is all the first answer. */
-export function unfold(text, n) {
-  const t = String(text || ""), out = Array(n).fill(""), marks = [...t.matchAll(/^[^\w\n]*=+\s*ANSWER\s+(\d+)\b.*$/gim)];
-  if (!marks.length) out[0] = t;
-  marks.forEach((m, i) => { const k = m[1] - 1; if (k >= 0 && k < n && !out[k]) out[k] = t.slice(m.index + m[0].length, marks[i + 1]?.index ?? t.length).trim(); });
-  return out;
-}
-
-/** A turn's reply written by Capo itself in the reply format, so a turn can be tried with no AI. It proposes no moves. */
+/** A turn's reply written by Capo itself in the reply format, so a first turn can be played as a demo with no AI. It proposes no moves. */
 export function sampleReply(g, to, auto, nameOf, near) {
   const o = near.filter((c) => c !== g.player), a = o[0] || g.player, b = o[1] || a, t = (d) => Date.parse(`${d}T00:00:00Z`);
   const day = (f) => new Date(t(g.date) + (t(to) - t(g.date)) * f).toISOString().slice(0, 10);
