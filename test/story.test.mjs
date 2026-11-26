@@ -1074,8 +1074,8 @@ test("the world moves on its own: after six quiet months the rules may open a cr
 
 test("ambitions: chosen from a fixed list, counted by the rules, met only when the count says so", () => {
   const g = game4("amb-1"), G = geo5(g, [["CHL-1", "PER"]]);
-  assert.deepEqual(ambitionsFor(g, G).map((x) => x.id), ["grow", "restore", "friends", "trade", "golden", "peace", "whole"]);
-  assert.deepEqual(ambitionsFor({ ...g, mode: "citizen", standing: 2 }, G).map((x) => x.id), ["peace", "rise"]);
+  assert.deepEqual(ambitionsFor(g, G).map((x) => x.id), ["grow", "restore", "friends", "trade", "golden", "peace", "whole", "sphere"]);
+  assert.deepEqual(ambitionsFor({ ...g, mode: "citizen", standing: 2 }, G).map((x) => x.id), ["peace", "comfort", "rise"]);
   assert.equal(ambitionsFor(g, geo5(g)).some((x) => x.id === "restore"), false, "nothing to restore when nothing is claimed or lost");
   assert.equal(chooseAmbition(g, G, "nonsense"), false);
   assert.ok(chooseAmbition(g, G, "restore"));

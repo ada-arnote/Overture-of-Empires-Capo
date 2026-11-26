@@ -60,6 +60,7 @@ export function newWorldGame(player, mode, seed, extra = {}) {
   // an alternate history brings its borders as the ground the story starts from: they count as each country's starting land
   const base = sc.alt ? { ...(sc.owners || {}) } : null, owners = { ...(sc.alt ? {} : sc.owners || {}), ...(extra.owners || {}) };
   return { v: 1, rules: RULES, orders: [], rel: {}, word: {}, truce: {}, people: [], threads: [], start: { ...(base || {}), ...owners }, chron: { eras: [], turns: [] }, branch: 0, scenario: sc.id, opening: sc.opening, player, mode: MODES[mode] ? mode : "nation", seed, date: sc.start, turn: 1,
+    ...(sc.beats?.length ? { script: structuredClone(sc.beats) } : {}), // features hook: the scenario's own beats
     ...(sc.alt ? { alt: structuredClone(sc.alt), base } : {}), owners, ...(sc.world ? { world: sc.world } : {}), custom: extra.custom || sc.custom || null, character: extra.character || null,
     wars: structuredClone(sc.wars || []), treaties: structuredClone(sc.treaties || []), offers: [], log: [],
     standing: STANDING[mode] || 5, council: null, chats: [], counsel: [], facts: structuredClone(sc.facts || []), might: { ...(sc.might || {}) }, edits: [], sandbox: false };

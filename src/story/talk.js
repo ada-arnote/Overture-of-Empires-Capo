@@ -39,6 +39,7 @@ function context(g, world, codes) {
     ...altLines(g, world.size).slice(0, 2), ...(g.alt ? ["- So this is not the real present day. Leaders are offices here; anyone named is invented, never a real person."] : []),
     `- The player is ${who(g, world)}.`,
     `- Between them now: ${[...new Set(rel)].join(", ") || "no wars or treaties"}`,
+    ...(world.known?.(codes) || []), // features hook: what the player's side knows of others, by tier (fog.js)
     `- The story so far, oldest first${story.length ? ":" : ": nothing yet"}`, ...story.map((l) => ` ${l}`),
   ];
 }

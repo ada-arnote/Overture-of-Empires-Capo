@@ -2,6 +2,32 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Capo's missing features, round two: home politics, fog, scenes, scale, debate, map views, pacts
+
+**Players**
+- **Your council cares.** Every seat cares for two things: one that comes with the office (the Treasurer, a full treasury; the Interior, order at home) and one of the person's own. Every six months each member's favour moves a step toward the mood those make, and the receipt says which care moved it. Mood alone never makes anyone resign. Advisors shows what each cares for and which way their favour is heading.
+- **Unrest has a face.** When your stability falls to shaken the rules name a figure and a province where trouble gathers; in revolt it is a rising. A rising left a year hands a province you took back to its old holder, or else costs a step of mandate. You can answer it from the sheet under your country's name: meet their terms (a step of treasury buys a step of stability), or move against them, a check with its odds shown before you order it.
+- **You see others only as well as you know them.** Four tiers: clear (your own country, defence and alliance partners), reported (neighbours, trade partners, enemies, anyone you talked with this year), rumoured (old dealings; a rumour may be a step off) and dark. An Envoy on your council lifts each a step. Cards of countries you know too little of no longer show their answers before you ask; chats and the council are told only what your side knows. The AI that writes the turn is still told the truth.
+- **Scenes.** Once a turn, live a moment in person: with a member of your council, another country's envoy, or (as a leader or a citizen) on your own. The AI writes the room, two or three choices and how each could end; the rules set the odds, show them, roll once and pick the ending. A scene moves one step of one thing (a member's favour, relations with a country, your own means) and never land, wars, treaties or offices.
+- **Change the scale of play in a running game.** In the Game menu, step between nation, leader and citizen, once a turn. Your country and its past stay; standing goes to the new scale's own and your circle follows, each member to the matching seat.
+- **Your own means.** A leader or a citizen has a gauge of their own, from destitute to wealthy. Once a year it moves a step toward where their standing and the country's treasury put it, and a scene can move it. Two new ambitions: a house in order, and a sphere of your own.
+- **Convene the council.** The rules seat the two advisers who see the state of the country most differently (and your trusted adviser), and they argue your question to each other's faces. Words only.
+- **Scenario authors can script beats.** In the Game menu, write moments of your own with a condition from a fixed list (war, peace, shaken, rich, unrest and more). Each comes once, ahead of the rules' own beats, and is saved with the scenario file.
+- **Five more map views, with a legend:** war fronts, land changed, claims, spheres of influence, and what you know. The stability view now greys out countries you know nothing of and marks provinces in unrest.
+- **Pacts and spheres.** From a foreign province's card you can propose a pact of non-aggression (five years; war between you is then a breach that costs the breaker at home and abroad) or demand a yearly tribute of a weaker neighbour. A country stands in the sphere of a much stronger defence or alliance partner, or of anyone it pays.
+- **Invented worlds have terrain.** Each province of a fictional world is coast, plain, hills, forest, marsh, steppe, desert or mountain. It is flavour for the story and shown on the card; no rule reads it.
+- Fixed: other countries now really do move by the rules when the AI proposes nothing for them, and suggested treaties appear. The page never gave the rules its list of provinces, so those two parts of v0.6.5 saw an empty map.
+- Games saved before this are brought up to date with a note at the top of Actions: nothing in their past changes.
+
+**Contributors**
+- New rules, each under 150 lines with one receipt sentence: `src/story/home.js`, `fog.js`, `scenes.js`, `scale.js`, `debate.js`, `pacts.js`, `views.js`; scripted beats in `beats.js`; `more.js` stays the one door (its mark is now 2). The page part is `site/court.js`, lent through `site/realm.js`. Tests: `test/features2.test.mjs`.
+- A receipt line may carry `gauge` pushes (`[[country, gauge, step, why]]`), read by `state.js`, and a `roll` (a check that is not an attack). A turn with a `roll`, taken back, moves to a new numbered line.
+- `fog.js` exports `learn(g, country, tier, date)` for any rule that should teach the player something (a mission, say).
+- `makeWorld(...).terrain` gives a word from `TERRAIN` for each province id, beside the map data so a world's fingerprint is unchanged (`src/map/worldgen.js`). The 3D map may read it.
+- `site/worldmap.js` takes an optional `tint(id)` for views that colour single provinces.
+
 ## v0.7.0 (2026-11-26): new worlds, and a deeper Capo
 
 ### A deeper Capo: gauges, ambitions, crises, causes for war, the press

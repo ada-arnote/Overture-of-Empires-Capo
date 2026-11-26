@@ -219,6 +219,23 @@ function realmsOf(r, P, adj, over, coast, label, size, seed) {
   return kept;
 }
 
+// ---- terrain: one flavour word a province, from the height and the wetness of its ground. Story only: no rule reads it ----
+/** The words a province's terrain may be: makeWorld(...).terrain gives one for each province id. The story is told them; a map may dress its land by them. */
+export const TERRAIN = ["coast", "plain", "hills", "forest", "marsh", "steppe", "desert", "mountain"];
+function terrainOf(of, P, coast, salt) {
+  const sum = Array.from({ length: P }, () => [0, 0, 0]);
+  for (let i = 0; i < N; i++) {
+    if (of[i] < 0) continue;
+    const x = i % W, y = (i - x) / W, t = sum[of[i]];
+    t[0] += Math.floor((3 * soft(x, y, 28, salt) + 2 * soft(x, y, 13, salt + 1) + 2 * soft(x, y, 6, salt + 2)) / 7); t[1] += Math.floor((2 * soft(x, y, 34, salt + 40) + soft(x, y, 11, salt + 41)) / 3); t[2]++;
+  }
+  // by rank, so every world has some of each: the highest tenth is mountain and the next sixth hills; of the rest,
+  // the driest eighth is desert, the next eighth steppe, the wettest third forest (marsh where it meets the sea)
+  const rank = (k, ids) => new Map(ids.slice().sort((a, b) => sum[a][k] * sum[b][2] - sum[b][k] * sum[a][2] || a - b).map((p, i) => [p, Math.floor((i * 100) / ids.length)]));
+  const all = sum.map((_, p) => p), high = rank(0, all), low = all.filter((p) => high.get(p) < 73), wet = rank(1, low);
+  return all.map((p) => (high.get(p) >= 90 ? "mountain" : high.get(p) >= 73 ? "hills" : wet.get(p) < 12 ? "desert" : wet.get(p) < 25 ? "steppe" : wet.get(p) >= 67 ? (coast.has(p) && wet.get(p) >= 85 ? "marsh" : "forest") : coast.has(p) ? "coast" : "plain"));
+}
+
 /**
  * Make a world. `recipe`: {land (percent), rough, blobs: [[x, y, rx, ry] in percent], isles, provinces, realms, reach,
  * cultures: [{name, a, b, c, z}] (starts, vowels, closes and endings of names), factions: [{name: "Kingdom of *",
@@ -238,6 +255,7 @@ export function makeWorld(recipe, seed) {
   const label = sum.map(([x, y, n], p) => { const cx = Math.floor(x / n), cy = Math.floor(y / n), c = of[cy * W + cx] === p ? cy * W + cx : seeds[p]; return [(c % W) * CELL + 5, Math.floor(c / W) * CELL + 5]; });
   const size = sum.map((s) => s[2]), { of: owner, homes, lands } = realmsOf(recipe, P, adj, over, coast, label, size, seed);
 
+  const terrain = terrainOf(of, P, coast, salt); // features hook: a flavour word a province (ruling 143)
   const names = dice(`${seed}/names`), name = namer(names), code = coder(), cultures = recipe.cultures, factions = recipe.factions || [], minors = recipe.minors?.length ? recipe.minors : ["*"];
   const realms = homes.map((h, k) => {
     // a lesser country shares the culture of the nearest faction's home
@@ -252,10 +270,13 @@ export function makeWorld(recipe, seed) {
   realms.forEach((r, k) => { r.home = ids[homes[k]]; });
   const provinces = ids.map((id, p) => ({ id, name: name(cultures[realms[owner[p]].culture]), country: realms[owner[p]].code, members: [id], label: label[p], rings: rings[p] }));
   const byId = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : 1);
-  return {
+  const world = {
     source: "An invented world, made by Capo's own generator from a seed. Own work.", width: W * CELL, height: H * CELL, view: [50, 50, 100],
     countries: Object.fromEntries(realms.map((r) => [r.code, r.name])), provinces,
     neighbours: [...pairs].map((k) => [ids[Math.floor(k / P)], ids[k % P]].sort()).sort(byId),
     sea: sea.map(([a, b, d]) => [...[ids[a], ids[b]].sort(), d * 30]).sort(byId), arcs, realms,
   };
+  // world.terrain: {province id: a word from TERRAIN}. Kept beside the map data, not in it (it is not listed with the
+  // world's own parts), so a world's file shape and fingerprint are what saved games expect
+  return Object.defineProperty(world, "terrain", { value: Object.fromEntries(ids.map((id, p) => [id, terrain[p]])) });
 }

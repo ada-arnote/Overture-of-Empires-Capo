@@ -23,7 +23,7 @@ import { fold, sampleReply, unfold } from "../src/story/replyform.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
 import { guard } from "./guard.js";
 // features hook: the country sheet, crises, ambitions, the Turns tab (site/realm.js)
-import { NOTE, demandBox, keepMore, notices, realmSheet, stateColour, turnsTab } from "./realm.js";
+import { backMore, cardExtras, councilMore, dimBox, gameMore, keepMore, knownFor, moreSheets, noteOf, notices, turnsTab, viewFill, viewTint, viewsInit } from "./realm.js";
 
 const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);
@@ -45,6 +45,7 @@ function icon(key) {
   path.setAttribute("d", ICONS[key]); s.append(path);
   return s;
 }
+let legend = () => {}; // features hook
 let world, map, state = null, past = [], route = loadRoute(), sheet = null, pending = null, jump = { key: "1m", n: 2, unit: "weeks" }, hush = 0, ledgerTab = "events", view = "countries";
 
 // games saved before wars and treaties existed get empty lists
@@ -52,7 +53,7 @@ const mend = mendGame;
 // A take-back record is the game without its log (the log only grows; the record keeps its length), so twenty
 // of them cost about what one full copy used to. Each says what it takes back.
 const snap = (why) => snapGame(state, why);
-const restore = (rec) => takeBack(state, rec);
+const restore = (rec) => backMore(takeBack(state, rec), state); // features hook: a roll taken back is drawn fresh
 const remember = (why) => { past.push(snap(why)); past = past.slice(-20); };
 let saveFailed = false;
 const save = () => {
@@ -83,6 +84,7 @@ async function enter(ref) {
   if (key === on) return true;
   const first = !made && !earth;
   world = made ? unpackWorld(made.data) : earth || (earth = await loadWorld("../maps/world.json", "../maps/disputes.json"));
+  if (made?.terrain) for (const [id, t] of Object.entries(made.terrain)) world.provinces.get(id).terrain = t; // features hook: a flavour word a province (ruling 143)
   on = key; stagedKey = null; if (!made) rebase(world, null); index(); claimsOf.clear(); claims(); map?.world(world);
   if (first) earthOnce(); // alternate histories: the real map's countries and disputes, and the presets laid over it, once
   stage();
@@ -138,7 +140,7 @@ function stage() {
 // A country's home is its largest province on its main landmass (the group of its provinces joined by land that has
 // the most of them), so France is centred on France and not on an overseas region that happens to be wide.
 function index() {
-  homes = new Map();
+  homes = new Map(); ids = [...world.provinces.keys()]; // features hook: the rules' list of every province was never filled, so rivals, suggestions and unrest saw an empty map
   const byCountry = new Map();
   for (const p of world.provinces.values()) { if (!byCountry.has(p.country)) byCountry.set(p.country, []); byCountry.get(p.country).push(p); }
   const area = (p) => (p.box[2] - p.box[0]) * (p.box[3] - p.box[1]);
@@ -222,7 +224,7 @@ function geo() {
 }
 
 // features hook: what site/realm.js borrows from this page
-const X = { g: () => state, geo, name, near: () => [...landNeighbours(state.player), ...seaNeighbours(state.player)], el, button, fmtDate, save: () => save(), toast, open, act: (t) => { state.actions = [...(state.actions || []), t]; save(); toast("Ordered: it is in your actions."); if (sheet === "actions") open("actions"); } };
+const X = { order: (o) => order(o), ask: (p, take, where) => askAI(p, take, where), asking: () => asking, askBox: () => askBox(), colour: (c) => colourOf(c) || ownerColour(c), refresh: () => map.refresh(), bar: () => topBar(), g: () => state, geo, name, near: () => [...landNeighbours(state.player), ...seaNeighbours(state.player)], el, button, fmtDate, save: () => save(), toast, open, act: (t) => { state.actions = [...(state.actions || []), t]; save(); toast("Ordered: it is in your actions."); if (sheet === "actions") open("actions"); } };
 
 /** The way back to every game, when this page has one (the double-click copy does not). */
 function home() {
@@ -235,7 +237,7 @@ function home() {
 const RELATION = { you: "#d3dbe4", alliance: "#4f9a6b", defence: "#5fa08a", trade: "#4a7fa8", war: "#c9553f", none: "#4b5354" };
 function viewColour(code) {
   if (!state || view === "countries") return colourOf(code);
-  if (view === "state") return stateColour(state, code); // features hook
+  { const c = viewFill(view, X, code); if (c) return c; } // features hook: stability, fronts, land changed, claims, spheres, what you know
   if (view === "might") { const m = mightOf(geo(), code); return `hsl(${40 - m * 4} ${30 + m * 5}% ${20 + m * 5}%)`; }
   if (code === state.player) return RELATION.you;
   if (warsOf(state, state.player).includes(code)) return RELATION.war;
@@ -460,9 +462,9 @@ function begin() {
 function play() {
   stage();
   $("top").hidden = false; $("dock").hidden = false;
-  if (state.told) setTimeout(() => state?.told && toast(NOTE), 3600); // features hook: a converted game says so
+  if (state.told) setTimeout(() => state?.told && toast(noteOf(state)), 3600); // features hook: a converted game says so
   map.redraw(); showCountry(state.player);
-  topBar(); dock();
+  topBar(); dock(); legend();
 }
 
 function topBar() {
@@ -505,7 +507,7 @@ function open(which) {
   if (!which) { box.classList.remove("open"); land(was === "game" ? $("top").querySelector("button[aria-label^=Game]") : $("dock").children[DOCK.findIndex(([k]) => k === was)]); return; }
   if (which === "ledger" && state.seen !== state.turn) { state.seen = state.turn; save(); dock(); }
   box.replaceChildren();
-  ({ actions, chats, ledger, advisors, master, game: gameSheet, realm: (b) => realmSheet(b, X) }[which])(box); // features hook: realm
+  ({ actions, chats, ledger, advisors, master, game: gameSheet, ...moreSheets(X) }[which])(box); // features hook: the country sheet and the scene
   if (which === "actions") box.prepend(...notices(X)); // features hook: a converted game's note, a demand on you, the ambition nudge
   const head = el("div", undefined, "head"), title = box.querySelector("h2"), shut = button("", () => open(null), "ic");
   shut.append(icon("close")); shut.setAttribute("aria-label", "Close");
@@ -789,7 +791,7 @@ function askBox() {
   const w = asking.where, hold = () => { heldAsks.push({ title: w === "chats" ? "A chat message" : "A question to the council", prompt: asking.prompt, take: asking.take }); asking = null; open(w); toast("Held: it goes in the same prompt as your next turn."); };
   return pastePanel({ prompt: asking.prompt, route, error: asking.error, read: settle, again: () => askAI(asking.prompt, asking.take, w), hold: route.route === "paste" ? hold : null, cancel: () => { asking = null; open(w); } });
 }
-const talkWorld = () => ({ name });
+const talkWorld = () => ({ name, known: (codes) => knownFor(X, codes) }); // features hook: chats and the council are told what your side knows, by tier
 
 // ---- chats ----
 let chatOpen = null;
@@ -889,6 +891,7 @@ function advisors(box) {
     box.append(el("h3", "Recent counsel"));
     for (const c of said) { const f = el("ol", undefined, "feed"); f.append(...c.says.map((s) => { const li = el("li"); li.append(el("div", `${s.name}: ${s.word}`, "note"), el("p", s.text)); return li; })); box.append(el("p", `Turn ${c.turn}: ${c.question}`, "note"), f); }
   }
+  box.append(...councilMore(X)); // features hook: what each cares for, and the council convened
   if (council.former.length) box.append(el("p", `Former members: ${council.former.map((f) => `${f.name} (${f.why})`).join(", ")}.`, "note"));
 }
 function formCouncil(seats, open1 = seats) {
@@ -934,7 +937,7 @@ function gameSheet(box) {
   sTitle.setAttribute("aria-label", "Scenario title"); sBlurb.setAttribute("aria-label", "Scenario line"); sOpen.setAttribute("aria-label", "Scenario opening");
   const sRow = el("div", undefined, "row");
   sRow.append(button("Save as a scenario", () => {
-    const s = scenarioFrom(state, { title: sTitle.value, blurb: sBlurb.value, opening: sOpen.value });
+    const s = scenarioFrom(state, { title: sTitle.value, blurb: sBlurb.value, opening: sOpen.value, beats: state.script }); // features hook: beats
     if (!s.title) return toast("Give the scenario a title.");
     if (crossesLine(scenarioText(s)).length) return toast("Refused: nothing sexual involving minors.");
     const a = el("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(s)], { type: "application/json" }));
@@ -944,6 +947,7 @@ function gameSheet(box) {
   const again = el("div", undefined, "row"); again.append(button("Show the guide", () => { open(null); guide(0); }));
   box.append(el("h2", "Game"), home(), again, ...(saveFailed ? [el("p", "This browser would not keep the game (its storage may be full). Save to a file now so nothing is lost.", "warn")] : []), el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back. A turn with a settled attack, played again, draws fresh numbers and is marked in the chronicle.`, "note"), saves, file,
     el("h3", "Save the world as a scenario"), el("p", `A starting point others can play: today's date, who holds what, wars, treaties, story facts and might${state.custom ? `, and ${state.custom.name}` : ""}. Not your actions, chats or council.`, "note"), sTitle, sBlurb, sOpen, sRow,
+    ...gameMore(X), // features hook: the scale of play, and the scenario's own beats
     aiPanel(route, toast), // how Capo reaches an AI: site/ai.js (p5-ai)
     about());
 }
@@ -1007,8 +1011,8 @@ function card(p) {
   const wars = state ? warsOf(state, owner) : [], pacts = state ? treatiesOf(state, owner) : [];
   const rows = [el("h2", p.name), ...(p.disputes || []).map((a) => el("p", `${{ disputed: "Disputed", breakaway: "Breakaway", unsettled: "Unsettled" }[a.kind]}: ${a.name}. ${a.note}`, "warn")), el("p", `${name(owner)}${owner !== p.country ? `, taken from ${name(p.country)}` : ""}.${wars.length ? ` At war with ${wars.map(name).join(", ")}.` : ""}${pacts.length ? ` Treaties: ${pacts.map((x) => `${name(x.with)} (${x.kind})`).join(", ")}.` : ""}${state ? ` Its ${strengthLine(strength(state, geo(), owner))}.` : ""}`, "note"), el("p", near.children.length ? "Borders by land:" : "No land borders.", "note"), near, ...(over.children.length ? [el("p", "Across a narrow sea:", "note"), over] : [])];
   if (state && owner !== state.player) rows.push(el("div", undefined, "row")), rows[rows.length - 1].append(button(`Talk to ${name(owner)}`, () => open("chats")));
-  if (state && state.mode !== "citizen" && owner !== state.player) rows.push(warsOf(state, state.player).includes(owner) ? attackBox(p) : treatyBox(owner));
-  { const d = state && demandBox(p, X); if (d) rows.push(d); } // features hook
+  if (state && state.mode !== "citizen" && owner !== state.player) rows.push(warsOf(state, state.player).includes(owner) ? attackBox(p) : dimBox(owner, X) || treatyBox(owner)); // features hook: dimBox
+  if (state) rows.push(...cardExtras(p, X)); // features hook: terrain, what you know, a demand, pacts
   box.replaceChildren(...rows);
   box.style.display = "block";
   picked = p.id;
@@ -1062,8 +1066,9 @@ async function start() {
   const kept = load();
   // presets hook: a kept game opens on its own world; anything else starts on the real one
   try { if (!(await enter(kept?.state?.world))) await enter(); } catch (e) { toast(`${e.message} Capo needs its web address, not a file opened by double-click.`); return; }
-  map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked, mine: () => state?.player });
+  map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked, mine: () => state?.player, tint: (id) => viewTint(view, X, id) }); // features hook: tint
   $("view").onchange = (e) => { view = e.target.value; map.refresh(); };
+  legend = viewsInit($("view"), X, () => view); // features hook: more map views, and their legend
   $("in").onclick = () => map.zoomBy(1.6);
   $("out").onclick = () => map.zoomBy(1 / 1.6);
   $("home").onclick = () => (state ? showCountry(state.player) : map.reset());

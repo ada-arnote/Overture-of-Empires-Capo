@@ -56,7 +56,10 @@ export function madeWorld(r) {
   // the powers, a few to a fact so no fact outgrows what a scenario file may hold
   for (let i = 0; i < great.length; i += 3) facts.push(`Powers: ${great.slice(i, i + 3).map((x) => `${line(x)}, ${s.factions[x.faction].what}`).join("; ")}.`.slice(0, 400));
   for (let i = 0; i < small.length; i += 9) facts.push(`Lesser countries: ${small.slice(i, i + 9).map(line).join(", ")}.`.slice(0, 400));
-  const out = { key, data, facts: facts.filter((t) => t.length > 14).map((t) => ({ text: t, turn: 0 })), might: Object.fromEntries(data.realms.map((x) => [x.code, x.faction >= 0 ? s.factions[x.faction].might : x.size >= 12 ? 3 : 2])) };
+  // features hook (ruling 143): the lie of the land, as one story fact; no rule reads terrain
+  const lie = Object.entries(Object.values(data.terrain || {}).reduce((n, t) => ({ ...n, [t]: (n[t] || 0) + 1 }), {})).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  if (lie.length) facts.push(`The land: mostly ${lie.slice(0, 3).map(([t]) => t).join(", ")}, with ${lie.slice(3).map(([t]) => t).join(", ")} in places. Each province has one of these as its terrain; let places feel like it.`);
+  const out = { key, data, terrain: data.terrain || {}, facts: facts.filter((t) => t.length > 14).map((t) => ({ text: t, turn: 0 })), might: Object.fromEntries(data.realms.map((x) => [x.code, x.faction >= 0 ? s.factions[x.faction].might : x.size >= 12 ? 3 : 2])) };
   made.push(out); if (made.length > 3) made.shift();
   return out;
 }
