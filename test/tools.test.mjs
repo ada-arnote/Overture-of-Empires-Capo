@@ -35,7 +35,9 @@ test("the gate is clear for what is here now", () => assert.deepEqual(check(root
 test("a release needs the licence text and a source address", () => {
   stops({}, /LICENSE is missing/, { release: true });
   stops({ "site/config.js": MARK + 'export const SOURCE_URL = "";\nexport const VERSION = "1";\n' }, /no source address/, { release: true });
-  const ok = withFiles({ LICENSE: "GNU AFFERO GENERAL PUBLIC LICENSE", "site/config.js": MARK + 'export const SOURCE_URL = "https://example.org/capo";\nexport const VERSION = "1";\n' }, { release: true });
+  // the AI services stay as they are: the Capo page's connect-src must match them (p5-ai)
+  const services = readFileSync(path.join(root, "site/config.js"), "utf8").match(/export const AI_BASES[\s\S]*?\};\n/)[0];
+  const ok = withFiles({ LICENSE: "GNU AFFERO GENERAL PUBLIC LICENSE", "site/config.js": MARK + 'export const SOURCE_URL = "https://example.org/capo";\nexport const VERSION = "1";\n' + services }, { release: true });
   assert.deepEqual(ok.bad, []);
 });
 test("rules code may not use chance, the clock, the page, uneven maths or language settings", () => {

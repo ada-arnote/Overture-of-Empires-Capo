@@ -2,6 +2,21 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased: Capo reaches an AI
+
+**Players**
+- **Connect a service in a few steps.** Game, How Capo reaches an AI: choose Paste by hand, or Connect a service, then pick one: OpenRouter, Groq, OpenAI, Anthropic (Claude), Google Gemini, Mistral, DeepSeek, Together AI or Cerebras with your own key, or Ollama, LM Studio, a llama.cpp server or any chat-completions server on your own computer, with no key. Each says what it costs and whether it works from a web page. Services that turn web pages away (Azure OpenAI, Amazon Bedrock, Google Vertex AI, SambaNova) are named as needing a server in between, which Capo does not ship.
+- **Check connection** lists the service's models (spending nothing) and asks for one word, then says plainly what is wrong: a refused key, no credit, a model the service does not know, a call blocked from the page, too many requests, or no answer.
+- **Your key stays yours.** Kept apart from the settings, only while the tab is open unless you choose Remember on this device; Forget my key clears every copy. It never goes into a save, a file, a web address or a message shown, and only to the service it is for. Remembering it shows a plain warning: any page at the same site address can read it until Capo has an address of its own.
+- **Waiting is visible.** While the AI writes you see who you are waiting for, the seconds passing and the text as it arrives, with Stop. Too many requests or a busy service is tried again three times with growing waits; the prompt is never lost.
+- **Structured replies.** Where the service allows tool calls, the AI fills in a form instead of writing lines; Capo turns it back into the same lines and the rules judge them exactly as before. A model that refuses is asked again for plain lines, and that is remembered.
+- **Each call has its own reply allowance** (a turn 1,800 tokens, a chat 400, counsel 500, a character 300), four times as much for thinking models (Thinking model, or known by the model's name).
+- **Pasting is easier.** The paste box puts Copy first and says Copied, can paste the reply from the clipboard, names the kinds of AI that work (free ones too), shows the whole prompt at full height, and scrolls to it with focus on Copy. Try a sample reply plays a first turn with no AI at all. A chat message or council question can wait and go in the same prompt as your next turn, so one paste answers all three.
+
+**Contributors**
+- `site/ai.js` (services, key storage, calls, streaming, errors, retries, and the page parts), `src/story/wire.js` (the three request and reply shapes), `src/story/replyform.js` (tool forms, folding, the sample reply); small hooks marked p5-ai in `site/game.js`.
+- The Capo page's connect-src lists exactly the services in `site/config.js` (`AI_BASES`) and this computer, and the gate holds them equal. `test/ai.test.mjs` covers each shape with a stand-in fetch.
+
 ## v0.6.3 (2026-11-26): the game screens in blue and silver
 
 **Players**
