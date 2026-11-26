@@ -2,6 +2,14 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.5.4 (2026-11-26): The Ink Dries
+
+**Players**
+- **An Inch of Ink, Traditional:** the ages now come sooner on smaller maps (world at 2:00 and 5:00, continents at 1:15 and 2:30, islands at 1:30 and 3:30), so the mark and the card come into play in most games.
+- **An Inch of Ink, Capo: "The Ink Dries".** A short, plain real-time game for 12 nations on a map drawn fresh each time: your first cell is your capital, land cut off from it fades away, and from the first minute the page dries from its edges inward. Hold most of the land still wet, or be the last nation left. Games take about two minutes.
+- The turn-by-turn duel now lives under Custom (choose Turns).
+- Games saved under the previous rules no longer open (they are refused with a note).
+
 ## v0.5.3 (2026-11-26): learn by playing
 
 **Players**
