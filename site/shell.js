@@ -9,8 +9,9 @@ export const CHOICES = {
   motion: [["system", "Follow the system"], ["reduced", "Reduced"], ["full", "Full"]],
   patterns: [["off", "Off"], ["on", "On"]],
   text: [["normal", "Normal"], ["large", "Large"], ["larger", "Larger"]],
+  keys: [["on", "On"], ["off", "Off"]],
 };
-export const DEFAULTS = { sound: "on", volume: 60, speed: "normal", motion: "system", patterns: "off", text: "normal" };
+export const DEFAULTS = { sound: "on", volume: 60, speed: "normal", motion: "system", patterns: "off", text: "normal", keys: "on" };
 /** How long bots wait, as a share of their usual pace; and how much bigger the words are. */
 export const PACE = { normal: 1, fast: 0.3, instant: 0 }, SCALE = { normal: 1, large: 1.15, larger: 1.3 };
 

@@ -59,6 +59,7 @@ export function hexBoard(T, stage, o) {
     patterns(on) { pat = !!on; if (b) b.patterns(pat); else if (svg) still(); },
     motion: (mode) => b?.motion(mode),
     layout: (free) => b?.layout(free),
+    zoom: (f) => b?.zoom(f), pan: (x, y) => b?.pan(x, y),
     show(order, quick) { if (b) return b.show(o.owner(), { pieces: o.pieces(), order, quick, names: o.names?.() }); still(); return 0; },
     light: (cells, chosen) => b?.preview(cells, chosen),
     clear: () => b?.preview([]),

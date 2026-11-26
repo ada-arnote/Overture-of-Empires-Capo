@@ -129,7 +129,7 @@ const LESSON = {
     { when: (T) => pos(T).round > 1, at: () => ($("trades").children.length ? $("trades") : $("hand").hidden ? null : $("hand")), next: true, done: (T, ev) => has(ev, "trade"),
       say: (T) => (setsOf(pos(T), pos(T).seat).length && pos(T).phase === "place" ? "You have a set: hand it in now for more strength to place." : `${pos(T).hands[pos(T).seat].length ? "You took land, so you drew a card" : "Take a province in a turn and you draw a card"}: three alike, or one of each, hand in for more strength.`) },
     { at: () => $("land"), next: true,
-      say: "Win by holding every province: the bar shows each side's share, and the gold mark is the goal. That is the lesson; play on." },
+      say: "Win by holding every province: the bar shows each side's share, and the bright mark is the goal. That is the lesson; play on." },
   ],
 };
 const NICE = { forts: ["Forts", "Spend 4 of what you muster to build one. It throws one more die in defence."], leaders: ["Leaders", "Each player has one. It adds 1 to your best die where it stands, and comes back two rounds after it is lost."], capitals: ["Capitals", "Hold more than half of them at the start of your turn and you win. They add 1 to the defender's best die."], secrets: ["Secret goals", "Each player is dealt one. It counts at the start of your turn."], events: ["Seasons", "Some rounds bring a harvest, a storm that closes the crossings, or unrest."] };
@@ -215,7 +215,7 @@ createTable({
     radio($("sources"), o.sources.map((i) => ({ value: i, label: nameOf(p, i), note: `${p.str[i]} strong` })), source, (v) => { source = v; target = null; much = -1; T.refresh(); });
     $("targets").hidden = !o.targets.length;
     const order = (i) => (p.owner[i] === p.seat ? 2000000 : -odds(p, source, i));
-    radio($("targets"), [...o.targets].sort((x, y) => order(x) - order(y) || x - y).map((i) => ({ value: i, label: p.owner[i] === p.seat ? `To ${nameOf(p, i)}` : nameOf(p, i), note: p.owner[i] === p.seat ? "move" : `${percent(odds(p, source, i))} in 100`, rgb: p.owner[i] === NONE ? LAND[0] : RGB[p.owner[i]] })), target, (v) => { target = v; much = -1; T.refresh(); });
+    radio($("targets"), [...o.targets].sort((x, y) => order(x) - order(y) || x - y).map((i) => ({ value: i, label: p.owner[i] === p.seat ? `To ${nameOf(p, i)}` : nameOf(p, i), note: p.owner[i] === p.seat ? "move" : `${p.owner[i] === NONE ? "No one's" : NAMES[p.owner[i]]}, ${p.str[i]} strong, ${percent(odds(p, source, i))} in 100`, rgb: p.owner[i] === NONE ? LAND[0] : RGB[p.owner[i]] })), target, (v) => { target = v; much = -1; T.refresh(); });
     $("amount").hidden = sums.length < 2;
     if (much < 0 || much >= sums.length) much = sums.length - 1;
     $("much").max = String(Math.max(0, sums.length - 1));
@@ -248,6 +248,7 @@ createTable({
     if (p.phase === "attack" && target !== null && p.owner[target] === p.seat) { source = p.str[target] > 1 ? target : source; target = null; } // go on from where you won
     if (!T.human()) source = target = null;
   },
+  listing: (T) => { const p = T.match.position, b = boardOf(p); return { head: ["Province", "Whose", "Strong", "Borders"], rows: p.owner.map((o, i) => [nameOf(p, i), o === NONE ? "No one's" : NAMES[o], p.str[i], b.near[i].map((j) => nameOf(p, j)).join(", ")]) }; },
   keys(T, k, e) {
     if (k === "e") $("end").click();
     else if (k === "r" && !$("once").hidden) $("once").click();

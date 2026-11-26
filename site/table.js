@@ -22,6 +22,7 @@ dress(LOOK0);
 export const $ = (id) => document.getElementById(id);
 export const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const THEME = "capo-tent-theme";
 const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["away", "A friend, by link"]];
 const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
 const store = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* files still work */ } };
@@ -67,7 +68,7 @@ let hush = 0;
 export function toast(t) { const b = $("toast"); b.textContent = t; b.classList.add("on"); clearTimeout(hush); hush = setTimeout(() => b.classList.remove("on"), 2800); }
 /** One sheet at a time. `kind` widens it (the menu, the end); no `close` leaves the closing to the sheet's own buttons and Escape. */
 export function sheet(title, body, close = "Close", kind = "") {
-  $("sheet").className = `panel ${kind}`;
+  $("sheet").className = kind === "paper" ? kind : `panel ${kind}`; // paper for what is read, lacquer for the rest
   $("sheet-title").textContent = title;
   $("sheet-body").replaceChildren(body);
   $("sheet-close").parentNode.hidden = !close;
@@ -99,11 +100,14 @@ export function createTable(G) {
   ahead.type = "button"; ahead.hidden = true;
   ahead.onclick = () => { T.hurry = true; ahead.hidden = true; };
   // what happened while you waited (said once, politely), and the log: docked beside the board on wide screens, one tap away on narrow ones
-  const news = el("div"), hide = el("button", "×"), dock = el("aside", undefined, "panel"), fold = el("button", "What happened", "head"), list = el("ol"), logs = $("menu").cloneNode(true);
+  const news = el("div"), hide = el("button", "×", "shut"), told = el("button", "Since your last turn", "head"), dock = el("aside", undefined, "panel"), fold = el("button", "What happened", "head"), list = el("ol"), logs = $("menu").cloneNode(true);
   news.id = "news"; news.setAttribute("role", "status");
-  hide.type = fold.type = "button"; hide.setAttribute("aria-label", "Hide");
+  hide.type = fold.type = told.type = "button"; hide.setAttribute("aria-label", "Hide");
+  // the summary is one line until it is opened, so on a phone it never takes the board; a wide screen starts with it open
+  const unfold = (open) => { news.classList.toggle("open", open); told.setAttribute("aria-expanded", String(open)); place(); };
+  told.onclick = () => unfold(!news.classList.contains("open"));
   hide.onclick = () => { news.replaceChildren(); place(); };
-  dock.id = "dock"; dock.hidden = true; list.reversed = true;
+  dock.id = "record"; dock.hidden = true; list.reversed = true;
   dock.append(fold, list); document.body.append(dock);
   logs.id = "logs"; logs.setAttribute("aria-label", "What happened");
   logs.querySelector("path").setAttribute("d", "M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1");
@@ -113,16 +117,28 @@ export function createTable(G) {
   $("about").after(more);
   // the turn banner, one line said once to a screen reader when a person's turn starts, the tray's handle on a phone, the menu's tabs
   const banner = el("div"), say = el("p", "", "sr"), tray = el("button", undefined, "tray"), setButton = el("button", "Settings", "text"), menuBox = el("div"), tabs = el("div", undefined, "pick small tabs"), pane = el("div");
+  const zoom = el("div", undefined, "zoom");
+  zoom.hidden = true; zoom.setAttribute("role", "group"); zoom.setAttribute("aria-label", "Zoom the board");
+  for (const [t, name, f] of [["+", "Zoom in", 1.4], ["−", "Zoom out", 1 / 1.4], ["⌂", "Show the whole board", 0]]) { const b = el("button", t, "quiet"); b.type = "button"; b.setAttribute("aria-label", name); b.onclick = () => board?.zoom(f); zoom.append(b); }
+  document.body.append(zoom);
+  const stage = $("stage");
+  stage.removeAttribute("aria-hidden"); stage.tabIndex = 0; stage.setAttribute("role", "group");
+  stage.setAttribute("aria-label", "The board. Plus and minus zoom, 0 shows all of it, arrows move it. The lists in the move panel choose places.");
+  stage.onkeydown = (e) => {
+    const move = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key], f = { "+": 1.4, "=": 1.4, "-": 1 / 1.4, 0: 0 }[e.key];
+    if (move) board?.pan(move[0] * 0.12, move[1] * 0.12); else if (f !== undefined) board?.zoom(f); else return;
+    e.preventDefault(); e.stopPropagation();
+  };
   banner.id = "turn"; banner.hidden = true; banner.setAttribute("aria-hidden", "true");
   say.setAttribute("aria-live", "polite");
-  tray.type = setButton.type = "button"; tray.setAttribute("aria-label", "Show the whole move panel");
+  tray.type = setButton.type = "button";
   tabs.setAttribute("role", "radiogroup"); tabs.setAttribute("aria-label", "Menu");
   menuBox.append(tabs, pane);
   $("act").prepend(tray);
   document.body.append(banner, say);
   $("title").querySelector(".links").append(setButton);
   const KEY = `capo-${G.key}-2`, LOOK = `capo-${G.key}-look`, many = G.seats || [2, 3], setup = { seats: G.normal || 2, style: "classic", rounds: G.lengths[1]?.[0], who: ["you", "normal", "normal", "normal", "normal", "normal"], look: LOOK0.map((x) => [...x]), extra: Object.fromEntries([...(G.choices || []), ...(G.switches || [])].map((c) => [c.key, c.normal])), on: {} };
-  let log = [], land = [], board = null, run = 0, mark = 0, drawn = -1, fell = [], heralded = "", tab = "game";
+  let sureEnd = 0, log = [], land = [], board = null, run = 0, mark = 0, drawn = -1, fell = [], heralded = "", tab = "game";
   const T = {
     match: null, kinds: [], look: LOOK0, hurry: false, link: null, demo: true, busy: false, RGB, NAMES, read: () => read(LOOK),
     get board() { return board; },
@@ -134,6 +150,7 @@ export function createTable(G) {
   };
   function docked() {
     dock.hidden = T.demo || T.catching || innerWidth <= 1180;
+    zoom.hidden = T.demo || !board?.looks.length; // the still board is all in view already
     fold.setAttribute("aria-expanded", String(!list.hidden));
     if (!dock.hidden && !list.hidden && drawn !== log.length) { drawn = log.length; list.replaceChildren(...log.slice(-80).reverse().map((t) => el("li", t))); }
   }
@@ -161,7 +178,18 @@ export function createTable(G) {
     if (r.winners.length > 1) return `${r.winners.map((s) => NAMES[s]).join(" and ")} tie. They ${r.why}.`;
     return T.solo() && T.kinds[r.winners[0]] === "you" ? G.won : `${NAMES[r.winners[0]]} wins.`;
   }
+  /** Where the keyboard was in the move panel. The panel is put away while a move plays out, which drops the focus; it is given back after. */
+  let held = "";
+  function refocus() {
+    const at = document.activeElement; // a button that was hidden or switched off still holds the focus until the page is next drawn
+    if ((at !== document.body && at.getClientRects().length && !at.disabled) || $("sheet").open || !T.ready()) return;
+    const was = !held || held === "end" ? null : $(held), ok = (e) => e && !e.disabled && e.getClientRects().length;
+    const to = ok(was) && was.matches("button") ? was : was?.querySelector("[aria-checked=true], [tabindex='0']");
+    (ok(to) ? to : $("choice").querySelector("[role=radio][tabindex='0']:not(:disabled), button.main:not(:disabled), button:not(:disabled)"))?.focus({ preventScroll: true });
+  }
   function panel() {
+    const at = document.activeElement;
+    if ($("choice").contains(at)) held = at.id || at.parentNode.id; // a button by its own name, a choice by its row
     sendBox();
     ahead.hidden = T.demo || T.hurry || T.catching || T.match.turn === null || T.human() || T.away();
     const over = T.match.turn === null, me = T.human() && !T.busy;
@@ -171,7 +199,7 @@ export function createTable(G) {
     if (over) { $("status").textContent = ending(); board.clear(); } else if (!me) {
       $("status").textContent = T.away() ? `Waiting for ${NAMES[T.match.turn]}` : T.human() ? "" : `${NAMES[T.match.position.seat]} is thinking`;
       board.clear();
-    } else G.panel(T);
+    } else { G.panel(T); refocus(); }
     lesson?.check();
   }
   function score() {
@@ -184,6 +212,7 @@ export function createTable(G) {
       const c = G.cellsOf(p, s), out = G.outOf ? G.outOf(p, s) : !c, li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${out ? " out" : ""}`), dl = el("dl");
       for (const [k, v] of [[G.unit || "Land", innerWidth > 820 || seats < 3 ? `${c}/${goal}` : c], ...G.stats(p, s)]) { const d = el("div"); d.append(el("dt", k), el("dd", String(v))); dl.append(d); }
       li.append(sign(s), el("b", NAMES[s]), el("small", T.kinds[s] === "you" && T.solo() ? "You" : WORDS[T.kinds[s]]), dl);
+      li.style.setProperty("--seat", `rgb(${RGB[s]})`);
       if (s === T.match.turn) li.setAttribute("aria-current", "true");
       return li;
     }));
@@ -196,8 +225,9 @@ export function createTable(G) {
     mark = log.length;
     if (!show.length) return;
     u.append(...show.map((t) => el("li", t)));
-    news.replaceChildren(hide, el("b", "Since your last turn"), u, ...(all.length > show.length ? [el("small", `${all.length - show.length} more in the log.`)] : []));
-    place();
+    told.textContent = `Since your last turn (${all.length})`;
+    news.replaceChildren(told, u, ...(all.length > show.length ? [el("small", `${all.length - show.length} more in the log.`)] : []), hide);
+    unfold(innerWidth > 820);
   }
   /** A person's turn starts: said once, a bell, and at normal speed a banner for under a second. Real time has no turns. */
   let gone = 0;
@@ -416,7 +446,7 @@ export function createTable(G) {
     skip.hidden = true;
     Object.assign(T, { demo: false, busy: false, catching: false, match: m, kinds: k, link });
     G.fresh?.(T);
-    log = []; land = []; mark = -1; drawn = -1; fell = [];
+    log = []; land = []; mark = -1; drawn = -1; fell = []; held = "";
     news.replaceChildren();
     const again = createMatch(G.game, { seed: m.seed, options: m.options });
     land.push(tally(again.position));
@@ -475,12 +505,12 @@ export function createTable(G) {
     const marks = land[0].map((_, s) => {
       const up = land.map((l, i) => base[i] + l[s]), wide = up.reduce((b, v, i) => (v - base[i] > up[b] - base[b] ? i : b), 0);
       x.beginPath(); up.forEach((v, i) => (i ? x.lineTo(px(i), py(v)) : x.moveTo(px(i), py(v)))); for (let i = land.length - 1; i >= 0; i--) x.lineTo(px(i), py(base[i])); x.closePath();
-      x.fillStyle = `rgb(${RGB[s]})`; x.fill(); x.strokeStyle = "#12171a"; x.lineWidth = 2; x.stroke();
+      x.fillStyle = `rgb(${RGB[s]})`; x.fill(); x.strokeStyle = "#0d1623"; x.lineWidth = 2; x.stroke();
       const mark = { s, at: Math.min(c.width - 150, Math.max(8, px(wide) - 40)), y: (py(up[wide]) + py(base[wide])) / 2, room: py(base[wide]) - py(up[wide]) };
       base = up;
       return mark;
     });
-    x.font = "600 22px Palatino, Georgia, serif"; x.textBaseline = "middle";
+    x.font = '22px "Tent Roman", Palatino, Georgia, serif'; x.textBaseline = "middle";
     for (const m of marks) if (m.room > 26) { x.drawImage(sign(m.s), m.at, m.y - 13, 26, 26); x.fillStyle = inkOf(RGB[m.s]); x.fillText(nameOf(m.s), m.at + 32, m.y + 1); }
     c.setAttribute("role", "img"); c.setAttribute("aria-label", `Land held over the game. At the end: ${tally(p).map((v, s) => `${nameOf(s)} ${v}`).join(", ")}.`);
     // places
@@ -539,8 +569,8 @@ export function createTable(G) {
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
-  function showLog() { const o = el("ol"); o.id = "log"; o.reversed = true; o.append(...log.slice().reverse().map((t) => el("li", t))); sheet("What happened", log.length ? o : el("p", "Nothing yet.")); }
-  function rules() { const u = el("ul"); u.append(...G.rules(T.demo ? setup.style === "classic" : T.match.position.classic, T.demo ? null : T.match.position).map((t) => el("li", t))); sheet("How to play", u); }
+  function showLog() { const o = el("ol"); o.id = "log"; o.reversed = true; o.append(...log.slice().reverse().map((t) => el("li", t))); sheet("What happened", log.length ? o : el("p", "Nothing yet."), "Close", "paper"); }
+  function rules() { const u = el("ul"); u.append(...G.rules(T.demo ? setup.style === "classic" : T.match.position.classic, T.demo ? null : T.match.position).map((t) => el("li", t))); sheet("How to play", u, "Close", "paper"); }
   /** One menu, the same in every table game: Game, Settings, Link play, About. */
   function menu(at = tab) {
     tab = at;
@@ -556,6 +586,11 @@ export function createTable(G) {
     if (lesson) add("Teach me again", lesson.start);
     if (T.demo) return box;
     add("What happened so far", showLog);
+    if (G.listing) add("The board as a list", () => {
+      const { head, rows } = G.listing(T), box = el("div", undefined, "ranks"), t = el("table"), tr = (cells, tag) => { const r = el("tr"); r.append(...cells.map((c) => el(tag, String(c)))); return r; };
+      t.append(tr(head, "th"), ...rows.map((r) => tr(r, "td"))); box.append(t);
+      sheet("The board as a list", box, "Close", "paper");
+    });
     if (G.more) add(G.more.label, () => sheet(G.more.label, G.more.body(T)));
     add("Take back your last move", undo).disabled = !canUndo();
     add("Save to a file", save);
@@ -586,9 +621,13 @@ export function createTable(G) {
     row("Bot speed", ...bind("speed"), CHOICES.speed);
     row("Motion", ...bind("motion"), CHOICES.motion);
     if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
+    row("Letter keys", ...bind("keys"), CHOICES.keys);
+    box.append(el("p", "E ends the turn (press twice), U takes back, and each game has a few more. Off leaves Tab, arrows, Enter and Escape.", "about"));
     row("Seat patterns", ...bind("patterns"), CHOICES.patterns);
     box.append(el("p", "Patterns show on the board and the score bar.", "about"));
     row("Text size", ...bind("text"), CHOICES.text);
+    // daylight or lamplight: the same choice the front page's lantern keeps
+    row("Light", () => read(THEME) || "system", (v) => { store(THEME, v === "system" ? null : v); if (v === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = v; }, [["system", "Follow the system"], ["light", "Daylight"], ["dark", "Lamplight"]]);
     return box;
   }
   function aboutTab() {
@@ -697,9 +736,10 @@ export function createTable(G) {
   // the banner goes at any tap or key, which still does what it does
   for (const k of ["pointerdown", "keydown"]) addEventListener(k, () => { if (!banner.hidden) unherald(); }, true);
   const shut = () => document.body.classList.contains("shut");
-  tray.onclick = () => { document.body.classList.toggle("shut"); store("capo-tray", shut() ? "shut" : null); tray.setAttribute("aria-expanded", String(!shut())); place(); };
+  const folded = () => { tray.setAttribute("aria-expanded", String(!shut())); tray.setAttribute("aria-label", shut() ? "Show the whole move panel" : "Fold the move panel, to see more of the board"); };
+  tray.onclick = () => { document.body.classList.toggle("shut"); store("capo-tray", shut() ? "shut" : null); folded(); place(); };
   document.body.classList.toggle("shut", read("capo-tray") === "shut");
-  tray.setAttribute("aria-expanded", String(!shut()));
+  folded();
   matchMedia("(prefers-reduced-motion: reduce)").addEventListener?.("change", apply);
   logs.onclick = showLog;
   list.hidden = read("capo-log") === "shut";
@@ -726,9 +766,12 @@ export function createTable(G) {
     }
   };
   addEventListener("keydown", (e) => {
-    if (T.demo || $("sheet").open || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key.toLowerCase() === "u") undo();
-    else if (T.ready()) G.key && G.keys?.(T, e.key.toLowerCase(), e);
+    const k = e.key.toLowerCase();
+    if (T.demo || $("sheet").open || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input:not([type=range]), select, textarea")) return;
+    if (k.length === 1 && settings.keys === "off") return; // single letters only; Enter and Escape stay
+    if (k === "u") undo();
+    else if (k === "e" && T.ready() && performance.now() > sureEnd) { sureEnd = performance.now() + 4000; toast("End your turn? Press E again."); }
+    else if (T.ready()) { sureEnd = 0; G.key && G.keys?.(T, k, e); }
   });
   addEventListener("resize", place);
   footer();

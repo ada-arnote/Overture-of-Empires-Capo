@@ -14,6 +14,8 @@ const options = (T) => legal(T).filter((m) => from(m) === source && (source[0] =
 const verb = (p, m) => (m.do === "fort" ? "Fort at" : m.do === "farm" ? "Farm at" : p.owner[m.to] !== p.seat ? (p.owner[m.to] === NONE ? "Claim" : "Take") : p.unit[m.to] ? "Join" : p.tree[m.to] ? "Clear" : "Stand");
 const weight = { Take: 0, Claim: 1, Clear: 2, Join: 3, Stand: 4, "Fort at": 5, "Farm at": 5 };
 const worth = (p, m) => weight[verb(p, m)] * 100 - (p.hall[m.to] ? 60 : 0) - (p.owner[m.to] !== NONE && p.owner[m.to] !== p.seat ? p.unit[m.to] * 10 : 0);
+/** A hex in words: whose it is and what stands on it. */
+const whatAt = (p, i) => [p.owner[i] === NONE ? "No one's" : p.owner[i] === p.seat ? "Yours" : NAMES[p.owner[i]], p.hall[i] ? "village" : p.unit[i] ? RANK[p.unit[i]].toLowerCase() : p.fort[i] ? "fort" : p.farm[i] ? "farm" : p.tree[i] ? (p.tree[i] === WOOD ? "wood" : "cairn") : ""].filter(Boolean).join(", ");
 const costOf = (p, m, t) => (m.do === "fort" ? p.rule.fort : m.do === "farm" ? farmPrice(p, t.cells) : raiseOf(p));
 
 function tap(T, i) {
@@ -160,19 +162,20 @@ createTable({
     $("builds").hidden = kinds.length < 2;
     radio($("builds"), kinds.map((k) => ({ value: k, label: { raise: "Scout", fort: "Fort", farm: "Farm" }[k], note: String(costOf(p, { do: k }, t || { cells: [] })) })), build, (v) => { build = v; where = null; T.refresh(); });
     $("wheres").hidden = !list.length;
-    radio($("wheres"), list.map((m) => ({ value: m.to, label: `${verb(p, m)} ${nameOf(p, m.to)}${m.sea ? " by boat" : ""}`, rgb: p.owner[m.to] === NONE ? PAPER[0] : RGB[p.owner[m.to]] })), where, (v) => { where = v; T.refresh(); });
+    radio($("wheres"), list.map((m) => ({ value: m.to, label: `${verb(p, m)} ${nameOf(p, m.to)}${m.sea ? " by boat" : ""}`, note: whatAt(p, m.to), rgb: p.owner[m.to] === NONE ? PAPER[0] : RGB[p.owner[m.to]] })), where, (v) => { where = v; T.refresh(); });
     const m = list.find((x) => x.to === where);
     $("do").disabled = !m;
     $("do").replaceChildren(m ? `${verb(p, m)} ${nameOf(p, m.to)}` : sources.length ? "Choose a village or unit" : "Nothing to do");
     if (m && m.do !== "move") $("do").append(el("small", ` for ${costOf(p, m, t)}`));
     $("do").onclick = () => { const now = options(T).find((x) => x.to === where); if (now) T.play(now); };
     $("end").onclick = () => { if (T.ready()) T.play({ do: "end" }); };
-    if (!give) { give = el("button", "", "quiet"); give.type = "button"; $("end").before(give); }
+    if (!give) { give = el("button", "", "text"); give.type = "button"; $("end").parentNode.after(give); } // apart from End turn, and small: it ends your game
     give.hidden = !all.some((x) => x.do === "concede");
     give.textContent = sure ? "Concede: tap again" : "Concede";
     give.onclick = () => { if (!T.ready()) return; if (sure) T.play({ do: "concede" }); else { sure = true; T.refresh(); } };
     T.board.light(list.filter((x) => ["Take", "Claim"].includes(verb(p, x))).map((x) => x.to), { ring: source ? Number(source.slice(1)) : -1, aim: where ?? -1, dots: list.filter((x) => !["Take", "Claim"].includes(verb(p, x))).map((x) => x.to) });
   },
+  listing: (T) => { const p = T.match.position; return { head: ["Hex", "Whose and what"], rows: boardOf(p).cells.map((_, i) => i).filter((i) => !p.water[i]).map((i) => [nameOf(p, i), whatAt(p, i)]) }; },
   changed: () => { where = null; sure = false; },
   keys(T, k, e) {
     if (k === "e") T.play({ do: "end" });
@@ -188,7 +191,7 @@ createTable({
     "Woods earn nothing and spread over empty land. A unit that steps in clears them, and its move is done.",
     "Cut a rival's land in two, and the part without the village starts with no money. Take a village, and its purse is lost.",
     "A number turning red means that territory cannot pay next turn.",
-    (p ? p.rule.goal === "last" : classic) ? `Win by being the last one standing. You may concede instead; a computer player concedes when one rival holds half the island and three times its land. ${p?.rule.limit ? "After the last round" : `After ${SAFETY} rounds`}, the most land wins.` : "Reach the gold mark on the bar to win, or hold the most land after the last round.",
+    (p ? p.rule.goal === "last" : classic) ? `Win by being the last one standing. You may concede instead; a computer player concedes when one rival holds half the island and three times its land. ${p?.rule.limit ? "After the last round" : `After ${SAFETY} rounds`}, the most land wins.` : "Reach the bright mark on the bar to win, or hold the most land after the last round.",
     "Keys: Tab and arrows choose, Enter acts, E ends the turn, Escape lets go, U takes back.",
   ],
 });
