@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const KB = 1000;
 export const LIMITS = {
   file: 250 * KB, // any one shipped file, as stored
-  code: { "src/core": 12 * KB, "src/map": 45 * KB, "src/games": 90 * KB, site: 56 * KB }, // compressed
+  code: { "src/core": 12 * KB, "src/map": 45 * KB, "src/games": 90 * KB, site: 72 * KB }, // compressed
   first: 500 * KB, // everything shipped, compressed
   lines: { "src/map": 2400, "src/games": 6500, "src/core": 700, tools: 1000 },
 };
@@ -52,6 +52,7 @@ export function check(root, { release = false } = {}) {
     if (ext !== ".svg" && text.includes("—")) bad.push(`${name}: has an em dash`);
     // Nothing is fetched from elsewhere. Links a person follows are fine, and so are the two fixed names below.
     for (const m of text.matchAll(/\b(?:https?|wss?):\/\/[^\s"'`<>)]+/g)) {
+      if (/^http:\/\/(localhost|127\.0\.0\.1)[:/]/.test(m[0])) continue; // this computer is not elsewhere
       if (/^http:\/\/www\.w3\.org\//.test(m[0]) || (ext === ".html" && new RegExp(`<a [^>]*href="${m[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(text)) || name === "site/config.js") continue;
       bad.push(`${name}: names an outside address, ${m[0].slice(0, 60)}`);
     }

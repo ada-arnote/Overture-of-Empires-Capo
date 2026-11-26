@@ -52,8 +52,10 @@ export function bundle(entry) {
 
 export function page(html, css, js, home = "") {
   const safe = js.replace(/<\/script/gi, "<\\/script"), hash = createHash("sha256").update(`\n${safe}\n`).digest("base64");
+  // a page that talks to an AI keeps the addresses it may reach; the games reach nothing
+  const reach = html.match(/connect-src ([^;"]*)/)?.[1]?.replace("'self'", "").trim() || "", talk = reach.includes("https:") ? ` connect-src ${reach};` : "";
   return html
-    .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, () => `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">`)
+    .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, () => `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src data:;${talk} base-uri 'none'; form-action 'none'">`)
     .replace(/<link rel="stylesheet"[^>]*>/, () => `<style>\n${css}</style>`)
     .replace(/<a href="\.\/" class="text">All games<\/a>/, home ? `<a href="${home}" class="text">All games</a>` : "")
     .replace(/<script type="module"[^>]*><\/script>/, () => `<script>\n${safe}\n</script>`);
@@ -62,7 +64,7 @@ export function page(html, css, js, home = "") {
 if (process.argv[1]?.endsWith("bundle.mjs")) {
   const at = (f) => readFileSync(path.join(root, "site", f), "utf8"), out = path.join(root, "dist");
   mkdirSync(out, { recursive: true });
-  for (const name of ["inch", "fable", "banners", "glass"]) {
+  for (const name of ["inch", "fable", "banners", "glass", "capo"]) {
     const js = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`, text = page(at(`${name}.html`), at("table.css"), js);
     mkdirSync(path.join(root, "play"), { recursive: true });
     writeFileSync(path.join(root, "play", `${name}.html`), page(at(`${name}.html`), at("table.css"), js, "../site/"));
