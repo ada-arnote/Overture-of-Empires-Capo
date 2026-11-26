@@ -4,7 +4,7 @@ const VS = `#version 300 es
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS = `#version 300 es
 precision highp float; precision highp int;
-uniform sampler2D uId,uHt,uTab; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime;
+uniform sampler2D uId,uHt,uTab; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell;
 uniform vec3 uInk,uPale,uWall,uGlow; out vec4 o;
 int raw(ivec2 t){ if(t.x<0||t.y<0||t.x>=int(uSize.x)||t.y>=int(uSize.y)) return 0; vec4 v=texelFetch(uId,t,0); return int(v.r*255.+.5)+256*int(v.g*255.+.5); }
 int idAt(vec2 p){ return raw(ivec2(floor(p))); }
@@ -18,6 +18,15 @@ vec2 plane(vec2 uv,float Z){ float Y=(uv.y*(1.-uQ*Z*uTilt.x)+Z*uTilt.y)/max(.02,
   return uC+vec2(X*uYaw.x+Y*uYaw.y,-X*uYaw.y+Y*uYaw.x)/uS; }
 float ht(vec2 p){ return texture(uHt,p/uSize).r*255.; }
 float grain(vec2 p){ p=floor(p); return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
+// seat patterns, a second sign beside colour, the same as on the score bar: q is the ground in screen pixels, so lines keep their width at any zoom
+float hatch(float u,float P){ return 1.-smoothstep(.6,1.1+.6/uDpr,abs(fract(u/P)-.5)*P); }
+float pattern(vec2 q,int k){
+  if(k==0) return hatch((q.x+q.y)*.7071,6.5);
+  if(k==1){ vec2 g=mod(q+vec2(floor(q.y/6.)*3.,0.),6.)-3.; return 1.-smoothstep(1.2,1.9+.6/uDpr,length(g)); }
+  if(k==2) return hatch(q.x,6.);
+  if(k==3) return max(hatch((q.x+q.y)*.7071,8.),hatch((q.x-q.y)*.7071,8.));
+  if(k==4) return hatch((q.x-q.y)*.7071,6.5);
+  return hatch(q.y,5.5); }
 vec3 face(vec2 p,int id,float foot){
   vec4 a=tab(id,0),b=tab(id,1); vec3 c=a.rgb; float e=2.;
   vec2 g=vec2(ht(p+vec2(e,0.))-ht(p-vec2(e,0.)),ht(p+vec2(0.,e))-ht(p-vec2(0.,e)))/100.;
@@ -25,11 +34,17 @@ vec3 face(vec2 p,int id,float foot){
   c*=.965+.07*grain(p*1.5); // paper
   float wet=b.b; c=mix(c,c*c*1.15,wet*.55); // fresh ink is deeper
   if(wet>0.) c+=vec3(.10)*wet*smoothstep(.0,1.,k-1.)*2.;
-  // borders: a firm line where the owner changes, a faint one between cells of one owner
-  float w=max(1.6,foot*1.1); bool edge=false,own=false,land=false;
-  for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*(w*2.6)); if(n!=id){ edge=true; if(n<=0||abs(tab(max(n,0),0).a-a.a)>.002) own=true; if(n>0){ float m=tab(n,1).a; if((m>.99)!=(b.a>.99)) own=true; else if(abs(m-b.a)>.002) land=true; } } }
-  if(own){ bool near=false; for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*(w*1.5)); if(n!=id) near=true; }
-    float l=dot(a.rgb,vec3(.3,.6,.1)); vec3 line=l>.36?uInk:uPale; c=mix(c,near?line:mix(line,a.rgb,.55),a.a<.99?(near?.92:.5):(near?.42:.15)); }
+  bool owned=a.a<.99;
+  if(owned&&uPat>0.){ vec2 d=(p-uC)*uS; int s=((int(a.a*255.+.5)-20)*154)%211; // 154 undoes the 37 the owner was stored with
+    float l=dot(a.rgb,vec3(.2126,.7152,.0722)); c=mix(c,l>.45?uInk:uPale,pattern(vec2(d.x*uYaw.x-d.y*uYaw.y,(d.x*uYaw.y+d.y*uYaw.x)*uTilt.x),s%6)*(l>.45?.32:.27)); }
+  // borders: a firm line where the owner changes, a faint one between cells of one owner.
+  // Owned land is ringed by an ink line and a paper line, whatever its colour: paper outside where it meets dark sea, else ink.
+  float w=max(1.6,foot*1.1),px=foot*uDpr,r2=owned?max(w*2.6,min(px*3.2,uCell*.2)):w*2.6; bool edge=false,own=false,land=false,them=false,dark=false;
+  for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*r2); if(n!=id){ edge=true; float o2=tab(max(n,0),0).a; if(n<=0||abs(o2-a.a)>.002){ own=true; if(n>0&&o2<.99) them=true; if(n>0&&o2>.99&&dot(tab(n,0).rgb,vec3(.3,.6,.1))<.42) dark=true; } if(n>0){ float m=tab(n,1).a; if((m>.99)!=(b.a>.99)) own=true; else if(abs(m-b.a)>.002) land=true; } } }
+  if(own){ bool near=false; float r1=owned?max(w*1.5,min(px*1.8,uCell*.11)):w*1.5; for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*r1); if(n!=id) near=true; }
+    if(owned) c=near!=dark?uInk*.5:mix(c,uPale,dark?.9:.6);
+    // beside owned land only the owned side draws the edge, so the ink meets the ground as it is
+    else if(!them){ float l=dot(a.rgb,vec3(.3,.6,.1)); vec3 line=l>.36?uInk:uPale; c=mix(c,near?line:mix(line,a.rgb,.55),near?.42:.15); } }
   else if(edge) c=mix(c,uInk,b.a<.99?.46:.16);
   if(land) c=mix(c,uGlow,own?.6:.92);
   float gl=b.g; if(gl>0.){ float pulse=uTime<=0.?1.:.72+.28*cos(uTime*6.2832); c=mix(c,uGlow,gl*(edge?.95:.34*pulse)); }
@@ -111,7 +126,7 @@ export class Painter {
     g.uniform1i(u.uId, 0); g.uniform1i(u.uHt, 1); g.uniform1i(u.uTab, 2);
     g.uniform2f(u.uSize, m.w, m.h); g.uniform2f(u.uView, cam.W, cam.H); g.uniform2f(u.uMid, cam.mx, cam.my); g.uniform2f(u.uC, cam.cx, cam.cy);
     g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform2f(u.uLight, -0.6, -0.8);
-    g.uniform1f(u.uS, cam.s); g.uniform1f(u.uQ, cam.q); g.uniform1f(u.uDpr, dpr); g.uniform1f(u.uUnit, o.unit); g.uniform1f(u.uMost, o.most); g.uniform1f(u.uRelief, o.relief); g.uniform1f(u.uTime, o.time);
+    g.uniform1f(u.uS, cam.s); g.uniform1f(u.uQ, cam.q); g.uniform1f(u.uDpr, dpr); g.uniform1f(u.uUnit, o.unit); g.uniform1f(u.uMost, o.most); g.uniform1f(u.uRelief, o.relief); g.uniform1f(u.uTime, o.time); g.uniform1f(u.uPat, o.pat ? 1 : 0); g.uniform1f(u.uCell, m.R);
     const f3 = (k, c) => g.uniform3f(u[k], c[0] / 255, c[1] / 255, c[2] / 255);
     f3("uInk", o.ink); f3("uPale", o.pale); f3("uWall", o.wall); f3("uGlow", o.glow);
     g.drawArrays(g.TRIANGLES, 0, 3);

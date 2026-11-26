@@ -3,11 +3,23 @@
 import { LOOKS, canDraw, createBoard } from "../src/map/board.js";
 import { ICONS, RGB } from "./table.js";
 
+/** The seats' patterns for the still board, the same six as on the moving board and the score bar: /, dots, |, x, \, -. */
+function patterns(make, f) {
+  const defs = make("defs", {}), ink = "rgba(16,12,10,.45)", line = (d, w) => make("path", { d, stroke: ink, "stroke-width": w, fill: "none" });
+  [["M0 8L8 0M-2 2L2-2M6 10L10 6"], [], ["M4 0V8"], ["M0 8L8 0M0 0L8 8"], ["M0 0L8 8M-2 6L2 10M6-2L10 2"], ["M0 4H8"]].forEach((paths, k) => {
+    const p = make("pattern", { id: `seat-${k}`, width: 8, height: 8, patternUnits: "userSpaceOnUse", patternTransform: `scale(${f})` }); // about 8 screen pixels
+    if (k === 1) p.append(make("circle", { cx: 4, cy: 4, r: 1.6, fill: ink }));
+    for (const d of paths) p.append(line(d, 1.5));
+    defs.append(p);
+  });
+  return defs;
+}
+
 /**
  * o.picture and o.fine { cells, of } for a board of provinces. Otherwise o: cells (axial), rough[], sea[], ground(i), owner() -> seats or -1 by cell, pieces() -> standing pieces, tap(i), can(i).
  */
 export function hexBoard(T, stage, o) {
-  let b = null, svg = null;
+  let b = null, svg = null, pat = false;
   const wide = innerWidth > 820, kept = T.read();
   const still = () => {
     const list = o.fine ? o.fine.cells : o.cells, big = Math.max(...list.map(([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)))) + 2;
@@ -15,18 +27,21 @@ export function hexBoard(T, stage, o) {
     const xs = list.map(([q, r]) => W * (q + r / 2)), ys = list.map(([, r]) => S * 1.5 * r), x0 = Math.min(...xs) - W, y0 = Math.min(...ys) - S * 1.5; // the board's own extent, with a margin
     svg = make("svg", { viewBox: o.fine ? `${-W * big} ${-S * 1.6 * big} ${W * 2 * big} ${S * 3.2 * big}` : `${x0} ${y0} ${Math.max(...xs) + W - x0} ${Math.max(...ys) + S * 1.5 - y0}` });
     const where = new Map(o.pieces().map((p) => [p.at, p]));
-    const words = [];
+    if (pat) svg.append(patterns(make, svg.viewBox.baseVal.width / Math.max(240, stage.clientWidth)));
+    const words = [], laid = [];
     list.forEach(([q, r], k) => {
       const i = o.fine ? o.fine.of[k] : k, x = W * (q + r / 2), y = S * 1.5 * r;
       if (i < 0) return;
       const s = owner[i], p = !o.fine || o.fine.mid[i] === k ? where.get(i) : null, rim = o.fine && s >= 0 ? `rgb(${RGB[s]})` : o.fine ? `rgb(${o.ground(i)})` : "#12171a";
       const g = make("polygon", { points: [0, 1, 2, 3, 4, 5].map((k) => { const a = (Math.PI / 180) * (60 * k - 90); return `${x + S * Math.cos(a)},${y + S * Math.sin(a)}`; }).join(" "), fill: `rgb(${s < 0 ? o.ground(i) : RGB[s]})`, stroke: rim, "stroke-width": 2 });
+      const over = pat && s >= 0 ? make("polygon", { points: g.getAttribute("points"), fill: `url(#seat-${s % 6})`, "pointer-events": "none" }) : null;
       g.addEventListener("click", () => o.tap(i));
       svg.append(g);
+      if (over) laid.push(over);
       const text = p ? (p.kind === "army" ? String(p.count) : p.kind === "tower" ? `${p.count}⌂` : "▲".repeat(p.rank)) : o.fine ? "" : s >= 0 ? String(s + 1) : o.rough[i] ? "∧" : "";
       if (text) { const t = make("text", { x, y: y + 6, "text-anchor": "middle", "font-size": o.fine ? 40 : p ? 15 : 14, "font-weight": 700, fill: "#12171a", "pointer-events": "none" }); t.textContent = p && p.kind === "army" && p.seat >= 0 ? `${"◆●■★▲♥"[p.seat]}${text}` : text; words.push(t); }
     });
-    svg.append(...words);
+    svg.append(...laid, ...words);
     stage.replaceChildren(svg);
   };
   if (canDraw()) {
@@ -41,6 +56,8 @@ export function hexBoard(T, stage, o) {
     get looks() { return b ? Object.entries(LOOKS).map(([k, v]) => [k, v.name]) : []; },
     get look() { return b?.look; },
     setLook: (k) => b?.setLook(k),
+    patterns(on) { pat = !!on; if (b) b.patterns(pat); else if (svg) still(); },
+    motion: (mode) => b?.motion(mode),
     layout: (free) => b?.layout(free),
     show(order, quick) { if (b) return b.show(o.owner(), { pieces: o.pieces(), order, quick, names: o.names?.() }); still(); return 0; },
     light: (cells, chosen) => b?.preview(cells, chosen),

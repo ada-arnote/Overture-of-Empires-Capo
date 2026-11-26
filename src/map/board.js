@@ -39,6 +39,21 @@ export function emblem(ctx, icon, x, y, size, flat = 1) {
   EMBLEMS[icon % EMBLEMS.length][1](ctx);
   ctx.restore();
 }
+/** The six seat patterns for things drawn on the page, the same as the painter's: /, dots, |, x, \, -. Light lines on dark colours. */
+const TILES = new Map();
+export function seatPattern(ctx, seat, rgb) {
+  const k = seat % 6, light = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255 > 0.45, key = k * 2 + light;
+  if (!TILES.has(key)) {
+    const t = document.createElement("canvas"), c = t.getContext("2d");
+    t.width = t.height = 8;
+    c.strokeStyle = c.fillStyle = light ? "rgba(24,20,18,.5)" : "rgba(250,244,228,.5)"; c.lineWidth = 1.4;
+    const lines = [[[0, 8, 8, 0], [-2, 2, 2, -2], [6, 10, 10, 6]], [], [[4, 0, 4, 8]], [[0, 8, 8, 0], [0, 0, 8, 8]], [[0, 0, 8, 8], [-2, 6, 2, 10], [6, -2, 10, 2]], [[0, 4, 8, 4]]][k];
+    for (const [a, b, x, y] of lines) { c.beginPath(); c.moveTo(a, b); c.lineTo(x, y); c.stroke(); }
+    if (k === 1) { c.beginPath(); c.arc(4, 4, 1.5, 0, 7); c.fill(); }
+    TILES.set(key, t);
+  }
+  return ctx.createPattern(TILES.get(key), "repeat");
+}
 const tower = (c) => { c.beginPath(); [[-0.3, 0], [-0.22, -0.62], [-0.31, -0.7], [-0.31, -1.04], [-0.17, -1.04], [-0.17, -0.92], [-0.07, -0.92], [-0.07, -1.04], [0.07, -1.04], [0.07, -0.92], [0.17, -0.92], [0.17, -1.04], [0.31, -1.04], [0.31, -0.7], [0.22, -0.62], [0.3, 0]].forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); };
 
 /** Can this device draw the moving board at all? */
@@ -56,13 +71,15 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
-  const m = picture || hexPicture(cells, rough, sea, size), painter = new Painter(under), cam = new Camera(), still = matchMedia("(prefers-reduced-motion: reduce)");
+  const m = picture || hexPicture(cells, rough, sea, size), painter = new Painter(under), cam = new Camera(), system = matchMedia("(prefers-reduced-motion: reduce)");
   painter.load(m);
   const ends = m.ends || m.mid.flatMap(([x, y]) => [[x - m.R, y], [x + m.R, y], [x, y - m.R], [x, y + m.R]]);
   const show = m.mid.map((_, i) => ({ land: lands?.[i], rgb: ground(i), from: ground(i), to: ground(i), owner: -1, top: sea[i] ? 0.2 : 1, topTo: sea[i] ? 0.2 : 1, glow: 0, wet: 0, start: 0, ends: 0 }));
   const tops = new Float32Array(m.n + 1), listeners = { pick: [], hover: [] };
-  let L = LOOKS[look], lookName = look, queued = false, dirty = true, alive = true, spots = [], hovering = -1, swing = null, until = 0, lit = 0, marks = [], point = null;
+  let L = LOOKS[look], lookName = look, motion = "system", pat = false, queued = false, dirty = true, alive = true, spots = [], hovering = -1, swing = null, until = 0, lit = 0, marks = [], point = null;
 
+  /** Reduced motion is the player's choice, or the system's when they follow it. Changes then fade quickly in place instead of moving. */
+  const calm = () => motion === "reduced" || (motion === "system" && system.matches);
   const unit = () => 9 * L.rise * cam.s, most = () => unit() * 2.2, dpr = () => Math.min(2, Math.max(1.5, devicePixelRatio || 1)); // thin lines need the extra samples on a plain screen
   function redraw() { if (!queued && alive) { queued = true; requestAnimationFrame(frame); } }
 
@@ -74,7 +91,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       if (c.start || c.ends) {
         const k = t <= c.start ? 0 : t >= c.ends ? 1 : (t - c.start) / (c.ends - c.start);
         c.rgb = mix(c.from, c.to, ease(k));
-        c.top = c.topFrom + (c.topTo - c.topFrom) * ease(k) + Math.sin(k * Math.PI) * 0.5;
+        c.top = c.topFrom + (c.topTo - c.topFrom) * ease(k) + Math.sin(k * Math.PI) * c.hop;
         c.wet = c.soak ? Math.max(0, 1 - Math.max(0, t - c.start) / 1500) * (k > 0 ? 1 : 0) : 0;
         if (k < 1 || c.wet > 0) moving = true;
         else { c.start = c.ends = 0; c.soak = false; }
@@ -90,10 +107,10 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       base = cam.s;
       if (k >= 1) swing = null; else moving = true;
     }
-    const beat = still.matches || !lit ? 0 : Math.max(0, 1.5 - (t - lit) / 1000); // a preview pulses briefly, then the board is still
+    const beat = calm() || !lit ? 0 : Math.max(0, 1.5 - (t - lit) / 1000); // a preview pulses briefly, then the board is still
     if (beat > 0) moving = true;
     if (dirty) { painter.send(show); dirty = false; }
-    painter.draw(cam, dpr(), { unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [255, 226, 150] });
+    painter.draw(cam, dpr(), { unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, pat, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [255, 226, 150] });
     drawOver(t);
     if (moving) redraw();
   }
@@ -191,7 +208,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
         const X = x + h * 0.55, Y = y + h * 0.45, k = s.kind === "town" ? 1.25 : 0.9;
         ctx.beginPath(); [[-0.4, 0], [-0.4, -0.45], [0, -0.85], [0.4, -0.45], [0.4, 0]].forEach(([u, v], i) => ctx[i ? "lineTo" : "moveTo"](X + u * h * k, Y + v * h * k)); ctx.closePath();
         if (s.kind === "town") { ctx.moveTo(X + 0.4 * h * k, Y); ctx.lineTo(X + 0.95 * h * k, Y); ctx.lineTo(X + 0.95 * h * k, Y - 0.35 * h * k); ctx.lineTo(X + 0.4 * h * k, Y - 0.35 * h * k); }
-        ctx.fillStyle = `rgb(${s.rgb})`; ctx.fill(); ctx.lineWidth = 2.2; ctx.stroke();
+        ctx.fillStyle = `rgb(${s.rgb})`; ctx.fill(); if (pat && s.seat >= 0) { ctx.fillStyle = seatPattern(ctx, s.seat, s.rgb); ctx.fill(); } ctx.lineWidth = 2.2; ctx.stroke();
         if (s.harbour) { ctx.beginPath(); ctx.arc(X, Y - 0.32 * h * k, h * 0.1, 0, 7); ctx.fillStyle = "#fdf6e4"; ctx.fill(); }
         continue;
       }
@@ -302,7 +319,11 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
 
   return {
     layout, get look() { return lookName; }, on(what, f) { (listeners[what] ||= []).push(f); },
-    setLook(name) { if (!LOOKS[name]) return; const a = { tilt: cam.tilt, yaw: cam.yaw, q: cam.q }; lookName = name; L = LOOKS[name]; if (still.matches) { layout({ left: cam.left, right: cam.right, top: cam.top, bottom: cam.bottom }); return; } swing = { t: performance.now(), a }; redraw(); },
+    setLook(name) { if (!LOOKS[name]) return; const a = { tilt: cam.tilt, yaw: cam.yaw, q: cam.q }; lookName = name; L = LOOKS[name]; if (calm()) { layout({ left: cam.left, right: cam.right, top: cam.top, bottom: cam.bottom }); for (const c of [under, over]) c.animate?.([{ opacity: 0.25 }, { opacity: 1 }], { duration: 180, easing: "ease-out" }); return; } swing = { t: performance.now(), a }; redraw(); },
+    /** Seat patterns over owned land, so colour is never the only sign of whose it is. */
+    patterns(on) { pat = !!on; redraw(); },
+    /** "system" (the default) follows the system's reduced-motion wish, "reduced" and "full" override it. */
+    motion(mode) { motion = mode === "reduced" || mode === "full" ? mode : "system"; redraw(); },
     setCursor(on) { under.style.cursor = on ? "pointer" : "default"; },
     /**
      * Show a position. owner[i] is a seat or -1. `order` lists cells that change first to last, so ink spreads.
@@ -311,13 +332,13 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     show(owner, { pieces = [], order = [], quick = false, names = null } = {}) {
       if (names) labels = names;
       const homes = new Set(pieces.filter((p) => p.kind === "tower").map((p) => p.at)), held = new Set(pieces.map((p) => p.at));
-      const t = performance.now(), slow = !quick && !still.matches, step = Math.min(90, 900 / Math.max(1, order.length)), place = new Map(order.map((c, i) => [c, i]));
+      const t = performance.now(), slow = !quick && !calm(), fade = !quick && !slow, step = Math.min(90, 900 / Math.max(1, order.length)), place = new Map(order.map((c, i) => [c, i]));
       let last = 0;
       owner.forEach((o, i) => {
         const c = show[i], to = o < 0 ? ground(i) : mix(seats[o], ground(i), rough[i] ? 0.1 : 0), tall = sea[i] ? 0.2 : homes.has(i) ? 1.5 : o < 0 ? 0.75 : 1.2;
         if (c.owner === o && c.topTo === tall) return;
-        const wait = slow && place.has(i) ? place.get(i) * step : 0, long = slow ? 320 : 1;
-        Object.assign(c, { from: c.rgb, to, topFrom: c.top, topTo: tall, start: t + wait, ends: t + wait + long, soak: slow && o >= 0 && c.owner !== o });
+        const wait = slow && place.has(i) ? place.get(i) * step : 0, long = slow ? 320 : fade ? 200 : 1; // reduced motion: all at once, a quick fade, no hop
+        Object.assign(c, { from: c.rgb, to, topFrom: slow ? c.top : tall, topTo: tall, hop: slow ? 0.5 : 0, start: t + wait, ends: t + wait + long, soak: slow && o >= 0 && c.owner !== o });
         c.owner = o;
         last = Math.max(last, wait + long);
         marks[i] = o < 0 ? null : { seat: o, seen: 1, home: held.has(i) };
