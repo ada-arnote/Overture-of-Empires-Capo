@@ -9,6 +9,7 @@ export const STYLES = {
   painted: {
     name: "Painted miniatures",
     set: "code", // which models: the ones made in code
+    pack: "", // a sculpted set to fetch on top of them (a file in site/models/), or none
     pal: [[142, 150, 162], [104, 76, 54], [146, 142, 134], [142, 70, 56], [190, 158, 92], [214, 204, 180], [44, 82, 62], [70, 112, 66], [238, 240, 240], [214, 176, 84], [232, 224, 202], [112, 80, 56], [40, 34, 32], [200, 170, 92], [74, 78, 86], [226, 220, 204]],
     fin: [[0.62, 0.04, 12, 0.05], [0.6, 0.16, 28, 0.07], [0.5, 0.42, 20, 0.1], [0.62, 0.02, 10, 0.03]],
     sun: [-0.6, -0.8, 1.3], // where the lamp is: up and to the left, as on a drawn map

@@ -4,7 +4,7 @@
 import { Camera, pick } from "./camera.js";
 import { hexPicture } from "./hexes.js";
 import { Meshes } from "./mesh.js";
-import { models } from "./models.js";
+import { models, unpack } from "./models.js";
 import { Painter } from "./paint.js";
 import { STYLES } from "./style.js";
 
@@ -440,5 +440,8 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     screenOf(i) { cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit()); return { x: cam.px, y: cam.py }; },
     destroy() { alive = false; painter.destroy(); under.remove(); over.remove(); },
     get solid() { return solid(); },
+    /** A style's pack of sculpted models, once fetched: they take the place of the code-made ones of the same names. */
+    pack(buffer) { if (meshes) { meshes.add(unpack(buffer)); staged = false; redraw(); } },
+    get style() { return look3; },
   };
 }

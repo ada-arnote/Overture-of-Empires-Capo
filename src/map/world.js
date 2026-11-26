@@ -9,7 +9,7 @@ import { DEPTH, HEAD, SHADE, aim, program } from "./mesh.js";
 
 // heights: one byte, 96 is the sea's surface; made from noise when a world brings no picture of its own
 const COMMON = `
-uniform sampler2D uRelief; uniform vec2 uSize; uniform float uReal,uSeed,uShade;
+uniform sampler2D uRelief; uniform vec2 uSize; uniform float uReal,uSeed,uShade,uRel;
 float grain(vec2 p){ p=floor(p); return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
 float nz(vec2 p){ vec2 f=fract(p); f=f*f*(3.-2.*f); return mix(mix(grain(p),grain(p+vec2(1.,0.)),f.x),mix(grain(p+vec2(0.,1.)),grain(p+1.),f.x),f.y); }
 float hgt(vec2 p){ if(uReal>0.) return texture(uRelief,p/uSize).r; vec2 q=p/uSize.x*9.+uSeed; float r=1.-abs(2.*nz(q*1.7)-1.);
@@ -26,8 +26,9 @@ in vec2 vP; in vec4 vC; in float vZ; out vec4 o;
 void main(){ float h=hgt(vP),t=clamp((h-.376)/.624,0.,1.); vec2 g=slope(vP);
   // the land's own colour by its height: green plain, dry upland, brown mountain, snow
   vec3 c=mix(vec3(.47,.54,.37),vec3(.68,.62,.44),smoothstep(.02,.2,t)); c=mix(c,vec3(.5,.41,.33),smoothstep(.2,.48,t)); c=mix(c,vec3(.95,.96,.97),smoothstep(.56,.74,t));
-  float glow=vC.a<.6?1.:0.; // a province that is lit: chosen, or offered
-  c=mix(c,vC.rgb,uTint)*clamp(1.-dot(g,uSun.xy)*26.,.52,1.42)*(.96+.07*grain(vP*uS*1.5));
+  float glow=vC.a<.6?1.:0.,ice=uReal>0.?1.-smoothstep(.55,.95,texture(uRelief,vP/uSize).a):0.; // a province that is lit: chosen, or offered. Ice, where the world's picture marks it
+  c=mix(c,vec3(.9,.94,.97),ice);
+  c=mix(c,vC.rgb,uTint*(1.-.45*ice))*clamp(1.-dot(g,uSun.xy)*26.*uRel,.6,1.36)*(.96+.07*grain(vP*uS*1.5));
   if(vZ<.99) c=mix(vec3(.2,.17,.14),c,.25+.3*vZ); // the cut side of the coast
   else c*=1.-uShade*shd(vP,uRise);
   c=mix(c,vec3(.93,.96,1.),glow*.3);
@@ -41,7 +42,7 @@ void main(){ vec2 uv=vec2(gl_FragCoord.x/uDpr,uView.y-gl_FragCoord.y/uDpr)-uMid,
   vec2 d=abs(p-hs)-hs; float sd=max(d.x,d.y); vec3 c;
   if(sd<0.){ // the sea: pale over the shelves, dark over the deeps, and the only gloss on the map
     float h=uReal>0.?hgt(p):.2+.1*nz(p/uSize.x*5.+uSeed),dp=clamp((.376-h)/.376,0.,1.); vec2 g=uReal>0.?slope(p):vec2(0.);
-    c=mix(vec3(.33,.52,.6),vec3(.09,.17,.28),smoothstep(0.,.75,dp))*clamp(1.-dot(g,uSun.xy)*9.,.8,1.2);
+    c=mix(vec3(.33,.52,.6),vec3(.09,.17,.28),smoothstep(0.,.75,dp))*clamp(1.-dot(g,uSun.xy)*6.*uRel,.84,1.16);
     vec2 w=g*9.; vec3 v=vec3(0.,uTilt.y,uTilt.x);
     c+=.2*pow(max(dot(normalize(vec3(-w,1.)),normalize(normalize(uSun)+v)),0.),30.); c*=(.97+.06*grain(p*uS*1.5))*(1.-uShade*shd(p,0.));
     c*=1.-.35*smoothstep(-14.*foot,0.,sd); }
@@ -102,10 +103,10 @@ export class WorldGround {
   }
   /** Each province's colour: bytes r, g, b and 255 (or 128 to light it), one set a province. */
   paint(bytes) { const g = this.g, all = new Uint8Array(64 * this.rows * 4); all.set(bytes.subarray(0, all.length)); g.activeTexture(g.TEXTURE0); g.bindTexture(g.TEXTURE_2D, this.tab); g.texSubImage2D(g.TEXTURE_2D, 0, 0, 0, 64, this.rows, g.RGBA, g.UNSIGNED_BYTE, all); }
-  /** A picture of the world's heights (96 of 255 is the sea's surface), or nothing for heights made from noise. */
-  relief(img) { const g = this.g; this.real = img ? 1 : 0; if (!img) return; g.activeTexture(g.TEXTURE1); g.bindTexture(g.TEXTURE_2D, this.heights); g.texImage2D(g.TEXTURE_2D, 0, g.R8, g.RED, g.UNSIGNED_BYTE, img); }
+  /** A picture of the world's heights (96 of 255 is the sea's surface; alpha under 255 marks ice), or nothing for heights made from noise. */
+  relief(img) { const g = this.g; this.real = img ? 1 : 0; if (!img) return; g.activeTexture(g.TEXTURE1); g.bindTexture(g.TEXTURE_2D, this.heights); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, g.RGBA, g.UNSIGNED_BYTE, img); }
   wood(img) { const g = this.g; g.activeTexture(g.TEXTURE3); g.bindTexture(g.TEXTURE_2D, this.timber); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, g.RGBA, g.UNSIGNED_BYTE, img); g.generateMipmap(g.TEXTURE_2D); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR_MIPMAP_LINEAR); }
-  /** o: style, rise (how far the land stands above the sea), tint (how much of the owner's colour lies over the land's own), lamp (the mesh layer's shadow settings, or nothing). */
+  /** o: style, relief (how strongly the heights are lit, 1 for the whole world, less close in where the picture runs out of detail), rise (how far the land stands above the sea), tint (how much of the owner's colour lies over the land's own), lamp (the mesh layer's shadow settings, or nothing). */
   draw(cam, dpr, o) {
     const g = this.g, W = Math.round(cam.W * dpr), H = Math.round(cam.H * dpr), cv = this.canvas, st = o.style.table;
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
@@ -114,7 +115,7 @@ export class WorldGround {
     const both = ({ P, u }) => {
       g.useProgram(P); aim(g, u, cam);
       g.uniform1i(u.uTab, 0); g.uniform1i(u.uRelief, 1); g.uniform1i(u.uWood, 3); g.uniform2f(u.uSize, ...this.size); g.uniform1f(u.uReal, this.real); g.uniform1f(u.uSeed, this.seed);
-      g.uniform3f(u.uSun, ...o.style.sun); g.uniform1f(u.uShOn, 0); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uK, DEPTH);
+      g.uniform3f(u.uSun, ...o.style.sun); g.uniform1f(u.uShOn, 0); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uRel, o.relief ?? 1);
       o.lamp?.(u);
       return u;
     };

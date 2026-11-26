@@ -134,6 +134,29 @@ const RECIPES = {
 function frame(o) { for (const [x0, y0, x1, y1] of [[-0.3, -0.19, 0.3, -0.165], [-0.3, 0.165, 0.3, 0.19], [-0.3, -0.19, -0.275, 0.19], [0.275, -0.19, 0.3, 0.19]]) box(o, x0, y0, 0.2, x1, y1, 0.212, c("bone")); return o; }
 for (let n = 1; n <= 6; n++) RECIPES[`die${n}`] = (o) => die(o, n);
 
+/**
+ * A pack of sculpted models, as tools/models.mjs writes it from open models (our own small format): "CAPM", a version, a count,
+ * then for each model its name, a scale, its points as 16-bit whole numbers and its triangles (three points, a palette slot, a finish).
+ * Faces are flat; which way each faces, and the wash, are worked out here. A model in a pack takes the place of the recipe of the same name.
+ */
+export function unpack(buffer) {
+  const d = new DataView(buffer), out = {};
+  if (d.getUint32(0) !== 0x4341504d || d.getUint8(4) !== 1) throw new Error("not a model pack this version reads");
+  let at = 6;
+  for (let k = d.getUint8(5); k > 0; k--) {
+    const long = d.getUint8(at), name = String.fromCharCode(...new Uint8Array(buffer, at + 1, long)); at += 1 + long;
+    const scale = d.getFloat32(at, true), V = d.getUint16(at + 4, true), T = d.getUint16(at + 6, true), pts = at + 8, tris = pts + V * 6, v = [];
+    const p = (i) => [0, 2, 4].map((o) => d.getInt16(pts + i * 6 + o, true) * scale);
+    for (let t = 0; t < T; t++) {
+      const o = tris + t * 8, a = p(d.getUint16(o, true)), b = p(d.getUint16(o + 2, true)), c3 = p(d.getUint16(o + 4, true)), col = [d.getUint8(o + 6), 128, 0], fin = d.getUint8(o + 7);
+      const n = [(b[1] - a[1]) * (c3[2] - a[2]) - (b[2] - a[2]) * (c3[1] - a[1]), (b[2] - a[2]) * (c3[0] - a[0]) - (b[0] - a[0]) * (c3[2] - a[2]), (b[0] - a[0]) * (c3[1] - a[1]) - (b[1] - a[1]) * (c3[0] - a[0])], l = Math.hypot(...n) || 1;
+      for (const q of [a, b, c3]) v.push(...q, n[0] / l, n[1] / l, n[2] / l, ...col, fin);
+    }
+    out[name] = bake(v); at = tris + T * 8;
+  }
+  return out;
+}
+
 let made = null;
 /** Every model, packed for the mesh layer. Made once, when a board first needs them. */
 export function models() { return (made ||= Object.fromEntries(Object.entries(RECIPES).map(([k, f]) => [k, bake(f([]))]))); }

@@ -69,15 +69,11 @@ export class Meshes {
   constructor(g, models) {
     this.g = g;
     this.draws = program(g, VS, FS); this.casts = program(g, VS2, FS2);
-    this.at = {}; this.list = []; this.stale = true; this.win = [0, 0, 1, 1]; this.tall = 96;
-    const all = Object.entries(models), total = all.reduce((s, [, m]) => s + m.n, 0), data = new Uint8Array(total * 20);
-    let first = 0;
-    for (const [name, m] of all) { data.set(new Uint8Array(m.buf), first * 20); this.at[name] = { first, n: m.n }; first += m.n; }
+    this.at = {}; this.list = []; this.stale = true; this.win = [0, 0, 1, 1]; this.tall = 96; this.models = {};
     this.vao = g.createVertexArray();
     g.bindVertexArray(this.vao);
     this.corners = g.createBuffer();
     g.bindBuffer(g.ARRAY_BUFFER, this.corners);
-    g.bufferData(g.ARRAY_BUFFER, data, g.STATIC_DRAW);
     g.enableVertexAttribArray(0); g.vertexAttribPointer(0, 3, g.FLOAT, false, 20, 0);
     g.enableVertexAttribArray(1); g.vertexAttribPointer(1, 4, g.BYTE, true, 20, 12);
     g.enableVertexAttribArray(2); g.vertexAttribPointer(2, 4, g.UNSIGNED_BYTE, true, 20, 16);
@@ -94,6 +90,18 @@ export class Meshes {
     g.bindFramebuffer(g.FRAMEBUFFER, this.frame);
     g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, this.map, 0);
     g.bindFramebuffer(g.FRAMEBUFFER, null);
+    this.add(models);
+  }
+  /** More models, or better ones under the same names (a style's sculpted pack, come later): all are sent again. What stands must then be set again. */
+  add(models) {
+    const g = this.g;
+    Object.assign(this.models, models);
+    const all = Object.entries(this.models), total = all.reduce((s, [, m]) => s + m.n, 0), data = new Uint8Array(total * 20);
+    let first = 0;
+    for (const [name, m] of all) { data.set(new Uint8Array(m.buf), first * 20); this.at[name] = { first, n: m.n }; first += m.n; }
+    g.bindBuffer(g.ARRAY_BUFFER, this.corners);
+    g.bufferData(g.ARRAY_BUFFER, data, g.STATIC_DRAW);
+    this.list = [];
   }
   /** What stands where: [{ m: model name, x, y, z (the ground's height there, in cell tops), s: size, t: turn, rgb, dim }]. */
   set(list) {

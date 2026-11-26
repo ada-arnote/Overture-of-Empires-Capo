@@ -19,7 +19,7 @@ const MARK = "// SPDX-License-Identifier: AGPL-3.0-or-later\n";
 function withFiles(files, opts) {
   const dir = mkdtempSync(path.join(tmpdir(), "capo-check-"));
   try {
-    for (const d of ["src", "site"]) cpSync(path.join(root, d), path.join(dir, d), { recursive: true });
+    for (const d of ["src", "site", "maps"]) cpSync(path.join(root, d), path.join(dir, d), { recursive: true });
     for (const f of ["CREDITS.csv", "ADAPTED.csv", "NOTICES.md"]) cpSync(path.join(root, f), path.join(dir, f));
     for (const [f, text] of Object.entries(files)) {
       mkdirSync(path.dirname(path.join(dir, f)), { recursive: true });

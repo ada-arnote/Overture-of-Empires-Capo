@@ -53,6 +53,7 @@ export function hexBoard(T, stage, o) {
   if (canDraw()) {
     try {
       b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, fit: o.fit, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, terrain: o.terrain, wood: "textures/walnut.webp", probe: !LOOKS[kept] && !weak, look: LOOKS[kept] ? kept : weak ? "flat" : "relief" });
+      if (b.style.pack) fetch(`models/${b.style.pack}`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((buf) => { if (buf) b?.pack(buf); }).catch(() => {}); // a style's sculpted models come after the board is up; the code-made ones stand meanwhile
       b.on("slow", () => { try { localStorage.setItem(SLOW, "1"); } catch { /* it will be timed again next time */ } b?.setLook("flat"); });
       b.on("pick", (i) => { if (i >= 0) o.tap(i); });
       b.on("hover", (i) => b?.setCursor(i >= 0 && T.ready() && o.can(i)));

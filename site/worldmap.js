@@ -17,7 +17,17 @@ export async function loadWorld(url, disputesUrl = "") {
   const disputes = disputesUrl ? await fetch(disputesUrl).then((r) => (r.ok ? r.json() : { areas: [] })).catch(() => ({ areas: [] })) : { areas: [] };
   const res = await fetch(url);
   if (!res.ok) throw new Error(`The map could not be loaded (${res.status}).`);
-  return unpackWorld(await res.json(), disputes);
+  const world = unpackWorld(await res.json(), disputes);
+  // the real world brings its relief (heights baked from open data, a picture) and its rivers and lakes; without them the map still works
+  world.relief = url.replace(/[^/]+$/, "relief.webp");
+  const waters = await fetch(url.replace(/[^/]+$/, "waters.json")).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  if (waters) {
+    const line = (d, path, close) => { let x = 0, y = 0; for (let i = 0; i < d.length; i += 2) { x += d[i]; y += d[i + 1]; if (i) path.lineTo(x / 10, y / 10); else path.moveTo(x / 10, y / 10); } if (close) path.closePath(); };
+    world.rivers = [0, 1, 2, 3].map(() => new Path2D()); world.lakes = new Path2D();
+    for (const [rank, ...d] of waters.rivers) line(d, world.rivers[rank]);
+    for (const d of waters.lakes) line(d, world.lakes, true);
+  }
+  return world;
 }
 /** A world as the page uses it, from the plain data of a map file or of a world made from a seed. */
 export function unpackWorld(w, disputes = { areas: [] }) {
@@ -185,7 +195,7 @@ export function worldMap(canvas, world, o) {
     cam.set({ W: cw, H: ch, s: view.s, cx: view.x + cw / 2 / view.s, cy: view.y + ch / 2 / view.s, tilt: t, yaw: 0, q: 0 });
     const k = stage(), pad = k * 2;
     lit.meshes.cast([x0 - pad, y0 - pad, x1 - x0 + pad * 2, y1 - y0 + pad * 2], rise(), style.sun, k * 1.4);
-    lit.ground.draw(cam, d, { style, rise: rise(), tint: o.tint?.() ?? 0.56, lamp: (u) => lit.meshes.lamp(u, true, style.sun) });
+    lit.ground.draw(cam, d, { style, relief: Math.max(0.2, Math.min(1, (wide * 2.4) / view.s)), rise: rise(), tint: o.tint?.() ?? 0.56, lamp: (u) => lit.meshes.lamp(u, true, style.sun) });
     lit.meshes.draw(cam, rise(), style);
   }
 
@@ -205,6 +215,12 @@ export function worldMap(canvas, world, o) {
       c.fillStyle = o.colour?.(who) || ownerColour(who); c.fill(f.path, "evenodd");
     }
     if (o.tint) for (const p of world.provinces.values()) { const t = !(p.box[2] < vx0 || p.box[0] > vx1 || p.box[3] < vy0 || p.box[1] > vy1) && o.tint(p.id); if (t) { c.fillStyle = t; c.fill(p.path, "evenodd"); } } // features hook: a map view may tint single provinces
+    // lakes, and rivers by rank: the great ones always, the lesser as the map comes close
+    if (world.lakes) {
+      c.fillStyle = lit ? "#4b7186" : "#16242b"; c.fill(world.lakes);
+      c.strokeStyle = lit ? "rgba(62,104,128,.9)" : "rgba(22,36,43,.9)"; c.lineJoin = "round"; c.lineCap = "round";
+      world.rivers.forEach((path, rank) => { if (rank <= near + (s > wide * 1.4 ? 1 : 0)) { c.lineWidth = Math.max(0.5, 1.9 - rank * 0.45) / s; c.stroke(path); } });
+    }
     // province lines faint, lines between owners stronger, the coast dark
     c.lineJoin = "round"; c.lineCap = "round";
     if (lit ? near > 0 : s > 0.6) { c.strokeStyle = lit ? "rgba(30,24,18,.3)" : "rgba(255,244,214,.16)"; c.lineWidth = 0.8 / s; c.stroke(layers.inner); } // province hairlines come with the zoom
