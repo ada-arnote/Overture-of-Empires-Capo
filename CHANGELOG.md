@@ -2,6 +2,19 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Capo connects to an AI; no more copy and paste
+
+**Players**
+- **Capo asks your AI for you.** Copying a prompt into a chat and pasting the reply back is gone. Connect a service with your own key (OpenRouter's free models, Groq and Google Gemini have free tiers, Cerebras a trial credit; OpenAI, Anthropic, Mistral, DeepSeek and Together AI are paid by use) or an AI on your own computer (Ollama, LM Studio, a llama.cpp server or another local server). Check connection is how you connect: once it answers, Capo uses that AI for every turn, chat and council question, and Disconnect stops it.
+- **With no AI connected, Advance shows how to connect one** right there, and carries on with the turn as soon as the check succeeds. The same step appears when you message a country, ask your council or fill in your character.
+- **You can still play with no AI.** "Advance by the rules alone" moves the world with no story, on any turn. On the first turn, "Play a sample turn" plays a short turn Capo writes itself, as a demo; Take back undoes it.
+- Questions held for your next turn, and their folded answers, are gone with the paste route. If you had chosen to paste by hand, Capo now reads that as not connected and says so in the AI settings.
+
+**Contributors**
+- `site/ai.js`: the paste box and the route choice are removed; `connected(route)` is the one test, a saved route of "paste" loads as "none" with a note, and `connectBox()` stands in for a reply that has not come. `src/story/replyform.js` loses `fold` and `unfold`. Ruling 142.
+
 ## v0.7.0 (2026-11-26): new worlds, and a deeper Capo
 
 ### A deeper Capo: gauges, ambitions, crises, causes for war, the press

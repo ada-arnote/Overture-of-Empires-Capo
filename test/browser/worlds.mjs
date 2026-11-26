@@ -38,6 +38,8 @@ const drawn = `(() => { const c = document.getElementById("map"), d = c.getConte
 
 async function play(preset, n, seed) {
   await run("localStorage.clear()");
+  // Capo reaches an AI only through a connection (ruling 142): a server "on this computer", whose call is caught below
+  await run(`localStorage.setItem("capo-ai", JSON.stringify({ route: "address", preset: "llamacpp" }))`);
   await send("Page.navigate", { url: `${base}${page}` });
   await until(`!!document.querySelector("input[name=scenario]")`, "the wizard did not open");
   await run(`[...document.querySelectorAll("input[name=scenario]")].find((r) => r.value === ${JSON.stringify(preset.id)}).click()`);
@@ -59,9 +61,11 @@ async function play(preset, n, seed) {
   await until(`!document.getElementById("top").hidden`, `${preset.title}: the game did not begin`);
   await sleep(300);
   await run(`[...document.querySelectorAll("button")].find((b) => b.getClientRects().length && b.textContent.trim() === "Skip")?.click()`); // the first-game guide
+  // the turn's call is caught before it leaves the page, and its prompt read from the request
+  await run(`(() => { const real = window.fetch; window.sent = ""; window.fetch = (u, o) => { if (!o?.body) return real(u, o); window.sent = o.body; return Promise.reject(new TypeError("caught by the test")); }; })()`);
   await press("Advance");
-  await until(`!!document.querySelector("textarea.paste")`, `${preset.title}: no prompt was shown`);
-  const prompt = await run(`document.querySelector("textarea.paste").value`), first = prompt.split("\n")[0];
+  await until(`!!window.sent`, `${preset.title}: no prompt was sent`);
+  const prompt = await run(`JSON.parse(window.sent).messages.at(-1).content`), first = prompt.split("\n")[0];
   if (!first.includes(preset.title) || /the real world/.test(first)) problems.push(`${preset.title}: the prompt does not open on its world: ${first.slice(0, 120)}`);
   for (const need of ["Tone:", "What exists:", "Powers:", "PLACES"]) if (!prompt.includes(need)) problems.push(`${preset.title}: the prompt has no "${need}"`);
   await shot(`${tag}-3-prompt.png`);

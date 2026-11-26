@@ -2,7 +2,7 @@
 
 Table games on one shared map, in the browser, and Capo, a story game played with an AI you bring. Free software, AGPL-3.0-or-later.
 
-An early build, at an unlisted address: https://ada-arnote.github.io/Overture-of-Empires-Capo/site/ . Four table games, with bots, saves, take-back and play by pasted link: **Brass and Banners**, **The Island Fable**, **Grain and Glass** and **An Inch of Ink**. And **Capo**, the story game, as an early test: the whole world, any country, an AI that writes the story and rules that decide what is true. Expect all of it to change.
+An early build, at an unlisted address: https://ada-arnote.github.io/Overture-of-Empires-Capo/site/ . Four table games, with bots, saves, take-back and play by pasted link: **Brass and Banners**, **The Island Fable**, **Grain and Glass** and **An Inch of Ink**. And **Capo**, the story game, as an early test: the whole world, any country, an AI you connect (a service with your own key, or one on your own computer) that writes the story, and rules that decide what is true. Expect all of it to change.
 
 | Command | What it does |
 |---|---|
