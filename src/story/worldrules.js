@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The rules of the world game: the AI proposes moves, these rules accept, trim or refuse each one and say why.
-// Land, wars and treaties change only here. Attacks are settled by replayable dice and each country's might.
-import { draw } from "./line.js";
+// Land, wars and treaties change only here. Attacks are settled by the check (check.js): might, a commander, odds out of 100.
+import { draw100 } from "./line.js";
+import { chanceOf, check, checkLine } from "./check.js";
 
 // Invented numbers for a fiction, from 1 to 10. Countries not listed get 2, or 3 if they hold twelve provinces or more.
 export const MIGHT = {
@@ -34,9 +35,9 @@ export const treatiesOf = (g, c) => g.treaties.filter((t) => t.pair.split("|").i
  * geo: name(code), place(id) -> {name, country}, find(idOrName) -> id, owner(id), neighbours(id), coastal(id), holds(code), known(code).
  */
 export function applyMoves(g, moves, geo, actions, months) {
-  const receipt = [], used = {}, attacks = {}, me = g.player;
+  const receipt = [], used = {}, attacks = {}, spent = {}, me = g.player;
   let rivals = 0;
-  const say = (m, ok, why) => receipt.push({ ok, text: `${geo.name(m.country)}: ${why}`, verb: m.verb, country: m.country });
+  const say = (m, ok, why, beat) => receipt.push({ ok, text: `${geo.name(m.country)}: ${why}`, verb: m.verb, country: m.country, ...(beat ? { check: beat } : {}) });
   for (const m of moves) {
     // a citizen does not command the country: its government moves on its own, like any other
     const c = m.country, citizen = g.mode === "citizen", isMe = c === me && !citizen, verb = m.verb;
@@ -50,8 +51,8 @@ export function applyMoves(g, moves, geo, actions, months) {
     } else if (++rivals > 6) { say(m, false, "more than six moves by other countries in one turn are not allowed"); continue; }
     const staller = isMe ? stalledBy(g, m, receipt.length) : null;
     if (staller) { say(m, false, `${verb.toLowerCase()} held back: ${staller.name} (favour ${staller.favour}), who opposes it, stalled the order this turn`); continue; }
-    const r = ({ WAR: war, PEACE: peace, TREATY: treaty, BREAK: unbind, ATTACK: attack, GIVE: give })[verb](g, m, geo, { isMe, attacks, months });
-    say(m, r.ok, r.why);
+    const r = ({ WAR: war, PEACE: peace, TREATY: treaty, BREAK: unbind, ATTACK: attack, GIVE: give })[verb](g, m, geo, { isMe, attacks, months, spent });
+    say(m, r.ok, r.why, r.check);
     for (const extra of r.also || []) receipt.push({ ok: true, text: extra });
   }
   return receipt;
@@ -98,40 +99,6 @@ function unbind(g, m, geo) {
   if (!old) return { ok: false, why: `has no treaty with ${geo.name(t) || t} to end` };
   g.treaties = g.treaties.filter((x) => x !== old);
   return { ok: true, why: `ends its ${old.kind} treaty with ${geo.name(t)}` };
-}
-
-function attack(g, m, geo, { attacks, months }) {
-  const c = m.country, id = geo.find(m.target);
-  if (!id) return { ok: false, why: `attack refused: "${m.target}" is not a province on the map` };
-  const o = geo.owner(id), place = geo.place(id).name;
-  if (o === c) return { ok: false, why: `${place} is already its own` };
-  if (!atWar(g, c, o)) return { ok: false, why: `attack on ${place} refused: not at war with ${geo.name(o)}, which holds it` };
-  // by land; across a narrow sea (any country may, a little harder); or across open sea (only a strong power)
-  const byLand = geo.neighbours(id).some((n) => geo.owner(n) === c);
-  const byStrait = !byLand && (geo.across?.(id) || []).some((n) => geo.owner(n) === c);
-  const bySea = !byLand && !byStrait && geo.coastal(id) && mightOf(geo, c) >= 6 && geo.hasCoast(c);
-  if (!byLand && !byStrait && !bySea) return { ok: false, why: `attack on ${place} refused: it touches no land ${geo.name(c)} holds, no narrow sea joins them, and ${geo.name(c)} cannot cross open sea in strength` };
-  const most = Math.max(1, Math.ceil(months));
-  attacks[c] = (attacks[c] || 0) + 1;
-  if (attacks[c] > most) return { ok: false, why: `attack on ${place} refused: no more than ${most} attack${most > 1 ? "s" : ""} in a turn this long` };
-  const home = geo.place(id).country === c ? 0.15 : 0, sea = bySea ? -0.1 : byStrait ? -0.05 : 0;
-  // land this country claims in a dispute it is not holding: a cause people rally to
-  const claim = !home && geo.claims?.(id, c) ? 0.1 : 0;
-  const counsel = c === g.player && g.mode !== "citizen" ? adviceFor(g) : null;
-  const luck = Math.min(1, Math.max(0, draw(g.seed, `${g.turn}:attack:${id}:${c}`) + home + sea + claim + (counsel?.nudge || 0)));
-  const a = mightOf(geo, c), d = mightOf(geo, o), wins = (a / d) * (0.5 + luck) > 1;
-  const how = `might ${a} against ${d}, luck ${Math.round(luck * 100)} of 100${home ? " (its own land, +15)" : ""}${claim ? " (land it claims, +10)" : ""}${bySea ? " (by open sea, -10)" : byStrait ? " (across a narrow sea, -5)" : ""}${counsel?.nudge ? ` (${counsel.member.name}'s counsel, ${counsel.nudge > 0 ? "+" : ""}${Math.round(counsel.nudge * 100)})` : ""}`;
-  if (counsel) record(counsel, wins);
-  const from = bySea ? " from the sea" : byStrait ? " across the strait" : "";
-  if (!wins) return { ok: true, why: `attacks ${place}${from} and is thrown back (${how})` };
-  if (geo.place(id).country === c) delete g.owners[id]; else g.owners[id] = c;
-  const also = [];
-  if (geo.holds(o) === 0) {
-    g.wars = g.wars.filter((w) => !w.pair.split("|").includes(o));
-    g.treaties = g.treaties.filter((t) => !t.pair.split("|").includes(o));
-    also.push(`${geo.name(o)}: has lost the last of its land`);
-  }
-  return { ok: true, why: `attacks ${place}${from} and takes it from ${geo.name(o)} (${how})`, also, taken: id };
 }
 
 function give(g, m, geo) {
@@ -191,21 +158,114 @@ export function placesFor(g, geo, all, cap = 90) {
   return [...tag].slice(0, cap).map(([id, why]) => `- ${id} ${geo.place(id).name} (${geo.owner(id)}; ${why})`);
 }
 
+// ---- the attack, on the check (ruling 124, step M0) ----
+// chance = 50 + 10 x (attacker's might - defender's might) + approach + up to four named parts: the commander
+// (2 a point of command), the ground (its own land +15, land it claims +10), the crossing (narrow sea -5, open sea
+// -10) and the trusted adviser's counsel (at most 5 either way). Held between 10 and 75. Clean: taken. Costly:
+// taken, but the army is spent for the turn. Failed: thrown back.
+export const APPROACHES = {
+  steady: [0, "no edge and no price"],
+  bold: [10, "+10, but if it fails the commander loses one favour"],
+  patient: [10, "+10, but it uses two of the turn's attacks"],
+};
+export const GENERALS = 3; // a country's own generals, unnamed: command 3 of 5
+/** A council member's command, 1 to 5: dealt by rule from the game's seed and their name, never by the AI. */
+export const commandOf = (g, m) => draw100(g.seed, `command:${m.name}`) % 5 + 1;
+const seated = (g) => g.mode !== "citizen" && g.council ? Object.entries(g.council.seats).filter(([, m]) => m) : [];
+/** Who may lead the player's attacks: council members (the war seat in role, others at -10), or the generals. */
+export const commanders = (g) => [...seated(g).map(([seat, m]) => ({ seat, name: m.name, command: commandOf(g, m), off: seat !== "war" })), { seat: "generals", name: "its generals", command: GENERALS, off: false }];
+function commanderFor(g, c, seat) {
+  const list = c === g.player ? commanders(g) : [], named = list.filter((x) => x.seat !== "generals");
+  const pick = list.find((x) => x.seat === seat) || named.find((x) => x.seat === "war") || list.find((x) => x.seat === "generals");
+  return pick || { seat: "generals", name: "its generals", command: GENERALS, off: false };
+}
+/** How a country could reach a province: "land", "strait", "sea", or "" when it cannot. */
+function reach(geo, c, id) {
+  if (geo.neighbours(id).some((n) => geo.owner(n) === c)) return "land";
+  if ((geo.across?.(id) || []).some((n) => geo.owner(n) === c)) return "strait";
+  return geo.coastal(id) && mightOf(geo, c) >= 6 && geo.hasCoast(c) ? "sea" : "";
+}
+
+/**
+ * Everything the attack check will use, before it is made: the same numbers the preview shows and the rules roll.
+ * order: {seat, approach} from the player's attack order, or {} for the default (war seat or generals, steady).
+ * Returns {ok: false, why} when the attack cannot be made at all.
+ */
+export function attackPlan(g, geo, c, id, order = {}, most = Infinity) {
+  const o = geo.owner(id), place = geo.place(id).name;
+  if (o === c) return { ok: false, why: `${place} is already its own` };
+  if (!atWar(g, c, o)) return { ok: false, why: `attack on ${place} refused: not at war with ${geo.name(o)}, which holds it` };
+  const way = reach(geo, c, id);
+  if (!way) return { ok: false, why: `attack on ${place} refused: it touches no land ${geo.name(c)} holds, no narrow sea joins them, and ${geo.name(c)} cannot cross open sea in strength` };
+  let approach = APPROACHES[order.approach] && c === g.player && g.mode !== "citizen" ? order.approach : "steady", note = "";
+  if (approach === "patient" && most < 2) { approach = "steady"; note = " (the turn is too short to be patient)"; }
+  const boss = commanderFor(g, c, order.seat), own = geo.place(id).country === c;
+  const counsel = c === g.player && g.mode !== "citizen" ? adviceFor(g) : null;
+  const parts = [
+    [`${boss.seat === "generals" ? "its generals" : `commander ${boss.name}`}${boss.off ? ", out of role" : ""}`, 2 * boss.command - (boss.off ? 10 : 0)],
+    own ? ["its own land", 15] : geo.claims?.(id, c) ? ["land it claims", 10] : ["", 0],
+    way === "sea" ? ["by open sea", -10] : way === "strait" ? ["across a narrow sea", -5] : ["", 0],
+    counsel ? [`${counsel.member.name}'s counsel`, counsel.nudge] : ["", 0],
+  ];
+  const plan = { mission: `attack:${id}:${c}`, checkpoint: "battle", person: boss.name, who: boss.name, role: "commander", skill: mightOf(geo, c), difficulty: mightOf(geo, o), approach: [approach, APPROACHES[approach][0]], parts };
+  return { ok: true, plan, chance: chanceOf(plan).chance, owner: o, place, way, boss, counsel, approach, note, cost: approach === "patient" ? 2 : 1 };
+}
+
+function attack(g, m, geo, { attacks, months, spent }) {
+  const c = m.country, id = geo.find(m.target);
+  if (!id) return { ok: false, why: `attack on "${m.target}" refused: it is not a province on the map` };
+  const most = Math.max(1, Math.ceil(months)), order = c === g.player && g.mode !== "citizen" ? (g.orders || []).find((x) => x.target === id) || {} : {};
+  const a = attackPlan(g, geo, c, id, order, most - (attacks[c] || 0));
+  if (!a.ok) return a;
+  if (spent[c]) return { ok: false, why: `attack on ${a.place} refused: its army is spent after a costly victory this turn` };
+  attacks[c] = (attacks[c] || 0) + a.cost;
+  if (attacks[c] > most) return { ok: false, why: `attack on ${a.place} refused: no more than ${most} attack${most > 1 ? "s" : ""} in a turn this long` };
+  const beat = check(g.seed, { ...a.plan, turn: g.turn }), o = a.owner, won = beat.band !== "failed";
+  if (a.counsel) record(a.counsel, won);
+  const from = a.way === "sea" ? " from the sea" : a.way === "strait" ? " across the strait" : "", how = `(${checkLine(beat, "might")})${a.note}`;
+  const also = [];
+  if (beat.band === "failed" && a.approach === "bold" && a.boss.seat !== "generals") also.push(...blame(g, a.boss.seat));
+  if (!won) return { ok: true, why: `attacks ${a.place}${from} and is thrown back ${how}`, check: beat, also };
+  if (beat.band === "costly") spent[c] = true;
+  if (geo.place(id).country === c) delete g.owners[id]; else g.owners[id] = c;
+  if (geo.holds(o) === 0) {
+    g.wars = g.wars.filter((w) => !w.pair.split("|").includes(o));
+    g.treaties = g.treaties.filter((t) => !t.pair.split("|").includes(o));
+    also.push(`${geo.name(o)}: has lost the last of its land`);
+  }
+  const price = beat.band === "costly" ? ", but its army is spent for the turn" : " cleanly";
+  return { ok: true, why: `attacks ${a.place}${from} and takes it from ${geo.name(o)}${price} ${how}`, also, taken: id, check: beat };
+}
+/** A failed bold attack costs its commander one favour; at -3 they resign, as with any other loss of favour. */
+function blame(g, seat) {
+  const mbr = g.council.seats[seat];
+  mbr.favour = Math.max(-3, mbr.favour - 1);
+  const out = [`${mbr.name}: loses favour after the failed bold attack (favour ${mbr.favour})`];
+  if (mbr.favour <= -3) {
+    g.council.former.push({ ...mbr, seat, left: g.date, why: "resigned" });
+    g.council.seats[seat] = null;
+    if (g.council.trusted === seat) g.council.trusted = null;
+    out.push(`${mbr.name}: resigns from your council`);
+  }
+  return out;
+}
+
 // ---- counsel and favour that act (rulings 54 and 56) ----
 
 /**
- * The trusted adviser's word from last turn moves the player's battle luck by at most 5 in 100, scaled by skill
- * and by how often they have been right. Unclear advice moves nothing. An adviser who has turned against the
- * player (favour -2 or lower) shades their counsel, so it counts for half.
+ * The trusted adviser's word from last turn moves the player's attack chance by at most 5 in 100, a whole number:
+ * skill x trust / 20, where trust is the percentage of times they have been right (60 until they have been tested
+ * three times), rounded half up. Unclear advice moves nothing. An adviser who has turned against the player
+ * (favour -2 or lower) shades their counsel, so it counts for half.
  */
 export function adviceFor(g) {
   // the advice follows the person, not the seat: standing may have moved them to another seat since
   const last = g.log[g.log.length - 1], said = last?.advice;
   const member = said && Object.values(g.council?.seats || {}).find((m) => m && m.name === said.name);
   if (!member || said.word === "unclear") return null;
-  const rec = member.record || { right: 0, n: 0 }, trust = rec.n >= 3 ? rec.right / rec.n : 0.6;
-  const nudge = (said.word === "favourable" ? 1 : -1) * 0.05 * (member.skill / 5) * trust * (member.favour <= -2 ? 0.5 : 1);
-  return { member, word: said.word, nudge: Math.round(nudge * 100) / 100 };
+  const rec = member.record || { right: 0, n: 0 }, trust = rec.n >= 3 ? Math.floor((100 * rec.right) / rec.n) : 60;
+  const size = Math.floor((member.skill * trust * (member.favour <= -2 ? 1 : 2) + 100) / 200);
+  return { member, word: said.word, nudge: (said.word === "favourable" ? 1 : -1) * size };
 }
 function record(counsel, wins) {
   const m = counsel.member, rec = m.record || { right: 0, n: 0 };
@@ -216,7 +276,7 @@ function record(counsel, wins) {
 function stalledBy(g, m, i) {
   for (const [seat, member] of Object.entries(g.council?.seats || {})) {
     if (!member || member.favour > -2 || !member.hates.includes(m.verb)) continue;
-    if (draw(g.seed, `${g.turn}:stall:${seat}:${i}`) < 0.5) return member;
+    if (draw100(g.seed, `${g.turn}:stall:${seat}:${i}`) <= 50) return member;
   }
   return null;
 }
@@ -225,7 +285,7 @@ function stalledBy(g, m, i) {
 export function leaks(g) {
   const out = [];
   for (const [seat, member] of Object.entries(g.council?.seats || {})) {
-    if (member && member.favour <= -2 && draw(g.seed, `${g.turn}:leak:${seat}`) < 0.4) out.push({ seat, name: member.name });
+    if (member && member.favour <= -2 && draw100(g.seed, `${g.turn}:leak:${seat}`) <= 40) out.push({ seat, name: member.name });
   }
   return out;
 }

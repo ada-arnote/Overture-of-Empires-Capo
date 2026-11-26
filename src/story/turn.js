@@ -4,6 +4,7 @@
 import { VERBS, worldFacts } from "./worldrules.js";
 import { STANDING, WORDS } from "./talk.js";
 import { crosses } from "./line.js";
+import { RULES } from "./check.js";
 
 export const JUMPS = [["1w", "A week", 0, 7], ["1m", "A month", 1, 0], ["3m", "Three months", 3, 0], ["6m", "Six months", 6, 0], ["1y", "A year", 12, 0], ["custom", "Other length", 0, 0], ["auto", "Until something happens", 12, 0]];
 export const UNITS = [["days", "days"], ["weeks", "weeks"], ["months", "months"], ["years", "years"]];
@@ -48,7 +49,7 @@ export const monthsBetween = (a, b) => Math.max(0.25, (Date.parse(`${b}T00:00:00
 export function newWorldGame(player, mode, seed, extra = {}) {
   const sc = extra.scenario || { id: "today", start: "2026-12-01", opening: "" };
   // a scenario may carry a whole starting world: land, wars, treaties, story facts, might and a country of its own
-  return { v: 1, scenario: sc.id, opening: sc.opening, player, mode: MODES[mode] ? mode : "nation", seed, date: sc.start, turn: 1,
+  return { v: 1, rules: RULES, orders: [], scenario: sc.id, opening: sc.opening, player, mode: MODES[mode] ? mode : "nation", seed, date: sc.start, turn: 1,
     owners: { ...(sc.owners || {}), ...(extra.owners || {}) }, custom: extra.custom || sc.custom || null, character: extra.character || null,
     wars: structuredClone(sc.wars || []), treaties: structuredClone(sc.treaties || []), offers: [], log: [],
     standing: STANDING[mode] || 5, council: null, chats: [], counsel: [], facts: structuredClone(sc.facts || []), might: { ...(sc.might || {}) }, edits: [], sandbox: false };
@@ -87,6 +88,7 @@ export function worldPrompt(g, world, actions, to, auto = false) {
     "- Other countries may make up to 6 MOVE lines in all, with action number 0.",
     ROLE[g.mode] || ROLE.nation,
     "- Moves are proposals. Say that wars, attacks or talks begin; never say who wins a battle, who takes a province, or that a treaty is signed. The rules decide, and you will read the results under RECEIPT next turn.",
+    "- Each attack under RECEIPT was decided by the rules: clean (taken), costly (taken, but the army is spent) or failed (thrown back). Tell it as decided, in words, never with its numbers, and never change who won.",
     "- Report what people say; do not quote them. At least two events must not involve the player's country.",
     "", "MOVES", ...Object.entries(VERBS).map(([v, h]) => `- ${v}: ${h}`),
     "", "FACTS",
