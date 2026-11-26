@@ -2,7 +2,7 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
-## Unreleased
+## v0.9.2 (2026-11-26): An Inch of Ink waits for you, and fights fairer
 
 ### An Inch of Ink: a clock that waits, rivals that teach, attacks you can see, and a truce
 
