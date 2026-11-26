@@ -6,6 +6,8 @@ import { STANDING } from "./talk.js";
 import { APPROACHES } from "./worldrules.js";
 import { RULES } from "./check.js";
 import { chronicleFrom } from "./chronicle.js";
+// presets hook: a game may be played on an invented world
+import { worldRef } from "./settings.js";
 
 // Older games are converted, never refused: nothing they hold needs the old rule, their turns keep the receipts
 // they had, and every attack from the next turn on is made under these rules.
@@ -33,7 +35,7 @@ const keepChron = (c) => (c && typeof c === "object" && Array.isArray(c.eras) &&
  * isProvince(id) and isCountry(code) answer for the map. Parts that do not fit the map are dropped, not trusted.
  */
 export function checkSave(s, isProvince, isCountry) {
-  if (!s || typeof s !== "object" || s.v !== 1 || typeof s.player !== "string") return null;
+  if (!s || typeof s !== "object" || s.v !== 1 || typeof s.player !== "string" || (s.world && !worldRef(s.world))) return null;
   if (!(isCountry(s.player) || s.custom?.code === s.player) || !MODES[s.mode]) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s.date || "") || !Number.isInteger(s.turn) || s.turn < 1 || typeof s.seed !== "string") return null;
   const known = (c) => isCountry(c) || c === s.custom?.code, list = (v) => (Array.isArray(v) ? v : []);
@@ -41,7 +43,7 @@ export function checkSave(s, isProvince, isCountry) {
   const council = s.council && typeof s.council === "object" && s.council.seats && typeof s.council.seats === "object" ? { trusted: null, ...s.council, former: list(s.council.former) } : null;
   const log = list(s.log).filter((t) => t && typeof t === "object"), word = Object.fromEntries(Object.entries(s.word && typeof s.word === "object" ? s.word : {}).filter(([c, d]) => known(c) && DATE.test(d || "")));
   const offers = list(s.offers).filter((o, i, all) => o && known(o.from) && typeof o.kind === "string" && DATE.test(o.date || "") && all.findIndex((x) => x && x.from === o.from && x.kind === o.kind) === i);
-  return mendGame({ ...s, owners, log, wars: list(s.wars), treaties: list(s.treaties), offers, chats: list(s.chats), counsel: list(s.counsel), facts: list(s.facts), edits: list(s.edits), council, actions: list(s.actions).filter((a) => typeof a === "string"), orders: keepOrders(s.orders, isProvince, known),
+  return mendGame({ ...s, ...(s.world ? { world: worldRef(s.world) } : {}), owners, log, wars: list(s.wars), treaties: list(s.treaties), offers, chats: list(s.chats), counsel: list(s.counsel), facts: list(s.facts), edits: list(s.edits), council, actions: list(s.actions).filter((a) => typeof a === "string"), orders: keepOrders(s.orders, isProvince, known),
     rel: keepRel(s.rel, known), word, branch: Number.isInteger(s.branch) && s.branch > 0 ? s.branch : 0, chron: keepChron(s.chron) || chronicleFrom(log, s.turn) });
 }
 

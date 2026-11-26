@@ -22,7 +22,7 @@ An early build, at an unlisted address: https://ada-arnote.github.io/Overture-of
 | `play` | The same pages as single files, made by `node tools/bundle.mjs`. This is what is served |
 | `test`, `tools` | Tests and tools |
 | `src/games` | Rules and bots. Whole numbers, no page, no clock |
-| `src/map` | The hex board: painter, camera, looks, pieces |
+| `src/map` | The hex board: painter, camera, looks, pieces. Also the generator and starter recipes for Capo's invented worlds |
 | `src/story` | Capo's turn, rules, talk and scenarios |
 | `maps` | Map data the pages fetch: Capo's world provinces and disputed areas |
 
