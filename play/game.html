@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-s4Czj/zZuNv87P52RG1qRcVf4EERe3ol8TvK5hWfc8M='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-cMtSGNoy1+UNviTRP4ydvu5TF6uST6/DafKxwVfdXMo='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -390,7 +390,40 @@ html, body { height: 100%; margin: 0; overflow: hidden }
 (() => {
 "use strict";
 const $m = [];
-$m[4] = (($x) => {
+$m[3] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Two small things every part of Capo's story game shares: the hard line, and repeatable chance.
+
+// The one hard line (ruling 49): nothing sexual involving minors. Nothing else is filtered.
+// A text crosses it when it names someone young and something sexual, unless it is plainly protective statecraft
+// ("prosecute those who abuse children", "fund sex education for teens"). Anything that asks to depict, describe or
+// arrange sexual content with someone young is refused whatever else it says. "Explicit" alone is not sexual.
+const YOUNG = /\b(child|children|childs?|minor|minors|underage|kid|kids|schoolgirl|schoolboy|preteen|teen|teens|teenager|teenagers|boy|boys|girl|girls|juvenile)\b|\b(1[0-7]|[1-9])[- ]?(years?|yrs?)[- ]?old\b|\baged (1[0-7]|[1-9])\b/i;
+const SEXUAL = /\b(sex(?!\s+(education|ed|trafficking|offen[cs]es?|offenders?|crimes?|abuse))|sexual|sexually|nude|naked|nudity|erotic\w*|porn\w*|lewd|intercourse|seduc\w*|aroused?)\b/i;
+const DEPICT = /\b(describe|depict|write|story|scene|role-?play|roleplay|show|image|photo\w*|picture|video|seduc\w*|have sex|sleep with|make love|kiss\w*|undress\w*)\b/i;
+const PROTECT = /\b(ban|bans|banned|outlaw\w*|punish\w*|prosecut\w*|protect\w*|prevent\w*|stop|end|combat|fight|crack(s|ed|ing)? down|arrest\w*|criminali[sz]\w*|abolish\w*|rescue\w*|shelter\w*|safeguard\w*|investigat\w*|penalt\w*|law|laws|education|against|abuse|exploitation|trafficking|victims?)\b/i;
+/** Whether one text crosses the hard line. */
+const crosses = (text) => {
+  const t = String(text || "");
+  if (!YOUNG.test(t) || !SEXUAL.test(t)) return false;
+  return DEPICT.test(t) || !PROTECT.test(t);
+};
+/** Texts that cross the hard line, by number (counting from 1). They are never sent, and never kept from a reply. */
+const crossesLine = (texts) => texts.map((o, i) => (crosses(o) ? i + 1 : 0)).filter(Boolean);
+
+/** One repeatable 32-bit whole number from the game's seed and a label. */
+function hash32(seed, label) {
+  let h = 2166136261;
+  for (const ch of seed + "/" + label) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
+  h = Math.imul(h ^ (h >>> 15), h | 1); h ^= h + Math.imul(h ^ (h >>> 7), h | 61);
+  return (h ^ (h >>> 14)) >>> 0;
+}
+/** One repeatable whole number from 1 to 100: the only chance the rules use (and the one Coda can repeat). */
+const draw100 = (seed, label) => (hash32(seed, label) % 100) + 1;
+
+$x.crosses = crosses; $x.crossesLine = crossesLine; $x.hash32 = hash32; $x.draw100 = draw100;
+return $x; })({});
+$m[5] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Relations, and the answer a country gives to a treaty. Rules only: whole numbers, no chance, no AI.
 // Every pair of countries stands somewhere from -3 (hostile) to +3 (close). Only what countries do moves it:
@@ -499,7 +532,7 @@ function relationLines(g) {
 
 $x.REL = REL; $x.NEED = NEED; $x.treatyName = treatyName; $x.monthsApart = monthsApart; $x.relOf = relOf; $x.relWord = relWord; $x.relate = relate; $x.settleRelations = settleRelations; $x.treatyAnswer = treatyAnswer; $x.relationLines = relationLines;
 return $x; })({});
-$m[3] = (($x) => {
+$m[4] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The state of a country, kept by the rules: three gauges in words, and the causes countries hold against each
 // other. Whole numbers, no chance, no AI. Every gauge runs 0 to 4, starts in the middle, moves at most one step a
@@ -514,7 +547,7 @@ $m[3] = (($x) => {
 // A cause for war lasts five years: land taken from you, a treaty ended on you, a demand refused. Land that was
 // yours, land you claim and a treaty partner under attack are causes for as long as they are so. Peace settles
 // the causes between two countries.
-const { monthsApart } = $m[4];
+const { monthsApart } = $m[5];
 
 const GAUGES = {
   s: ["Stability", ["in revolt", "shaken", "steady", "calm", "united"]],
@@ -612,39 +645,6 @@ function keepState(s, known) {
 
 $x.GAUGES = GAUGES; $x.gaugeOf = gaugeOf; $x.gaugeWord = gaugeWord; $x.gaugeWords = gaugeWords; $x.causeOf = causeOf; $x.setCause = setCause; $x.barred = barred; $x.settleState = settleState; $x.stateLines = stateLines; $x.keepState = keepState;
 return $x; })({});
-$m[5] = (($x) => {
-// SPDX-License-Identifier: AGPL-3.0-or-later
-// Two small things every part of Capo's story game shares: the hard line, and repeatable chance.
-
-// The one hard line (ruling 49): nothing sexual involving minors. Nothing else is filtered.
-// A text crosses it when it names someone young and something sexual, unless it is plainly protective statecraft
-// ("prosecute those who abuse children", "fund sex education for teens"). Anything that asks to depict, describe or
-// arrange sexual content with someone young is refused whatever else it says. "Explicit" alone is not sexual.
-const YOUNG = /\b(child|children|childs?|minor|minors|underage|kid|kids|schoolgirl|schoolboy|preteen|teen|teens|teenager|teenagers|boy|boys|girl|girls|juvenile)\b|\b(1[0-7]|[1-9])[- ]?(years?|yrs?)[- ]?old\b|\baged (1[0-7]|[1-9])\b/i;
-const SEXUAL = /\b(sex(?!\s+(education|ed|trafficking|offen[cs]es?|offenders?|crimes?|abuse))|sexual|sexually|nude|naked|nudity|erotic\w*|porn\w*|lewd|intercourse|seduc\w*|aroused?)\b/i;
-const DEPICT = /\b(describe|depict|write|story|scene|role-?play|roleplay|show|image|photo\w*|picture|video|seduc\w*|have sex|sleep with|make love|kiss\w*|undress\w*)\b/i;
-const PROTECT = /\b(ban|bans|banned|outlaw\w*|punish\w*|prosecut\w*|protect\w*|prevent\w*|stop|end|combat|fight|crack(s|ed|ing)? down|arrest\w*|criminali[sz]\w*|abolish\w*|rescue\w*|shelter\w*|safeguard\w*|investigat\w*|penalt\w*|law|laws|education|against|abuse|exploitation|trafficking|victims?)\b/i;
-/** Whether one text crosses the hard line. */
-const crosses = (text) => {
-  const t = String(text || "");
-  if (!YOUNG.test(t) || !SEXUAL.test(t)) return false;
-  return DEPICT.test(t) || !PROTECT.test(t);
-};
-/** Texts that cross the hard line, by number (counting from 1). They are never sent, and never kept from a reply. */
-const crossesLine = (texts) => texts.map((o, i) => (crosses(o) ? i + 1 : 0)).filter(Boolean);
-
-/** One repeatable 32-bit whole number from the game's seed and a label. */
-function hash32(seed, label) {
-  let h = 2166136261;
-  for (const ch of seed + "/" + label) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
-  h = Math.imul(h ^ (h >>> 15), h | 1); h ^= h + Math.imul(h ^ (h >>> 7), h | 61);
-  return (h ^ (h >>> 14)) >>> 0;
-}
-/** One repeatable whole number from 1 to 100: the only chance the rules use (and the one Coda can repeat). */
-const draw100 = (seed, label) => (hash32(seed, label) % 100) + 1;
-
-$x.crosses = crosses; $x.crossesLine = crossesLine; $x.hash32 = hash32; $x.draw100 = draw100;
-return $x; })({});
 $m[6] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The check (ruling 124): one whole-number roll against a chance out of 100, with three results.
@@ -653,7 +653,7 @@ $m[6] = (($x) => {
 // So no plan is certain: at 75, rolls of 96 to 100 still fail (5 in 100). At 10, a clean result is still possible.
 // Every roll is named (turn, mission, checkpoint, person) and drawn from the game's seed, so it replays exactly and
 // changing one step leaves every other roll alone. The AI never rolls: it tells what the check decided.
-const { draw100 } = $m[5];
+const { draw100 } = $m[3];
 
 const LOW = 10, HIGH = 75, COSTLY = 20, MOST_PARTS = 4;
 const BANDS = ["clean", "costly", "failed"];
@@ -720,11 +720,11 @@ $m[2] = (($x) => {
 // The rules of the world game: the AI proposes moves, these rules accept, trim or refuse each one and say why.
 // Land, wars and treaties change only here. Attacks are settled by the check (check.js): might, a commander, odds out of 100.
 // A country asked for a treaty answers by rule, with its reasons (relations.js).
+const { draw100 } = $m[3];
 // features hook: revolt and an empty treasury stop a war or an attack
-const { barred } = $m[3];
-const { draw100 } = $m[5];
+const { barred } = $m[4];
 const { chanceOf, check, checkLine } = $m[6];
-const { relate, relationLines, treatyAnswer, treatyName } = $m[4];
+const { relate, relationLines, treatyAnswer, treatyName } = $m[5];
 
 // Invented numbers for a fiction, from 1 to 10. Countries not listed get 2, or 3 if they hold twelve provinces or more.
 const MIGHT = {
@@ -1058,7 +1058,7 @@ $m[8] = (($x) => {
 // rules decided (from the receipt's own records) and the one sentence the turn was told in. The newest nine turns
 // stay as lines; older ones fold, ten turns at a time, into an era line; past four eras the two oldest join. So the
 // chronicle a prompt carries is the same size at turn 200 as at turn 20, and nothing in it was made up to fit.
-const { treatyName } = $m[4];
+const { treatyName } = $m[5];
 
 const KEEP = { recent: 3, turns: 6, eras: 4, span: 10, line: 130, era: 110, told: 320, facts: 8 };
 const ORDER = ["fell", "war", "peace", "took", "treaty", "broke", "gave", "no"];
@@ -1137,8 +1137,8 @@ $m[7] = (($x) => {
 // land, wars or treaties. What was said goes into the next turn's prompt, and favour moves by rule.
 const { VERBS, commandOf } = $m[2];
 const { chronicleLines } = $m[8];
-const { relOf, relWord } = $m[4];
-const { crosses } = $m[5];
+const { relOf, relWord } = $m[5];
+const { crosses } = $m[3];
 
 const WORDS = ["favourable", "unclear", "against"];
 // Who is in the player's circle depends on their standing (ruling 59): 5 ruling, 2 an ordinary person.
@@ -1354,10 +1354,10 @@ $m[10] = (($x) => {
 // makes one.
 // The world also moves on its own: after six quiet months the rules may open a crisis over land that changed
 // hands or land in dispute (an even chance each turn, drawn from the game's seed), near the player when they can.
-const { draw100, hash32 } = $m[5];
-const { monthsApart } = $m[4];
+const { draw100, hash32 } = $m[3];
+const { monthsApart } = $m[5];
 const { atWar, mightOf, treatiesOf, treatyOf, turnKey, warsOf } = $m[2];
-const { causeOf, gaugeOf, gaugeWord, setCause } = $m[3];
+const { causeOf, gaugeOf, gaugeWord, setCause } = $m[4];
 
 const CRISIS = { need: 4, quiet: 6, chance: 50, due: 3, mine: 1, again: 24 };
 const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
@@ -1469,8 +1469,8 @@ $m[11] = (($x) => {
 // the day it is chosen. The AI is told the ambition and how far along it is, so the story can lean toward it; it
 // cannot say it is met. When it is, the receipt says so, the game goes on, and another may be chosen.
 // The reckoning is the game so far in a few lines, counted by code from what the rules decided.
-const { monthsApart } = $m[4];
-const { gaugeOf, gaugeWords } = $m[3];
+const { monthsApart } = $m[5];
+const { gaugeOf, gaugeWords } = $m[4];
 
 const pacts = (g, trade) => g.treaties.filter((t) => t.pair.split("|").includes(g.player) && (trade || t.kind !== "trade")).length;
 const atWar = (g) => g.wars.some((w) => w.pair.split("|").includes(g.player));
@@ -1565,8 +1565,8 @@ $m[12] = (($x) => {
 // rules pick one whose condition holds and that has not come in the last ten turns, and the AI is told to write it
 // as one event. A beat changes no fact: no land, no gauge, no treaty.
 // The press is four papers fixed for the game, each with a stance it keeps.
-const { draw100, hash32 } = $m[5];
-const { gaugeOf } = $m[3];
+const { draw100, hash32 } = $m[3];
+const { gaugeOf } = $m[4];
 const { turnKey } = $m[2];
 
 const BEAT = { chance: 40, rest: 10 };
@@ -1626,7 +1626,7 @@ $m[9] = (($x) => {
 // One door for four small systems the turn calls: the state of countries and their causes (state.js), crises
 // (crisis.js), ambitions (ambitions.js), and the turn's beat and the press (beats.js). The turn, the rules and the
 // page each call one function here, so those files carry one line apiece.
-const { keepState, settleState, stateLines } = $m[3];
+const { keepState, settleState, stateLines } = $m[4];
 const { crisisLines, keepCrisis, settleCrisis } = $m[10];
 const { ambitionLines, keepAmbition, settleAmbition } = $m[11];
 const { BEATS, beatLines, noteBeat } = $m[12];
@@ -1669,8 +1669,8 @@ $m[1] = (($x) => {
 const { VERBS, applyMoves, leaks, ownMoves, worldFacts } = $m[2];
 const { STANDING, WORDS, changeStanding, moveFavour } = $m[7];
 const { chronicleLines, remember } = $m[8];
-const { settleRelations } = $m[4];
-const { crosses } = $m[5];
+const { settleRelations } = $m[5];
+const { crosses } = $m[3];
 const { RULES } = $m[6];
 // features hook: gauges, causes, crises, ambitions, beats, the press
 const { moreFacts, settleMore } = $m[9];
@@ -1970,7 +1970,7 @@ $m[14] = (($x) => {
 // The scenarios a Capo game can start from. Each sets the date, the opening and who may be played.
 // Fiction: not news and not a forecast.
 
-const { crosses } = $m[5];
+const { crosses } = $m[3];
 
 const SCENARIOS = [
   {
@@ -2366,7 +2366,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.6.3";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "9bdeabc0";
+const BUILD = "1d814577";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
 return $x; })({});
@@ -2397,7 +2397,7 @@ $m[19] = (($x) => {
 // crisis.js, ambitions.js, beats.js); this file only shows them and takes orders. x is what the game page lends:
 // {g() the game, geo(), name(code), near() neighbouring countries, el, button, fmtDate, save(), toast(text),
 // open(sheet), act(text) adds an action, drop(text) removes one}.
-const { GAUGES, causeOf, gaugeOf, gaugeWord } = $m[3];
+const { GAUGES, causeOf, gaugeOf, gaugeWord } = $m[4];
 const { demand, demandAnswer } = $m[10];
 const { ambitionsFor, chooseAmbition, progress, reckoning } = $m[11];
 const { papers } = $m[12];
@@ -2485,10 +2485,10 @@ $m[0] = (($x) => {
 // moves; the rules in src/story/worldrules.js decide which stand, and the map follows.
 const { JUMPS, MODES, UNITS, closeTurn, jumpFrom, monthsBetween, newWorldGame, readWorldReply, turnCode, worldPrompt } = $m[1];
 const { APPROACHES, attackPlan, commanders, mightOf, placesFor, treatiesOf, warsOf } = $m[2];
-const { NEED, relOf, relWord, treatyAnswer, treatyName } = $m[4];
+const { NEED, relOf, relWord, treatyAnswer, treatyName } = $m[5];
 const { factWords, factsOf } = $m[8];
 const { oddsLine, partsLine } = $m[6];
-const { crossesLine } = $m[5];
+const { crossesLine } = $m[3];
 const { checkSave: checkSaveOf, convertNote, keptRecords, mendGame, snapGame, takeBack } = $m[13];
 const { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacter, scenarioFrom, scenarioText } = $m[14];
 const { askPrompt, chatPrompt, councilPrompt, readAsk, readChat, readCouncil, seatsFor, talkLines } = $m[7];

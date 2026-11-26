@@ -2,9 +2,9 @@
 // The rules of the world game: the AI proposes moves, these rules accept, trim or refuse each one and say why.
 // Land, wars and treaties change only here. Attacks are settled by the check (check.js): might, a commander, odds out of 100.
 // A country asked for a treaty answers by rule, with its reasons (relations.js).
+import { draw100 } from "./line.js";
 // features hook: revolt and an empty treasury stop a war or an attack
 import { barred } from "./state.js";
-import { draw100 } from "./line.js";
 import { chanceOf, check, checkLine } from "./check.js";
 import { relate, relationLines, treatyAnswer, treatyName } from "./relations.js";
 

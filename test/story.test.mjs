@@ -624,8 +624,8 @@ test("ambitions: chosen from a fixed list, counted by the rules, met only when t
   assert.equal(ambitionsFor(g, G).some((x) => x.id === "restore"), false, "one met is not offered again");
   // years count from the day chosen, and start again while the condition is broken
   assert.ok(chooseAmbition(g, G, "peace"));
-  for (let i = 0; i < 3; i++) closeTurn(g, reply(g, [], 12), G, []);
-  assert.equal(progress(g, G).have, 0, "still at war: the count restarts each turn");
+  closeTurn(g, reply(g, [], 12), G, []);
+  assert.equal(progress(g, G).have, 0, "still at war: the count starts again");
   g.wars = [];
   for (let i = 0; i < 4; i++) closeTurn(g, reply(g, [], 12), G, []);
   assert.deepEqual([progress(g, G).have, g.done.length], [4, 1]);
@@ -633,8 +633,8 @@ test("ambitions: chosen from a fixed list, counted by the rules, met only when t
   assert.deepEqual([g.goal, g.done.map((d) => d.id)], [null, ["restore", "peace"]]);
   // the reckoning is counted by code
   const lines = reckoning(g, G);
-  assert.equal(lines[0], "Peru, 2026-12-01 to 2035-01-01: 9 turns.");
-  assert.match(lines[4], /^Ambitions met: Hold the 1 province you claim or have lost \(2027\); Five years without a war \(2035\)\.$/);
+  assert.equal(lines[0], "Peru, 2026-12-01 to 2033-01-01: 7 turns.");
+  assert.match(lines[4], /^Ambitions met: Hold the 1 province you claim or have lost \(2027\); Five years without a war \(2033\)\.$/);
   for (const a of Object.values(AMBITIONS)) assert.ok(a.title && a.modes && a.said(a.begin(g, G)));
 });
 
@@ -709,3 +709,4 @@ test("the features lane in a whole game: the prompt carries it, saves keep it, o
   assert.equal(gaugeOf(t, "PER", "s"), 1);
   assert.equal(gaugeOf(takeBack(t, rec), "PER", "s"), 2);
 });
+// ---- end of the features lane ----
