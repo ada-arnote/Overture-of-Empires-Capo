@@ -25,20 +25,23 @@
         <li><a href="#ledger">Privacy and credits</a></li>
       </ul>
     </nav>
-    <button class="lantern" id="lantern" type="button" aria-pressed="false">
-      <svg viewBox="0 0 22 30" aria-hidden="true"><path class="frame" d="M11 1v4M7 5h8M6 9h10l2 13H4zM5 22h12v4H5zM8 9V7a3 3 0 0 1 6 0v2"/><path class="flame" d="M11 12c2.4 2.4 3 4.2 3 5.6a3 3 0 0 1-6 0c0-1.4.6-3.2 3-5.6z"/></svg>
-      Night theme
-    </button>
+    <button class="lantern" id="lantern" type="button" aria-pressed="false"><span class="mk" aria-hidden="true"></span>Night theme</button>
   </div>
 </header>
-<div class="valance" aria-hidden="true"></div>
+<div class="valance-wrap" aria-hidden="true"><div class="valance"></div></div>
 
 <div class="wrap">
   <main>
   <div class="intro">
-    <h1>Overture of Empires: Capo</h1>
-    <p class="lede">Table games on one shared map. Free, whole, and yours to change.</p>
-    <p class="note">The map on the desk is Capo, the story game, and it needs an AI you bring. The trunk holds four table games that play whole with no AI, no account and no payment.</p>
+    <div class="words">
+      <h1>Overture of Empires: Capo</h1>
+      <p class="lede">Table games on one shared map. Free, whole, and yours to change.</p>
+      <p class="note">The map on the desk is Capo, the story game, and it needs an AI you bring. The trunk holds four table games that play whole with no AI, no account and no payment.</p>
+    </div>
+    <figure class="print">
+      <img src="icons/engraved/sandby-tent.webp" width="360" height="199" alt="An old etching of a commander's pavilion beneath a broad tree, its doorway framed in carved ornament.">
+      <figcaption>The commander's tent, after Paul Sandby, 1780</figcaption>
+    </figure>
   </div>
 
   <section id="capo" aria-labelledby="capo-h">
@@ -47,33 +50,30 @@
       <h2 id="capo-h">Capo, the story game</h2>
     </div>
     <div class="desk">
-      <div class="map" role="img" aria-label="A campaign map of the world laid on the desk, with wooden unit blocks and a marching route.">
+      <div class="map" role="img" aria-label="A campaign map of the world laid on the desk, with wooden unit blocks, a marching route, a compass rose and dividers.">
         <div class="coast"><div></div></div>
-        <svg viewBox="0 0 600 340">
+        <svg viewBox="0 0 600 340" aria-hidden="true">
           <path class="grid" d="M0 57h600M0 113h600M0 227h600M0 283h600M50 0v340M100 0v340M150 0v340M250 0v340M300 0v340M350 0v340M450 0v340M500 0v340M550 0v340"/>
           <path class="fold" d="M200 0v340M400 0v340M0 170h600"/>
           <path class="route" d="M312 120c18 16 40 4 65 20"/>
-          <g>
-            <rect class="blk-s" x="298" y="114" width="16" height="11" rx="1"/><rect class="blk-b" x="296" y="111" width="16" height="11" rx="1"/>
-            <rect class="blk-s" x="327" y="103" width="16" height="11" rx="1"/><rect class="blk-b" x="325" y="100" width="16" height="11" rx="1"/>
-            <rect class="blk-s" x="380" y="139" width="16" height="11" rx="1"/><rect class="blk-r" x="378" y="136" width="16" height="11" rx="1"/>
-            <rect class="blk-s" x="488" y="130" width="16" height="11" rx="1"/><rect class="blk-r" x="486" y="127" width="16" height="11" rx="1"/>
-            <rect class="blk-s" x="168" y="124" width="16" height="11" rx="1"/><rect class="blk-b" x="166" y="121" width="16" height="11" rx="1"/>
-          </g>
-          <g transform="translate(42 268)"><circle class="rose" r="24"/><circle class="rose" r="17"/><path class="ink" d="M0-30 4-4 30 0 4 4 0 30-4 4-30 0-4-4z"/><path class="rose" d="M-14-14 14 14M14-14-14 14"/><text class="maptext" y="-34" text-anchor="middle">N</text></g>
-          <rect class="rose" x="362" y="296" width="196" height="30"/><text class="maptitle" x="460" y="316" text-anchor="middle">THE WORLD TODAY</text>
-          <text class="maptext" x="228" y="172" text-anchor="middle">Atlantic</text><text class="maptext" x="72" y="205" text-anchor="middle">Pacific</text><text class="maptext" x="428" y="238" text-anchor="middle">Indian Ocean</text>
+          <g class="blk-s"><rect x="298" y="114" width="17" height="11" rx="1"/><rect x="327" y="103" width="17" height="11" rx="1"/><rect x="380" y="139" width="17" height="11" rx="1"/><rect x="488" y="130" width="17" height="11" rx="1"/><rect x="168" y="124" width="17" height="11" rx="1"/></g>
+          <g class="blk blk-b"><rect x="296" y="111" width="17" height="11" rx="1"/><path d="M300 113v7M304 113v7"/><rect x="325" y="100" width="17" height="11" rx="1"/><path d="M329 102v7"/><rect x="166" y="121" width="17" height="11" rx="1"/><path d="M170 123v7M174 123v7M178 123v7"/></g>
+          <g class="blk blk-r"><rect x="378" y="136" width="17" height="11" rx="1"/><path d="M382 138v7M386 138v7"/><rect x="486" y="127" width="17" height="11" rx="1"/><path d="M490 129v7"/></g>
+          <path class="cart" d="M362 296h196v30H362zM366 300h188v22H366z"/><text class="maptitle" x="460" y="316" text-anchor="middle">THE WORLD TODAY</text>
+          <text class="maptext" x="228" y="172" text-anchor="middle">Atlantic</text><text class="maptext" x="80" y="210" text-anchor="middle">Pacific</text><text class="maptext" x="428" y="238" text-anchor="middle">Indian Ocean</text>
           <g transform="translate(268 222) rotate(-18)"><path class="brasss" d="M0 0-9 44M0 0 9 44"/><path class="steel" d="M-9 44-10 53M9 44 10 53"/><circle class="brassf" r="5"/></g>
         </svg>
+        <span class="mk rose" aria-hidden="true"></span>
       </div>
+      <div class="side">
+      <img class="inkstand" src="icons/tent/inkstand.svg" width="132" height="84" alt="">
       <div class="orders">
         <h3>Capo</h3>
         <ul class="tags"><li>Early test build</li><li>Needs an AI you bring</li><li>For adults</li></ul>
         <p>Lead any country in the world today, or live in one. You write what you do, an AI tells the story, and the rules decide wars, borders and treaties. Paste into any AI chat, or connect one.</p>
-        <a class="seal" href="../play/game.html">
-          <svg viewBox="0 0 34 34" aria-hidden="true"><circle class="ring" cx="17" cy="17" r="14"/><path class="mark" d="M17 6l2.4 8.6L28 17l-8.6 2.4L17 28l-2.4-8.6L6 17l8.6-2.4z"/></svg>
-          Open Capo's map</a>
+        <a class="seal" href="../play/game.html"><img src="icons/tent/seal.svg" width="56" height="56" alt="">Open Capo's map</a>
         <a class="how" href="#ledger">Where what you write goes</a>
+      </div>
       </div>
     </div>
   </section>
@@ -88,43 +88,39 @@
       <div class="lid" aria-hidden="true"><span>Table games, four sets</span><span>No AI. No account. No payment.</span></div>
       <ul class="tray">
         <li class="box g-banners">
-          <div class="band" aria-hidden="true"><span>Dice</span>
-            <svg viewBox="0 0 54 44"><rect x="3" y="17" width="22" height="22" rx="4"/><rect x="24" y="8" width="22" height="22" rx="4" transform="rotate(14 35 19)"/><g class="cut"><circle cx="9" cy="23" r="2.2"/><circle cx="19" cy="33" r="2.2"/><circle cx="14" cy="28" r="2.2"/><circle cx="31" cy="15" r="2.2"/><circle cx="39" cy="24" r="2.2"/></g></svg></div>
+          <div class="band" aria-hidden="true"><span>Dice</span><span class="mk"></span></div>
           <div class="body">
             <h3><a href="../play/banners.html">Brass and Banners</a></h3>
             <p>A world-conquest dice game. Muster, attack, and raise your banner over the map.</p>
             <div class="facts">Two to six players, with bots</div>
-            <span class="plate" aria-hidden="true">Play</span>
+            <span class="plate" aria-hidden="true"><span class="mk"></span>Play</span>
           </div>
         </li>
         <li class="box g-fable">
-          <div class="band" aria-hidden="true"><span>Hex island</span>
-            <svg viewBox="0 0 54 44"><path d="M14 4l10 6v11l-10 6-10-6V10zM36 4l10 6v11l-10 6-10-6V10zM25 22l10 6v11l-10 6-10-6V28z"/><path class="cut" d="M10 20v-6l4-4 4 4v6zM21 38v-6l4-4 4 4v6z"/></svg></div>
+          <div class="band" aria-hidden="true"><span>Hex island</span><span class="mk"></span></div>
           <div class="body">
             <h3><a href="../play/fable.html">The Island Fable</a></h3>
             <p>A hex island war of villages and upkeep. Cut a rival's land in two.</p>
             <div class="facts">Two to six players, with bots</div>
-            <span class="plate" aria-hidden="true">Play</span>
+            <span class="plate" aria-hidden="true"><span class="mk"></span>Play</span>
           </div>
         </li>
         <li class="box g-glass">
-          <div class="band" aria-hidden="true"><span>Settle and trade</span>
-            <svg viewBox="0 0 54 44"><path d="M16 42V18M16 18c-6-1-8-6-8-11 5 1 8 5 8 11zM16 18c6-1 8-6 8-11-5 1-8 5-8 11zM16 28c-6-1-8-5-8-10 5 1 8 4 8 10zM16 28c6-1 8-5 8-10-5 1-8 4-8 10z"/><rect x="15" y="16" width="2.4" height="26"/><circle cx="40" cy="27" r="11"/><circle class="cut" cx="36.5" cy="23" r="3.2"/></svg></div>
+          <div class="band" aria-hidden="true"><span>Settle and trade</span><span class="mk"></span></div>
           <div class="body">
             <h3><a href="../play/glass.html">Grain and Glass</a></h3>
             <p>A settle-and-trade game. Roll for goods, build, trade, and race to the points.</p>
             <div class="facts">Two to six players, with bots</div>
-            <span class="plate" aria-hidden="true">Play</span>
+            <span class="plate" aria-hidden="true"><span class="mk"></span>Play</span>
           </div>
         </li>
         <li class="box g-inch">
-          <div class="band" aria-hidden="true"><span>Real time</span>
-            <svg viewBox="0 0 54 44"><path d="M12 6h12v6l5 6v20a3 3 0 0 1-3 3H10a3 3 0 0 1-3-3V18l5-6z"/><rect class="cut" x="10" y="22" width="16" height="10"/><path d="M42 12c5 6 8 10 8 15a8 8 0 0 1-16 0c0-5 3-9 8-15z"/></svg></div>
+          <div class="band" aria-hidden="true"><span>Real time</span><span class="mk"></span></div>
           <div class="body">
             <h3><a href="../play/inch.html">An Inch of Ink</a></h3>
             <p>A real-time land-grab among up to fifty nations, or a quick turn-based duel.</p>
             <div class="facts">Up to fifty nations, with bots</div>
-            <span class="plate" aria-hidden="true">Play</span>
+            <span class="plate" aria-hidden="true"><span class="mk"></span>Play</span>
           </div>
         </li>
       </ul>
@@ -152,21 +148,23 @@
     <div class="hang">
       <div class="rail" aria-hidden="true"></div>
       <div class="board">
+        <div class="cork">
         <div class="pins" id="pins">
           <svg class="threads" id="threads" aria-hidden="true"></svg>
           <div class="pinned p-main">
             <h3>The desktop game</h3>
             <small>Coming soon, for desktop</small>
             <p>Made in Godot: a deep world that runs itself, with no AI needed, script mods and server-checked play.</p>
-            <a href="https://github.com/ada-arnote/Overture-of-Empires-Capo" target="_blank" rel="noopener">Follow the work on GitHub</a>
+            <a href="https://github.com/ada-arnote/Overture-of-Empires-Capo" target="_blank" rel="noopener"><span class="mk" aria-hidden="true"></span>Follow the work on GitHub</a>
           </div>
           <div class="pinned p-a"><b>A deep world</b>It runs itself.</div>
           <div class="pinned p-b"><b>No AI needed</b>Rules all the way down.</div>
-          <div class="pinned sketch p-c" aria-hidden="true"><svg viewBox="0 0 90 100"><ellipse class="tone" cx="45" cy="50" rx="34" ry="44"/><ellipse class="sk" cx="45" cy="50" rx="34" ry="44"/><path class="ink" d="M45 26a13 14 0 0 1 13 14c0 6-3 11-7 13v5c9 2 17 7 20 15a34 44 0 0 1-52 0c3-8 11-13 20-15v-5c-4-2-7-7-7-13a13 14 0 0 1 13-14z"/></svg></div>
+          <div class="pinned sketch p-c" aria-hidden="true"><span class="mk bust"></span></div>
           <div class="pinned p-d"><b>Script mods</b>Change it and share it.</div>
           <div class="pinned p-e"><b>Server-checked play</b>Fair games between players.</div>
           <div class="pinned p-f"><b>Legacy campaigns</b>The Coda rules: each game changes the next.</div>
-          <div class="pinned sketch p-g" aria-hidden="true"><svg viewBox="0 0 90 100"><path class="tone" d="M45 12 56 34l24-4-14 20 14 20-24-4-11 22-11-22-24 4 14-20-14-20 24 4z"/><path class="sk" d="M45 12 56 34l24-4-14 20 14 20-24-4-11 22-11-22-24 4 14-20-14-20 24 4zM45 34 59 50 45 66 31 50zM4 92c14-6 22 4 36-2s22 4 46-2"/></svg></div>
+          <div class="pinned sketch p-g" aria-hidden="true"><img src="icons/tent/camp-plan.svg" width="90" height="100" alt=""></div>
+        </div>
         </div>
       </div>
     </div>
@@ -184,7 +182,7 @@
       <div><dt>Settings</dt><dd>The lantern at the top switches between daylight canvas and lamplight. This browser remembers your choice.</dd></div>
       <div><dt>Feedback</dt><dd><a href="https://github.com/ada-arnote/Overture-of-Empires-Capo/issues" target="_blank" rel="noopener">Report a problem or send feedback</a> (on GitHub).</dd></div>
       <div><dt>Source</dt><dd><span id="source"><a href="https://github.com/ada-arnote/Overture-of-Empires-Capo">Source code</a></span>. Free software under the GNU AGPL, version 3 or later.</dd></div>
-      <div><dt>Credits</dt><dd>Type: Tent Roman (from IM FELL English by Igino Marini), Spectral by the Spectral Project Authors, and Atkinson Hyperlegible by the Braille Institute of America, all under the SIL Open Font License 1.1. The coast on the desk map is from Natural Earth, in the public domain.</dd></div>
+      <div><dt>Credits</dt><dd>Type: Tent Roman (from IM FELL English by Igino Marini), Spectral by the Spectral Project Authors, and Atkinson Hyperlegible by the Braille Institute of America, all under the SIL Open Font License 1.1. Game marks and the lantern: icons made by Delapouite and Lorc, available on <a href="https://game-icons.net">game-icons.net</a> under CC BY 3.0. Play and link icons: Phosphor Icons, MIT License. Wood, canvas, cork and paper: Poly Haven and ambientCG, CC0. The tent print is a detail of Paul Sandby's etching of 1780 (Rijksmuseum, public domain); the headpiece, tailpiece and bust are eighteenth-century printers' ornaments (Wikimedia Commons, public domain). The camp plan follows Rochambeau's plans of 1782 (Library of Congress, Geography and Map Division). The coast on the desk map is from Natural Earth, in the public domain. The seal, inkstand, pins and compass rose are our own drawings.</dd></div>
       <div><dt>Version</dt><dd id="version">Version</dd></div>
     </dl>
   </footer>

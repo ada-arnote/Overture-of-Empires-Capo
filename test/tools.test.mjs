@@ -105,6 +105,13 @@ test("assets have their own budgets, counted at full size and apart from the sit
   stops({ [i]: "x".repeat(26000), "CREDITS.csv": HEAD + credit(i) }, /site\/icons: \d+ kB is over its 25 kB/);
   stops({ "site/a.ogg": "x", "CREDITS.csv": HEAD + credit("site/a.ogg") }, /ship only from/);
 });
+test("textures have their own 32 kB budget, at full size, for WebP and PNG tiles only", () => {
+  const credit = (f) => `${f},A,Someone,CC0-1.0,https://example.org,2026-11-26,none\n`, t = "site/textures/a.webp", used = check(root).assets["site/textures"];
+  stops({ [t]: "x".repeat(32001 - used), "CREDITS.csv": HEAD + credit(t) }, /site\/textures: \d+ kB is over its 32 kB asset budget/);
+  clear({ [t]: "x".repeat(31999 - used), "CREDITS.csv": HEAD + credit(t) });
+  stops({ "site/textures/a.svg": "<svg/>", "CREDITS.csv": HEAD + credit("site/textures/a.svg") }, /only \.webp \.png \.txt go in site\/textures/);
+  stops({ "site/textures/a.png": "x" }, /no row in CREDITS/);
+});
 test("site pages keep their rule: nothing by default, trusted types, fonts and sounds only from their own site", () => {
   const meta = (rule) => `<meta http-equiv="Content-Security-Policy" content="${rule}">`, ok = "default-src 'none'; script-src 'self'; font-src 'self'; media-src 'self'; require-trusted-types-for 'script'";
   clear({ "site/x.html": meta(ok) });
