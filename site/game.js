@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's game screen: the world map full-screen, a top bar, the dock and the province card, as in the original
-// Ancient Kingdom. First slice: choose any country and a mode, write actions, jump time, read what happened.
-// Borders do not move yet; rules-checked changes come with the next step of the rebuild.
-import { JUMPS, MODES, jumpFrom, newWorldGame, readWorldReply, turnCode, worldPrompt } from "../src/story/turn.js";
+// Ancient Kingdom: choose any country and a mode, write actions, jump time, read what happened. The AI proposes
+// moves; the rules in src/story/worldrules.js decide which stand, and the map follows.
+import { JUMPS, MODES, jumpFrom, monthsOf, newWorldGame, readWorldReply, turnCode, worldPrompt } from "../src/story/turn.js";
+import { applyMoves, mightOf, placesFor, treatiesOf, warsOf } from "../src/story/worldrules.js";
 import { crossesLine } from "../src/story/rules.js";
 import { loadWorld, ownerColour, worldMap } from "./worldmap.js";
 import { ask, forgetKey, loadRoute, saveRoute } from "./ai.js";
@@ -13,6 +14,8 @@ const el = (tag, text, cls) => { const e = document.createElement(tag); if (text
 const button = (text, on, cls = "plain") => { const b = el("button", text, cls); b.type = "button"; b.onclick = on; return b; };
 let world, map, state = null, past = [], route = loadRoute(), sheet = null, pending = null, chosen = null, jump = "1m", hush = 0, ledgerTab = "events";
 
+// games saved before wars and treaties existed get empty lists
+const mend = (s) => ({ wars: [], treaties: [], offers: [], ...s });
 const save = () => { try { localStorage.setItem(KEEP, JSON.stringify({ state, past: past.slice(-10) })); } catch { /* the game still runs for this visit */ } };
 const load = () => { try { return JSON.parse(localStorage.getItem(KEEP) || "null"); } catch { return null; } };
 function toast(t) { const b = $("toast"); b.textContent = t; b.classList.add("on"); clearTimeout(hush); hush = setTimeout(() => b.classList.remove("on"), 3400); }
@@ -35,6 +38,15 @@ function landNeighbours(code) {
   const out = new Set();
   for (const id of held(code)) for (const n of world.neighbours.get(id)) { const o = ownerOf(n); if (o !== code) out.add(o); }
   return [...out];
+}
+
+/** What the rules may ask of the map. */
+function geo() {
+  return {
+    name, place: (id) => world.provinces.get(id), owner: ownerOf, neighbours: (id) => world.neighbours.get(id), coastal: (id) => world.coast.has(id),
+    holds: (c) => held(c).length, known: (c) => homes.has(c), hasCoast: (c) => held(c).some((id) => world.coast.has(id)),
+    find: (s) => { const k = String(s || "").trim(); if (world.provinces.has(k)) return k; const low = k.toLowerCase(), hits = [...world.provinces.values()].filter((p) => p.name.toLowerCase() === low); return hits.length === 1 ? hits[0].id : null; },
+  };
 }
 
 // ---- the first screen ----
@@ -62,7 +74,7 @@ function startScreen() {
   };
   const go = el("div", undefined, "row");
   go.append(button("Begin", begin, "go"));
-  if (kept?.state) go.append(button(`Continue as ${name(kept.state.player)}, ${fmtDate(kept.state.date)}`, () => { state = kept.state; past = kept.past || []; $("start").classList.remove("open"); play(); }));
+  if (kept?.state) go.append(button(`Continue as ${name(kept.state.player)}, ${fmtDate(kept.state.date)}`, () => { state = mend(kept.state); past = (kept.past || []).map(mend); $("start").classList.remove("open"); play(); }));
   const l1 = el("label"); l1.append("Your country", pick, list);
   box.replaceChildren(el("p", "Overture of Empires", "eyebrow"), el("h1", "Capo"),
     el("p", "Lead any country in the world today, or live in one. You decide what to do; an AI tells what happens; the rules keep the facts. An early test build of the new screen.", "note"),
@@ -115,7 +127,7 @@ function actions(box) {
   for (const t of ["Strengthen the army.", "Spend on schools and hospitals.", ...near.map((c) => `Seek closer ties with ${name(c)}.`)]) ideas.append(button(t, () => { state.actions = [...(state.actions || []), t]; save(); open("actions"); }));
   const go = el("div", undefined, "row");
   go.append(button("Add", add), button(`Advance ${JUMPS.find((j) => j[0] === jump)[1].toLowerCase()}`, advance, "go"));
-  box.append(el("h2", "Actions"), el("p", "Write what you do, in your own words, as many as you like. The AI reads them all. Nothing on the map changes yet: that comes with the next step.", "note"), list, input, go, el("h3", "Ideas"), ideas);
+  box.append(el("h2", "Actions"), el("p", "Write what you do, in your own words, as many as you like. The AI reads them all and proposes moves; the rules decide what stands: wars, peace, treaties, attacks and handovers.", "note"), list, input, go, el("h3", "Ideas"), ideas);
   if (pending) box.append(pasteBox());
 }
 
@@ -134,7 +146,8 @@ function advance() {
   const acts = state.actions || [], bad = crossesLine(acts);
   if (bad.length) return toast(`Action ${bad.join(", ")} is refused: nothing sexual involving minors.`);
   const to = jumpFrom(state.date, jump);
-  pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, size: (c) => held(c).length }, acts, to), to, actions: acts };
+  const g = geo();
+  pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]) }, acts, to), to, actions: acts, months: monthsOf(jump) };
   if (route.route === "paste") { open("actions"); return; }
   viaAddress();
 }
@@ -147,18 +160,21 @@ function finish(text) {
   if (!r.matched) { pending.error = `That reply is not for this turn: it must start with TURN: ${turnCode(state)}.`; open("actions"); return; }
   if (!r.events.length) { pending.error = `No event could be read${r.dropped.length ? `: ${r.dropped.slice(0, 3).join("; ")}` : ""}.`; open("actions"); return; }
   past.push(structuredClone(state));
-  state.log.push({ from: state.date, to: pending.to, actions: pending.actions, events: r.events, summary: r.summary, dropped: r.dropped });
+  const receipt = applyMoves(state, r.moves, geo(), pending.actions, pending.months);
+  state.log.push({ from: state.date, to: pending.to, actions: pending.actions, events: r.events, summary: r.summary, dropped: r.dropped, receipt });
   state.log = state.log.slice(-60);
   state.date = pending.to; state.turn++; state.actions = [];
-  pending = null; save(); topBar(); ledgerTab = "events"; open("ledger");
-  toast(`Now ${fmtDate(state.date)}.`);
+  pending = null; save(); topBar(); ledgerTab = "events"; open("ledger"); map.refresh();
+  const changed = receipt.filter((x) => x.ok && / takes it from | hands /.test(x.text)).length;
+  toast(`Now ${fmtDate(state.date)}.${changed ? ` ${changed} province${changed > 1 ? "s" : ""} changed hands.` : ""}`);
 }
 
 function ledger(box) {
   const tabs = el("div", undefined, "row");
-  for (const [k, t] of [["events", "Events"], ["log", "Log"]]) { const b = button(t, () => { ledgerTab = k; open("ledger"); }); b.setAttribute("aria-pressed", String(ledgerTab === k)); tabs.append(b); }
+  for (const [k, t] of [["events", "Events"], ["world", "World"], ["log", "Log"]]) { const b = button(t, () => { ledgerTab = k; open("ledger"); }); b.setAttribute("aria-pressed", String(ledgerTab === k)); tabs.append(b); }
   box.append(el("h2", "Ledger"), tabs);
   const last = state.log[state.log.length - 1];
+  if (ledgerTab === "world") { worldTab(box); return; }
   if (ledgerTab === "log") {
     if (!state.log.length) { box.append(el("p", "Nothing yet.", "note")); return; }
     const feed = el("ol", undefined, "feed");
@@ -172,7 +188,22 @@ function ledger(box) {
     li.append(when, el("p", e.text)); feed.append(li);
   }
   box.append(el("p", last.summary, "note"), feed);
+  if (last.receipt?.length) {
+    const list = el("ul", undefined, "list");
+    list.append(...last.receipt.map((x) => { const li = el("li"); li.append(el("span", `${x.ok ? "✓" : "✗"} ${x.text}.`)); if (!x.ok) li.style.opacity = ".7"; return li; }));
+    box.append(el("h3", "What the rules decided"), list);
+  }
   if (last.dropped.length) box.append(el("p", `Left out of the reply: ${last.dropped.join("; ")}.`, "note"));
+}
+
+function worldTab(box) {
+  const me = state.player, wars = state.wars.map((w) => w.pair.split("|")), list = (items, empty) => { const ul = el("ul", undefined, "list"); ul.append(...(items.length ? items : [empty]).map((t) => { const li = el("li"); li.append(el("span", t)); return li; })); return ul; };
+  const taken = Object.entries(state.owners).map(([id, c]) => `${world.provinces.get(id).name}: held by ${name(c)}, taken from ${name(world.provinces.get(id).country)}`);
+  box.append(el("h3", "Wars"), list(wars.map(([a, b]) => `${name(a)} and ${name(b)}, since ${fmtDate(state.wars.find((w) => w.pair === [a, b].join("|")).since)}`), "No wars."),
+    el("h3", "Treaties"), list(state.treaties.map((t) => { const [a, b] = t.pair.split("|"); return `${name(a)} and ${name(b)}: ${t.kind}`; }), "No treaties."),
+    el("h3", "Offers to you"), list(state.offers.map((o) => `${name(o.from)} offers ${o.kind === "peace" ? "peace" : `a ${o.kind} treaty`} (${fmtDate(o.date)}). To accept, write it in your actions.`), "None."),
+    el("h3", "Land that has changed hands"), list(taken, "None yet."),
+    el("p", `${name(me)}: might ${mightOf(geo(), me)} of 10 (invented, for this fiction), ${held(me).length} provinces.`, "note"));
 }
 
 const later = (title, what) => (box) => box.append(el("h2", title), el("p", what, "note"));
@@ -199,7 +230,7 @@ function gameSheet(box) {
   const file = el("input"); file.type = "file"; file.accept = ".json,application/json"; file.hidden = true;
   file.onchange = async () => { const f = file.files[0]; if (!f) return; try { const s = JSON.parse(await f.text()); if (s?.v !== 1 || !homes.has(s.player)) throw new Error(); state = s; past = []; save(); toast("Opened."); open(null); play(); } catch { toast("That file is not a Capo game."); } };
   const saves = el("div", undefined, "row");
-  saves.append(button("Take back the last turn", () => { if (!past.length) return toast("Nothing to take back."); state = past.pop(); save(); topBar(); open("game"); map.redraw(); }),
+  saves.append(button("Take back the last turn", () => { if (!past.length) return toast("Nothing to take back."); state = past.pop(); save(); topBar(); open("game"); map.refresh(); }),
     button("Save to a file", () => { const a = el("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: "application/json" })); a.download = `capo-${state.player}-turn-${state.turn}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }),
     button("Open a file", () => file.click()),
     button("New game", () => { if (confirm("Leave this game? It stays saved until you begin another.")) { open(null); $("top").hidden = true; $("dock").hidden = true; state = null; startScreen(); } }));
@@ -217,7 +248,8 @@ function card(p) {
   if (!state) { $("start-box").querySelector("input[type=search]").value = name(p.country); chosen = p.country; }
   const owner = ownerOf(p.id), near = el("div", undefined, "near");
   for (const id of world.neighbours.get(p.id)) { const n = world.provinces.get(id); near.append(button(n.name, () => { card(n); map.show(n.id); })); }
-  const rows = [el("h2", p.name), el("p", `${name(owner)}${owner !== p.country ? `, taken from ${name(p.country)}` : ""}.`, "note"), el("p", near.children.length ? "Borders by land:" : "No land borders: reached by sea.", "note"), near];
+  const wars = state ? warsOf(state, owner) : [], pacts = state ? treatiesOf(state, owner) : [];
+  const rows = [el("h2", p.name), el("p", `${name(owner)}${owner !== p.country ? `, taken from ${name(p.country)}` : ""}.${wars.length ? ` At war with ${wars.map(name).join(", ")}.` : ""}${pacts.length ? ` Treaties: ${pacts.map((x) => `${name(x.with)} (${x.kind})`).join(", ")}.` : ""}`, "note"), el("p", near.children.length ? "Borders by land:" : "No land borders: reached by sea.", "note"), near];
   if (state && owner !== state.player) rows.push(el("div", undefined, "row")), rows[rows.length - 1].append(button(`Talk to ${name(owner)}`, () => open("chats")));
   box.replaceChildren(...rows);
   box.style.display = "block";
@@ -233,6 +265,6 @@ async function start() {
   $("out").onclick = () => map.zoomBy(1 / 1.6);
   $("home").onclick = () => (state ? showCountry(state.player) : map.reset());
   const kept = load();
-  if (kept?.state && homes.has(kept.state.player)) { state = kept.state; past = kept.past || []; play(); } else startScreen();
+  if (kept?.state && homes.has(kept.state.player)) { state = mend(kept.state); past = (kept.past || []).map(mend); play(); } else startScreen();
 }
 start();

@@ -30,7 +30,9 @@ export async function loadWorld(url) {
   const lines = arcs.map((pts) => { const l = new Path2D(); pts.forEach(([x, y], i) => (i ? l.lineTo(x, y) : l.moveTo(x, y))); return l; });
   const neighbours = new Map([...byId.keys()].map((id) => [id, []]));
   for (const [a, b] of w.neighbours) { neighbours.get(a).push(b); neighbours.get(b).push(a); }
-  return { width: w.width, height: w.height, countries: w.countries, source: w.source, provinces: byId, lines, sides, neighbours };
+  // a province on the coast has a line with nobody on the other side
+  const coast = new Set(sides.filter((ids) => ids.length === 1).map((ids) => ids[0]));
+  return { width: w.width, height: w.height, countries: w.countries, source: w.source, provinces: byId, lines, sides, neighbours, coast };
 }
 
 /** A gentle colour for every owner code, the same on every machine. */
@@ -151,7 +153,7 @@ export function worldMap(canvas, world, o) {
     return null;
   }
   const local = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-  canvas.addEventListener("pointerdown", (e) => { canvas.setPointerCapture(e.pointerId); touches.set(e.pointerId, local(e)); moved = 0; last = local(e); if (touches.size === 2) { const [a, b] = [...touches.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); } });
+  canvas.addEventListener("pointerdown", (e) => { try { canvas.setPointerCapture(e.pointerId); } catch { /* a pointer the page did not see start */ } touches.set(e.pointerId, local(e)); moved = 0; last = local(e); if (touches.size === 2) { const [a, b] = [...touches.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); } });
   canvas.addEventListener("pointermove", (e) => {
     if (!touches.has(e.pointerId)) return;
     const p = local(e), before = touches.get(e.pointerId);
@@ -177,6 +179,8 @@ export function worldMap(canvas, world, o) {
   fit(); redraw();
   return {
     redraw,
+    /** Paint again now: land has changed hands, so the picture is out of date. */
+    refresh: () => { drawn = null; redraw(); },
     zoomBy: (f) => zoom(f, canvas.clientWidth / 2, canvas.clientHeight / 2),
     reset: () => { fit(); redraw(); },
     /** Centre on a province and zoom so it fills about a third of the screen. */
