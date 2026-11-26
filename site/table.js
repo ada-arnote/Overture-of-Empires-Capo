@@ -6,6 +6,7 @@ import { EMBLEMS, emblem } from "../src/map/board.js";
 import { footer } from "./footer.js";
 import { canLock, linkGames, makeLink, newId, readLink } from "./link.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
+import { coach } from "./coach.js";
 import { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, turnKey, wake } from "./shell.js";
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
@@ -170,6 +171,7 @@ export function createTable(G) {
       $("status").textContent = T.away() ? `Waiting for ${NAMES[T.match.turn]}` : T.human() ? "" : `${NAMES[T.match.position.seat]} is thinking`;
       board.clear();
     } else G.panel(T);
+    lesson?.check();
   }
   function score() {
     const p = T.match.position, goal = G.goalOf(p), n = G.landOf(p), seats = T.kinds.length, over = T.match.turn === null;
@@ -227,7 +229,7 @@ export function createTable(G) {
     place();
   }
   const tally = (p) => Array.from({ length: T.kinds.length }, (_, s) => G.cellsOf(p, s));
-  const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, look: T.look, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds, look: T.look })); };
+  const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, look: T.look, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo && !lesson?.owns()) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds, look: T.look })); };
 
   /** A tick of a real-time game: played at once, drawn without waiting, saved now and then. */
   function flow(move) {
@@ -248,6 +250,7 @@ export function createTable(G) {
     // in a game by link, a move that rolled dice is final: nobody can look at the dice, take it back and choose again
     if (T.link && T.match.rolled) T.link.floor = T.match.list.length;
     log.push(...words);
+    lesson?.seen(events, person);
     if (person) mark = log.length;
     land.push(tally(T.match.position));
     watch(T.match.position);
@@ -549,6 +552,7 @@ export function createTable(G) {
     // starting again or leaving loses the game in play: the first press asks, the second does it
     const sure = (t, f) => { const b = add(t, f, "quiet danger"), go = b.onclick; b.onclick = () => { if (b.dataset.armed) go(); else { b.dataset.armed = "1"; b.textContent = `${t}: press again to be sure`; } }; };
     add("How to play", rules);
+    if (lesson) add("Teach me again", lesson.start);
     if (T.demo) return box;
     add("What happened so far", showLog);
     if (G.more) add(G.more.label, () => sheet(G.more.label, G.more.body(T)));
@@ -674,7 +678,10 @@ export function createTable(G) {
   $("start").onclick = () => launch(chosen(), chosen(true), G.kindsOf?.(chosen()) || setup.who.slice(0, setup.seats), passField.value.trim());
   // Play: one press starts a short game, you against bots, on the game's own preset (G.quick) or Traditional at the fewest seats and the shortest length
   const quick = { style: "classic", seats: Math.min(...many), ...(G.lengths[0] ? { rounds: G.lengths[0][0] } : {}), ...G.quick }, them = (G.kindsOf?.(quick) || Array(quick.seats)).length - 1;
-  $("quick").onclick = () => launch(quick, quick, G.kindsOf?.(quick) || ["you", ...Array(them).fill("normal")]);
+  const fast = () => launch(quick, quick, G.kindsOf?.(quick) || ["you", ...Array(them).fill("normal")]);
+  // the guided first game (coach.js), when the game has one: offered on the title card, at the first Play, and in the menu
+  const lesson = G.lesson && coach(T, G.lesson, G.key, () => begin(createMatch(G.game, { seed: G.lesson.seed, options: G.lesson.options }), [...G.lesson.kinds], null, -1, LOOK0.map((x) => [...x])));
+  $("quick").onclick = () => lesson?.first(fast) || fast();
   $("preset").replaceChildren(...[`${STYLES[quick.style]} rules, you against ${them || "the"} bot${them === 1 ? "" : "s"}.`, ...G.about[quick.style].split("\n").filter((x) => x.startsWith("Not "))].map((x) => el("span", x)));
   linkButton.onclick = linkSheet;
   sendCopy.onclick = copy;

@@ -82,11 +82,61 @@ function cards(T) {
   const sets = p.phase === "place" ? setsOf(p, s) : [];
   $("trades").replaceChildren(...sets.map((list) => { const b = el("button", list.map((c) => SUITS[suitOf(p, c)]).join(", ")); b.type = "button"; b.append(el("small", `hand in for ${setWorth(p, s, list)}`)); b.onclick = () => { if (T.ready()) T.play({ do: "trade", cards: list }); }; return b; }));
 }
+// ---- the guided first game: Traditional on a small archipelago, against one gentle bot ----
+const has = (ev, ...kinds) => ev.some((e) => kinds.includes(e.kind));
+const pos = (T) => T.match.position;
+/** A land of the player's that lacks one province, which can be taken from next door: [land, that province], or null. */
+function nearly(p) {
+  const b = boardOf(p);
+  let best = null;
+  b.lands.forEach((_, k) => {
+    const miss = p.owner.flatMap((o, i) => (b.region[i] === k && o !== p.seat ? [i] : []));
+    if (miss.length === 1 && b.near[miss[0]].some((j) => p.owner[j] === p.seat) && (!best || b.sizes[k] < b.sizes[best[0]])) best = [k, miss[0]];
+  });
+  return best;
+}
+/** The fight to suggest: [from, to] with the best chance, a province that makes a land whole first. */
+function aim(p) {
+  const key = nearly(p)?.[1];
+  let best = null, score = -1;
+  p.owner.forEach((o, from) => { if (o === p.seat) for (const to of boardOf(p).near[from]) if (p.owner[to] !== p.seat) { const s = (to === key ? 2e6 : 0) + (p.str[from] > 1 ? odds(p, from, to) : p.str[from]); if (s > score) { score = s; best = [from, to]; } } });
+  return best;
+}
+/** The neighbour with the best chance from a chosen province. */
+const best = (p, from) => boardOf(p).near[from].filter((to) => p.owner[to] !== p.seat).sort((x, y) => odds(p, from, y) - odds(p, from, x))[0];
+/** A land to show: one held whole, else the one nearest to whole. */
+function landToShow(p) {
+  const b = boardOf(p), whole = wholeOf(p, p.seat)[0], k = whole ?? nearly(p)?.[0] ?? b.lands.map((_, x) => x).sort((x, y) => p.owner.filter((o, i) => o !== p.seat && b.region[i] === x).length - p.owner.filter((o, i) => o !== p.seat && b.region[i] === y).length)[0];
+  return { k, whole: whole !== undefined, at: p.owner.findIndex((o, i) => b.region[i] === k && (whole !== undefined || o === p.seat)) };
+}
+const LESSON = {
+  seed: "lesson 2", options: { style: "classic", seats: 2, map: "isles" }, kinds: ["you", "easy"],
+  steps: [
+    { when: (T) => pos(T).phase === "setup", at: (T) => (source === null ? aim(pos(T))?.[0] : $("do")), or: () => $("sources"), done: (T, ev) => has(ev, "place"),
+      say: "The islands are dealt out between you and a gentle bot: choose a province of yours, on the map or in the list, then press Place to add strength there." },
+    { when: (T) => pos(T).phase !== "setup", at: () => $("info"), next: true,
+      say: "Each turn starts with new strength to place: 1 for every three provinces you hold, at least 3, and more for every land you hold whole: place it now, the same way." },
+    { when: (T) => pos(T).phase === "attack", at: (T) => (source === null ? aim(pos(T))?.[0] : target === null ? best(pos(T), source) ?? $("targets") : $("do")), or: () => $(source === null ? "sources" : "targets"), done: (T, ev) => (target !== null && pos(T).owner[target] !== pos(T).seat) || has(ev, "fight"),
+      say: "Now attack: choose a province of yours with 2 or more, then a neighbour that is not yours." },
+    { when: (T) => pos(T).phase === "attack" && target !== null, at: () => $("do"), done: (T, ev) => has(ev, "fight"), pass: (T, ev) => has(ev, "done", "move"),
+      say: (T) => `If you keep rolling, your chance to take ${nameOf(pos(T), target)} is ${percent(odds(pos(T), source, target))} in 100: press Roll it out, or Roll once for a single throw.` },
+    { when: (T) => pos(T).phase === "occupy", at: () => ($("amount").hidden ? $("do") : $("amount")), done: (T, ev) => has(ev, "occupy"), pass: (T) => pos(T).phase !== "occupy",
+      say: "It is yours: choose how many more move in, then press the button; those left behind guard where you came from." },
+    { when: (T) => pos(T).phase === "attack", at: () => $("end"), done: (T, ev) => has(ev, "done", "move"),
+      say: "Attack again as often as you like; when you have done enough, press End turn (moving once also ends it)." },
+    { when: (T) => pos(T).round > 1, at: (T) => landToShow(pos(T)).at, next: true,
+      say: (T) => { const p = pos(T), b = boardOf(p), { k, whole } = landToShow(p); return whole ? `You hold all of ${b.lands[k]}, so it adds ${bonusOf(b, k)} to what you place every turn; gold lines mark each land.` : `Gold lines mark the lands: hold every province of ${b.lands[k]} and it adds ${bonusOf(b, k)} to what you place every turn.`; } },
+    { when: (T) => pos(T).round > 1, at: () => ($("trades").children.length ? $("trades") : $("hand").hidden ? null : $("hand")), next: true, done: (T, ev) => has(ev, "trade"),
+      say: (T) => (setsOf(pos(T), pos(T).seat).length && pos(T).phase === "place" ? "You have a set: hand it in now for more strength to place." : `${pos(T).hands[pos(T).seat].length ? "You took land, so you drew a card" : "Take a province in a turn and you draw a card"}: three alike, or one of each, hand in for more strength.`) },
+    { at: () => $("land"), next: true,
+      say: "Win by holding every province: the bar shows each side's share, and the gold mark is the goal. That is the lesson; play on." },
+  ],
+};
 const NICE = { forts: ["Forts", "Spend 4 of what you muster to build one. It throws one more die in defence."], leaders: ["Leaders", "Each player has one. It adds 1 to your best die where it stands, and comes back two rounds after it is lost."], capitals: ["Capitals", "Hold more than half of them at the start of your turn and you win. They add 1 to the defender's best die."], secrets: ["Secret goals", "Each player is dealt one. It counts at the start of your turn."], events: ["Seasons", "Some rounds bring a harvest, a storm that closes the crossings, or unrest."] };
 
 createTable({
   game: banners, key: "banners", title: "Brass and Banners", won: "The land is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 4, lengths: [], pace: (p) => (p.owner.length > 40 ? 300 : 430),
-  cellsOf, goalOf, landOf, choose, thinking,
+  cellsOf, goalOf, landOf, choose, thinking, lesson: LESSON,
   about: {
     classic: "Traditional: inspired by Risk.\nThe standard world-conquest rules as players know them, on our own world map: all land dealt out, place your armies, attack with up to 3 dice against up to 2, move once, cards in sets for more armies (put a player out and you take theirs), and play until one player holds the world. Ours: the map, the lands and what they pay, and our own card values.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
     custom: "Custom: your own rules.\nSet every rule yourself: how the game starts, the dice, what each turn brings, the cards, how much land wins, the number of rounds, and how strongly empty land is held. Add any expansions on top.",

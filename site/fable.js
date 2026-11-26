@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Island Fable on the table: choose a hall or a unit, then what to build or where it goes.
-import { EXPANSIONS, NONE, SAFETY, SWITCHES, WOOD, boardOf, cellsOf, fable, farmPrice, goalOf, landOf, nameOf, raiseOf, territories, upkeepOf } from "../src/games/fable/rules.js";
+import { EXPANSIONS, NONE, SAFETY, SWITCHES, WOOD, act, boardOf, cellsOf, fable, farmPrice, goalOf, landOf, nameOf, raiseOf, territories, upkeepOf } from "../src/games/fable/rules.js";
 import { choose, thinking } from "../src/games/fable/bot.js";
 import { $, NAMES, PAPER, RGB, createTable, el, radio, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
@@ -32,12 +32,50 @@ function tap(T, i) {
   if (p.water[i]) return undefined;
   return toast(source ? "It cannot reach there, or the land is too well guarded." : "Choose one of your halls or units first.");
 }
+// ---- the guided first game: Traditional on a small round island, against one gentle bot ----
+const has = (ev, ...kinds) => ev.some((e) => kinds.includes(e.kind));
+const pos = (T) => T.match.position;
+/** The village of the richest territory. */
+const richest = (p) => territories(p, p.seat).reduce((a, b) => (b.purse > a.purse ? b : a), { purse: -1 }).hall;
+/** A unit of the player's that can still act: the chosen one, else the first. */
+const idle = (T) => (source?.[0] === "u" ? Number(source.slice(1)) : legal(T).find((m) => m.do === "move")?.from);
+/** Moves onto a rival's land; with `cut`, only those that split it. */
+function strikes(T, cut) {
+  const p = pos(T);
+  return legal(T).filter((m) => m.to !== undefined && p.owner[m.to] !== NONE && p.owner[m.to] !== p.seat && (!cut || act(p, m).events.some((e) => e.kind === "split")));
+}
+/** Point at what makes a strike: the unit or village, then where it goes. */
+function strike(T, cut) {
+  const list = strikes(T, cut), mine = list.find((m) => from(m) === source);
+  return mine ? mine.to : list[0] ? Number(from(list[0]).slice(1)) : null;
+}
+const LESSON = {
+  seed: "lesson 21", options: { style: "classic", seats: 2, isle: "round", size: "small" }, kinds: ["you", "easy"],
+  steps: [
+    { at: (T) => richest(pos(T)), or: () => $("sources"), done: (T, ev) => source?.[0] === "h" || has(ev, "raise", "clear", "take", "merge"),
+      say: "Joined land is a territory with one village, and the number on its tower is its purse: choose your village, on the map or in the list." },
+    { at: (T) => (source?.[0] === "h" ? $("do") : richest(pos(T))), or: () => $("sources"), done: (T, ev) => has(ev, "raise", "clear", "take", "merge"),
+      say: (T) => `A scout costs ${raiseOf(pos(T))} from that purse: choose where it stands, then press the button, or tap the hex.` },
+    { at: (T) => (source?.[0] === "u" ? $("wheres") : idle(T) ?? null), or: () => $("sources"), next: true, done: (T, ev) => has(ev, "move", "merge"),
+      say: "Units walk anywhere inside your own land and can still act after; move one onto another scout and they join into a guard." },
+    { at: () => document.querySelector("#seats li"), next: true,
+      say: (T) => `Every turn a territory earns 1 coin a hex without woods and pays its units' wages (a scout costs ${upkeepOf(pos(T), 1)}); a purse that cannot pay loses all its units.` },
+    { at: () => $("end"), done: (T, ev) => has(ev, "done"),
+      say: (T) => (pos(T).round === 1 && pos(T).rule.opening === "truce" ? "Nobody may take a rival's land in the first round, so press End turn now." : "Press End turn when you are done.") },
+    { when: (T) => pos(T).round > 1, at: (T) => strike(T, false), or: () => $(source ? "wheres" : "sources"), next: true, done: (T, ev) => ev.some((e) => e.kind === "take" && e.was !== NONE),
+      say: "Take a rival hex beside your land: your unit must outrank every unit on and beside it, and a village guards like a scout." },
+    { when: (T) => pos(T).round > 1, at: (T) => strike(T, true), or: () => $(source ? "wheres" : "sources"), next: true, done: (T, ev) => has(ev, "split"),
+      say: "Cut a rival's territory in two: the part left without its village has no purse, so its units starve next turn." },
+    { at: () => (give && !give.hidden ? give : $("land")), next: true,
+      say: "Win by being the last one standing: a bot concedes when it is far behind, and Concede lets you give up. That is the lesson; play on." },
+  ],
+};
 const SHAPES = [["round", "Round"], ["lakes", "With lakes"], ["crescent", "A crescent"], ["arms", "Long arms"], ["chain", "A chain of islands"]];
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
 createTable({
   game: fable, key: "fable", title: "The Island Fable", won: "The island is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 3, lengths: [[10, "Short"], [14, "Normal"], [18, "Long"]], pace: (p) => (p.classic ? 240 : 480),
-  cellsOf, goalOf, landOf, choose, thinking,
+  cellsOf, goalOf, landOf, choose, thinking, lesson: LESSON,
   about: {
     classic: "Traditional: inspired by Slay.\nThe hex island rules as players know them: the island is dealt out, villages keep purses, soldiers cost wages and merge into higher ranks, woods spread over idle land, you act as often as you like and move freely inside your own land, and you play until one is left or the rest concede. Ours: four ranks of our own, our prices and wages, forts of our own, and a first round of truce.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
     custom: "Custom: your own rules.\nSet every rule yourself: island shape and size, the start, actions a turn, ranks, prices, wages, woods, forts, the goal, the number of rounds, turn order, the first round and moving at home. Add any expansions on top.",
