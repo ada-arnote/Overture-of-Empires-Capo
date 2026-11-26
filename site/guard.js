@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
-// Daylight or lamplight, as the front page's lantern last left it; every page starts here.
+// Daylight or lamplight, as the table games' Light setting last left it; every page starts here. The front page has one theme.
 try { const t = localStorage.getItem("capo-tent-theme"); if (t === "dark" || t === "light") document.documentElement.dataset.theme = t; } catch { /* no page, or storage is off: the system's choice stands */ }
 
 export function guard() {

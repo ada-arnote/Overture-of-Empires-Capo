@@ -12,9 +12,10 @@ import { keepScript } from "./beats.js";
 export const SCENARIOS = [
   {
     id: "today",
-    title: "The world today",
+    // was "The world today"; the id stays, so saves and shared files still open (ruling 151)
+    title: "A clean slate",
     start: "2026-12-01",
-    blurb: "Every country on the map, as its borders stand. Play any of them, or one of your own.",
+    blurb: "The present day with nothing in place: every country on the map as its borders stand, and no wars or treaties yet. Play any of them, or one of your own.",
     opening: "The story begins on 1 December 2026, in a world much like ours. Borders are as the map shows them. Wars and treaties start empty in this build: the story begins from a clean slate, and the AI writes the world's troubles as it goes.",
   },
 ];

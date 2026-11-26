@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The front page: its footer, the lantern (daylight or lamplight, kept in this browser), the folding menu,
+// The front page, in one dark blue (ruling 151): its footer, the folding menu,
 // and the desk, where a real game of Brass and Banners is played by bots when the device can draw it (live.js).
 // The board on the desk is a link into that game; its Pause button sits outside the link, in the caption.
 import { footer } from "./footer.js";
@@ -7,21 +7,10 @@ import { VERSION } from "./config.js";
 
 footer();
 
-const root = document.documentElement, $ = (id) => document.getElementById(id), lantern = $("lantern"), dusk = matchMedia("(prefers-color-scheme: dark)");
+const $ = (id) => document.getElementById(id);
 // guard() empties the page when it is shown inside another site; then there is nothing more to do
-if (lantern) {
-  root.classList.add("js");
-  const night = () => (root.dataset.theme ? root.dataset.theme === "dark" : dusk.matches);
-  const show = () => lantern.setAttribute("aria-pressed", String(night()));
-  try { const kept = localStorage.getItem("capo-tent-theme"); if (kept === "dark" || kept === "light") root.dataset.theme = kept; } catch { /* storage may be off */ }
-  show();
-  dusk.addEventListener("change", show);
-  lantern.addEventListener("click", () => {
-    const next = night() ? "light" : "dark";
-    root.dataset.theme = next;
-    show();
-    try { localStorage.setItem("capo-tent-theme", next); } catch { /* kept for this visit only */ }
-  });
+if ($("burger")) {
+  document.documentElement.classList.add("js");
   $("version").textContent = `Version ${VERSION}`; // the front page names its version only; the build stamp is for the game pages
   menu();
   saved();

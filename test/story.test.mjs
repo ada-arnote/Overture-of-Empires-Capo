@@ -871,7 +871,7 @@ test("a game in an alternate world: its borders are the ground it stands on, the
   };
   const fresh = newWorldGame("TWN", "nation", "alt-1", { scenario: sc });
   assert.deepEqual([fresh.owners, Object.keys(fresh.base).length, fresh.date, fresh.scenario, fresh.treaties.length], [{}, 10, "2026-12-01", "althist-yangtze", sc.treaties.length], "nothing has changed hands yet: the preset's borders are the base");
-  assert.equal(newWorldGame("PER", "nation", "x").alt, undefined, "the world today has no alternate world");
+  assert.equal(newWorldGame("PER", "nation", "x").alt, undefined, "a clean slate has no alternate world");
   const { g, world, G } = play("alt-1");
   // on the rebased map the south is the Republic's own land, by this world's names
   assert.deepEqual([world.countries.TWN, world.countries.CHN, world.provinces.get("CHN-1819").country, world.provinces.get("CHN-1819").home], ["Republic of China", "People's Republic of China", "TWN", "CHN"]);
@@ -890,7 +890,7 @@ test("a game in an alternate world: its borders are the ground it stands on, the
   assert.match(prompt, /Land that has changed hands: none near the player/);
   assert.deepEqual(altLines({ alt: { turn: "T.", lands: {}, gone: ["AUT", "HUN"] } }, (c) => (c === "HUN" ? 2 : 0)), ["- This world is an alternate history, invented for this story. Where history turned: T.", "- Not countries in this world (others hold their land; never use these codes): AUT"]);
   assert.deepEqual(altLines({}), []);
-  assert.doesNotMatch(worldPrompt(newWorldGame("PER", "nation", "x"), { name: (c) => c, neighbours: () => [], size: () => 1, geo: geoOf(newWorldGame("PER", "nation", "x")), places: [] }, [], "2027-01-01"), /alternate history/, "the world today is told as before");
+  assert.doesNotMatch(worldPrompt(newWorldGame("PER", "nation", "x"), { name: (c) => c, neighbours: () => [], size: () => 1, geo: geoOf(newWorldGame("PER", "nation", "x")), places: [] }, [], "2027-01-01"), /alternate history/, "a clean slate is told as before");
   assert.ok(placesFor(g, G, [...world.provinces.keys()]).some((l) => /^- CHN-1808 Hunan \(TWN; /.test(l)), "places name the holder this world gives");
   // replay: the same seed and the same moves give the same game, to the letter
   assert.equal(JSON.stringify(play("alt-1").g), JSON.stringify(g));

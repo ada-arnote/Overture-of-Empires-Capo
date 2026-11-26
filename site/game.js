@@ -16,7 +16,7 @@ import { layPresets, rebase } from "../src/story/overlay.js";
 import { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacter, scenarioFrom, scenarioText } from "../src/story/scenarios.js";
 import { askPrompt, chatPrompt, councilPrompt, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
 // presets hook: ready-made starts and the worlds they are set on
-import { KINDS, PRESETS, checkSetting, madeWorld, settingScenario, staged, worldKey } from "../src/story/presets.js";
+import { FIRST, KINDS, PRESETS, checkSetting, madeWorld, settingScenario, staged, startOrder, worldKey } from "../src/story/presets.js";
 import { loadWorld, ownerColour, unpackWorld, worldMap } from "./worldmap.js";
 // 3D hook: what stands on the lit map
 import { mapPieces } from "./mappieces.js";
@@ -92,8 +92,10 @@ const SHELF = "capo-scenarios-1";
 const shelf = () => { try { return JSON.parse(localStorage.getItem(SHELF) || "[]"); } catch { return []; } };
 const shelve = (list) => { try { localStorage.setItem(SHELF, JSON.stringify(list.slice(-12))); } catch { toast("This browser would not keep the scenario; it works for this visit."); } };
 // ---- presets hook: ready-made starts from src/story/presets.js, and the map each one is played on ----
-const allScenarios = () => [...SCENARIOS, ...PRESETS.filter((p) => !p.broken), ...shelf()];
-const baseScen = () => allScenarios().find((x) => x.id === draft.scenario) || SCENARIOS[0];
+// ruling 151: "Late 2026" comes first and is chosen when the screen opens; the clean slate follows it
+const allScenarios = () => [...startOrder(SCENARIOS, PRESETS.filter((p) => !p.broken)), ...shelf()];
+const firstId = () => allScenarios()[0].id;
+const baseScen = () => allScenarios().find((x) => x.id === draft.scenario) || allScenarios()[0];
 const scen = () => (draft ? staged(baseScen(), draft.seeds[draft.scenario]) : null);
 let earth = null, on = null; // the real map, fetched when first needed; which world is shown now ("" is the real one)
 /** Show the world a game or scenario is set on: one made from its seed, or the real one. False when it cannot be made. */
@@ -287,7 +289,7 @@ let stepShown = "scenario";
 const STEPS = [["scenario", "Scenario"], ["country", "Country"], ["you", "You"], ["begin", "Begin"]];
 
 function startScreen() {
-  draft = draft || { step: "scenario", scenario: SCENARIOS[0].id, kind: "map", country: null, own: { name: "", code: "", colour: PALETTE[0], history: "", provinces: new Set() }, mode: "nation", character: blankCharacter(), fill: null, seeds: {} };
+  draft = draft || { step: "scenario", scenario: firstId(), kind: "map", country: null, own: { name: "", code: "", colour: PALETTE[0], history: "", provinces: new Set() }, mode: "nation", character: blankCharacter(), fill: null, seeds: {} };
   stage();
   const box = $("start-box"), pills = el("div", undefined, "row"), at = STEPS.findIndex(([k]) => k === draft.step);
   // while picking on the map, the wizard shrinks to a bar so the map can be tapped, even on a phone
@@ -315,13 +317,14 @@ function stepScenario(box) {
   const kept = load(), list = el("div", undefined, "modes"), mine = shelf();
   let head = "";
   for (const s of allScenarios()) {
-    const l = el("label"), r = el("input"), t = el("span"), opened = mine.some((x) => x.id === s.id), kind = opened ? "Opened from files" : KINDS[s.kind] || "";
-    if (kind !== head) list.append(el("h3", head = kind)); // presets hook: a heading for each kind of start
+    // the two present-day starts lead with no heading; the rest go under a heading for each kind
+    const l = el("label"), r = el("input"), t = el("span"), opened = mine.some((x) => x.id === s.id), lead = s.id === FIRST || SCENARIOS.includes(s), kind = opened ? "Opened from files" : lead ? "" : KINDS[s.kind] || "";
+    if (kind !== head && (head = kind)) list.append(el("h3", kind)); // presets hook: a heading for each kind of start
     Object.assign(r, { type: "radio", name: "scenario", value: s.id, checked: s.id === draft.scenario });
     r.onchange = () => choose(s.id);
     t.append(el("b", s.title), el("small", `${s.alt ? "Fiction. " : ""}${s.blurb || ""}${opened ? ` From a file; starts ${fmtDate(s.start)}.` : ""}`));
     l.append(r, t);
-    if (opened) l.append(button("Remove", () => { shelve(shelf().filter((x) => x.id !== s.id)); if (draft.scenario === s.id) return choose(SCENARIOS[0].id); startScreen(); }));
+    if (opened) l.append(button("Remove", () => { shelve(shelf().filter((x) => x.id !== s.id)); if (draft.scenario === s.id) return choose(firstId()); startScreen(); }));
     list.append(l);
   }
   const file = el("input"); file.type = "file"; file.accept = ".json,application/json"; file.hidden = true;
@@ -518,7 +521,7 @@ function topBar() {
   const date = el("span", undefined, "date"); date.append(el("b", fmtDate(state.date)), el("small", `Turn ${state.turn}`));
   const go = button(calling ? "Waiting..." : "Advance", advance, "go"); go.append(icon("go")); go.disabled = !!calling;
   const menu = button("", () => open(sheet === "game" ? null : "game"), "ic"); menu.append(icon("game")); menu.setAttribute("aria-label", "Game: saves, scenarios and the AI"); menu.title = "Game";
-  top.replaceChildren(who, el("span", MODES[state.mode][0], "mode"), ...(state.sandbox ? [el("span", "Sandbox", "mode sandbox")] : []), date, jumpPick, ...length, go, menu);
+  top.replaceChildren(who, el("span", MODES[state.mode][0], "mode"), ...(state.sandbox ? [el("span", "Sandbox", "mode sandbox")] : []), date, jumpPick, ...length, ...connectLink(), go, menu);
 }
 
 const DOCK = [["actions", "Actions"], ["chats", "Chats"], ["ledger", "Ledger"], ["advisors", "Advisors"], ["master", "Game Master"]];
@@ -537,6 +540,7 @@ function open(which) {
   sheet = which;
   const box = $("sheet");
   dock();
+  if (was === "game" && which !== "game") topBar(); // an AI connected or let go in the Game menu shows or hides Connect an AI
   if (!which) { box.classList.remove("open"); land(was === "game" ? $("top").querySelector("button[aria-label^=Game]") : $("dock").children[DOCK.findIndex(([k]) => k === was)]); return; }
   if (which === "ledger" && state.seen !== state.turn) { state.seen = state.turn; save(); dock(); }
   box.replaceChildren();
@@ -566,7 +570,7 @@ function actions(box) {
   hints.append(...suggest(state, geo()).map(({ note, ...o }) => { const li = el("li"); li.append(el("span", `${o.text} ${note[0].toUpperCase()}${note.slice(1)}.`), button("Order", () => order(o))); return li; }));
   for (const t of ["Strengthen the army.", "Spend on schools and hospitals."]) ideas.append(button(t, () => { state.actions = [...(state.actions || []), t]; save(); open("actions"); }));
   const go = el("div", undefined, "row");
-  go.append(button("Add", add), button(jump.key === "custom" ? `Advance ${jump.n} ${jump.unit}` : `Advance: ${JUMPS.find((j) => j[0] === jump.key)[1].toLowerCase()}`, advance, "go"));
+  go.append(button("Add", add), button(jump.key === "custom" ? `Advance ${jump.n} ${jump.unit}` : `Advance: ${JUMPS.find((j) => j[0] === jump.key)[1].toLowerCase()}`, advance, "go"), ...connectLink());
   // offers as cards: one tap accepts, and the rules carry it out whether or not the AI writes it down
   const offers = el("ul", undefined, "list");
   offers.append(...state.offers.map((o) => {
@@ -604,12 +608,19 @@ function rulesOnly() {
     own.length ? ` ${own.length} action${own.length > 1 ? "s" : ""} in your own words kept for a turn told by an AI.` : "");
   if (own.length) { state.actions = own; save(); }
 }
+/** With no AI, once the first rules-only turn is past: a small way to connect one, beside Advance (ruling 151). */
+function connectLink() {
+  if (connected(route) || !rulesSeen()) return [];
+  const b = button("Connect an AI", () => { open("game"); const p = $("sheet").querySelector(".aipanel"); p?.scrollIntoView?.({ block: "start" }); land(p?.querySelector("h3")); }, "connect");
+  b.title = "How Capo reaches an AI, in the Game menu";
+  return [b];
+}
 /** The in-page word before the first rules-only turn. */
 function rulesAskBox() {
   const wrap = el("div", undefined, "connectbox"), head = el("h3", "Play by the rules, no AI"), r = el("div", undefined, "row");
   r.append(button("Advance by the rules", rulesOnly, "go"), button("Back", () => { pending.rulesAsk = false; open("actions"); }));
   wrap.append(head, el("p", "Orders you gave by card are carried out: treaties, demands, attacks and missions from a province's card, and answers from your country's sheet. Other countries move by rule, and the Ledger shows what the rules decided. No story is told.", "note"),
-    el("p", "Actions in your own words are not read: they are kept for a turn told by an AI. This is asked once; after this the button moves the world at once.", "note"), r);
+    el("p", "Actions in your own words are not read: they are kept for a turn told by an AI. This is asked once; after this Advance moves the world at once, and Connect an AI beside it, or the Game menu, sets one up.", "note"), r);
   setTimeout(() => { if (wrap.isConnected) { wrap.scrollIntoView?.({ block: "start" }); land(head); } }, 0);
   return wrap;
 }
@@ -643,6 +654,8 @@ function advance() {
   const g = geo();
   const auto = jump.key === "auto";
   pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, across: seaNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]), talk: talkLines(state, { name }), disputes: disputeLines() }, acts, to, auto), to, auto, actions: acts };
+  // with no AI, only the first Advance in this browser asks; after that the rules move the world at once (ruling 151)
+  if (!connected(route) && rulesSeen()) return rulesOnly();
   open("actions");
   if (connected(route)) viaAddress();
 }
@@ -1023,7 +1036,7 @@ const GUIDE = [
   [() => $("map"), "The province card", () => "Tap a foreign province to open its card. From there you propose treaties, make demands, attack when at war and send missions, and the card shows the rules' answer or the odds before you order. These orders work with no AI at all."],
   [dockButton(0), "1. Decide", () => "Give orders from the cards, or write what you do in Actions, in your own words, as many as you like. Ideas are there to start you off."],
   [() => $("top").querySelector("select"), "2. Choose how far", () => "Jump a week, a month, a year, any length, or until something happens."],
-  [() => $("top").querySelector("button.go"), "3. Advance", () => "With no AI, choose Play by the rules: your card orders are carried out and other countries move by rule. To have each turn told as a story, connect an AI in the Game menu: a service with your own key (some have free tiers) or an AI on your own computer."],
+  [() => $("top").querySelector("button.go"), "3. Advance", () => "With no AI, the first Advance asks once: play by the rules, or connect an AI. After that Advance moves the world by the rules at once: your card orders are carried out and other countries move by rule. To have each turn told as a story, use Connect an AI beside Advance, or the Game menu: a service with your own key (some have free tiers) or an AI on your own computer."],
   [dockButton(2), "4. Read what happened", () => "The Ledger shows the events, the papers, and what the rules decided: which moves stood, which were refused, and why. The AI tells the story; the rules keep the facts."],
   [dockButton(3), "Your people", () => "Form a council in Advisors and choose whom you trust. In Chats, talk with any country. Words only: only actions change the world."],
   [dockButton(4), "Game Master", () => "Tell the story something true, or change the world by hand. Hand changes mark the game Sandbox, and every one can be undone."],

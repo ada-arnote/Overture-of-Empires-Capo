@@ -24,6 +24,8 @@ html, body { height: 100%; margin: 0; overflow: hidden }
 #top .mode.sandbox { border-color: var(--danger); color: var(--danger) }
 #top .date { margin-left: auto; display: grid; justify-items: end; line-height: 1.15 } #top .date b { font: 700 var(--fs-3)/1.2 var(--sans); color: var(--text) } #top .date small { color: var(--text-3); font-size: var(--fs-1) }
 #top button.go { min-height: var(--tap-lg); padding: 0 20px; font-size: 17px }
+/* with no AI, a quiet way to connect one beside Advance (ruling 151) */
+button.connect { min-height: var(--tap); padding: 0 6px; border: 0; background: none; color: var(--text-2); font-size: var(--fs-2); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: .2em; white-space: nowrap } button.connect:hover { color: var(--text) }
 
 /* the dock: five places, each with its own mark */
 #dock { position: fixed; left: 8px; bottom: max(10px, env(safe-area-inset-bottom)); display: flex; gap: 4px; padding: 5px; z-index: 4; max-width: calc(100vw - 70px) }
@@ -85,7 +87,7 @@ html, body { height: 100%; margin: 0; overflow: hidden }
   #start h1 + .row button { font-size: var(--fs-1) }
   /* two lines: who you are, the date and the menu; then how you play, the length and Advance */
   #top { left: 0; right: 0; border-radius: 0; gap: 6px 8px } #top::before { content: ""; order: 1; flex-basis: 100%; margin-top: -6px }
-  #top .who { min-width: 0; font-size: 20px } #top :is(.mode, select, input, button.go) { order: 2 }
+  #top .who { min-width: 0; font-size: 20px } #top :is(.mode, select, input, button.connect, button.go) { order: 2 }
   #top .mode { margin: 0 auto 0 6px } #top select.plain { flex: 0 1 auto; min-width: 0; max-width: 29vw } #top button.go { min-height: var(--tap); padding: 0 12px; gap: 4px }
   #dock { left: 0; right: 0; bottom: 0; max-width: none; padding: 4px 4px max(4px, env(safe-area-inset-bottom)); border-radius: 0; border-width: 1px 0 0; } #dock button { flex: 1 1 0; min-width: 0; padding: 6px 2px 5px; line-height: 1.1 }
   #sheet { left: 0; top: auto; width: 100vw; height: 60vh; bottom: 70px; border-radius: var(--r-3) var(--r-3) 0 0 } #card { right: 8px; bottom: 78px; width: calc(100vw - 16px); box-sizing: border-box }
