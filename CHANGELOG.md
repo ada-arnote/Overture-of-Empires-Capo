@@ -2,6 +2,22 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.9.0 (2026-11-26): the boards go 3D
+
+### Every board on a war table, and Capo's world in relief
+
+**Players**
+- **The table games open tilted, in 3D.** Tiles have moulded rims, lamp-lit sides and tops shaped by the land: grain rows, clay pits, dunes, salt pans, rock and hills. Water has depth, a pale shore and gloss; wet ink shines. The board sits on a walnut table with a blue baize inlay. Flat, the old look, is one tap away.
+- **Pieces and scenery stand on the board.** Armies, towns, villages, trees and ships are 3D models made in code, with soft shadows from one lamp. Numbers stay sharp on plates. In Brass and Banners the last dice lie on the table.
+- **Capo's world as a lit relief map.** Real heights light the land; the sea has shelves and deeps; ice, rivers and lakes are drawn. Tilt rises as you zoom in. Capitals, armies, armour, guns, fleets, air wings and commanders stand on the map, and fronts are red lines. It works on the real world, alternate histories and invented worlds. A switch beside the zoom buttons returns to the flat map.
+- **Board style**, a new row in Settings: War table (the default), Campaign map (ink on chart paper, pen-stroke slopes, wooden blocks) and Clear (flat light, heavier edges, larger outlined pieces). Capo follows the same choice.
+- **Phones.** A device that reports itself as weak opens Flat; any other device that runs slowly in its first frames drops to Flat and remembers it.
+
+**Contributors**
+- `src/map`: a geometry kit, 48 code-made models (about 8,300 triangles in all), instanced drawing with shared depth, a lamp-view shadow map redrawn only when a piece moves; `src/map/style.js` holds the styles as data (ruling 147). `lab/models.html` shows every model.
+- Capo's relief is baked offline from ETOPO 2022 (CC0) and Natural Earth (public domain) by `tools/relief.py` into `maps/relief.webp` and `maps/waters.json`; `tools/models.mjs` converts glTF models into a pack for the new, empty `site/models/` shelf. The gate allows `.webp` and `.bin` in `maps/`.
+- Build notes: `docs/design/3d/build.md` (private).
+
 ## v0.8.2 (2026-11-26): Grain and Glass trades like the best
 
 ### Grain and Glass: a trade desk, counter-offers, rolls in view, sharper bots
