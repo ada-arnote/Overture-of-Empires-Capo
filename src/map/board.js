@@ -338,6 +338,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   let rest = 1, asked = {};
   function layout(free = {}) {
     const { fill = false, at = -1, ...room } = (asked = free);
+    const kept = zoom > 1 && zoom !== rest ? [cam.cx, cam.cy] : null; // hook (Inch lane, p8): a view zoomed away from its opening keeps its middle when the panels change size
     cam.set({ W: host.clientWidth || 1, H: host.clientHeight || 1, left: 0, right: 0, top: 0, bottom: 0, ...room });
     cam.set({ tilt: L.tilt, yaw: L.yaw, q: near() });
     cam.fit(ends, 14);
@@ -345,7 +346,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     const tall = (cam.H - cam.top - cam.bottom) / (m.h * cam.s), was = rest; // a wide map on a narrow screen starts closer in
     rest = fill ? Math.max(1, Math.min(3, tall / Math.max(0.3, cam.ct), (1.25 * cam.W) / (m.w * cam.s))) : picture && cam.W < 821 && tall > 1.6 ? Math.min(2.6, tall) : 1;
     zoomed(zoom === 1 || zoom === was ? rest : zoom);
-    if (zoom === rest) centre(at);
+    if (zoom === rest) centre(at); else if (kept) { cam.cx = kept[0]; cam.cy = kept[1]; }
     under.style.width = over.style.width = cam.W + "px";
     under.style.height = over.style.height = cam.H + "px";
     redraw();

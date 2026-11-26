@@ -47,7 +47,7 @@ createTable({
     { key: "live", label: "Clock", normal: false, only: ["custom"], values: [[false, "Turns"], [true, "Real time"]] },
     { key: "map", label: "Map", normal: "world", only: ["classic", "custom"], when: LIVE, values: [["world", "The world"], ["continents", "Continents"], ["islands", "Islands"]] },
     { key: "nations", label: "Nations", normal: 20, only: ["classic", "custom"], when: LIVE, values: [[8, "8"], [12, "12"], [20, "20"], [30, "30"], [50, "50"]] },
-    { key: "rivals", label: "Rivals", normal: "gentle", only: ["classic", "custom", "ours"], when: LIVE, values: [["gentle", "Gentle"], ["even", "Even"], ["hard", "Hard"]] },
+    { key: "rivals", label: "Rivals", normal: "gentle", only: ["classic", "custom", "ours"], when: LIVE, values: [["gentle", "Gentle"], ["even", "Normal"], ["hard", "Hard"]] }, // "even" is the saved name of Normal
     { key: "inks", label: "Inks", normal: "chosen", only: ["custom"], when: CUSTOM, values: [["chosen", "You choose yours"], ["drawn", "Drawn for everyone"], ["off", "Off"]] },
     { key: "places", label: "Places", normal: "normal", only: ["custom"], when: CUSTOM, values: [["none", "None"], ["few", "Few"], ["normal", "Normal"], ["many", "Many"]] },
     { key: "ages", label: "Ages and marks", normal: true, only: ["custom"], when: CUSTOM, values: [[true, "On"], [false, "Off"]] },

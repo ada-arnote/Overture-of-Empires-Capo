@@ -2,6 +2,25 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### An Inch of Ink: a clock that waits, rivals that teach, attacks you can see, and a truce
+
+**Players**
+- **The clock waits for your first order.** After you choose where to start, nothing moves until you send something (or press Start the clock), so reading the panel costs nothing. The panel says so.
+- **Space pauses whatever has the keyboard**, the Send button included; it no longer sends again. The button reads Pause, Resume, or Start the clock.
+- **Find me moves the map.** It brings the map in close on your land and slides it to the middle, then glows your border as before.
+- **On a phone the map starts close on your land** once you have it (and when a saved game is brought back), instead of the whole world in a strip. A zoomed map now keeps its place when the panel grows or shrinks.
+- **Attacks on you are plain.** As a rival starts one, the log says "Holm attacks you." (once in half a minute for each attacker), the edge of the board flashes red, your border with it glows and an arrow comes in from its land. Land of yours that is surrounded and soaking away is told and shown the same way. When you are out, the log and the sheet say who took your last land and when; the log also says when you finish a nation.
+- **Rivals retuned.** Gentle: rivals grow at eight tenths of your pace, leave you alone for two minutes, then only one attacks you at a time. Normal (the old Even, renamed): eight tenths, 30 seconds, two at once. Hard: nine tenths, a 20-second opening truce, three at once. Measured with a scripted newcomer: Gentle won 87 games in 100 in a median 4:11 (it was always won, in 2:55, without losing a cell); Normal 15 in 100 (was 1); Hard 3 in 100 and alive at one minute 98 times in 100 (was out in a median 0:52). How to play gives each tier's numbers from the rules' own table.
+- **A truce with one neighbour.** Choose a neighbour in the list and offer it a truce: for a minute neither of you can attack the other, kept by the rules, and attacks between you come home whole. One at a time, a minute's wait after one ends, and a neighbour holding more than twice your strength will not take one. No alliances.
+
+**Contributors**
+- Inch rules are version 11 (saves from 10 do not open): `RIVALS` gains `pile` (most rivals attacking you at once) and new numbers, Hard and Normal gain a truce; the `pact` move, `p.pact`, `PACT`, `pactOn` and `pactWhy`; events `attacked` (a rival starts an attack on you, by land or boat), `soaked` (your land soaks into a rival this tick), `pact`, `pactend`, and `out` now carries `by`. Games stay whole-number and replay from seed and moves.
+- `tools/inchtiers.mjs`: three scripted players (newcomer, steady, regular) against each tier, and the ink fairness table with bots on every seat. `node tools/inchtiers.mjs players` and `node tools/inchtiers.mjs inks`.
+- Ink fairness, 1,000 bots-only games a map at Normal, ink win share against share of nations: world 0.71 to 1.26, continents 0.60 to 1.46, islands 0.82 to 1.28 (version 10's Even, same harness: 0.76 to 1.41, 0.66 to 1.47, 0.70 to 1.32). All inside 0.5 to 1.5.
+- `src/map/board.js`: a marked one-line hook so that `layout` keeps a zoomed view's middle (for the board's owner to keep or replace).
+
 ## v0.9.1 (2026-11-26): the cold review fixes, a bag of dice, plans worth buying
 
 ### The table games' shell: a board that fills the screen, a game kept safe, take back that hides nothing

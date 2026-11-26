@@ -13,7 +13,7 @@ const store = (list) => { try { localStorage.setItem(KEY, JSON.stringify(list.sl
 const won = (l) => l.filter((g) => g.won);
 const TITLES = [
   ["First Blot", "Win a game", (l) => won(l).length > 0],
-  ["Steady Hand", "Win against even rivals", (l) => won(l).some((g) => g.rivals === "even")],
+  ["Steady Hand", "Win against normal rivals", (l) => won(l).some((g) => g.rivals === "even")],
   ["Ten Pages", "Play ten games", (l) => l.length >= 10],
   ["Quick Quill", "Win within five minutes of game time", (l) => won(l).some((g) => g.ticks <= 600)],
   ["Late Seal", "Win after seven minutes, in the last age", (l) => won(l).some((g) => g.ticks > 840)],
@@ -45,7 +45,7 @@ export function ledger(again) {
     const here = l.filter((g) => g.map === m), w = won(here), fast = Math.min(...w.map((g) => g.ticks));
     if (here.length) line(`${name}: ${here.length} played, ${w.length} won${w.length ? `, fastest ${clock(fast)}` : ""}.`);
   }
-  for (const t of TIERS) { const here = l.filter((g) => g.rivals === t); if (here.length) line(`Against ${t} rivals: ${here.length} played, ${won(here).length} won.`); }
+  for (const t of TIERS) { const here = l.filter((g) => g.rivals === t); if (here.length) line(`Against ${t === "even" ? "normal" : t} rivals: ${here.length} played, ${won(here).length} won.`); }
   const inks = INKS.filter((_, k) => won(l).some((g) => g.ink === k)).map((k) => k.name);
   if (inks.length) line(`Won with ${inks.join(", ")}.`);
   const t = el("ul");
