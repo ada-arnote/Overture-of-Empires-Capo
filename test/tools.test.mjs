@@ -30,6 +30,7 @@ function withFiles(files, opts) {
 }
 const stops = (files, re, opts) => { const { bad } = withFiles(files, opts); assert.ok(bad.some((b) => re.test(b)), `wanted ${re}, got ${JSON.stringify(bad)}`); };
 const clear = (files) => assert.deepEqual(withFiles(files).bad, []);
+const noted = (files, re) => { const { bad, note } = withFiles(files); assert.ok(note.some((n) => re.test(n)), `wanted a note ${re}, got ${JSON.stringify(note)}`); assert.ok(!bad.some((b) => re.test(b)), "a size guide never stops"); }; // sizes are reported, not limited (ruling 141)
 
 test("the gate is clear for what is here now", () => assert.deepEqual(check(root).bad, []));
 test("a release needs the licence text and a source address", () => {
@@ -61,13 +62,13 @@ test("outside addresses, markup from text, and code from text are stopped", () =
 });
 test("file types, sizes, marks and dashes", () => {
   stops({ "site/x.exe": "x" }, /do not ship/);
-  stops({ "site/x.json": "x".repeat(250001) }, /over the 250 kB/);
+  noted({ "site/x.json": "x".repeat(250001) }, /above the 250 kB guide/);
   stops({ "site/x.js": "export const a = 1;\n" }, /licence mark/);
   stops({ "site/x.html": "a \u2014 b" }, /em dash/);
   let noise = ""; const d = chance(seedState("noise")); while (noise.length < 200000) noise += d.below(2 ** 32).toString(36);
-  stops({ "src/core/x.js": `${MARK}export const x = "${noise}";\n` }, /src\/core: .*over 12 kB/);
+  noted({ "src/core/x.js": `${MARK}export const x = "${noise}";\n` }, /src\/core: .*above its 12 kB guide/);
 });
-test("line ceilings hold", () => stops({ "src/core/x.js": MARK + "export const a = 1;\n".repeat(1).concat("\n".repeat(800)) }, /lines is over its ceiling/));
+test("line counts are reported against their guide", () => noted({ "src/core/x.js": MARK + "export const a = 1;\n".repeat(1).concat("\n".repeat(800)) }, /lines, above its \d+-line guide/));
 test("borrowed pictures and adapted code need their rows", () => {
   stops({ "site/icons/a.png": "x" }, /no row in CREDITS/);
   stops({ "site/a.js": `${MARK}// Adapted from somewhere\n` }, /no row in ADAPTED/);
@@ -101,15 +102,15 @@ test("MIT and ISC icons pass with their notice text and copyright line in NOTICE
 });
 test("assets have their own budgets, counted at full size and apart from the site code budget", () => {
   const credit = (f) => `${f},A,Someone,CC0-1.0,https://example.org,2026-11-26,none\n`, s = "site/sounds/a.ogg", f = "site/fonts/a/a.woff2", i = "site/icons/a.webp";
-  stops({ [s]: "x".repeat(61000), "CREDITS.csv": HEAD + credit(s) }, /site\/sounds: 61 kB is over its 60 kB asset budget/);
+  noted({ [s]: "x".repeat(61000), "CREDITS.csv": HEAD + credit(s) }, /site\/sounds: 61 kB, above its 60 kB asset guide/);
   { const { bad } = withFiles({ [s]: "x".repeat(59000), "CREDITS.csv": HEAD + credit(s) }); assert.deepEqual(bad.filter((x) => /site\/sounds|^site:/.test(x)), [], JSON.stringify(bad)); } // 59 kB fits the sound shelf and is not counted as site code (the whole-site total is checked elsewhere)
-  stops({ [f]: "x".repeat(111000), "CREDITS.csv": HEAD + credit(f), "NOTICES.md": NOTES + "\nsite/fonts/a/\n" }, /site\/fonts: \d+ kB is over its 110 kB/);
-  stops({ [i]: "x".repeat(26000), "CREDITS.csv": HEAD + credit(i) }, /site\/icons: \d+ kB is over its 25 kB/);
+  noted({ [f]: "x".repeat(111000), "CREDITS.csv": HEAD + credit(f), "NOTICES.md": NOTES + "\nsite/fonts/a/\n" }, /site\/fonts: \d+ kB, above its 110 kB/);
+  noted({ [i]: "x".repeat(26000), "CREDITS.csv": HEAD + credit(i) }, /site\/icons: \d+ kB, above its 25 kB/);
   stops({ "site/a.ogg": "x", "CREDITS.csv": HEAD + credit("site/a.ogg") }, /ship only from/);
 });
 test("textures have their own 32 kB budget, at full size, for WebP and PNG tiles only", () => {
   const credit = (f) => `${f},A,Someone,CC0-1.0,https://example.org,2026-11-26,none\n`, t = "site/textures/a.webp", used = check(root).assets["site/textures"];
-  stops({ [t]: "x".repeat(32001 - used), "CREDITS.csv": HEAD + credit(t) }, /site\/textures: \d+ kB is over its 32 kB asset budget/);
+  noted({ [t]: "x".repeat(32001 - used), "CREDITS.csv": HEAD + credit(t) }, /site\/textures: \d+ kB, above its 32 kB asset guide/);
   clear({ [t]: "x".repeat(31999 - used), "CREDITS.csv": HEAD + credit(t) });
   stops({ "site/textures/a.svg": "<svg/>", "CREDITS.csv": HEAD + credit("site/textures/a.svg") }, /only \.webp \.png \.txt go in site\/textures/);
   stops({ "site/textures/a.png": "x" }, /no row in CREDITS/);
@@ -117,7 +118,7 @@ test("textures have their own 32 kB budget, at full size, for WebP and PNG tiles
 test("screenshots have their own 120 kB budget, at full size, for WebP only", () => {
   const credit = (f) => `${f},A,Someone,own work,taken from this project's pages,2026-11-26,none
 `, t = "site/shots/a.webp", used = check(root).assets["site/shots"];
-  stops({ [t]: "x".repeat(120001 - used), "CREDITS.csv": HEAD + credit(t) }, /site\/shots: \d+ kB is over its 120 kB asset budget/);
+  noted({ [t]: "x".repeat(120001 - used), "CREDITS.csv": HEAD + credit(t) }, /site\/shots: \d+ kB, above its 120 kB asset guide/);
   stops({ "site/shots/a.png": "x", "CREDITS.csv": HEAD + credit("site/shots/a.png") }, /only \.webp \.txt go in site\/shots/);
 });
 test("site pages keep their rule: nothing by default, trusted types, fonts and sounds only from their own site", () => {

@@ -30,13 +30,15 @@ An early build, at an unlisted address: https://ada-arnote.github.io/Overture-of
 
 **Fonts, icons, sounds, textures and screenshots.** Only CC0, CC BY, OFL 1.1, MIT or ISC, never made by an AI, each with a row in `CREDITS.csv`. They ship only from these folders, which the gate counts apart from code (`.woff2`, `.ogg`, `.mp3`, `.png`, `.webp` at full size, since they do not compress), all inside the 700 kB total:
 
-| Folder | Holds | Budget |
+| Folder | Holds | Guide |
 |---|---|---|
 | `site/fonts/<family>/` | `.woff2`, with the licence text and copyright line in a `.txt` beside it (the font's own `OFL.txt`) | 110 kB |
 | `site/icons/` (a folder per set) | `.svg`, `.png`, `.webp`: icons, signs and ornament | 25 kB |
 | `site/sounds/` | `.ogg`, `.mp3` | 60 kB |
 | `site/textures/` | `.webp`, `.png`: small seamless tiles (the walnut of the front page) | 32 kB |
 | `site/shots/` | `.webp`: screenshots taken from our own game pages (own work) | 120 kB |
+
+Sizes are guides, not limits (ruling 141): the gate reports every area's size on each run and notes anything above its guide, but never stops a release for size. Efficiency stays a focus: keep pages light, load heavy things only when needed.
 
 Each font, and each OFL, MIT or ISC file, is named in `NOTICES.md` by its path or its folder; MIT and ISC sets also keep their copyright line and permission text there. Pages name an asset by its whole path from `site/`, in quotes or `url()` (`"sounds/move.ogg"`, `url("fonts/spectral/spectral-400.woff2")`), never built from pieces: `node tools/bundle.mjs` points `play/` pages back at `../site/` and puts the file itself inside each `dist/play-*.html` as `data:`, so every font a page names makes each double-click page larger by about four thirds of its size. Page rules allow fonts and sounds only from the page's own site (`font-src 'self'; media-src 'self'`), or from inside the page (`data:`) for double-click pages.
 

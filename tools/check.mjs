@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const KB = 1000;
+// Guides, not limits (ruling 141): going past one prints a note, never stops a release. Efficiency stays a focus.
 export const LIMITS = {
   file: 250 * KB, // any one shipped file, as stored
   code: { "src/core": 12 * KB, "src/map": 45 * KB, "src/games": 90 * KB, "src/story": 90 * KB, site: 200 * KB }, // compressed. site: 200, the owner's ruling (rulings 121, 125, 134 and 137)
@@ -56,7 +57,7 @@ export function check(root, { release = false } = {}) {
     else { for (const k of Object.keys(code)) if (name.startsWith(k + "/")) code[k] += zip; }
     if (MEDIA.has(ext) && !shelf) bad.push(`${name}: fonts, pictures and sounds ship only from ${Object.keys(assets).join("/, ")}/`);
     if (!TYPES.has(ext)) bad.push(`${name}: files of type "${ext}" do not ship`);
-    if (size > LIMITS.file) bad.push(`${name}: ${Math.round(size / KB)} kB is over the ${LIMITS.file / KB} kB limit for one file`);
+    if (size > LIMITS.file) note.push(`${name}: ${Math.round(size / KB)} kB, above the ${LIMITS.file / KB} kB guide for one file`);
     if (![".js", ".css", ".html", ".svg"].includes(ext)) continue;
     const text = body.toString("utf8"), plain = ext === ".js" ? bare(text) : text;
     // a page's own rule: nothing by default, trusted types kept, fonts and sounds from its own site only
@@ -94,15 +95,17 @@ export function check(root, { release = false } = {}) {
   for (const f of walk(path.join(root, "maps"))) {
     const zip = gzipSync(readFileSync(f)).length;
     if (path.extname(f) !== ".json") bad.push(`${rel(f)}: only map data in JSON goes in maps/`);
-    else if (zip > LIMITS.map) bad.push(`${rel(f)}: ${Math.round(zip / KB)} kB compressed is over the ${LIMITS.map / KB} kB limit for one map`);
+    else if (zip > LIMITS.map) note.push(`${rel(f)}: ${Math.round(zip / KB)} kB compressed, above the ${LIMITS.map / KB} kB guide for one map`);
   }
-  for (const [k, n] of Object.entries(code)) if (n > LIMITS.code[k]) bad.push(`${k}: ${Math.round(n / KB)} kB compressed is over ${LIMITS.code[k] / KB} kB`);
-  for (const [k, n] of Object.entries(assets)) if (n > LIMITS.assets[k].max) bad.push(`${k}: ${Math.round(n / KB)} kB is over its ${LIMITS.assets[k].max / KB} kB asset budget`);
-  if (total > LIMITS.first) bad.push(`everything shipped: ${Math.round(total / KB)} kB compressed is over ${LIMITS.first / KB} kB`);
+  for (const [k, n] of Object.entries(code)) if (n > LIMITS.code[k]) note.push(`${k}: ${Math.round(n / KB)} kB compressed, above its ${LIMITS.code[k] / KB} kB guide`);
+  for (const [k, n] of Object.entries(assets)) if (n > LIMITS.assets[k].max) note.push(`${k}: ${Math.round(n / KB)} kB, above its ${LIMITS.assets[k].max / KB} kB asset guide`);
+  if (total > LIMITS.first) note.push(`everything shipped: ${Math.round(total / KB)} kB compressed, above the ${LIMITS.first / KB} kB guide`);
+  // sizes are reported, not limited (ruling 141): efficiency stays a focus, so every check shows where the weight is
+  note.push(`sizes: ${Object.entries(code).map(([k, n]) => `${k} ${(n / KB).toFixed(1)}`).join(", ")}; ${Object.entries(assets).map(([k, n]) => `${k.replace("site/", "")} ${(n / KB).toFixed(1)}`).join(", ")} (kB)`);
 
   for (const [area, max] of Object.entries(LIMITS.lines)) {
     const n = walk(path.join(root, area)).filter((f) => /\.m?js$/.test(f)).reduce((s, f) => s + readFileSync(f, "utf8").split("\n").length, 0);
-    if (n > max) bad.push(`${area}: ${n} lines is over its ceiling of ${max}`);
+    if (n > max) note.push(`${area}: ${n} lines, above its ${max}-line guide`);
     else if (n > max * 0.9) note.push(`${area}: ${n} of ${max} lines`);
   }
 
@@ -154,6 +157,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
   for (const n of r.note) console.log("note  " + n);
   for (const b of r.bad) console.log("STOP  " + b);
-  console.log(`${r.files} files ship, ${(r.total / KB).toFixed(1)} kB compressed of ${LIMITS.first / KB}. ${r.bad.length ? r.bad.length + " to fix" : "All clear"}.`);
+  console.log(`${r.files} files ship, ${(r.total / KB).toFixed(1)} kB compressed (guide ${LIMITS.first / KB}, not a limit). ${r.bad.length ? r.bad.length + " to fix" : "All clear"}.`);
   process.exitCode = r.bad.length ? 1 : 0;
 }
