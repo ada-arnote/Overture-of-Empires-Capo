@@ -2,6 +2,7 @@
 // The world turn: the player's actions go to an AI, which writes what happened across the world and proposes
 // moves (wars, peace, treaties, attacks, handovers). The rules in worldrules.js decide which moves stand.
 import { VERBS, worldFacts } from "./worldrules.js";
+import { STANDING, WORDS } from "./talk.js";
 
 export const JUMPS = [["1w", "A week", 0, 7], ["1m", "A month", 1, 0], ["3m", "Three months", 3, 0], ["6m", "Six months", 6, 0], ["1y", "A year", 12, 0]];
 export const MODES = {
@@ -28,7 +29,8 @@ export function jumpFrom(iso, key) {
 export function newWorldGame(player, mode, seed, extra = {}) {
   const sc = extra.scenario || { id: "today", start: "2026-12-01", opening: "" };
   return { v: 1, scenario: sc.id, opening: sc.opening, player, mode: MODES[mode] ? mode : "nation", seed, date: sc.start, turn: 1,
-    owners: { ...(extra.owners || {}) }, custom: extra.custom || null, character: extra.character || null, wars: [], treaties: [], offers: [], log: [] };
+    owners: { ...(extra.owners || {}) }, custom: extra.custom || null, character: extra.character || null, wars: [], treaties: [], offers: [], log: [],
+    standing: STANDING[mode] || 5, council: null, chats: [], counsel: [] };
 }
 
 // what each mode lets the player's actions do
@@ -40,6 +42,8 @@ const ROLE = {
 
 /** Months a jump covers, a week counting as a quarter: how many attacks a country may make in it. */
 export const monthsOf = (key) => { const j = JUMPS.find((x) => x[0] === key) || JUMPS[1]; return j[2] + j[3] / 30; };
+
+const trustedOf = (g) => (g.council?.trusted && g.council.seats[g.council.trusted]) || null;
 
 export const turnCode = (g) => `t${g.turn}-${g.seed.slice(0, 6)}`;
 
@@ -75,6 +79,7 @@ export function worldPrompt(g, world, actions, to) {
     ...worldFacts(g, world.geo),
     "", "RECENT (the last turns, oldest first)",
     ...(recent.length ? recent : ["- nothing yet: this is the first turn"]),
+    "", "SAID THIS TURN (chats and counsel: words only, nothing agreed is done until a MOVE)", ...(world.talk?.length ? world.talk : ["- nothing"]),
     "", "PLACES (province id, name, holder)", ...world.places,
     "", "ACTIONS (what the player does in this turn)",
     ...(actions.length ? actions.map((a, i) => `${i + 1}. ${a}`) : ["- none: the player waits and watches"]),
@@ -83,6 +88,7 @@ export function worldPrompt(g, world, actions, to) {
     "MOVE: m1 | action number or 0 | country code | VERB | target | detail or -",
     "EVENT: YYYY-MM-DD | country code | two or three sentences",
     "SUMMARY: one sentence on the turn as a whole",
+    ...(trustedOf(g) ? [`ADVICE: one word from ${WORDS.join(", ")} | one sentence in the voice of ${trustedOf(g).name}, the player's trusted adviser, on what comes next`] : []),
     "END",
   ].join("\n");
 }
@@ -92,10 +98,15 @@ export function readWorldReply(text, g, known, to) {
   const lines = String(text || "").split(/\r?\n/).map((l) => l.trim().replace(/^[*_`>-]+\s*/, "").replace(/\s*[*_`]+$/, "")), dropped = [], events = [];
   const turn = lines.find((l) => /^TURN\s*:/i.test(l));
   if (!turn || turn.replace(/^TURN\s*:\s*/i, "").trim() !== turnCode(g)) return { matched: false, events, moves: [], summary: "", dropped };
-  let summary = "";
+  let summary = "", advice = null;
   const moves = [];
   for (const l of lines) {
     if (/^SUMMARY\s*:/i.test(l)) { summary = l.replace(/^SUMMARY\s*:\s*/i, "").slice(0, 300); continue; }
+    if (/^ADVICE\s*:/i.test(l)) {
+      const [word, ...rest] = l.replace(/^ADVICE\s*:\s*/i, "").split("|").map((s) => s.trim());
+      if (WORDS.includes((word || "").toLowerCase()) && trustedOf(g)) advice = { word: word.toLowerCase(), text: rest.join(" | ").slice(0, 400), name: trustedOf(g).name };
+      continue;
+    }
     if (/^MOVE\s*:/i.test(l)) {
       const [, action, country, verb, target, detail] = l.replace(/^MOVE\s*:\s*/i, "").split("|").map((s) => s.trim());
       const code = (s) => ALIASES[(s || "").toUpperCase()] || (s || "").toUpperCase();
@@ -113,5 +124,5 @@ export function readWorldReply(text, g, known, to) {
     events.push({ date, at: code, text: said });
   }
   events.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  return { matched: true, events, moves, summary, dropped };
+  return { matched: true, events, moves, summary, advice, dropped };
 }

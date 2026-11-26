@@ -6,6 +6,7 @@ import { JUMPS, MODES, jumpFrom, monthsOf, newWorldGame, readWorldReply, turnCod
 import { applyMoves, mightOf, placesFor, treatiesOf, warsOf } from "../src/story/worldrules.js";
 import { crossesLine } from "../src/story/rules.js";
 import { CHARACTER, SCENARIOS, SOON, characterPrompt, readCharacter } from "../src/story/scenarios.js";
+import { STANDING, askPrompt, chatPrompt, councilPrompt, moveFavour, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
 import { loadWorld, ownerColour, worldMap } from "./worldmap.js";
 import { ask, forgetKey, loadRoute, saveRoute } from "./ai.js";
 
@@ -16,7 +17,7 @@ const button = (text, on, cls = "plain") => { const b = el("button", text, cls);
 let world, map, state = null, past = [], route = loadRoute(), sheet = null, pending = null, jump = "1m", hush = 0, ledgerTab = "events";
 
 // games saved before wars and treaties existed get empty lists
-const mend = (s) => ({ wars: [], treaties: [], offers: [], ...s });
+const mend = (s) => ({ wars: [], treaties: [], offers: [], chats: [], counsel: [], council: null, standing: STANDING[s.mode] || 5, ...s });
 const save = () => { try { localStorage.setItem(KEEP, JSON.stringify({ state, past: past.slice(-10) })); } catch { /* the game still runs for this visit */ } };
 const load = () => { try { return JSON.parse(localStorage.getItem(KEEP) || "null"); } catch { return null; } };
 function toast(t) { const b = $("toast"); b.textContent = t; b.classList.add("on"); clearTimeout(hush); hush = setTimeout(() => b.classList.remove("on"), 3400); }
@@ -298,7 +299,7 @@ function advance() {
   if (bad.length) return toast(`Action ${bad.join(", ")} is refused: nothing sexual involving minors.`);
   const to = jumpFrom(state.date, jump);
   const g = geo();
-  pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]) }, acts, to), to, actions: acts, months: monthsOf(jump) };
+  pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]), talk: talkLines(state, { name }) }, acts, to), to, actions: acts, months: monthsOf(jump) };
   if (route.route === "paste") { open("actions"); return; }
   viaAddress();
 }
@@ -312,7 +313,8 @@ function finish(text) {
   if (!r.events.length) { pending.error = `No event could be read${r.dropped.length ? `: ${r.dropped.slice(0, 3).join("; ")}` : ""}.`; open("actions"); return; }
   past.push(structuredClone(state));
   const receipt = applyMoves(state, r.moves, geo(), pending.actions, pending.months);
-  state.log.push({ from: state.date, to: pending.to, actions: pending.actions, events: r.events, summary: r.summary, dropped: r.dropped, receipt });
+  receipt.push(...moveFavour(state, receipt));
+  state.log.push({ from: state.date, to: pending.to, actions: pending.actions, events: r.events, summary: r.summary, dropped: r.dropped, receipt, advice: r.advice });
   state.log = state.log.slice(-60);
   state.date = pending.to; state.turn++; state.actions = [];
   pending = null; save(); topBar(); ledgerTab = "events"; open("ledger"); map.refresh();
@@ -339,6 +341,7 @@ function ledger(box) {
     li.append(when, el("p", e.text)); feed.append(li);
   }
   box.append(el("p", last.summary, "note"), feed);
+  if (last.advice) box.append(el("h3", `Your trusted adviser, ${last.advice.name}`), el("p", `${last.advice.word}: ${last.advice.text}`));
   if (last.receipt?.length) {
     const list = el("ul", undefined, "list");
     list.append(...last.receipt.map((x) => { const li = el("li"); li.append(el("span", `${x.ok ? "✓" : "✗"} ${x.text}.`)); if (!x.ok) li.style.opacity = ".7"; return li; }));
@@ -358,13 +361,152 @@ function worldTab(box) {
 }
 
 const later = (title, what) => (box) => box.append(el("h2", title), el("p", what, "note"));
-const advisors = later("Advisors", "Your council comes in a later step: advisers who follow your character's standing, give counsel before each turn, and gain or lose favour with what you do.");
 const master = later("Game Master", "Comes in a later step: tell the story what is true, in canonical or free mode, with undo.");
-function chats(box) {
-  const near = landNeighbours(state.player);
-  box.append(el("h2", "Chats"), el("p", "Talking with other countries comes in a later step: one chat per country or group, each a separate AI call, and what is said feeds the next turn.", "note"));
-  if (near.length) box.append(el("h3", "Your neighbours by land"), el("p", near.map(name).join(", ")));
+// ---- asking an AI for chats and counsel: by address straight away, or by paste inside the open panel ----
+let asking = null;
+function askAI(prompt, take, where) {
+  asking = { prompt, take, where, error: "" };
+  if (route.route !== "address") { open(where); return; }
+  toast("Asking the AI...");
+  ask(route, prompt).then((text) => settle(text)).catch((e) => { if (asking) { asking.error = e.message; open(where); } });
+  open(where);
 }
+function settle(text) {
+  const why = asking.take(text);
+  if (why) { asking.error = why; open(asking.where); return; }
+  const where = asking.where; asking = null; save(); open(where);
+}
+function askBox() {
+  const wrap = el("div"), out = Object.assign(el("textarea", undefined, "plain paste"), { value: asking.prompt, readOnly: true }), back = Object.assign(el("textarea", undefined, "plain paste"), { placeholder: "Paste the AI's whole reply here." });
+  out.setAttribute("aria-label", "The prompt"); back.setAttribute("aria-label", "The AI's reply");
+  const go = el("div", undefined, "row");
+  if (route.route === "address") go.append(button("Ask again", () => askAI(asking.prompt, asking.take, asking.where)));
+  go.append(button("Copy the prompt", async () => { try { await navigator.clipboard.writeText(asking.prompt); toast("Copied. Paste it into a new chat."); } catch { out.select(); } }), button("Read the reply", () => settle(back.value), "go"), button("Cancel", () => { const w = asking.where; asking = null; open(w); }));
+  wrap.append(el("h3", route.route === "paste" ? "Paste this into a new chat" : "Waiting for the AI"), ...(asking.error ? [el("p", asking.error, "warn")] : []), out, back, go);
+  return wrap;
+}
+const talkWorld = () => ({ name });
+
+// ---- chats ----
+let chatOpen = null;
+function chats(box) {
+  box.append(el("h2", state.mode === "citizen" ? "Contacts" : "Chats"));
+  if (asking?.where === "chats") { box.append(askBox()); return; }
+  const chat = state.chats.find((c) => c.id === chatOpen);
+  if (chat) { chatView(box, chat); return; }
+  box.append(el("p", "Talk with any country, a group of them, or a person. Words only: what is said reaches the next turn, and anything agreed still needs an action of yours.", "note"));
+  const list = el("ul", undefined, "list");
+  for (const c of state.chats) { const li = el("li"); li.append(el("span", `${chatTitle(c)} (${c.messages.length} message${c.messages.length === 1 ? "" : "s"})`), button("Open", () => { chatOpen = c.id; open("chats"); })); list.append(li); }
+  if (state.chats.length) box.append(list);
+  box.append(el("h3", "Start a chat"));
+  const pick = Object.assign(el("input", undefined, "plain"), { type: "search", placeholder: "Add a country" }), dl = el("datalist"), chosen = [];
+  dl.id = "chat-countries";
+  const byName = new Map([...homes.keys(), ...(state.custom ? [state.custom.code] : [])].filter((c) => c !== state.player).map((c) => [name(c), c]));
+  dl.append(...[...byName.keys()].sort().map((n) => { const o = document.createElement("option"); o.value = n; return o; }));
+  pick.setAttribute("list", "chat-countries"); pick.setAttribute("aria-label", "Add a country to the chat");
+  const shown = el("p", "Nobody yet.", "note"), person = Object.assign(el("input", undefined, "plain"), { type: "text", maxLength: 80, placeholder: "Or a person, for example: Marta Ríos, union leader" });
+  person.setAttribute("aria-label", "A person to talk to");
+  const show = () => { shown.textContent = chosen.length ? `With: ${chosen.map(name).join(", ")}` : "Nobody yet."; };
+  const add = (c) => { if (c && !chosen.includes(c) && chosen.length < 4) { chosen.push(c); show(); } };
+  pick.onchange = () => { add(byName.get(pick.value)); pick.value = ""; };
+  const quick = el("div", undefined, "row");
+  for (const c of [...new Set([...warsOf(state, state.player), ...treatiesOf(state, state.player).map((t) => t.with), ...landNeighbours(state.player)])].slice(0, 6)) quick.append(button(name(c), () => add(c)));
+  const go = el("div", undefined, "row");
+  go.append(button("Start", () => {
+    const p = person.value.trim();
+    if (!chosen.length && !p) return toast("Add a country or name a person.");
+    if (crossesLine([p]).length) return toast("Refused: nothing sexual involving minors.");
+    const c = { id: `c${Date.now().toString(36)}`, with: chosen.slice(), person: p, messages: [] };
+    state.chats.push(c); chatOpen = c.id; save(); open("chats");
+  }, "go"));
+  box.append(pick, dl, quick, shown, person, go);
+}
+const chatTitle = (c) => [...c.with.map(name), ...(c.person ? [c.person] : [])].join(", ");
+function chatView(box, chat) {
+  const feed = el("ol", undefined, "feed");
+  for (const m of chat.messages) { const li = el("li"); li.append(el("div", m.who === "you" ? "You" : chat.with.includes(m.who) ? name(m.who) : m.who, "note"), el("p", m.text)); feed.append(li); }
+  const input = Object.assign(el("textarea", undefined, "plain"), { rows: 3, maxLength: 800, placeholder: "Say something." });
+  input.setAttribute("aria-label", "Your message");
+  const go = el("div", undefined, "row");
+  go.append(button("Send", () => {
+    const t = input.value.trim(); if (!t) return;
+    if (crossesLine([t]).length) return toast("Refused: nothing sexual involving minors.");
+    const prompt = chatPrompt(state, talkWorld(), chat, t);
+    askAI(prompt, (text) => {
+      const got = readChat(text, chat, name);
+      if (!got.length) return "No answer could be read: each must be a REPLY line from someone in the chat.";
+      chat.messages.push({ who: "you", text: t, turn: state.turn }, ...got.map((g) => ({ ...g, turn: state.turn })));
+      chat.messages = chat.messages.slice(-60);
+      return "";
+    }, "chats");
+  }, "go"), button("All chats", () => { chatOpen = null; open("chats"); }), button("Close this chat", () => { state.chats = state.chats.filter((c) => c !== chat); chatOpen = null; save(); open("chats"); }));
+  box.append(el("h3", chatTitle(chat)), feed, input, go, el("p", "Words only. To act on what is agreed, write it as an action.", "note"));
+}
+
+// ---- advisors ----
+function advisors(box) {
+  const seats = seatsFor(state), council = state.council;
+  box.append(el("h2", state.mode === "citizen" ? "Your circle" : "Your council"));
+  if (asking?.where === "advisors") { box.append(askBox()); return; }
+  if (!council) {
+    box.append(el("p", `Five people to advise you, from the circle someone of your standing has: ${seats.map(([, l]) => l.toLowerCase()).join(", ")}. An AI invents them once; they stay, and their favour moves with what you do.`, "note"));
+    const r = el("div", undefined, "row");
+    r.append(button("Form your council", () => formCouncil(seats), "go"));
+    box.append(r); return;
+  }
+  for (const [seat, label] of seats) {
+    const m = council.seats[seat], card = el("div", undefined, "feed");
+    const li = el("li");
+    if (!m) {
+      li.append(el("div", `${label}: empty`, "note"));
+      const r = el("div", undefined, "row");
+      r.append(button("Find someone", () => formCouncil(seats, [[seat, label]])));
+      for (const f of council.former.filter((x) => x.seat === seat && x.why === "dismissed").slice(-2)) r.append(button(`Bring back ${f.name}`, () => { council.seats[seat] = { ...f, favour: Math.max(-2, f.favour) }; council.former = council.former.filter((x) => x !== f); save(); open("advisors"); }));
+      li.append(r);
+    } else {
+      const trusted = council.trusted === seat;
+      li.append(el("div", `${label}${trusted ? ", your trusted adviser" : ""}`, "note"), el("b", m.name), el("p", `${m.traits}. Skill ${m.skill} of 5. Wants ${m.wants}. Favour ${m.favour > 0 ? "+" : ""}${m.favour}.${m.likes.length ? ` Likes you to ${m.likes.map((v) => v.toLowerCase()).join(", ")}.` : ""}${m.hates.length ? ` Dislikes ${m.hates.map((v) => v.toLowerCase()).join(", ")}.` : ""}`));
+      const r = el("div", undefined, "row");
+      if (!trusted) r.append(button("Trust most", () => { council.trusted = seat; save(); open("advisors"); }));
+      r.append(button("Ask", () => askCouncil([[seat, m]])), button("Dismiss", () => { if (!confirm(`Dismiss ${m.name}?`)) return; council.former.push({ ...m, seat, left: state.date, why: "dismissed", favour: m.favour - 2 }); council.seats[seat] = null; if (trusted) council.trusted = null; save(); open("advisors"); }));
+      li.append(r);
+    }
+    card.append(li); box.append(card);
+  }
+  const q = Object.assign(el("textarea", undefined, "plain"), { rows: 2, maxLength: 600, placeholder: "Ask the whole council, for example: Should we answer Chile's insult with sanctions?" });
+  q.id = "council-question"; q.setAttribute("aria-label", "Your question");
+  const r = el("div", undefined, "row");
+  r.append(button("Ask the whole council", () => askCouncil(Object.entries(council.seats).filter(([, m]) => m)), "go"));
+  box.append(el("h3", "Ask"), q, r);
+  if (!council.trusted) box.append(el("p", "Choose whom you trust most: they speak every turn, at no extra call.", "note"));
+  const said = (state.counsel || []).slice(-3).reverse();
+  if (said.length) {
+    box.append(el("h3", "Recent counsel"));
+    for (const c of said) { const f = el("ol", undefined, "feed"); f.append(...c.says.map((s) => { const li = el("li"); li.append(el("div", `${s.name}: ${s.word}`, "note"), el("p", s.text)); return li; })); box.append(el("p", `Turn ${c.turn}: ${c.question}`, "note"), f); }
+  }
+  if (council.former.length) box.append(el("p", `Former members: ${council.former.map((f) => `${f.name} (${f.why})`).join(", ")}.`, "note"));
+}
+function formCouncil(seats, open1 = seats) {
+  askAI(councilPrompt(state, talkWorld(), seats, open1), (text) => {
+    const got = readCouncil(text, open1);
+    if (!Object.keys(got).length) return "No member could be read: each must be a MEMBER line for an open seat.";
+    if (crossesLine(Object.values(got).map((m) => `${m.name} ${m.traits} ${m.wants}`)).length) return "Refused: nothing sexual involving minors.";
+    state.council = state.council || { seats: Object.fromEntries(seats.map(([k]) => [k, null])), trusted: null, former: [] };
+    for (const [k, m] of Object.entries(got)) state.council.seats[k] = { ...m, since: state.date };
+    return "";
+  }, "advisors");
+}
+function askCouncil(members) {
+  const q = ($("council-question")?.value || "").trim() || "What should we do next?";
+  if (crossesLine([q]).length) return toast("Refused: nothing sexual involving minors.");
+  askAI(askPrompt(state, talkWorld(), members, q), (text) => {
+    const says = readAsk(text, members);
+    if (!says.length) return "No answer could be read: each must be a SAYS line from an adviser asked.";
+    state.counsel = [...(state.counsel || []), { turn: state.turn, question: q, says }].slice(-30);
+    return "";
+  }, "advisors");
+}
+
 
 function gameSheet(box) {
   const pick = el("select", undefined, "plain"), base = el("input", undefined, "plain"), model = el("input", undefined, "plain"), key = el("input", undefined, "plain"), keep = el("input");

@@ -35,7 +35,7 @@ export const treatiesOf = (g, c) => g.treaties.filter((t) => t.pair.split("|").i
 export function applyMoves(g, moves, geo, actions, months) {
   const receipt = [], used = {}, attacks = {}, me = g.player;
   let rivals = 0;
-  const say = (m, ok, why) => receipt.push({ ok, text: `${geo.name(m.country)}: ${why}` });
+  const say = (m, ok, why) => receipt.push({ ok, text: `${geo.name(m.country)}: ${why}`, verb: m.verb, country: m.country });
   for (const m of moves) {
     // a citizen does not command the country: its government moves on its own, like any other
     const c = m.country, citizen = g.mode === "citizen", isMe = c === me && !citizen, verb = m.verb;
