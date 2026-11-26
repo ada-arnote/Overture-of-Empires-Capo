@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-/3JtkG96+1sesH14TpuDSLYC7ThxleedtvI8Pcpru98='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-DSWgj8fRXfjfJibR4H9s74UvpCVCr1A9Bbx1QdN23S4='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Brass and Banners</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -683,7 +683,7 @@ const { fingerprint } = $m[6];
 const { Refusal, createMatch } = $m[7];
 
 const LAYOUT = 2, MOST_MOVES = 4000, MOST_BYTES = 32000, CHECK = 8;
-const ROLES = ["host", "friend", "normal", "easy"];
+const ROLES = ["host", "friend", "normal", "easy", "hard"];
 const broken = () => new Refusal("link", "that link is broken or not complete");
 
 function put(out, n) { // a whole number, seven bits to a byte
@@ -2467,7 +2467,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.7.1";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "f2a16ff6";
+const BUILD = "5c42fbaf";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -2844,9 +2844,9 @@ const $ = (id) => document.getElementById(id);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const THEME = "capo-tent-theme";
-const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["away", "A friend, by link"]];
+const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["hard", "Hard bot"], ["away", "A friend, by link"]];
 // gentle is the lessons' bot, not offered in the setup
-const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
+const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", hard: "Hard bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
 // what each table game grew from, named by its family of games only: no titles, characters or art of anyone else's
 const FAMILY = {
   banners: "classic world-conquest board games, where armies spread over a map and battles are fought with dice",
@@ -3010,7 +3010,7 @@ function createTable(G) {
     human: () => !!T.match && T.match.turn !== null && T.kinds[T.match.turn] === "you",
     ready: () => !T.demo && T.human() && !T.busy,
     solo: () => T.kinds.filter((k) => k === "you" || k === "away").length === 1 || (!!T.link && T.kinds.filter((k) => k === "you").length === 1),
-    play, refresh: panel, realtime: () => realtime(),
+    play, refresh: panel, realtime: () => realtime(), begin: (m, kinds) => begin(m, kinds), // begin: a game's own ladder starts its next step
   };
   /** Is this game played on a clock? Then there are no turns: no turn keys, no taking back, no turn banner. */
   function realtime(p = T.match?.position) {
@@ -3399,7 +3399,7 @@ function createTable(G) {
     // places
     let rows = ranked(Array.from({ length: names ? names.length : T.kinds.length }, (_, s) => ({ seat: s, won: r.winners.includes(s), score: G.cellsOf(p, s), fell: fell[s] })));
     if (names) rows = rows.filter((w, i) => i < 8 || mine(w.seat));
-    rows = rows.map((w) => ({ ...w, name: nameOf(w.seat), figures: [[G.unit || "Land", w.score], ...G.stats(p, w.seat), ...(rounds ? [["Rounds", w.fell ?? last]] : [])] }));
+    rows = rows.map((w) => ({ ...w, name: nameOf(w.seat), figures: [[G.unit || "Land", w.score], ...(G.figures?.(T, w.seat) || G.stats(p, w.seat)), ...(rounds ? [["Rounds", w.fell ?? last]] : [])] }));
     const scroll = el("div", undefined, "ranks"), table = el("table"), head = el("tr");
     head.append(...["Place", "Player", ...rows[0].figures.map(([k]) => k)].map((t) => { const th = el("th", t); th.scope = "col"; return th; }));
     table.append(head, ...rows.map((w) => {
@@ -3427,6 +3427,8 @@ function createTable(G) {
     change.onclick = () => { home(); $("own").open = true; };
     look.onclick = closeSheet;
     copyIt.onclick = async () => { try { await navigator.clipboard.writeText(text); copyIt.textContent = "Copied"; } catch { toast(text); } };
+    const onward = G.next?.(T); // a ladder's next step takes the main button's place
+    if (onward) { again.textContent = onward.label; again.onclick = () => { closeSheet(); onward.go(); }; }
     go.append(all, change, again); minor.append(look, copyIt);
     body.append(hero, scroll, c, go, minor);
     sheet(lost ? "Defeat" : people ? "Victory" : "The end", body, null, `end ${lost ? "lose" : "win"}`);
@@ -3554,7 +3556,7 @@ function createTable(G) {
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
       const li = el("li"), k = el("select");
-      k.append(...KINDS.map(([v, t]) => new Option(t, v)));
+      k.append(...KINDS.filter(([v]) => v !== "hard" || G.hard).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one
       k.value = setup.who[s];
       k.setAttribute("aria-label", NAMES[s]);
       k.onchange = () => { setup.who[s] = k.value; passLine(); };

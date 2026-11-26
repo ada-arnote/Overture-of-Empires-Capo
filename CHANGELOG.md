@@ -4,6 +4,23 @@ What changed in each tagged version of Overture of Empires: Capo, newest first. 
 
 ## Unreleased
 
+### The Island Fable: the voyage, guard numbers, a ledger, a hard bot
+
+**Players**
+- **The voyage.** A ladder of 24 named islands in four seas, for one player, from the title card. Each island is harder than the last: more rivals and better ones, larger and stranger islands, expansions, and a start less kind to you (six islands are grown for each step and one is kept, never one of the two worst for you). Winning opens the next two. Each has a par in rounds, your best result is kept in this browser, and the end screen offers Next island or Sail again.
+- **Guard numbers.** With a village or unit chosen, each guarded rival hex beside its land shows its guard, red where that village or unit cannot take it. Tapping a hex you cannot take says what guards it, from where, and what rank it takes.
+- **The purse before you spend it.** The move panel shows the chosen village's purse, what it earns and pays, and what the move you are aiming would leave, in red when the village could not pay next turn. It also says when a move cuts a rival's land in two or fells a village. End turn names a village that cannot pay, once, before it goes on.
+- **A hard bot**, in the setup and by link. It reads its rivals as well as itself and looks for the cut that starves them. Against the normal bot it wins 62 to 68 percent of two-player games (420 and 224 games) and 43 to 47 percent of three-player games where a fair share is 33.
+- **Villages have names**, our own, the same for a seed every time. The log and the lists use them.
+- **The count.** The end screen shows, for each player, the most land held, rival hexes taken and lost, scouts raised, units starved and cuts made; the menu shows the same during a game.
+- The status line says how many units can still act and how many villages can buy.
+- The line about where the Traditional rules come from has moved from the setup card to the end of How to play.
+- No rule changed: the Fable's rules version is still 8, so saves and links open as before and seat fairness is as last measured.
+
+**Contributors**
+- New: `src/games/fable/ladder.js` (the voyage's steps and how a step's island is chosen) and `names.js` (village names). `bot.js` has the `hard` tier and its reading, `keen`.
+- Hooks in `site/table.js`, each one line: a game with `hard: true` is offered the hard bot; `figures(T, seat)` gives the end table its own columns; `next(T)` may replace the end screen's main button; `T.begin(match, kinds)` starts a game from the game's own page. `src/core/link.js` accepts the role `hard`.
+
 ### An Inch of Ink: call an attack back, find yourself, a guided first minute, your game in figures
 
 **Players**

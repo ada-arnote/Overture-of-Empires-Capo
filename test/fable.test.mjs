@@ -3,9 +3,11 @@
 // no win rates, wages, turn orders or whole-game fingerprints are written down here.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chance, createMatch, seedState } from "../src/core/index.js";
+import { chance, createMatch, packGame, seedState, unpackGame } from "../src/core/index.js";
 import { CAIRN, EXPANSIONS, NONE, SAFETY, SWITCHES, WOOD, act, beats, boardOf, cellsOf, defence, fable, goalOf, groupsOf, raiseOf, territories, topOf, upkeepOf } from "../src/games/fable/rules.js";
-import { TIERS, choose, hopeless } from "../src/games/fable/bot.js";
+import { TIERS, choose, hopeless, keen, value } from "../src/games/fable/bot.js";
+import { villageName } from "../src/games/fable/names.js";
+import { ISLANDS, island, open, step, stepOf } from "../src/games/fable/ladder.js";
 import { SLOW, botGame, ended, passive, refused, replays, same, sameEachStep, slowOnly } from "./fixtures/bots.js";
 
 const STYLES = ["classic", "custom", "ours"]; // Traditional, Custom with its normal switches, Capo
@@ -245,4 +247,72 @@ test("with no round limit a game still ends: after the safety rounds the most la
   const m = passive(createMatch(fable, { seed: "idle", options: { seats: 2, style: "classic" } })), p = m.position;
   assert.equal(p.rule.limit, 0); assert.equal(p.round, SAFETY + 1); assert.ok(m.result.why.includes(String(SAFETY)));
   replays(m, [fable]);
+});
+
+// ---- the hard bot, village names and the voyage ----
+test("the hard bot reads its rivals: units and purses count against it, but not in a territory that cannot pay", () => {
+  const { mid } = cl, starving = strip({ units: [[mid[5], 3]] }), paid = structuredClone(starving);
+  paid.purse[mid[6]] = 40;
+  assert.ok(territories(starving, 1)[0].purse + territories(starving, 1)[0].net < 0, "the captain cannot be paid");
+  assert.equal(keen(starving, 0), value(starving, 0), "a unit that will starve is not counted");
+  assert.equal(keen(paid, 0), value(paid, 0) - (30 * 3 + 40), "a paid captain and a full purse are");
+  assert.ok(TIERS.includes("hard"));
+});
+test("the hard bot plays whole games in Traditional: every move legal, an end, and the save replays", () => {
+  for (const n of [2, 3]) {
+    const m = botGame(fable, choose, { seed: `hard ${n}`, options: { seats: n, style: "classic", size: "small" }, tiers: ["hard", "normal", "hard"], each: sound });
+    ended(m, n);
+    replays(m, [fable]);
+  }
+});
+test("the hard bot beats the normal one more often than not, over 40 small duels with the seats swapped", { skip: slowOnly }, () => {
+  let won = 0;
+  for (let i = 0; i < 40; i++) {
+    const hero = i % 2, m = botGame(fable, choose, { seed: `duel ${i}`, options: { seats: 2, style: "classic", size: "small" }, tiers: hero ? ["normal", "hard"] : ["hard", "normal"] });
+    if (ended(m, 2).winners.includes(hero)) won++;
+  }
+  assert.ok(won > 20, `hard won ${won} of 40`);
+});
+test("village names: every hex of the largest island would give a different one, and a seed gives the same names again", () => {
+  const p = createMatch(fable, { seed: "names", options: { seats: 6, style: "classic", size: "huge" } }).position, q = createMatch(fable, { seed: "names", options: { seats: 6, style: "classic", size: "huge" } }).position;
+  const all = p.owner.map((_, c) => villageName(p, c));
+  assert.equal(new Set(all).size, all.length);
+  assert.ok(all.every((n) => /^[A-Z][a-z]+$/.test(n)));
+  assert.deepEqual(all, q.owner.map((_, c) => villageName(q, c)));
+});
+test("the voyage: 24 steps that never ease, each a legal Traditional game for one player, grown the same way every time", () => {
+  const rank = { gentle: 0, easy: 1, normal: 2, hard: 3 }, hardness = (v) => v.kinds.slice(1).reduce((n, k) => n + rank[k] + 1, 0);
+  assert.equal(ISLANDS, 24);
+  assert.equal(new Set(Array.from({ length: ISLANDS }, (_, i) => step(i + 1).name)).size, ISLANDS, "every island has its own name");
+  const seas = [0, 1, 2, 3].map((s) => Array.from({ length: 6 }, (_, i) => step(s * 6 + i + 1)));
+  for (let s = 1; s < 4; s++) {
+    assert.ok(seas[s].reduce((n, v) => n + hardness(v), 0) > seas[s - 1].reduce((n, v) => n + hardness(v), 0), "each sea's rivals are harder than the last sea's");
+    assert.ok(Math.min(...seas[s].flatMap((v) => v.kinds.slice(1).map((k) => rank[k]))) >= Math.min(...seas[s - 1].flatMap((v) => v.kinds.slice(1).map((k) => rank[k]))));
+  }
+  for (let n = 1; n <= ISLANDS; n++) {
+    const v = step(n);
+    assert.equal(v.kinds[0], "you"); assert.equal(v.kinds.length, v.seats); assert.equal(v.options.style, "classic");
+    assert.ok(v.kinds.slice(1).every((k) => k in rank) && v.par >= 10);
+    assert.equal(createMatch(fable, { seed: `check ${n}`, options: v.options }).position.seats, v.seats, "its options are ones the game takes");
+  }
+  for (const n of SLOW ? Array.from({ length: ISLANDS }, (_, i) => i + 1) : [1, 7, 13]) {
+    const v = island(n), again = island(n);
+    assert.equal(stepOf(v.seed), n); assert.equal(v.seed, again.seed);
+    assert.equal(createMatch(fable, { seed: v.seed, options: v.options }).position.seat, 0, "the player moves first in round 1");
+  }
+  assert.equal(stepOf("series 4"), 0); assert.equal(stepOf("voyage 99 a"), 0);
+  assert.equal(open([]), 2); assert.equal(open([1, 2]), 4); assert.equal(open([24]), 24);
+});
+test("the voyage deals an early step kindly and a late one evenly: of six islands grown, the kept one is never one of the two worst for the player", () => {
+  const hand = (p, s) => { const ts = territories(p, s); return ts.reduce((n, t) => n + 2 * t.cells.length + t.purse, 0) + 4 * Math.max(0, ...ts.map((t) => t.cells.length)); };
+  for (const n of [1, 19]) {
+    const v = island(n), edges = [..."abcdef"].map((t) => { const p = createMatch(fable, { seed: `voyage ${n} ${t}`, options: v.options }).position; let rest = 0; for (let s = 1; s < v.seats; s++) rest += hand(p, s); return [`voyage ${n} ${t}`, hand(p, 0) * (v.seats - 1) - rest]; }).sort((a, b) => b[1] - a[1]);
+    const place = edges.findIndex(([seed]) => seed === v.seed), mine = edges[place][1];
+    assert.ok(edges.filter(([, e]) => e < mine).length >= 2 || place <= 3, `step ${n} kept place ${place + 1} of 6`);
+    if (n === 1) assert.equal(mine, edges[0][1], "the first step keeps the kindest");
+  }
+});
+test("a game by link may seat a hard bot", () => {
+  const m = createMatch(fable, { seed: "link", options: { seats: 2, style: "ours" } }), look = [[0, 0], [4, 1]];
+  assert.deepEqual(unpackGame(packGame(m, ["host", "hard"], look), [fable]).roles, ["host", "hard"]);
 });
