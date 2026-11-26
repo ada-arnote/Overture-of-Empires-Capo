@@ -8,8 +8,10 @@
 import { hexBoard, joined } from "../hex.js";
 
 export const NONE = -1, GOODS = ["Grain", "Glass", "Clay", "Salt"], WASTE = -1;
-export const COST = { route: [0, 0, 2, 2], depot: [2, 2, 2, 0], town: [0, 4, 0, 4], plan: [2, 2, 0, 2], ship: [0, 2, 0, 2], harbour: [2, 0, 4, 0] }; // a depot gathers from seven hexes, so things cost more
+export const COST = { route: [0, 0, 2, 2], depot: [2, 2, 2, 0], town: [0, 4, 0, 4], plan: [1, 2, 0, 2], ship: [0, 2, 0, 2], harbour: [2, 0, 4, 0] }; // a depot gathers from seven hexes, so things cost more
 export const PLANS = ["harvest", "works", "toll", "seal"];
+/** How many of each plan the deck holds. A plan costs five goods; the toll plans are left out when there is no toll gate. */
+export const DECK = { harvest: 5, works: 5, toll: 5, seal: 6 };
 /** The least that wins each award: routes in one joined network (the Great Road), toll plans played (the Toll Warden). Each is worth 2. */
 export const AWARD = { road: 5, warden: 2 };
 /** The numbers that come up most, kept apart on the island. */
@@ -42,8 +44,8 @@ export const goalOf = (p) => p.rule.goal;
 const add = (a, b, k = 1) => a.map((v, i) => v + k * b[i]);
 export const canPay = (hand, cost) => hand.every((v, i) => v >= cost[i]);
 export const total = (hand) => hand.reduce((n, v) => n + v, 0);
-/** A hand after a harvest plan: one more of each of the two goods it holds least of. */
-export const harvestOf = (h) => { const need = [0, 1, 2, 3].sort((a, b) => h[a] - h[b] || a - b).slice(0, 2); return h.map((v, g) => v + (need.includes(g) ? 1 : 0)); };
+/** A hand after a harvest plan: two more of each of the two goods it holds least of. */
+export const harvestOf = (h) => { const need = [0, 1, 2, 3].sort((a, b) => h[a] - h[b] || a - b).slice(0, 2); return h.map((v, g) => v + (need.includes(g) ? 2 : 0)); };
 /** The raid roll: a 7 when two dice are added, doubles when the higher die counts. */
 export const raidRoll = (rule, [a, b]) => (rule.roll === "sum" ? a + b === 7 : a === b);
 
@@ -261,7 +263,7 @@ function island(rule, dice, seats) {
 }
 
 export const glass = {
-  id: "glass", version: "5",
+  id: "glass", version: "6",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -271,7 +273,7 @@ export const glass = {
     const isle = island(rule, dice, o.seats), first = dice.below(o.seats), n = isle.land.length, zero = () => Array(n).fill(0);
     const p = { style: o.style, classic: o.style !== "ours", rule, seats: o.seats, ...isle, gate: rule.gate ? isle.gate : NONE, ships: o.ships, harbours: o.harbours,
       hands: Array.from({ length: o.seats }, () => [0, 0, 0, 0]), coin: Array(o.seats).fill(rule.market === "falling" ? 2 : 0), route: Array.from({ length: n }, () => []), depot: Array(n).fill(NONE), town: zero(), harbour: zero(),
-      deck: rule.plans ? dice.shuffle([...Array(6).fill("harvest"), ...Array(5).fill("works"), ...(rule.gate ? Array(5).fill("toll") : []), ...Array(5).fill("seal")]) : [], held: Array.from({ length: o.seats }, () => []), seals: Array(o.seats).fill(0), charted: Array(o.seats).fill(0),
+      deck: rule.plans ? dice.shuffle(PLANS.flatMap((k) => (k === "toll" && !rule.gate ? [] : Array(DECK[k]).fill(k)))) : [], held: Array.from({ length: o.seats }, () => []), seals: Array(o.seats).fill(0), charted: Array(o.seats).fill(0),
       sold: [0, 0, 0, 0], charter: rule.charters ? [0, 1, 2].map(() => dice.shuffle([0, 0, 1, 1, 2, 2, 3, 3]).slice(0, 6)) : [], first, seat: first, step: 0, round: 1, rounds: rule.limit, phase: "open", opened: 0, left: 0, offers: 0, played: 0, free: 0, roll: null, ask: null, over: null,
       rolls: Array(13).fill(0), gained: Array.from({ length: o.seats }, () => [0, 0, 0, 0]), tried: [], deals: [], spoil: Array(o.seats).fill(0), back: null, tolls: Array(o.seats).fill(0), road: NONE, warden: NONE, lit: [] };
     if (o.seasons) p.event = "fair";

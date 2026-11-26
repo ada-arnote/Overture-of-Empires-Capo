@@ -37,3 +37,18 @@ test("Banners lesson: nobody is struck in round 1, then at most one province a b
   for (const [round, n] of lost) assert.ok(round < 2 ? n === 0 : n <= 1, `round ${round}: the learner lost ${n}`);
   assert.ok(bannerCells(m.position, 0) >= 6, "the learner still holds land after ten rounds");
 });
+
+test("Glass lesson: the gentle gate is on, so a learner on 2 points is never robbed by the toll gate", async () => {
+  const { glass, pointsOf } = await import("../src/games/glass/rules.js");
+  const { choose } = await import("../src/games/glass/bot.js");
+  const m = createMatch(glass, { seed: "lesson 1", options: { style: "custom", seats: 2, size: "small", goal: 8, opening: "full", offers: 1, spare: 2 } });
+  assert.equal(m.position.rule.spare, 2);
+  let tolls = 0;
+  while (m.turn !== null && m.position.round <= 30) {
+    const p = m.position, mine = m.turn === 0;
+    const move = !mine ? choose(p, chance(seedState(`${m.seed}/${m.list.length}`)), "easy") : p.phase === "main" ? { do: "end" } : p.phase === "answer" ? { do: "refuse" } : m.legal()[0];
+    const events = m.play(move);
+    for (const e of events) if (e.kind === "toll" && e.seat === 1) { tolls++; if (pointsOf(p, 0) <= 2) assert.notEqual(e.from, 0, "the gate took from a learner on 2 points"); }
+  }
+  assert.ok(tolls > 0, "the bot moved the gate at least once");
+});

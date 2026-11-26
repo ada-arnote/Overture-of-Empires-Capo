@@ -8,6 +8,8 @@ import { steps } from "../areas.js";
 import { AWARD, COST, NONE, WASTE, answer, boardOf, canPay, depotSpots, glass, harvestOf, pointsOf, rateOf, roadOf, routeSpots, total } from "./rules.js";
 
 export const TIERS = ["random", "easy", "normal"];
+/** For measuring plans (tools/plans.mjs): seats listed in `seek` aim for a plan whenever their next build is `far` goods or more away and a plan is no further. Empty in play. */
+export const trial = { seek: [], far: 2 };
 const WAYS = { sum: [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1], high: [0, 1, 3, 5, 7, 9, 11] };
 
 /** How much a hex yields in a round, in ways out of 36, for each good. */
@@ -30,8 +32,14 @@ function worthOf(p, s, at, have) {
 }
 const lack = (h, cost) => cost.reduce((n, c, k) => n + Math.max(0, c - h[k]), 0);
 
-/** What to aim for now: [cost, move]. */
+/** What to aim for now: [cost, move]. A seat on trial (see `trial`) may aim for a plan instead. */
 function aim(p, s) {
+  const [cost, move] = target(p, s), h = p.hands[s];
+  if (trial.seek.includes(s) && p.rule.plans && p.deck.length && lack(h, cost) >= trial.far && lack(h, COST.plan) <= lack(h, cost)) return [COST.plan, { do: "plan" }];
+  return [cost, move];
+}
+/** The next build worth aiming for: [cost, move]. */
+function target(p, s) {
   const towns = p.depot.flatMap((o, at) => (o === s && !p.town[at] ? [at] : [])), spots = depotSpots(p, s), have = haveOf(p, s), spotWorth = (q, seat, at) => worthOf(q, seat, at, have);
   const best = (list, f) => (list.length ? list.reduce((a, b) => (f(b) > f(a) ? b : a)) : undefined);
   if (spots.length) return [COST.depot, { do: "depot", at: best(spots, (i) => spotWorth(p, s, i)) }];

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-AaaaCjBbsnhCsUgWxOWNo2lRI/VY/p1WbBpLQc8REM0='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+Gt9sXCyIr2mMef1pigmzbX3cMOCSBebsldBDnDGsaQ='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Grain and Glass</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -164,7 +164,9 @@ dialog hr { border: 0; border-top: 1px solid var(--edge); margin: 6px 0 } #sheet
 #act .quiet { padding: 0 14px } #send + .quiet, #act > .quiet { width: 100%; margin-top: var(--sp-2) }
 #choice > .text { display: block; margin: 2px auto -10px; font-size: var(--fs-2) }
 #info { color: var(--text-2); font-size: var(--fs-2); min-height: 2.9em; margin-bottom: var(--sp-2) }
-#amount { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; min-height: var(--tap) } #much { flex: 1; height: var(--tap) } #many { min-width: 3.2em; text-align: right; font: 700 var(--fs-4)/1 var(--sans); font-variant-numeric: tabular-nums }
+#amount { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; min-height: var(--tap) } #much { flex: 1; min-width: 60px; height: var(--tap) } #amount button.ic { font: 700 var(--fs-4)/1 var(--sans) } #amount button:disabled { opacity: .4; cursor: default }
+#many { width: 4.4em; min-height: var(--tap); padding: 0 8px; border-radius: var(--r-1); border: 1px solid var(--edge); background: rgba(var(--shade), .55); text-align: right; font: 700 var(--fs-4)/1 var(--sans); font-variant-numeric: tabular-nums; appearance: textfield; -moz-appearance: textfield } #many::-webkit-inner-spin-button, #many::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0 }
+#bag { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-bottom: 10px; font-size: var(--fs-1); color: var(--text-2) } #bag span { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; color: var(--text) } #bag svg { width: 18px; height: 18px; display: block }
 #dice { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 10px } #dice div { display: flex; gap: 4px } #dice svg { width: 30px; height: 30px; display: block; animation: tumble .28s ease-out backwards }
 @keyframes tumble { from { transform: rotate(-140deg) scale(.5); opacity: 0 } }
 #send p { color: var(--text-2); margin-bottom: 10px }
@@ -281,7 +283,7 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
   .menu #foot { left: 0; right: 0; bottom: 0; padding: 8px 16px; background: var(--ground); justify-content: center }
   .tray { display: block; width: calc(100% + 24px); height: var(--tap); margin: -12px -12px -8px; border: 0; background: none }
   .tray::before { content: ""; display: block; width: 48px; height: 4px; margin: 0 auto 14px; border-radius: 2px; background: var(--edge) } .shut .tray::before { background: var(--accent) }
-  .shut #act :is(#news, #dice, #info, #hand, #trades, .pick, #amount, #leaders, .live-info, #send > p, .text) { display: none }
+  .shut #act :is(#news, #dice, #bag, #info, #hand, #trades, .pick, #amount, #leaders, .live-info, #send > p, .text) { display: none }
   .shut #status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: var(--sp-2) }
   dialog, #sheet.wide, #sheet.end { width: calc(100vw / var(--ui-scale)); max-width: none; margin: auto 0 0; max-height: calc(90vh / var(--ui-scale)); padding: 18px 16px; border-radius: var(--r-3) var(--r-3) 0 0; border-width: 1px 0 0 } dialog > .go { margin: 0 -16px -18px; padding: 10px 16px max(14px, env(safe-area-inset-bottom)) !important } dialog .go { bottom: -18px }
   .end .ends { grid-template-columns: 1fr 1fr } .end .ends .main { grid-column: 1 / -1; grid-row: 1 } .hero canvas { width: 60px; height: 60px }
@@ -420,8 +422,10 @@ $m[1] = (($x) => {
 const { hexBoard, joined } = $m[2];
 
 const NONE = -1, GOODS = ["Grain", "Glass", "Clay", "Salt"], WASTE = -1;
-const COST = { route: [0, 0, 2, 2], depot: [2, 2, 2, 0], town: [0, 4, 0, 4], plan: [2, 2, 0, 2], ship: [0, 2, 0, 2], harbour: [2, 0, 4, 0] }; // a depot gathers from seven hexes, so things cost more
+const COST = { route: [0, 0, 2, 2], depot: [2, 2, 2, 0], town: [0, 4, 0, 4], plan: [1, 2, 0, 2], ship: [0, 2, 0, 2], harbour: [2, 0, 4, 0] }; // a depot gathers from seven hexes, so things cost more
 const PLANS = ["harvest", "works", "toll", "seal"];
+/** How many of each plan the deck holds. A plan costs five goods; the toll plans are left out when there is no toll gate. */
+const DECK = { harvest: 5, works: 5, toll: 5, seal: 6 };
 /** The least that wins each award: routes in one joined network (the Great Road), toll plans played (the Toll Warden). Each is worth 2. */
 const AWARD = { road: 5, warden: 2 };
 /** The numbers that come up most, kept apart on the island. */
@@ -454,8 +458,8 @@ const goalOf = (p) => p.rule.goal;
 const add = (a, b, k = 1) => a.map((v, i) => v + k * b[i]);
 const canPay = (hand, cost) => hand.every((v, i) => v >= cost[i]);
 const total = (hand) => hand.reduce((n, v) => n + v, 0);
-/** A hand after a harvest plan: one more of each of the two goods it holds least of. */
-const harvestOf = (h) => { const need = [0, 1, 2, 3].sort((a, b) => h[a] - h[b] || a - b).slice(0, 2); return h.map((v, g) => v + (need.includes(g) ? 1 : 0)); };
+/** A hand after a harvest plan: two more of each of the two goods it holds least of. */
+const harvestOf = (h) => { const need = [0, 1, 2, 3].sort((a, b) => h[a] - h[b] || a - b).slice(0, 2); return h.map((v, g) => v + (need.includes(g) ? 2 : 0)); };
 /** The raid roll: a 7 when two dice are added, doubles when the higher die counts. */
 const raidRoll = (rule, [a, b]) => (rule.roll === "sum" ? a + b === 7 : a === b);
 
@@ -673,7 +677,7 @@ function island(rule, dice, seats) {
 }
 
 const glass = {
-  id: "glass", version: "5",
+  id: "glass", version: "6",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -683,7 +687,7 @@ const glass = {
     const isle = island(rule, dice, o.seats), first = dice.below(o.seats), n = isle.land.length, zero = () => Array(n).fill(0);
     const p = { style: o.style, classic: o.style !== "ours", rule, seats: o.seats, ...isle, gate: rule.gate ? isle.gate : NONE, ships: o.ships, harbours: o.harbours,
       hands: Array.from({ length: o.seats }, () => [0, 0, 0, 0]), coin: Array(o.seats).fill(rule.market === "falling" ? 2 : 0), route: Array.from({ length: n }, () => []), depot: Array(n).fill(NONE), town: zero(), harbour: zero(),
-      deck: rule.plans ? dice.shuffle([...Array(6).fill("harvest"), ...Array(5).fill("works"), ...(rule.gate ? Array(5).fill("toll") : []), ...Array(5).fill("seal")]) : [], held: Array.from({ length: o.seats }, () => []), seals: Array(o.seats).fill(0), charted: Array(o.seats).fill(0),
+      deck: rule.plans ? dice.shuffle(PLANS.flatMap((k) => (k === "toll" && !rule.gate ? [] : Array(DECK[k]).fill(k)))) : [], held: Array.from({ length: o.seats }, () => []), seals: Array(o.seats).fill(0), charted: Array(o.seats).fill(0),
       sold: [0, 0, 0, 0], charter: rule.charters ? [0, 1, 2].map(() => dice.shuffle([0, 0, 1, 1, 2, 2, 3, 3]).slice(0, 6)) : [], first, seat: first, step: 0, round: 1, rounds: rule.limit, phase: "open", opened: 0, left: 0, offers: 0, played: 0, free: 0, roll: null, ask: null, over: null,
       rolls: Array(13).fill(0), gained: Array.from({ length: o.seats }, () => [0, 0, 0, 0]), tried: [], deals: [], spoil: Array(o.seats).fill(0), back: null, tolls: Array(o.seats).fill(0), road: NONE, warden: NONE, lit: [] };
     if (o.seasons) p.event = "fair";
@@ -844,7 +848,7 @@ function answer(p, seat, give, get, n = 1, k = 1) {
   return h[get] >= k + 1 && h[give] <= h[get] - k && k <= n;
 }
 
-$x.NONE = NONE; $x.GOODS = GOODS; $x.WASTE = WASTE; $x.COST = COST; $x.PLANS = PLANS; $x.AWARD = AWARD; $x.BUSY = BUSY; $x.TERMS = TERMS; $x.SWITCHES = SWITCHES; $x.EXPANSIONS = EXPANSIONS; $x.boardOf = boardOf; $x.goalOf = goalOf; $x.canPay = canPay; $x.total = total; $x.harvestOf = harvestOf; $x.raidRoll = raidRoll; $x.pointsOf = pointsOf; $x.joinedPorts = joinedPorts; $x.roadOf = roadOf; $x.reachOf = reachOf; $x.routeSpots = routeSpots; $x.depotSpots = depotSpots; $x.victims = victims; $x.rateOf = rateOf; $x.priceOf = priceOf; $x.sellPrice = sellPrice; $x.landFor = landFor; $x.glass = glass; $x.answer = answer;
+$x.NONE = NONE; $x.GOODS = GOODS; $x.WASTE = WASTE; $x.COST = COST; $x.PLANS = PLANS; $x.DECK = DECK; $x.AWARD = AWARD; $x.BUSY = BUSY; $x.TERMS = TERMS; $x.SWITCHES = SWITCHES; $x.EXPANSIONS = EXPANSIONS; $x.boardOf = boardOf; $x.goalOf = goalOf; $x.canPay = canPay; $x.total = total; $x.harvestOf = harvestOf; $x.raidRoll = raidRoll; $x.pointsOf = pointsOf; $x.joinedPorts = joinedPorts; $x.roadOf = roadOf; $x.reachOf = reachOf; $x.routeSpots = routeSpots; $x.depotSpots = depotSpots; $x.victims = victims; $x.rateOf = rateOf; $x.priceOf = priceOf; $x.sellPrice = sellPrice; $x.landFor = landFor; $x.glass = glass; $x.answer = answer;
 return $x; })({});
 $m[6] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -1645,6 +1649,8 @@ const { steps } = $m[4];
 const { AWARD, COST, NONE, WASTE, answer, boardOf, canPay, depotSpots, glass, harvestOf, pointsOf, rateOf, roadOf, routeSpots, total } = $m[1];
 
 const TIERS = ["random", "easy", "normal"];
+/** For measuring plans (tools/plans.mjs): seats listed in `seek` aim for a plan whenever their next build is `far` goods or more away and a plan is no further. Empty in play. */
+const trial = { seek: [], far: 2 };
 const WAYS = { sum: [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1], high: [0, 1, 3, 5, 7, 9, 11] };
 
 /** How much a hex yields in a round, in ways out of 36, for each good. */
@@ -1667,8 +1673,14 @@ function worthOf(p, s, at, have) {
 }
 const lack = (h, cost) => cost.reduce((n, c, k) => n + Math.max(0, c - h[k]), 0);
 
-/** What to aim for now: [cost, move]. */
+/** What to aim for now: [cost, move]. A seat on trial (see `trial`) may aim for a plan instead. */
 function aim(p, s) {
+  const [cost, move] = target(p, s), h = p.hands[s];
+  if (trial.seek.includes(s) && p.rule.plans && p.deck.length && lack(h, cost) >= trial.far && lack(h, COST.plan) <= lack(h, cost)) return [COST.plan, { do: "plan" }];
+  return [cost, move];
+}
+/** The next build worth aiming for: [cost, move]. */
+function target(p, s) {
   const towns = p.depot.flatMap((o, at) => (o === s && !p.town[at] ? [at] : [])), spots = depotSpots(p, s), have = haveOf(p, s), spotWorth = (q, seat, at) => worthOf(q, seat, at, have);
   const best = (list, f) => (list.length ? list.reduce((a, b) => (f(b) > f(a) ? b : a)) : undefined);
   if (spots.length) return [COST.depot, { do: "depot", at: best(spots, (i) => spotWorth(p, s, i)) }];
@@ -1804,7 +1816,7 @@ function choose(p, dice, tier) {
   for (;;) { const s = t.next(); if (s.done) return s.value; }
 }
 
-$x.TIERS = TIERS; $x.spotWorth = spotWorth; $x.wants = wants; $x.thinking = thinking; $x.choose = choose;
+$x.TIERS = TIERS; $x.trial = trial; $x.spotWorth = spotWorth; $x.wants = wants; $x.thinking = thinking; $x.choose = choose;
 return $x; })({});
 $m[14] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -2448,7 +2460,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.8.2";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "53c7c974";
+const BUILD = "e27b12ab";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -3758,10 +3770,11 @@ const { AWARD, BUSY, COST, EXPANSIONS, GOODS, NONE, SWITCHES, TERMS, WASTE, boar
 const { choose, thinking } = $m[3];
 const { $, NAMES, RGB, createTable, el, radio, sheet, toast } = $m[12];
 const { hexBoard } = $m[23];
+const { hexPicture } = $m[15];
 
 const SEA = [70, 116, 140], TILE = [[226, 196, 96], [176, 206, 214], [196, 120, 82], [228, 226, 214]], WASTEG = [150, 140, 120];
 const KINDS = { route: "Route", depot: "Depot", town: "Town", harbour: "Harbour", plan: "Plan", trade: "Trade", use: "Play a plan", answer: "Answer the offer", spoil: "Spoilage", toll: "Toll gate" };
-const PLAN = { harvest: "Harvest: two goods you lack", works: "Works: two free routes", toll: "Toll: move the gate and take a good", seal: "Seal: a point" };
+const PLAN = { harvest: "Harvest: two each of the two goods you hold least", works: "Works: two free routes", toll: "Toll: move the gate and take a good", seal: "Seal: a point" };
 const AWARDS = { road: "Great Road", warden: "Toll Warden" };
 const BUILDS = { route: ["Route"], depot: ["Depot", "1 point"], town: ["Town", "2 points, on a depot"], harbour: ["Harbour", "on a depot by the sea"], plan: ["Plan"] };
 let kind = "depot", where = null;
@@ -3779,6 +3792,19 @@ const same = (a, b) => Object.keys(b).every((k) => a[k] === b[k]);
 const keyOf = (m) => (m.at !== undefined && m.from === undefined ? m.at : JSON.stringify(m)); // a hex, or the whole move where one hex has several
 const deal = (d) => `${d.n} ${GOODS[d.give]} for ${d.k} ${GOODS[d.get]}`;
 const raidText = (p) => (p.rule.roll === "sum" ? "A 7" : "Doubles");
+/** What a port swaps at: 3 of anything for 1, or 2 of its own good for 1 (and 3 of the rest). */
+const portText = (g) => (g === 4 ? "3:1" : `2:1 ${GOODS[g]}`);
+/** Each port's rate, printed on the sea beside it, so the board says what the flag means. */
+function portLabels(p, picture) {
+  const { near } = boardOf(p), out = [], dry = p.land.flatMap((l, i) => (l ? [picture.mid[i]] : []));
+  const cx = dry.reduce((n, m) => n + m[0], 0) / dry.length, cy = dry.reduce((n, m) => n + m[1], 0) / dry.length, off = (m) => Math.hypot(picture.mid[m][0] - cx, picture.mid[m][1] - cy);
+  p.port.forEach((g, i) => {
+    const wet = near[i].filter((m) => !p.land[m]);
+    if (g === NONE || !wet.length) return;
+    out.push({ at: picture.mid[wet.reduce((a, b) => (off(b) > off(a) ? b : a))], sea: true, text: portText(g) }); // on the open sea beside it, away from the land
+  });
+  return out;
+}
 /** Where each award stands for a seat: who holds it and with how many, how near the seat is, and who is one short of taking it. */
 function awardsOf(p, s) {
   const counts = { road: (o) => roadOf(p, o), warden: (o) => p.tolls[o] }, words = { road: "routes", warden: "tolls" };
@@ -3890,7 +3916,7 @@ function pips(p, i) { return p.land[i] && p.good[i] !== WASTE ? waysOf(p)[p.num[
 const richest = (T) => legal(T).filter((m) => m.do === "depot").map((m) => m.at).sort((a, b) => [b, ...boardOf(pos(T)).near[b]].reduce((n, i) => n + pips(pos(T), i), 0) - [a, ...boardOf(pos(T)).near[a]].reduce((n, i) => n + pips(pos(T), i), 0))[0];
 const tab = (k) => [...$("sources").children].find((b) => b.textContent.startsWith(KINDS[k]) && !b.disabled) || $("sources");
 const LESSON = {
-  seed: "lesson 1", options: { style: "custom", seats: 2, size: "small", goal: 8, opening: "full", offers: 1 }, kinds: ["you", "easy"],
+  seed: "lesson 1", options: { style: "custom", seats: 2, size: "small", goal: 8, opening: "full", offers: 1, spare: 2 }, kinds: ["you", "easy"], // the gentle gate: nobody on 2 points or fewer is robbed while learning
   steps: [
     { at: (T) => (pos(T).opened % 2 ? $("wheres") : richest(T)), or: () => $("wheres"), done: (T, ev) => has(ev, "route"),
       say: (T) => (pos(T).opened % 2 ? "Now a route, on a hex beside your depot. Routes are how you reach new hexes to build on." : "Place your first depot, on the board or in the list. It gathers from its own hex and the six around it. A hex's number is the roll that makes it yield; red 6 and 8 come up most.") },
@@ -3905,7 +3931,7 @@ const LESSON = {
     { when: (T) => pos(T).phase === "main", at: () => $("end"), done: (T, ev) => has(ev, "done"),
       say: "When you are done, press End turn. The bot plays, then you roll again." },
     { when: (T) => pos(T).round > 1, at: (T) => (pos(T).gate === NONE ? $("status") : pos(T).gate), or: () => $("status"), next: true, done: (T, ev) => has(ev, "toll"),
-      say: (T) => `${pos(T).phase === "toll" ? "A 7: the raid roll. " : "A roll of 7 is the raid: "}nothing yields, and anyone holding more than ${pos(T).rule.hand} goods loses half. Then the roller moves the toll gate, the barrier on the board, to block a hex and take a good from a rival beside it.` },
+      say: (T) => `${pos(T).phase === "toll" ? "A 7: the raid roll. " : "A roll of 7 is the raid: "}nothing yields, and anyone holding more than ${pos(T).rule.hand} goods loses half. Then the roller moves the toll gate, the barrier on the board, to block a hex and take a good from a rival beside it. In this lesson the gate is gentle: it takes nothing from a player on ${pos(T).rule.spare} points or fewer.` },
     { when: (T) => pos(T).round > 1 && pos(T).phase === "main", at: () => $("info"), next: true,
       say: `Awards are 2 points each, for whoever leads: the Great Road for ${AWARD.road} routes joined, the Toll Warden for ${AWARD.warden} tolls played. A plan costs ${costText(COST.plan)}: free routes, goods, a toll, or a point.` },
     { at: () => $("round"), next: true,
@@ -3972,11 +3998,11 @@ createTable({
   },
   order: (events) => events.flatMap((e) => (e.at !== undefined && ["depot", "town", "route"].includes(e.kind) ? [e.at] : [])),
   board(T, stage) {
-    const p = T.match.position, b = boardOf(p), sea = b.cells.map((_, i) => !p.land[i]), none = b.cells.map(() => false);
+    const p = T.match.position, b = boardOf(p), sea = b.cells.map((_, i) => !p.land[i]), none = b.cells.map(() => false), picture = hexPicture(b.cells, none, sea);
     document.body.classList.remove("atlas");
     card(T);
     return hexBoard(T, stage, {
-      cells: b.cells, rough: none, sea, plain: true, ground: (i) => (sea[i] ? SEA : p.good[i] === WASTE ? WASTEG : TILE[p.good[i]]),
+      cells: b.cells, rough: none, sea, plain: true, picture, labels: portLabels(p, picture), ground: (i) => (sea[i] ? SEA : p.good[i] === WASTE ? WASTEG : TILE[p.good[i]]),
       owner: () => b.cells.map(() => NONE),
       pieces() {
         const q = T.match.position, out = [];
@@ -4066,7 +4092,7 @@ createTable({
     $("end").onclick = () => { if (T.ready()) T.play({ do: "end" }); };
     T.board.light(list.filter((x) => x.at !== undefined).map((x) => x.at), { aim: m?.at ?? -1 });
   },
-  listing: (T) => { const p = T.match.position; return { head: ["Hex", "Gives", "In 36 rolls", "Built"], rows: p.land.map((l, i) => i).filter((i) => p.land[i]).map((i) => [nameOf(p, i), yieldOf(p, i) || "waste", pips(p, i), [p.depot[i] !== NONE && `${NAMES[p.depot[i]]}'s ${p.town[i] ? "town" : "depot"}`, p.route[i].length && `routes: ${p.route[i].map((s) => NAMES[s]).join(", ")}`, p.gate === i && "the toll gate"].filter(Boolean).join("; ")]) }; },
+  listing: (T) => { const p = T.match.position; return { head: ["Hex", "Gives", "In 36 rolls", "Port", "Built"], rows: p.land.map((l, i) => i).filter((i) => p.land[i]).map((i) => [nameOf(p, i), yieldOf(p, i) || "waste", pips(p, i), p.port[i] === NONE ? "" : portText(p.port[i]), [p.depot[i] !== NONE && `${NAMES[p.depot[i]]}'s ${p.town[i] ? "town" : "depot"}`, p.route[i].length && `routes: ${p.route[i].map((s) => NAMES[s]).join(", ")}`, p.gate === i && "the toll gate"].filter(Boolean).join("; ")]) }; },
   changed: (T) => { where = null; card(T); },
   seen(T, events) { // what just happened to the one person at the table, said at once: goods gathered, goods taken, an offer answered
     card(T);
@@ -4090,10 +4116,10 @@ createTable({
     `The first to ${r.goal} points wins. A depot is worth 1, a town 2, each award 2, a seal 1.`,
     "Each turn begins with a roll. Every hex showing that number gives one of its good to each depot on it or beside it, and two to a town. A dark hex gives nothing.",
     `Build: a route (${costText(COST.route)}) on a hex beside your routes or depots; a depot (${costText(COST.depot)}) on a hex your routes reach, with no depot on it or beside it; a town (${costText(COST.town)}) in place of a depot.`,
-    r.market === "falling" ? "Sell goods for coin: 3, then 2, then 1 as more of a good is sold; prices recover each turn. Buy any good for 4 coin." : "Swap 4 of one good for 1 of any other at the bank, 3 at a port hex of yours, 2 at a port for that good.",
+    r.market === "falling" ? "Sell goods for coin: 3, then 2, then 1 as more of a good is sold; prices recover each turn. Buy any good for 4 coin." : "Swap 4 of one good for 1 of any other at the bank, 3 at a port hex of yours, 2 at a port for that good. Each port's rate is printed on the sea beside its flag: 3:1, or 2:1 and the good.",
     "Offer one player a good for one of theirs, one for one or up to three for one either way: they take it, turn it down, name other terms once (a counter-offer, which you take or turn down), or leave it open to take on their own turn. Or offer it to anyone. An open offer stands until it is taken, you withdraw it, or the round ends. An offer turned down cannot be made again that turn.",
     "A bot trades when the swap brings its next build closer and costs it less than the bank would, or when it gets more goods than it gives and needs none of them. It never trades with a player two points from winning, never leaves an offer open, and asks the leader for two for one. The easy bot simply gives what it has more of.",
-    ...(r.plans ? [`Draw a plan for ${costText(COST.plan)}: a harvest of two goods you lack, two free routes, a toll (move the gate and take a good), or a seal worth a point. Play one plan a turn.`] : []),
+    ...(r.plans ? [`Draw a plan for ${costText(COST.plan)}: a harvest (two each of the two goods you hold least), two free routes, a toll (move the gate and take a good), or a seal worth a point at once. A plan can be played the turn it is drawn; play one plan a turn.`] : []),
     ...(r.gate || r.hand ? [`${r.roll === "high" ? "Doubles are" : "A 7 is"} the raid roll${r.roll === "high" ? "" : ": no hex carries a 7, so nothing yields"}.${r.hand ? ` Anyone holding more than ${r.hand} goods loses half, rounded down, and chooses what.` : ""}${r.gate ? " Then the roller moves the toll gate to another hex and takes one good, unseen, from a rival with a depot on it or beside it. The hex under the gate yields nothing until it moves." : ""}`] : []),
     ...(r.awards ? [`Awards, 2 points each, held by whoever leads and passed on when beaten: the Great Road, for the most routes in one joined network (at least ${AWARD.road})${r.gate && r.plans ? `, and the Toll Warden, for the most tolls played (at least ${AWARD.warden})` : ""}.`] : []),
     ...(r.charters ? ["Charters: three public orders for six goods. Fill one for 2 points. Joining two ports with your routes scores 2."] : []),

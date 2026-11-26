@@ -2,6 +2,29 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Brass and Banners: exact numbers, and an open bag of dice
+
+**Players**
+- **Move exactly as many as you mean.** After a conquest, when placing and on the last move, every number can be chosen: a minus and a plus button beside the slider, and a box to type the number in (Enter moves). The keys - and + step too. Before, a big stack could only be split at a few stops.
+- **Dice luck, an open bag**, a Custom switch. Every die is drawn from a bag of throws that starts with six of each face, so over a game each face comes up about as often as the others. What is left in the bag is shown under the dice and in Lands and dice; when fewer than 12 are left, a fresh set of 36 goes in. Fair dice stay the default in every rule set, and Play is still Traditional.
+
+**Contributors**
+- Banners rules are version 7: `occupy`, `place` and `move` list every amount (`amounts(n)` is now 1 to n), the `luck` switch (`fair` or `bag`, normal `fair`, Custom only) and `bag` (six face counts, or null) in the position. Dice from the bag are drawn by the seed, so a seed and the moves still replay. Saves from version 6 do not open as version 7.
+
+### Grain and Glass: plans worth buying, port rates on the board, a gentler lesson
+
+**Players**
+- **Plans are worth their price.** A plan now costs 1 Grain, 2 Glass and 2 Salt (five goods, was six). A harvest brings two each of the two goods you hold least (was one each). The deck has one more seal and one fewer harvest: 5 harvests, 5 works, 5 tolls, 6 seals. A plan can still be played the turn it is drawn.
+- **Port rates on the board.** Each port's rate is printed on the sea beside its flag: 3:1, or 2:1 and the good. The board as a list has a Port column.
+- **The lesson's toll gate is gentle**: it takes nothing from a player on 2 points or fewer, and the lesson says so.
+
+**Contributors**
+- Glass rules are version 6: `COST.plan` is `[1, 2, 0, 2]`, `harvestOf` adds two of each, and the deck is built from `DECK`. Saves from version 5 do not open as version 6.
+- `node tools/plans.mjs` measures plans: bots that aim for a plan whenever their next build is two goods or more away play bots that do not, each seed both ways round. Over 2,000 games a seat count, the plan seekers won 44.8, 41.5, 38.5, 40.0 and 39.0% at two to six seats under the old plans; now they win 50.3, 50.1, 48.6, 48.8 and 49.0% at two to six seats. The bot hook it uses is `trial` in `src/games/glass/bot.js`, empty in play.
+- Fairness, 1,000 Traditional bot games a seat count: wins by seat 47.2/52.7 at two seats, 35.7/34.0/30.3 at three, 24.0/24.5/24.8/26.7 at four, 18.9/19.8/19.7/22.4/19.2 at five, 15.9/18.2/16.5/15.0/18.2/16.2 at six. The widest gap is 5.5 points (two seats).
+
 ## v0.8.2 (2026-11-26): Grain and Glass trades like the best
 
 ### Grain and Glass: a trade desk, counter-offers, rolls in view, sharper bots

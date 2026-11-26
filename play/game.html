@@ -164,7 +164,9 @@ dialog hr { border: 0; border-top: 1px solid var(--edge); margin: 6px 0 } #sheet
 #act .quiet { padding: 0 14px } #send + .quiet, #act > .quiet { width: 100%; margin-top: var(--sp-2) }
 #choice > .text { display: block; margin: 2px auto -10px; font-size: var(--fs-2) }
 #info { color: var(--text-2); font-size: var(--fs-2); min-height: 2.9em; margin-bottom: var(--sp-2) }
-#amount { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; min-height: var(--tap) } #much { flex: 1; height: var(--tap) } #many { min-width: 3.2em; text-align: right; font: 700 var(--fs-4)/1 var(--sans); font-variant-numeric: tabular-nums }
+#amount { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; min-height: var(--tap) } #much { flex: 1; min-width: 60px; height: var(--tap) } #amount button.ic { font: 700 var(--fs-4)/1 var(--sans) } #amount button:disabled { opacity: .4; cursor: default }
+#many { width: 4.4em; min-height: var(--tap); padding: 0 8px; border-radius: var(--r-1); border: 1px solid var(--edge); background: rgba(var(--shade), .55); text-align: right; font: 700 var(--fs-4)/1 var(--sans); font-variant-numeric: tabular-nums; appearance: textfield; -moz-appearance: textfield } #many::-webkit-inner-spin-button, #many::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0 }
+#bag { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-bottom: 10px; font-size: var(--fs-1); color: var(--text-2) } #bag span { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; color: var(--text) } #bag svg { width: 18px; height: 18px; display: block }
 #dice { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 10px } #dice div { display: flex; gap: 4px } #dice svg { width: 30px; height: 30px; display: block; animation: tumble .28s ease-out backwards }
 @keyframes tumble { from { transform: rotate(-140deg) scale(.5); opacity: 0 } }
 #send p { color: var(--text-2); margin-bottom: 10px }
@@ -281,7 +283,7 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
   .menu #foot { left: 0; right: 0; bottom: 0; padding: 8px 16px; background: var(--ground); justify-content: center }
   .tray { display: block; width: calc(100% + 24px); height: var(--tap); margin: -12px -12px -8px; border: 0; background: none }
   .tray::before { content: ""; display: block; width: 48px; height: 4px; margin: 0 auto 14px; border-radius: 2px; background: var(--edge) } .shut .tray::before { background: var(--accent) }
-  .shut #act :is(#news, #dice, #info, #hand, #trades, .pick, #amount, #leaders, .live-info, #send > p, .text) { display: none }
+  .shut #act :is(#news, #dice, #bag, #info, #hand, #trades, .pick, #amount, #leaders, .live-info, #send > p, .text) { display: none }
   .shut #status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: var(--sp-2) }
   dialog, #sheet.wide, #sheet.end { width: calc(100vw / var(--ui-scale)); max-width: none; margin: auto 0 0; max-height: calc(90vh / var(--ui-scale)); padding: 18px 16px; border-radius: var(--r-3) var(--r-3) 0 0; border-width: 1px 0 0 } dialog > .go { margin: 0 -16px -18px; padding: 10px 16px max(14px, env(safe-area-inset-bottom)) !important } dialog .go { bottom: -18px }
   .end .ends { grid-template-columns: 1fr 1fr } .end .ends .main { grid-column: 1 / -1; grid-row: 1 } .hero canvas { width: 60px; height: 60px }

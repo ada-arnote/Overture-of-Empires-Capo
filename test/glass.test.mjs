@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createMatch } from "../src/core/index.js";
-import { AWARD, BUSY, COST, EXPANSIONS, NONE, SWITCHES, TERMS, WASTE, answer, boardOf, canPay, depotSpots, glass, harvestOf, pointsOf, roadOf, total, victims } from "../src/games/glass/rules.js";
+import { AWARD, BUSY, COST, DECK, EXPANSIONS, NONE, PLANS, SWITCHES, TERMS, WASTE, answer, boardOf, canPay, depotSpots, glass, harvestOf, pointsOf, roadOf, total, victims } from "../src/games/glass/rules.js";
 import { TIERS, choose, wants } from "../src/games/glass/bot.js";
 import { SLOW, botGame, ended, inList, passive, refused, replays, same, sameEachStep, slowOnly } from "./fixtures/bots.js";
 
@@ -264,7 +264,22 @@ test("the full bot trades towards its next build, turns down a seat about to win
     }
   }
 });
-test("bots draw plans and play them: over a few games the full bot buys, plays every kind, and a harvest brings two goods", () => {
+test("plans: five goods, a deck of every kind (no tolls without a gate), a harvest of two each of the two goods held least, and playable the turn drawn", () => {
+  assert.equal(total(COST.plan), 5);
+  for (const gate of [true, false]) {
+    const p = createMatch(glass, { seed: "deck", options: { seats: 3, style: "custom", gate } }).position, count = (k) => p.deck.filter((x) => x === k).length;
+    for (const k of PLANS) assert.equal(count(k), k === "toll" && !gate ? 0 : DECK[k], `${k}, gate ${gate}`);
+  }
+  assert.deepEqual(harvestOf([3, 0, 1, 5]), [3, 2, 3, 5]);
+  assert.deepEqual(harvestOf([2, 2, 2, 2]), [4, 4, 2, 2]);
+  const p = bare(3, "plan");
+  p.hands[p.seat] = [...COST.plan];
+  p.deck = ["works", "harvest"];
+  const q = play(p, { do: "plan" }).position;
+  assert.deepEqual(q.held[p.seat], ["harvest"]);
+  assert.ok(inList(glass.moves(q), { do: "use", plan: "harvest" }), "a plan can be played the turn it is drawn");
+});
+test("bots draw plans and play them: over a few games the full bot buys, plays every kind, and a harvest brings four goods", () => {
   const seen = { plan: 0, harvest: 0, works: 0, toll: 0, counter: 0 };
   for (const seed of ["p1", "p2", "p3", "p4"]) botGame(glass, choose, {
     seed, options: { seats: 3, style: "classic" }, tiers: ["normal"],
@@ -274,7 +289,7 @@ test("bots draw plans and play them: over a few games the full bot buys, plays e
       if (move.do !== "use") return;
       seen[move.plan]++;
       const before = m.at(m.list.length - 1), p = m.position;
-      if (move.plan === "harvest") { assert.deepEqual(p.hands[before.seat], harvestOf(before.hands[before.seat])); assert.equal(total(p.hands[before.seat]), total(before.hands[before.seat]) + 2); }
+      if (move.plan === "harvest") { assert.deepEqual(p.hands[before.seat], harvestOf(before.hands[before.seat])); assert.equal(total(p.hands[before.seat]), total(before.hands[before.seat]) + 4); }
       assert.equal(p.played, 1); assert.ok(!glass.moves(p).some((x) => x.do === "use"), "one plan a turn");
     },
   });
