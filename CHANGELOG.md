@@ -2,6 +2,13 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+**Players**
+- The front page shows the four table games straight after the opening, before Capo, which needs an AI you bring. The opening sentence now says what the five games are: world conquest with dice, a hex island war, a settle-and-trade race, a real-time land grab, and a story game told by an AI.
+- Every part of a game card opens its game, and so does the live board at the top, marked "Play this game" (Pause still stops it, and it still waits to be asked when you prefer less motion).
+- Smaller fixes: the version pill and "build dev" are gone from the page, "What is new" shows the latest versions, Capo's button says "Try Capo", its labels no longer look like buttons, the lantern has a tooltip, links to GitHub say they open in a new tab, and the figures and fairness lines read more plainly.
+
 ## v0.6.3 (2026-11-26): the game screens in blue and silver
 
 **Players**
