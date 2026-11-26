@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Bots for Brass and Banners. They see only what a player sees, and work out the same odds the player is shown.
-import { FORT, HAND, NONE, banners, boardOf, bonusOf, cellsOf, goalOf, nearOf, odds, setsOf, setWorth } from "./rules.js";
+import { FORT, HAND, NONE, banners, boardOf, bonusOf, cellsOf, goalOf, nearOf, odds, setsOf, setWorth, toll } from "./rules.js";
 import { steps } from "../areas.js";
 
-export const TIERS = ["random", "easy", "normal"];
+export const TIERS = ["random", "easy", "normal", "hard"];
 const MILLION = 1000000;
 
 /** How much a seat wants a place, in hundredths of one ordinary place. */
@@ -50,7 +50,7 @@ function risk(p, at, more) {
   return odds(q, foe, at);
 }
 
-function place(p, dice, noise) {
+function place(p, dice, noise, ranks) {
   const s = p.seat, mine = mineOf(p), edge = mine.filter((i) => nearOf(p, i).some((m) => p.owner[m] !== s)), list = edge.length ? edge : mine;
   let at = list[0], score = -1;
   for (const i of list) {
@@ -58,6 +58,7 @@ function place(p, dice, noise) {
     const own = p.caps && p.caps[s] === i ? 320 : 0;
     if (strongest(p, s, i) > p.str[i] || own) v += Math.floor(((worth(p, s, i) + own) * Math.max(0, risk(p, i, 0) - risk(p, i, p.left))) / MILLION);
     v += dice.below(noise);
+    ranks?.push([v, { do: "place", at: i, n: p.left }]);
     if (v > score) { score = v; at = i; }
   }
   if (p.phase === "place" && p.forts && p.left >= FORT + 3 && !p.forts[at] && risk(p, at, 0) > 500000) return { do: "fort", at };
@@ -71,7 +72,7 @@ function claim(p, dice) {
   return { do: "claim", at: list.reduce((a, c) => (c[0] > a[0] ? c : a))[1] };
 }
 
-function attack(p, dice, noise, floor) {
+function attack(p, dice, noise, floor, ranks) {
   if (p.rule.opening === "truce" && p.round === 1) return null; // nobody strikes in the first round
   const s = p.seat, goal = goalOf(p) - cellsOf(p, s);
   let pick = null, score = 0;
@@ -85,6 +86,7 @@ function attack(p, dice, noise, floor) {
       // attack from where the rest of the strength is least needed
       const spare = nearOf(p, i).some((x) => x !== m && p.owner[x] !== s) ? 0 : 25;
       const v = Math.floor((worth(p, s, m) * o) / MILLION) + spare + dice.below(noise);
+      ranks?.push([v, { do: "attack", from: i, to: m, roll: "all" }]);
       if (v > score) { score = v; pick = { do: "attack", from: i, to: m, roll: "all" }; }
     }
   }
@@ -136,9 +138,67 @@ function* plan(p, dice, tier) {
   return attack(p, dice, noise, floor) || move(p) || { do: "end" };
 }
 
+// ---- the hard bot: it plans a whole march, not one fight at a time ----
+const H = { floor: 450000, deep: 5, bare: 30, least: 20 }; // the least chance it will march on, how many fights ahead it looks, what an outmatched stopping place costs for each strength short, and the least a march must be worth
+/** The best march from a place with `force` able to attack: each fight's worth by the chance of getting that far, less what is left open where it stops. Returns [value, first target]. `q` is a scratch position and is put back as it was. */
+function march(q, s, from, force, deep) {
+  let top = 0, to = -1;
+  for (const m of nearOf(q, from)) {
+    if (q.owner[m] === s) continue;
+    const o = odds(q, from, m, force);
+    if (o < H.floor) continue;
+    const left = force - Math.floor((toll(q, from, m, force) + 500) / 1000), w = worth(q, s, m), was = q.owner[m], had = q.str[m];
+    if (left < 1) continue;
+    q.owner[m] = s; q.str[m] = left;
+    const on = deep > 1 && left > 1 ? march(q, s, m, left - 1, deep - 1)[0] : 0, open = on ? 0 : H.bare * Math.max(0, strongest(q, s, m) - left);
+    q.owner[m] = was; q.str[m] = had;
+    const v = Math.floor((o * (w + on - open)) / MILLION);
+    if (v > top) { top = v; to = m; }
+  }
+  return [top, to];
+}
+const scratch = (p) => ({ ...p, owner: [...p.owner], str: [...p.str] });
+function* hard(p, dice) {
+  const s = p.seat, q = scratch(p), mine = mineOf(p);
+  if (p.phase === "claim" || p.phase === "setup" || (p.phase === "place" && setsOf(p, s).length)) return yield* plan(p, dice, "normal");
+  if (p.phase === "place") {
+    const usual = place(p, dice, 6);
+    if (usual.do !== "place") return usual;
+    let at = usual.at, top = -1;
+    for (const i of mine) {
+      if (!nearOf(p, i).some((m) => p.owner[m] !== s)) continue;
+      let [v] = march(q, s, i, p.str[i] - 1 + p.left, H.deep);
+      const own = p.caps && p.caps[s] === i ? 320 : 0;
+      if (strongest(p, s, i) > p.str[i] || own) v += Math.floor(((worth(p, s, i) + own) * Math.max(0, risk(p, i, 0) - risk(p, i, p.left))) / MILLION);
+      v += dice.below(4);
+      if (v > top) { top = v; at = i; }
+    }
+    return { do: "place", at, n: p.left };
+  }
+  yield;
+  if (p.phase === "occupy") {
+    const { from, to } = p.pend, n = p.str[from] - 1;
+    if (p.caps && p.caps[s] === from) return { do: "occupy", n: occupy(p) };
+    q.str[to] += n; q.str[from] -= n;
+    const [there] = march(q, s, to, q.str[to] - 1, H.deep);
+    q.str[to] -= n; q.str[from] += n;
+    const [here] = march(q, s, from, n, H.deep);
+    return { do: "occupy", n: there || here ? (there >= here ? n : 0) : occupy(p) };
+  }
+  if (p.rule.opening === "truce" && p.round === 1) return move(p) || { do: "end" };
+  let pick = null, top = H.least;
+  for (const i of mine) {
+    if (p.str[i] < 2) continue;
+    if (p.caps && p.caps[s] === i && p.str[i] < 2 * strongest(p, s, i) && risk(p, i, 0) < 600000 && strongest(p, s, i) > 2) continue;
+    const [v, to] = march(q, s, i, p.str[i] - 1, H.deep);
+    if (to >= 0 && v + dice.below(4) > top) { top = v; pick = { do: "attack", from: i, to, roll: "all" }; }
+  }
+  return pick || move(p) || { do: "end" };
+}
+
 /** Choose a move a little at a time. `dice` breaks ties and drives random. */
 export function* thinking(p, dice, tier = "normal") {
-  const want = yield* plan(p, dice, tier), all = banners.moves(p);
+  const want = yield* (tier === "hard" ? hard(p, dice) : plan(p, dice, tier)), all = banners.moves(p);
   if (want.n === undefined) return want;
   // amounts are offered in steps when there are many: take the nearest one that is offered
   const same = all.filter((m) => m.do === want.do && m.at === want.at && m.from === want.from && m.to === want.to);

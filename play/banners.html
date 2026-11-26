@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-DSWgj8fRXfjfJibR4H9s74UvpCVCr1A9Bbx1QdN23S4='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-oeJ1HXNJwGjcQPGno4SxZZI4js7cSJlQtzmQG7xFre8='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Brass and Banners</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -311,6 +311,7 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
 <section id="act" class="panel" hidden aria-label="Your move">
   <p id="status" role="status"></p>
   <div id="dice" hidden></div>
+  <p id="fought" hidden></p>
   <div id="choice">
     <p id="info"></p>
     <div id="hand"></div>
@@ -1245,7 +1246,27 @@ function odds(att, def, how) {
   return v;
 }
 
-$x.DICE = DICE; $x.meet = meet; $x.odds = odds;
+const tolls = new Map();
+/** What rolling it out is likely to cost the attacker, in thousandths of one strength, win or lose. */
+function toll(att, def, how) {
+  if (att <= 0 || def <= 0) return 0;
+  const a = Math.min(att, 60), d = Math.min(def, 60), k = `${a}/${d}/${how.a}/${how.d}/${how.tie}/${how.up}/${how.down}`;
+  if (tolls.has(k)) return tolls.get(k);
+  let sum = 0, all = 0;
+  for (const [x, y, w] of results(Math.min(a, how.a), Math.min(d, how.d), how)) { sum += w * (1000 * x + toll(a - x, d - y, how)); all += w; }
+  const v = Math.floor(sum / all);
+  if (tolls.size > 60000) tolls.clear();
+  tolls.set(k, v);
+  return v;
+}
+/** What one throw is expected to cost each side, in thousandths: [attacker, defender]. For the roll tally's measure of luck. */
+function fair(a, d, how) {
+  let x = 0, y = 0, all = 0;
+  for (const [p, q, w] of results(a, d, how)) { x += w * p; y += w * q; all += w; }
+  return [Math.floor((1000 * x) / all), Math.floor((1000 * y) / all)];
+}
+
+$x.DICE = DICE; $x.meet = meet; $x.odds = odds; $x.toll = toll; $x.fair = fair;
 return $x; })({});
 $m[1] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -1255,7 +1276,7 @@ $m[1] = (($x) => {
 const { MAPS, areaBoard, bonusOf, bordersOf } = $m[2];
 // what a land pays is kept with the board maker, which reads the same rule to keep lands even
 $x.bonusOf = $m[2].bonusOf; $x.bordersOf = $m[2].bordersOf;
-const { DICE, odds: chanceOf, meet } = $m[11];
+const { DICE, odds: chanceOf, meet, toll: tollOf } = $m[11];
 
 const NONE = -1, HAND = 5, FORT = 4;
 const BASE = 3, PER = 3, WILD = 3;
@@ -1266,15 +1287,16 @@ const SWITCHES = {
   muster: { values: ["floor", "plus"], normal: "floor" }, // floor: 1 for every three provinces, at least 3; plus: 3 more on top of that
   cards: { values: ["rising", "flat", "none"], normal: "rising" },
   goal: { values: [65, 80, 100], normal: 80 },
-  rounds: { values: [12, 20, 40, 0], normal: 40 }, // 0: no limit, play until one side wins (a safety stop at SAFETY rounds)
+  rounds: { values: [10, 12, 20, 40, 0], normal: 40 }, // 0: no limit, play until one side wins (a safety stop at SAFETY rounds)
   order: { values: ["fixed", "rotate"], normal: "fixed" }, // rotate: the first seat moves on each round
   opening: { values: ["open", "lean", "grade", "truce"], normal: "open" }, // lean: at two seats the first seat musters a third on its first turn; grade: in round 1 each seat musters its share by its place in the order (1 of n parts, 2 of n, up to all); truce: nobody attacks in the first round
   neutral: { values: [1, 2, 3], normal: 2 },
   spoils: { values: ["trade", "wait"], normal: "trade" }, // trade: put a player out, take their cards, and hand in at once while you hold five or more
+  score: { values: ["land", "rounds"], normal: "land" }, // rounds: from round 2 each seat scores what it holds at the start of its turn, and once more at the end; the most points wins when the rounds run out
 };
 const SETS = {
-  classic: { start: "dealt", dice: "standard", muster: "floor", cards: "rising", goal: 100, rounds: 0, neutral: 2, order: "fixed", opening: "lean", spoils: "trade" },
-  ours: { start: "far", dice: "even", muster: "plus", cards: "flat", goal: 65, rounds: 40, neutral: 3, order: "fixed", opening: "grade", spoils: "wait" },
+  classic: { start: "dealt", dice: "standard", muster: "floor", cards: "rising", goal: 100, rounds: 0, neutral: 2, order: "fixed", opening: "lean", spoils: "trade", score: "land" },
+  ours: { start: "far", dice: "even", muster: "plus", cards: "flat", goal: 65, rounds: 10, neutral: 3, order: "fixed", opening: "grade", spoils: "wait", score: "rounds" },
 };
 const EXPANSIONS = ["forts", "leaders", "capitals", "secrets", "events"];
 const off = { values: [false, true], normal: false };
@@ -1304,6 +1326,11 @@ function muster(p, seat) {
   const lands = wholeOf(p, seat).reduce((n, k) => n + bonusOf(b, k), 0), event = p.event === "harvest" ? 2 : 0;
   return { base, land, lands, event, all: base + land + lands + event };
 }
+/** What a seat scores for what it holds now, under scored rounds: 1 for every three provinces, each whole land's bonus, 2 for each capital. */
+function gain(p, seat) {
+  const b = boardOf(p);
+  return Math.floor(cellsOf(p, seat) / PER) + wholeOf(p, seat).reduce((n, k) => n + bonusOf(b, k), 0) + (p.caps ? 2 * capsHeld(p, seat) : 0);
+}
 /** How a fight stands: the dice rule with leaders and forts counted in. */
 function terms(p, from, to) {
   const d = DICE[p.rule.dice], o = p.owner[to];
@@ -1311,6 +1338,8 @@ function terms(p, from, to) {
 }
 /** The chance, in millionths, of taking a place by rolling until it is settled. `att` is the strength able to attack. */
 const odds = (p, from, to, att = p.str[from] - 1) => chanceOf(att, p.str[to], terms(p, from, to));
+/** What rolling it out is likely to cost the attacker, in thousandths of one strength. */
+const toll = (p, from, to, att = p.str[from] - 1) => tollOf(att, p.str[to], terms(p, from, to));
 
 // ---- cards ----
 /** Sets a seat can hand in: three of a kind, or one of each. A wild card stands for any. One offer for each shape. */
@@ -1338,14 +1367,14 @@ function draw(p, dice) {
 }
 
 // ---- turns ----
-const copy = (p) => ({ ...p, owner: [...p.owner], str: [...p.str], hands: p.hands.map((h) => [...h]), deck: [...p.deck], spent: [...p.spent], reserve: [...p.reserve], outBy: [...p.outBy], back: [...p.back], forts: p.forts && [...p.forts], leaders: p.leaders && [...p.leaders], caps: p.caps && [...p.caps], goals: p.goals && p.goals.map((g) => ({ ...g })), pend: p.pend ? { ...p.pend } : null });
+const copy = (p) => ({ ...p, owner: [...p.owner], str: [...p.str], hands: p.hands.map((h) => [...h]), deck: [...p.deck], spent: [...p.spent], reserve: [...p.reserve], outBy: [...p.outBy], back: [...p.back], points: p.points && [...p.points], forts: p.forts && [...p.forts], leaders: p.leaders && [...p.leaders], caps: p.caps && [...p.caps], goals: p.goals && p.goals.map((g) => ({ ...g })), pend: p.pend ? { ...p.pend } : null });
 
 /** The start of a seat's turn. Changes p. */
 function begin(p, events) {
   // who moves first moves with less: lean, at two seats, gives the first seat a third of its fresh armies on its first turn;
   // grade gives each seat in round 1 its place in the order in parts of the whole, so the last to move has all of it
   const s = p.seat, m = muster(p, s), first = p.round === 1, how = p.rule.opening;
-  p.left = first && how === "lean" && p.seats === 2 && p.step === 0 ? Math.floor(m.all / 3) : first && how === "grade" ? Math.floor((m.all * (p.step + 1)) / p.seats) : m.all;
+  p.left = first && how === "lean" && p.seats === 2 && p.step === 0 ? Math.floor(m.all / 3) : first && how === "grade" ? Math.floor((m.all * (p.seats + p.step)) / (2 * p.seats - 1)) : m.all;
   p.took = 0;
   p.phase = p.left ? "place" : "attack";
   if (p.leaders && p.leaders[s] === NONE && p.round >= p.back[s]) { // a lost leader comes back where the seat is strongest
@@ -1354,6 +1383,8 @@ function begin(p, events) {
     events.push({ kind: "leader", seat: s, at: p.leaders[s] });
   }
   events.push({ kind: "muster", seat: s, ...m });
+  // scored rounds: what you still hold when your turn comes round again counts, so every seat is scored after the others have answered
+  if (p.points && !first) { const n = gain(p, s); p.points[s] += n; events.push({ kind: "score", seat: s, n, all: p.points[s] }); }
   // what you hold at the start of your own turn counts, so the others have had a round to answer
   if (p.round > 2 && p.caps && p.owner[p.caps[s]] === s && capsHeld(p, s) >= capsToWin(p)) finish(p, [s], "held the capitals", events);
   else if (p.round > 2 && reached(p, s)) finish(p, [s], "reached a secret goal", events);
@@ -1403,6 +1434,12 @@ function weather(p, dice, events) {
   if (p.event !== "calm") events.push({ kind: "event", what: p.event });
 }
 
+/** The end of scored rounds: everyone left scores once more, and the most points wins; level on points, the most land. Changes p. */
+function tally(p, live, events) {
+  for (const s of live) { const n = gain(p, s); p.points[s] += n; events.push({ kind: "score", seat: s, n, all: p.points[s], last: true }); }
+  const top = Math.max(...live.map((s) => p.points[s])), level = live.filter((s) => p.points[s] === top), most = Math.max(...level.map((s) => cellsOf(p, s)));
+  return finish(p, level.filter((s) => cellsOf(p, s) === most), "scored the most over the rounds", events);
+}
 /** A game with no round limit still ends after this many rounds, on the most land, for players who will never break a stalemate. */
 const SAFETY = 100;
 /** Pass the turn: seats in a fixed order, or with the first seat moving on each round when the rules say so. Changes p. */
@@ -1417,6 +1454,7 @@ function pass(p, dice, events) {
       p.step = 0;
       p.round++;
       if (p.round > (p.rounds || SAFETY)) {
+        if (p.points) return tally(p, live, events);
         const most = Math.max(...live.map((s) => cellsOf(p, s)));
         return finish(p, live.filter((s) => cellsOf(p, s) === most), p.rounds ? "held the most land at the end" : "held the most land when the long war was called off", events);
       }
@@ -1505,7 +1543,7 @@ function amounts(n) {
 }
 
 const banners = {
-  id: "banners", version: "5",
+  id: "banners", version: "6",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 4 }, map: { values: MAPS, normal: "world" },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -1514,7 +1552,7 @@ const banners = {
   setup(o, dice) {
     const key = dice.below(0x40000000), b = areaBoard(key, o.map), all = b.near.map((_, i) => i);
     const rule = SETS[o.style] ? { ...SETS[o.style] } : Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]])), each = Math.floor(b.n / o.seats);
-    const p = { classic: true, style: o.style, rule, key, map: o.map, seats: o.seats, owner: Array(b.n).fill(NONE), str: Array(b.n).fill(rule.neutral), hands: Array.from({ length: o.seats }, () => []), deck: [], spent: [], traded: 0, reserve: Array(o.seats).fill(0), outBy: Array(o.seats).fill(NONE), seat: 0, step: 0, round: 1, rounds: rule.rounds, phase: "place", left: 0, took: 0, pend: null, over: null, forts: null, leaders: null, back: Array(o.seats).fill(0), caps: null, goals: null };
+    const p = { classic: true, style: o.style, rule, key, map: o.map, seats: o.seats, owner: Array(b.n).fill(NONE), str: Array(b.n).fill(rule.neutral), hands: Array.from({ length: o.seats }, () => []), deck: [], spent: [], traded: 0, reserve: Array(o.seats).fill(0), outBy: Array(o.seats).fill(NONE), seat: 0, step: 0, round: 1, rounds: rule.rounds, phase: "place", left: 0, took: 0, pend: null, over: null, forts: null, leaders: null, back: Array(o.seats).fill(0), caps: null, goals: null, points: rule.score === "rounds" && rule.rounds ? Array(o.seats).fill(0) : null };
     if (rule.cards !== "none") p.deck = dice.shuffle([...all, b.n, b.n + 1]);
     if (o.forts) p.forts = all.map(() => 0);
     if (o.leaders) p.leaders = Array(o.seats).fill(NONE);
@@ -1616,15 +1654,15 @@ const banners = {
   result: (p) => p.over,
 };
 
-$x.NONE = NONE; $x.HAND = HAND; $x.FORT = FORT; $x.SWITCHES = SWITCHES; $x.EXPANSIONS = EXPANSIONS; $x.boardOf = boardOf; $x.cellsOf = cellsOf; $x.landOf = landOf; $x.goalOf = goalOf; $x.nameOf = nameOf; $x.suitOf = suitOf; $x.nearOf = nearOf; $x.wholeOf = wholeOf; $x.muster = muster; $x.terms = terms; $x.odds = odds; $x.setsOf = setsOf; $x.setWorth = setWorth; $x.reached = reached; $x.capsToWin = capsToWin; $x.capsHeld = capsHeld; $x.SAFETY = SAFETY; $x.amounts = amounts; $x.banners = banners;
+$x.NONE = NONE; $x.HAND = HAND; $x.FORT = FORT; $x.SWITCHES = SWITCHES; $x.EXPANSIONS = EXPANSIONS; $x.boardOf = boardOf; $x.cellsOf = cellsOf; $x.landOf = landOf; $x.goalOf = goalOf; $x.nameOf = nameOf; $x.suitOf = suitOf; $x.nearOf = nearOf; $x.wholeOf = wholeOf; $x.muster = muster; $x.gain = gain; $x.terms = terms; $x.odds = odds; $x.toll = toll; $x.setsOf = setsOf; $x.setWorth = setWorth; $x.reached = reached; $x.capsToWin = capsToWin; $x.capsHeld = capsHeld; $x.SAFETY = SAFETY; $x.amounts = amounts; $x.banners = banners;
 return $x; })({});
 $m[12] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Bots for Brass and Banners. They see only what a player sees, and work out the same odds the player is shown.
-const { FORT, HAND, NONE, banners, boardOf, bonusOf, cellsOf, goalOf, nearOf, odds, setsOf, setWorth } = $m[1];
+const { FORT, HAND, NONE, banners, boardOf, bonusOf, cellsOf, goalOf, nearOf, odds, setsOf, setWorth, toll } = $m[1];
 const { steps } = $m[2];
 
-const TIERS = ["random", "easy", "normal"];
+const TIERS = ["random", "easy", "normal", "hard"];
 const MILLION = 1000000;
 
 /** How much a seat wants a place, in hundredths of one ordinary place. */
@@ -1671,7 +1709,7 @@ function risk(p, at, more) {
   return odds(q, foe, at);
 }
 
-function place(p, dice, noise) {
+function place(p, dice, noise, ranks) {
   const s = p.seat, mine = mineOf(p), edge = mine.filter((i) => nearOf(p, i).some((m) => p.owner[m] !== s)), list = edge.length ? edge : mine;
   let at = list[0], score = -1;
   for (const i of list) {
@@ -1679,6 +1717,7 @@ function place(p, dice, noise) {
     const own = p.caps && p.caps[s] === i ? 320 : 0;
     if (strongest(p, s, i) > p.str[i] || own) v += Math.floor(((worth(p, s, i) + own) * Math.max(0, risk(p, i, 0) - risk(p, i, p.left))) / MILLION);
     v += dice.below(noise);
+    ranks?.push([v, { do: "place", at: i, n: p.left }]);
     if (v > score) { score = v; at = i; }
   }
   if (p.phase === "place" && p.forts && p.left >= FORT + 3 && !p.forts[at] && risk(p, at, 0) > 500000) return { do: "fort", at };
@@ -1692,7 +1731,7 @@ function claim(p, dice) {
   return { do: "claim", at: list.reduce((a, c) => (c[0] > a[0] ? c : a))[1] };
 }
 
-function attack(p, dice, noise, floor) {
+function attack(p, dice, noise, floor, ranks) {
   if (p.rule.opening === "truce" && p.round === 1) return null; // nobody strikes in the first round
   const s = p.seat, goal = goalOf(p) - cellsOf(p, s);
   let pick = null, score = 0;
@@ -1706,6 +1745,7 @@ function attack(p, dice, noise, floor) {
       // attack from where the rest of the strength is least needed
       const spare = nearOf(p, i).some((x) => x !== m && p.owner[x] !== s) ? 0 : 25;
       const v = Math.floor((worth(p, s, m) * o) / MILLION) + spare + dice.below(noise);
+      ranks?.push([v, { do: "attack", from: i, to: m, roll: "all" }]);
       if (v > score) { score = v; pick = { do: "attack", from: i, to: m, roll: "all" }; }
     }
   }
@@ -1757,9 +1797,67 @@ function* plan(p, dice, tier) {
   return attack(p, dice, noise, floor) || move(p) || { do: "end" };
 }
 
+// ---- the hard bot: it plans a whole march, not one fight at a time ----
+const H = { floor: 450000, deep: 5, bare: 30, least: 20 }; // the least chance it will march on, how many fights ahead it looks, what an outmatched stopping place costs for each strength short, and the least a march must be worth
+/** The best march from a place with `force` able to attack: each fight's worth by the chance of getting that far, less what is left open where it stops. Returns [value, first target]. `q` is a scratch position and is put back as it was. */
+function march(q, s, from, force, deep) {
+  let top = 0, to = -1;
+  for (const m of nearOf(q, from)) {
+    if (q.owner[m] === s) continue;
+    const o = odds(q, from, m, force);
+    if (o < H.floor) continue;
+    const left = force - Math.floor((toll(q, from, m, force) + 500) / 1000), w = worth(q, s, m), was = q.owner[m], had = q.str[m];
+    if (left < 1) continue;
+    q.owner[m] = s; q.str[m] = left;
+    const on = deep > 1 && left > 1 ? march(q, s, m, left - 1, deep - 1)[0] : 0, open = on ? 0 : H.bare * Math.max(0, strongest(q, s, m) - left);
+    q.owner[m] = was; q.str[m] = had;
+    const v = Math.floor((o * (w + on - open)) / MILLION);
+    if (v > top) { top = v; to = m; }
+  }
+  return [top, to];
+}
+const scratch = (p) => ({ ...p, owner: [...p.owner], str: [...p.str] });
+function* hard(p, dice) {
+  const s = p.seat, q = scratch(p), mine = mineOf(p);
+  if (p.phase === "claim" || p.phase === "setup" || (p.phase === "place" && setsOf(p, s).length)) return yield* plan(p, dice, "normal");
+  if (p.phase === "place") {
+    const usual = place(p, dice, 6);
+    if (usual.do !== "place") return usual;
+    let at = usual.at, top = -1;
+    for (const i of mine) {
+      if (!nearOf(p, i).some((m) => p.owner[m] !== s)) continue;
+      let [v] = march(q, s, i, p.str[i] - 1 + p.left, H.deep);
+      const own = p.caps && p.caps[s] === i ? 320 : 0;
+      if (strongest(p, s, i) > p.str[i] || own) v += Math.floor(((worth(p, s, i) + own) * Math.max(0, risk(p, i, 0) - risk(p, i, p.left))) / MILLION);
+      v += dice.below(4);
+      if (v > top) { top = v; at = i; }
+    }
+    return { do: "place", at, n: p.left };
+  }
+  yield;
+  if (p.phase === "occupy") {
+    const { from, to } = p.pend, n = p.str[from] - 1;
+    if (p.caps && p.caps[s] === from) return { do: "occupy", n: occupy(p) };
+    q.str[to] += n; q.str[from] -= n;
+    const [there] = march(q, s, to, q.str[to] - 1, H.deep);
+    q.str[to] -= n; q.str[from] += n;
+    const [here] = march(q, s, from, n, H.deep);
+    return { do: "occupy", n: there || here ? (there >= here ? n : 0) : occupy(p) };
+  }
+  if (p.rule.opening === "truce" && p.round === 1) return move(p) || { do: "end" };
+  let pick = null, top = H.least;
+  for (const i of mine) {
+    if (p.str[i] < 2) continue;
+    if (p.caps && p.caps[s] === i && p.str[i] < 2 * strongest(p, s, i) && risk(p, i, 0) < 600000 && strongest(p, s, i) > 2) continue;
+    const [v, to] = march(q, s, i, p.str[i] - 1, H.deep);
+    if (to >= 0 && v + dice.below(4) > top) { top = v; pick = { do: "attack", from: i, to, roll: "all" }; }
+  }
+  return pick || move(p) || { do: "end" };
+}
+
 /** Choose a move a little at a time. `dice` breaks ties and drives random. */
 function* thinking(p, dice, tier = "normal") {
-  const want = yield* plan(p, dice, tier), all = banners.moves(p);
+  const want = yield* (tier === "hard" ? hard(p, dice) : plan(p, dice, tier)), all = banners.moves(p);
   if (want.n === undefined) return want;
   // amounts are offered in steps when there are many: take the nearest one that is offered
   const same = all.filter((m) => m.do === want.do && m.at === want.at && m.from === want.from && m.to === want.to);
@@ -1773,7 +1871,93 @@ function choose(p, dice, tier) {
 
 $x.TIERS = TIERS; $x.worth = worth; $x.thinking = thinking; $x.choose = choose;
 return $x; })({});
-$m[14] = (($x) => {
+$m[13] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// What the table games' screen keeps for the player: settings, sounds made in code, and the order of places at the end.
+// No page is touched when this is loaded, so its plain parts are tested in Node (test/shell.test.mjs).
+
+const SETTINGS_KEY = "capo-settings";
+const CHOICES = {
+  sound: [["on", "On"], ["off", "Off"]],
+  speed: [["normal", "Normal"], ["fast", "Fast"], ["instant", "Instant"]],
+  motion: [["system", "Follow the system"], ["reduced", "Reduced"], ["full", "Full"]],
+  patterns: [["off", "Off"], ["on", "On"]],
+  text: [["normal", "Normal"], ["large", "Large"], ["larger", "Larger"]],
+  keys: [["on", "On"], ["off", "Off"]],
+};
+const DEFAULTS = { sound: "on", volume: 60, speed: "normal", motion: "system", patterns: "off", text: "normal", keys: "on" };
+/** How long bots wait, as a share of their usual pace; and how much bigger the words are. */
+const PACE = { normal: 1, fast: 0.3, instant: 0 }, SCALE = { normal: 1, large: 1.15, larger: 1.3 };
+
+/** Settings from what was kept: anything missing or strange falls back to its default. */
+function parseSettings(text) {
+  let o;
+  try { o = JSON.parse(text || "{}"); } catch { o = null; }
+  const s = { ...DEFAULTS }, v = Number(o?.volume);
+  for (const [k, list] of Object.entries(CHOICES)) if (list.some(([x]) => x === o?.[k])) s[k] = o[k];
+  if (o?.volume !== undefined && Number.isFinite(v)) s.volume = Math.max(0, Math.min(100, Math.round(v)));
+  return s;
+}
+const settings = parseSettings((() => { try { return localStorage.getItem(SETTINGS_KEY); } catch { return null; } })());
+function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* kept for this visit only */ } }
+
+/** The turn a banner was shown for: once a round when one person plays, once a seat when several share the screen. */
+const turnKey = (seed, round, seat, solo) => (solo ? `${seed}/${round}` : `${seed}/${round}/${seat}`);
+
+/** Places at the end: winners first, then those still standing by score, then the fallen, the last to fall first. Rows: { seat, won, score, fell }. */
+function ranked(rows) {
+  const up = (r) => (r.fell === undefined || r.fell === null ? 1 : 0), key = (r) => (r.won ? "w" : `${up(r)}/${r.score}/${r.fell ?? ""}`);
+  const all = [...rows].sort((a, b) => (b.won ? 1 : 0) - (a.won ? 1 : 0) || up(b) - up(a) || b.score - a.score || (b.fell ?? 0) - (a.fell ?? 0) || a.seat - b.seat);
+  let place = 0;
+  return all.map((r, i) => ({ ...r, place: i && key(all[i - 1]) === key(r) ? place : (place = i + 1) }));
+}
+/** The result as one line of plain text, to paste anywhere. */
+const resultText = (title, rows) => `${title}: ${rows.map((r) => `${r.place}. ${r.name}${r.figures.length ? ` (${r.figures.map(([k, v]) => `${k} ${v}`).join(", ")})` : ""}`).join("; ")}.`;
+
+// Sounds, made here with the Web Audio API: no files. Silent until a press has woken them (browsers ask for that).
+let ctx = null;
+function wake() {
+  try { ctx ||= new AudioContext(); if (ctx.state === "suspended") ctx.resume(); } catch { ctx = null; }
+}
+// [hertz, start, length, loudness, wave]
+const TUNES = {
+  tick: [[1900, 0, 0.03, 0.12, "square"]],
+  turn: [[784, 0, 0.45, 0.5], [1175, 0.11, 0.6, 0.4]],
+  capture: [[147, 0, 0.22, 0.9, "triangle"], [294, 0.05, 0.3, 0.45, "triangle"]],
+  win: [[523, 0, 0.3, 0.5], [659, 0.13, 0.3, 0.5], [784, 0.26, 0.3, 0.5], [1047, 0.39, 0.9, 0.55]],
+  lose: [[392, 0, 0.4, 0.5], [311, 0.2, 0.4, 0.5], [262, 0.4, 1, 0.5]],
+};
+function sfx(name, later = 0) {
+  if (!ctx || ctx.state !== "running" || settings.sound !== "on" || !settings.volume) return;
+  try {
+    const t0 = ctx.currentTime + 0.01 + later, out = ctx.createGain();
+    out.gain.value = 0.6 * (settings.volume / 100) ** 2;
+    out.connect(ctx.destination);
+    if (name === "roll") for (let i = 0; i < 4; i++) rattle(out, t0 + i * 0.06 + Math.random() * 0.025);
+    for (const [hz, at, len, peak, wave = "sine"] of TUNES[name] || []) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = wave; o.frequency.value = hz;
+      g.gain.setValueAtTime(0.0001, t0 + at); g.gain.exponentialRampToValueAtTime(peak, t0 + at + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + len);
+      o.connect(g).connect(out); o.start(t0 + at); o.stop(t0 + at + len + 0.05);
+    }
+  } catch { /* a sound is never needed to play */ }
+}
+/** A die on wood: a short burst of noise through a narrow filter. */
+function rattle(out, at) {
+  const n = Math.floor(ctx.sampleRate * 0.045), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0), src = ctx.createBufferSource(), f = ctx.createBiquadFilter();
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) ** 3;
+  f.type = "bandpass"; f.frequency.value = 1200 + Math.random() * 1800; f.Q.value = 3;
+  src.buffer = buf; src.connect(f).connect(out); src.start(at);
+}
+/** The sound a move makes, by what happened in it. */
+function cue(events) {
+  if (events.some((e) => ["fight", "roll", "pour", "attack"].includes(e.kind))) sfx("roll");
+  if (events.some((e) => e.kind === "take" || (e.kind === "pour" && e.taken?.length))) sfx("capture", 0.2);
+}
+
+$x.SETTINGS_KEY = SETTINGS_KEY; $x.CHOICES = CHOICES; $x.DEFAULTS = DEFAULTS; $x.PACE = PACE; $x.SCALE = SCALE; $x.parseSettings = parseSettings; $x.settings = settings; $x.saveSettings = saveSettings; $x.turnKey = turnKey; $x.ranked = ranked; $x.resultText = resultText; $x.wake = wake; $x.sfx = sfx; $x.cue = cue;
+return $x; })({});
+$m[15] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Turns a list of hexes into what the painter needs: a picture of cell numbers and a picture of heights.
 const ROOT3 = Math.sqrt(3);
@@ -1825,11 +2009,11 @@ function hexPicture(cells, rough, sea = [], size = 44) {
 
 $x.noise = noise; $x.hexPicture = hexPicture;
 return $x; })({});
-$m[13] = (($x) => {
+$m[14] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Turns provinces made of small hexes into what the painter needs. Borders are bent a little so they look drawn,
 // never enough to make two provinces touch that did not, or part two that did.
-const { noise } = $m[14];
+const { noise } = $m[15];
 
 const ROOT3 = Math.sqrt(3);
 
@@ -1877,7 +2061,7 @@ function areaPicture(cells, of, mids, size = 26, flat = false) {
 
 $x.areaPicture = areaPicture;
 return $x; })({});
-$m[17] = (($x) => {
+$m[18] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // One camera for every look. Board point (x, y) in board pixels, height Z in screen pixels.
 // The *To methods write into fields and make no objects, so picking makes no garbage.
@@ -1946,7 +2130,7 @@ function pick(cam, m, sx, sy, top, unit, most) {
 
 $x.Camera = Camera; $x.pick = pick;
 return $x; })({});
-$m[18] = (($x) => {
+$m[19] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The painter: WebGL2 by hand. One full-screen triangle; the shader undoes the camera and walks down to the first cell top.
 const VS = `#version 300 es
@@ -2085,13 +2269,13 @@ class Painter {
 
 $x.Painter = Painter;
 return $x; })({});
-$m[16] = (($x) => {
+$m[17] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A hex board on a page: the painted surface, standing pieces and emblems, picking, looks and animation.
 // It never changes a game. It is told what to show and says which cell was pointed at.
-const { Camera, pick } = $m[17];
-const { hexPicture } = $m[14];
-const { Painter } = $m[18];
+const { Camera, pick } = $m[18];
+const { hexPicture } = $m[15];
+const { Painter } = $m[19];
 
 const DEG = Math.PI / 180;
 const LOOKS = {
@@ -2459,7 +2643,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
 
 $x.LOOKS = LOOKS; $x.EMBLEMS = EMBLEMS; $x.emblem = emblem; $x.seatPattern = seatPattern; $x.canDraw = canDraw; $x.createBoard = createBoard;
 return $x; })({});
-$m[20] = (($x) => {
+$m[21] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Where this copy's source code can be read. Anyone who runs a changed copy puts their own address here.
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
@@ -2467,7 +2651,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.7.1";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "5c42fbaf";
+const BUILD = "39ef9550";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -2487,7 +2671,7 @@ const AI_BASES = {
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_BASES = AI_BASES;
 return $x; })({});
-$m[21] = (($x) => {
+$m[22] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
 // Daylight or lamplight, as the front page's lantern last left it; every page starts here.
@@ -2507,10 +2691,10 @@ function guard() {
 
 $x.guard = guard;
 return $x; })({});
-$m[19] = (($x) => {
+$m[20] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-const { BUILD, SOURCE_URL, VERSION } = $m[20];
-const { guard } = $m[21];
+const { BUILD, SOURCE_URL, VERSION } = $m[21];
+const { guard } = $m[22];
 
 /** Every page shows its version and where its source can be read. */
 function footer() {
@@ -2526,12 +2710,12 @@ function footer() {
 
 $x.footer = footer;
 return $x; })({});
-$m[22] = (($x) => {
+$m[23] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Games played by pasting a link. The whole game is in the part after #, which browsers do not send to the host.
 // With a password the game is locked (AES-GCM, the key made from the password by PBKDF2) before it goes in the link.
 const { Refusal } = $m[3];
-const { SITE_URL } = $m[20];
+const { SITE_URL } = $m[21];
 
 const ID = 6, SALT = 16, IV = 12, ROUNDS = 250000, PLACE = "capo-link-";
 const broken = () => new Refusal("link", "that link is broken or not complete");
@@ -2591,7 +2775,7 @@ const linkGames = {
 
 $x.canLock = canLock; $x.newId = newId; $x.makeLink = makeLink; $x.readLink = readLink; $x.linkGames = linkGames;
 return $x; })({});
-$m[23] = (($x) => {
+$m[24] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The coach: a guided first game. A game gives a fixed seed, a short preset and a few steps. Each step points at a place
 // on the board or a control, says one plain sentence, and goes on when the player does the thing (or presses Next, for a step
@@ -2732,103 +2916,17 @@ function coach(T, L, key, go) {
 
 $x.coach = coach;
 return $x; })({});
-$m[24] = (($x) => {
-// SPDX-License-Identifier: AGPL-3.0-or-later
-// What the table games' screen keeps for the player: settings, sounds made in code, and the order of places at the end.
-// No page is touched when this is loaded, so its plain parts are tested in Node (test/shell.test.mjs).
-
-const SETTINGS_KEY = "capo-settings";
-const CHOICES = {
-  sound: [["on", "On"], ["off", "Off"]],
-  speed: [["normal", "Normal"], ["fast", "Fast"], ["instant", "Instant"]],
-  motion: [["system", "Follow the system"], ["reduced", "Reduced"], ["full", "Full"]],
-  patterns: [["off", "Off"], ["on", "On"]],
-  text: [["normal", "Normal"], ["large", "Large"], ["larger", "Larger"]],
-  keys: [["on", "On"], ["off", "Off"]],
-};
-const DEFAULTS = { sound: "on", volume: 60, speed: "normal", motion: "system", patterns: "off", text: "normal", keys: "on" };
-/** How long bots wait, as a share of their usual pace; and how much bigger the words are. */
-const PACE = { normal: 1, fast: 0.3, instant: 0 }, SCALE = { normal: 1, large: 1.15, larger: 1.3 };
-
-/** Settings from what was kept: anything missing or strange falls back to its default. */
-function parseSettings(text) {
-  let o;
-  try { o = JSON.parse(text || "{}"); } catch { o = null; }
-  const s = { ...DEFAULTS }, v = Number(o?.volume);
-  for (const [k, list] of Object.entries(CHOICES)) if (list.some(([x]) => x === o?.[k])) s[k] = o[k];
-  if (o?.volume !== undefined && Number.isFinite(v)) s.volume = Math.max(0, Math.min(100, Math.round(v)));
-  return s;
-}
-const settings = parseSettings((() => { try { return localStorage.getItem(SETTINGS_KEY); } catch { return null; } })());
-function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* kept for this visit only */ } }
-
-/** The turn a banner was shown for: once a round when one person plays, once a seat when several share the screen. */
-const turnKey = (seed, round, seat, solo) => (solo ? `${seed}/${round}` : `${seed}/${round}/${seat}`);
-
-/** Places at the end: winners first, then those still standing by score, then the fallen, the last to fall first. Rows: { seat, won, score, fell }. */
-function ranked(rows) {
-  const up = (r) => (r.fell === undefined || r.fell === null ? 1 : 0), key = (r) => (r.won ? "w" : `${up(r)}/${r.score}/${r.fell ?? ""}`);
-  const all = [...rows].sort((a, b) => (b.won ? 1 : 0) - (a.won ? 1 : 0) || up(b) - up(a) || b.score - a.score || (b.fell ?? 0) - (a.fell ?? 0) || a.seat - b.seat);
-  let place = 0;
-  return all.map((r, i) => ({ ...r, place: i && key(all[i - 1]) === key(r) ? place : (place = i + 1) }));
-}
-/** The result as one line of plain text, to paste anywhere. */
-const resultText = (title, rows) => `${title}: ${rows.map((r) => `${r.place}. ${r.name}${r.figures.length ? ` (${r.figures.map(([k, v]) => `${k} ${v}`).join(", ")})` : ""}`).join("; ")}.`;
-
-// Sounds, made here with the Web Audio API: no files. Silent until a press has woken them (browsers ask for that).
-let ctx = null;
-function wake() {
-  try { ctx ||= new AudioContext(); if (ctx.state === "suspended") ctx.resume(); } catch { ctx = null; }
-}
-// [hertz, start, length, loudness, wave]
-const TUNES = {
-  tick: [[1900, 0, 0.03, 0.12, "square"]],
-  turn: [[784, 0, 0.45, 0.5], [1175, 0.11, 0.6, 0.4]],
-  capture: [[147, 0, 0.22, 0.9, "triangle"], [294, 0.05, 0.3, 0.45, "triangle"]],
-  win: [[523, 0, 0.3, 0.5], [659, 0.13, 0.3, 0.5], [784, 0.26, 0.3, 0.5], [1047, 0.39, 0.9, 0.55]],
-  lose: [[392, 0, 0.4, 0.5], [311, 0.2, 0.4, 0.5], [262, 0.4, 1, 0.5]],
-};
-function sfx(name, later = 0) {
-  if (!ctx || ctx.state !== "running" || settings.sound !== "on" || !settings.volume) return;
-  try {
-    const t0 = ctx.currentTime + 0.01 + later, out = ctx.createGain();
-    out.gain.value = 0.6 * (settings.volume / 100) ** 2;
-    out.connect(ctx.destination);
-    if (name === "roll") for (let i = 0; i < 4; i++) rattle(out, t0 + i * 0.06 + Math.random() * 0.025);
-    for (const [hz, at, len, peak, wave = "sine"] of TUNES[name] || []) {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = wave; o.frequency.value = hz;
-      g.gain.setValueAtTime(0.0001, t0 + at); g.gain.exponentialRampToValueAtTime(peak, t0 + at + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + len);
-      o.connect(g).connect(out); o.start(t0 + at); o.stop(t0 + at + len + 0.05);
-    }
-  } catch { /* a sound is never needed to play */ }
-}
-/** A die on wood: a short burst of noise through a narrow filter. */
-function rattle(out, at) {
-  const n = Math.floor(ctx.sampleRate * 0.045), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0), src = ctx.createBufferSource(), f = ctx.createBiquadFilter();
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) ** 3;
-  f.type = "bandpass"; f.frequency.value = 1200 + Math.random() * 1800; f.Q.value = 3;
-  src.buffer = buf; src.connect(f).connect(out); src.start(at);
-}
-/** The sound a move makes, by what happened in it. */
-function cue(events) {
-  if (events.some((e) => ["fight", "roll", "pour", "attack"].includes(e.kind))) sfx("roll");
-  if (events.some((e) => e.kind === "take" || (e.kind === "pour" && e.taken?.length))) sfx("capture", 0.2);
-}
-
-$x.SETTINGS_KEY = SETTINGS_KEY; $x.CHOICES = CHOICES; $x.DEFAULTS = DEFAULTS; $x.PACE = PACE; $x.SCALE = SCALE; $x.parseSettings = parseSettings; $x.settings = settings; $x.saveSettings = saveSettings; $x.turnKey = turnKey; $x.ranked = ranked; $x.resultText = resultText; $x.wake = wake; $x.sfx = sfx; $x.cue = cue;
-return $x; })({});
-$m[15] = (($x) => {
+$m[16] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What every table game's screen shares: title, seats, score bar, words, taking back, saving, bots' turns and the end.
 // A game gives its rules, its board and its own move panel.
 const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } = $m[3];
-const { EMBLEMS, emblem } = $m[16];
-const { footer } = $m[19];
-const { canLock, linkGames, makeLink, newId, readLink } = $m[22];
-const { BUILD, SOURCE_URL, VERSION } = $m[20];
-const { coach } = $m[23];
-const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, turnKey, wake } = $m[24];
+const { EMBLEMS, emblem } = $m[17];
+const { footer } = $m[20];
+const { canLock, linkGames, makeLink, newId, readLink } = $m[23];
+const { BUILD, SOURCE_URL, VERSION } = $m[21];
+const { coach } = $m[24];
+const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, turnKey, wake } = $m[13];
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -3397,9 +3495,9 @@ function createTable(G) {
     for (const m of marks) if (m.room > 26) { x.drawImage(sign(m.s), m.at, m.y - 13, 26, 26); x.fillStyle = inkOf(RGB[m.s]); x.fillText(nameOf(m.s), m.at + 32, m.y + 1); }
     c.setAttribute("role", "img"); c.setAttribute("aria-label", `Land held over the game. At the end: ${tally(p).map((v, s) => `${nameOf(s)} ${v}`).join(", ")}.`);
     // places
-    let rows = ranked(Array.from({ length: names ? names.length : T.kinds.length }, (_, s) => ({ seat: s, won: r.winners.includes(s), score: G.cellsOf(p, s), fell: fell[s] })));
+    let rows = ranked(Array.from({ length: names ? names.length : T.kinds.length }, (_, s) => ({ seat: s, won: r.winners.includes(s), score: (G.placeOf || G.cellsOf)(p, s), land: G.cellsOf(p, s), fell: fell[s] }))); // G.placeOf: what places are ranked by, when it is not land
     if (names) rows = rows.filter((w, i) => i < 8 || mine(w.seat));
-    rows = rows.map((w) => ({ ...w, name: nameOf(w.seat), figures: [[G.unit || "Land", w.score], ...(G.figures?.(T, w.seat) || G.stats(p, w.seat)), ...(rounds ? [["Rounds", w.fell ?? last]] : [])] }));
+    rows = rows.map((w) => ({ ...w, name: nameOf(w.seat), figures: [[G.unit || "Land", w.land], ...(G.figures?.(T, w.seat) || G.stats(p, w.seat)), ...(rounds ? [["Rounds", w.fell ?? last]] : [])] }));
     const scroll = el("div", undefined, "ranks"), table = el("table"), head = el("tr");
     head.append(...["Place", "Player", ...rows[0].figures.map(([k]) => k)].map((t) => { const th = el("th", t); th.scope = "col"; return th; }));
     table.append(head, ...rows.map((w) => {
@@ -3430,7 +3528,7 @@ function createTable(G) {
     const onward = G.next?.(T); // a ladder's next step takes the main button's place
     if (onward) { again.textContent = onward.label; again.onclick = () => { closeSheet(); onward.go(); }; }
     go.append(all, change, again); minor.append(look, copyIt);
-    body.append(hero, scroll, c, go, minor);
+    body.append(hero, scroll, c, ...[G.report?.(T)].filter(Boolean), go, minor); // G.report: the figures a game adds to the end
     sheet(lost ? "Defeat" : people ? "Victory" : "The end", body, null, `end ${lost ? "lose" : "win"}`);
     again.focus();
   }
@@ -3697,8 +3795,8 @@ return $x; })({});
 $m[25] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The hex board for a game's screen: the moving one when the device can draw it, else a still picture that can be tapped.
-const { LOOKS, canDraw, createBoard } = $m[16];
-const { ICONS, RGB } = $m[15];
+const { LOOKS, canDraw, createBoard } = $m[17];
+const { ICONS, RGB } = $m[16];
 
 /** The seats' patterns for the still board, the same six as on the moving board and the score bar: /, dots, |, x, \, -. */
 function patterns(make, f) {
@@ -3773,11 +3871,13 @@ return $x; })({});
 $m[0] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Brass and Banners on the table: place strength, attack with dice, move in, move once.
-const { EXPANSIONS, FORT, HAND, NONE, SAFETY, SWITCHES, banners, bonusOf, bordersOf, boardOf, capsHeld, capsToWin, cellsOf, goalOf, landOf, muster, nameOf, odds, setWorth, setsOf, suitOf, terms, wholeOf } = $m[1];
+const { EXPANSIONS, FORT, HAND, NONE, SAFETY, SWITCHES, banners, bonusOf, bordersOf, boardOf, capsHeld, capsToWin, cellsOf, gain, goalOf, landOf, muster, nameOf, odds, setWorth, setsOf, suitOf, terms, toll, wholeOf } = $m[1];
 const { choose, thinking } = $m[12];
-const { DICE } = $m[11];
-const { areaPicture } = $m[13];
-const { $, ICONS, NAMES, RGB, createTable, el, radio, sheet, toast } = $m[15];
+const { DICE, fair, meet } = $m[11];
+const { createMatch } = $m[3];
+const { settings } = $m[13];
+const { areaPicture } = $m[14];
+const { $, ICONS, NAMES, RGB, createTable, el, radio, sheet, toast } = $m[16];
 const { hexBoard } = $m[25];
 
 const SEA = [68, 108, 122], LAND = [[222, 190, 150], [206, 206, 150], [228, 200, 180], [190, 206, 178], [214, 190, 200], [226, 214, 158], [196, 200, 214], [210, 180, 150], [178, 204, 200], [224, 206, 190]];
@@ -3837,12 +3937,83 @@ function die(n, rgb, lost) {
 }
 function showDice(T) {
   const f = shown, box = $("dice");
-  box.hidden = !f;
-  if (!f) return;
+  box.hidden = $("fought").hidden = !f;
+  if (!f) { box.removeAttribute("aria-label"); return; }
+  const them = f.was === NONE ? "the defenders" : NAMES[f.was], n = f.rolls.length, place = nameOf(T.match.position, f.to);
+  $("fought").textContent = `${n === 1 ? "One throw" : `${n} throws`}: ${NAMES[f.seat]} lost ${f.lost.attacker}, ${them} lost ${f.lost.defender}. ${place} ${f.won ? "is taken" : "holds"}.`;
   const [A, D] = f.rolls[f.rolls.length - 1], row = (list, other, rgb, tie) => { const d = el("div"); list.forEach((n, i) => { const s = die(n, rgb, i < other.length && (n < other[i] || (n === other[i] && tie))); s.style.animationDelay = `${i * 45}ms`; d.append(s); }); return d; };
   box.setAttribute("role", "img");
-  box.setAttribute("aria-label", `${NAMES[f.seat]} rolled ${A.join(", ")}. ${f.was === NONE ? "The defenders" : NAMES[f.was]} rolled ${D.join(", ")}.`);
+  box.setAttribute("aria-label", `${n > 1 ? "The last throw: " : ""}${NAMES[f.seat]} rolled ${A.join(", ")}. ${cap(them)} rolled ${D.join(", ")}.`);
   box.replaceChildren(row(A, D, RGB[f.seat], true), row(D, A, f.was === NONE ? [206, 196, 170] : RGB[f.was], shownTie));
+}
+/** A fight shown where it happened: the last throw's dice between the two provinces, and what each side lost, rising off the map. */
+function onMap(T, e) {
+  const a = T.board?.at?.(e.from), d = T.board?.at?.(e.to);
+  if (!a || !d || T.demo || T.hurry || settings.speed === "instant") return;
+  const stage = $("stage").getBoundingClientRect(), still = document.documentElement.classList.contains("still"), quick = settings.speed === "fast" && !T.human() ? 0.6 : 1;
+  const put = (node, at, ms, rise) => {
+    Object.assign(node.style, { position: "fixed", left: `${stage.left + at.x}px`, top: `${stage.top + at.y}px`, transform: "translate(-50%, -50%)", zIndex: "2", pointerEvents: "none" });
+    node.setAttribute("aria-hidden", "true");
+    document.body.append(node);
+    if (!still) node.animate([{ opacity: 0, transform: "translate(-50%, -30%) scale(.7)" }, { opacity: 1, transform: "translate(-50%, -50%)", offset: 0.15 }, { opacity: 1, transform: `translate(-50%, ${-50 - rise / 2}%)`, offset: 0.75 }, { opacity: 0, transform: `translate(-50%, ${-50 - rise}%)` }], { duration: ms * quick, easing: "ease-out" });
+    setTimeout(() => node.remove(), ms * quick - 20);
+  };
+  const pale = [206, 196, 170], lost = (n, at, rgb) => {
+    if (!n) return;
+    const b = el("b", `−${n}`);
+    Object.assign(b.style, { font: "800 20px/1 system-ui, sans-serif", color: "#fff", background: "#a3271b", border: `2px solid rgb(${rgb})`, borderRadius: "999px", padding: "4px 9px", boxShadow: "0 2px 8px rgba(0,0,0,.5)" });
+    put(b, { x: at.x, y: at.y - 26 }, 1300, 160);
+  };
+  const [A, D] = e.rolls[e.rolls.length - 1], box = el("div");
+  const row = (list, other, rgb, loses) => { const r = el("div"); Object.assign(r.style, { display: "flex", gap: "2px", justifyContent: "center" }); list.forEach((n, i) => { const s = die(n, rgb, i < other.length && (n < other[i] || (n === other[i] && loses))); s.style.width = s.style.height = "20px"; r.append(s); }); return r; };
+  Object.assign(box.style, { display: "grid", gap: "2px", padding: "4px", borderRadius: "8px", background: "rgba(13,22,35,.82)", boxShadow: "0 2px 10px rgba(0,0,0,.5)" });
+  box.append(row(A, D, RGB[e.seat], true), row(D, A, e.was === NONE ? pale : RGB[e.was], shownTie));
+  put(box, { x: (a.x + d.x) / 2, y: (a.y + d.y) / 2 }, 1100, 30);
+  lost(e.lost.attacker, a, RGB[e.seat]);
+  lost(e.lost.defender, d, e.was === NONE ? pale : RGB[e.was]);
+}
+
+/** The battle record: every fight of the game counted again from its seed and moves, so a game opened from a save has it too. */
+function record(T) {
+  const m = T.match, again = createMatch(banners, { seed: m.seed, options: m.options }), seats = m.options.seats;
+  const rows = Array.from({ length: seats }, () => ({ faces: [0, 0, 0, 0, 0, 0, 0], dice: 0, fights: 0, won: 0, taken: 0, gone: 0, struck: 0, fallen: 0, luck: 0 }));
+  let bold = null;
+  for (const move of m.list) {
+    const p = again.position;
+    for (const e of again.play(move)) {
+      if (e.kind === "take") { rows[e.seat].taken++; if (e.was !== NONE) rows[e.was].gone++; }
+      if (e.kind !== "fight") continue;
+      const how = terms(p, e.from, e.to), me = rows[e.seat], you = e.was === NONE ? null : rows[e.was], chance = odds(p, e.from, e.to);
+      me.fights++; if (e.won) me.won++;
+      me.struck += e.lost.defender; me.fallen += e.lost.attacker;
+      if (you) { you.struck += e.lost.attacker; you.fallen += e.lost.defender; }
+      if (e.won && move.roll === "all" && (!bold || chance < bold.chance)) bold = { chance, seat: e.seat, at: e.to };
+      for (const [A, D] of e.rolls) {
+        const [a, d] = meet(A, D, how), [ea, ed] = fair(A.length, D.length, how), swing = 1000 * (d - a) - (ed - ea); // how far the throw went the attacker's way, past what the odds give
+        for (const v of A) { me.faces[v]++; me.dice++; }
+        me.luck += swing;
+        if (you) { for (const v of D) { you.faces[v]++; you.dice++; } you.luck -= swing; }
+      }
+    }
+  }
+  return { rows, bold };
+}
+const signed = (n) => { const v = Math.round(n / 100) / 10; return v > 0 ? `+${v.toFixed(1)}` : v < 0 ? `−${Math.abs(v).toFixed(1)}` : "0.0"; };
+function grid(head, rows, label) {
+  const box = el("div", undefined, "ranks"), t = el("table"), tr = el("tr");
+  tr.append(...head.map((h) => { const th = el("th", h); th.scope = "col"; return th; }));
+  t.append(tr, ...rows.map(([name, ...cells]) => { const r = el("tr"), th = el("th", name); th.scope = "row"; r.append(th, ...cells.map((c) => el("td", String(c)))); return r; }));
+  t.setAttribute("aria-label", label);
+  box.append(t);
+  return box;
+}
+/** Every die thrown so far, by player: how often each face came up, the average, and how far the dice ran ahead of the odds. */
+function tally(T) {
+  const { rows } = record(T), box = el("div");
+  if (!rows.some((r) => r.dice)) { box.append(el("p", "No dice have been thrown yet.")); return box; }
+  box.append(grid(["Player", "Dice", "1", "2", "3", "4", "5", "6", "Average", "Luck"], rows.map((r, s) => [NAMES[s], r.dice, ...r.faces.slice(1), r.dice ? (r.faces.reduce((n, c, v) => n + c * v, 0) / r.dice).toFixed(2) : "", signed(r.luck)]), "Every die thrown"),
+    el("p", "A fair die averages 3.50. Luck is the strength your dice won or saved beyond what the odds give: above zero the dice ran your way, below zero against you. The same seed and moves always throw the same dice."));
+  return box;
 }
 
 const words = (g, p) => { const b = boardOf(p); return g.kind === "lands" ? `Hold ${g.lands.map((k) => b.lands[k]).join(" and ")} whole.` : g.kind === "share" ? `Hold ${g.many} provinces.` : g.kind === "strong" ? `Hold ${g.many} provinces with 3 or more on each.` : `Put ${NAMES[g.seat]} out. If someone else does, hold ${Math.ceil((p.owner.length * 45) / 100)} provinces.`; };
@@ -3916,12 +4087,22 @@ const LESSON = {
 const NICE = { forts: ["Forts", "Spend 4 of what you muster to build one. It throws one more die in defence."], leaders: ["Leaders", "Each player has one. It adds 1 to your best die where it stands, and comes back two rounds after it is lost."], capitals: ["Capitals", "Hold more than half of them at the start of your turn and you win. They add 1 to the defender's best die."], secrets: ["Secret goals", "Each player is dealt one. It counts at the start of your turn."], events: ["Seasons", "Some rounds bring a harvest, a storm that closes the crossings, or unrest."] };
 
 createTable({
-  game: banners, key: "banners", title: "Brass and Banners", won: "The land is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 4, lengths: [], pace: (p) => (p.owner.length > 40 ? 300 : 430),
+  game: banners, key: "banners", title: "Brass and Banners", won: "The land is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 4, lengths: [], hard: true,
+  // bots do not linger: moving in and placing are quick, a fight is given time to be read
+  pace: (p) => (p.phase === "occupy" ? 110 : p.phase === "attack" ? (p.owner.length > 40 ? 300 : 380) : 220),
+  placeOf: (p, s) => (p.points ? 1000 * p.points[s] + cellsOf(p, s) : cellsOf(p, s)),
+  roundText: (p) => (p.points ? `Round ${Math.min(p.round, p.rounds)} of ${p.rounds}` : ""),
+  report(T) {
+    const { rows, bold } = record(T), p = T.match.position, box = el("div");
+    box.append(grid(["Player", "Taken", "Lost", "Fights won", "Struck down", "Fallen", "Dice luck"], rows.map((r, s) => [NAMES[s], r.taken, r.gone, `${r.won} of ${r.fights}`, r.struck, r.fallen, signed(r.luck)]), "The battle record"));
+    if (bold && bold.chance < 600000) box.append(el("p", `Boldest win: ${NAMES[bold.seat]} took ${nameOf(p, bold.at)} at ${percent(bold.chance)} in 100.`, "about"));
+    return box;
+  },
   cellsOf, goalOf, landOf, choose, thinking, lesson: LESSON,
   about: {
     classic: "Traditional: inspired by Risk.\nThe standard world-conquest rules as players know them, on our own world map: all land dealt out, place your armies, attack with up to 3 dice against up to 2, move once, cards in sets for more armies (put a player out and you take theirs), and play until one player holds the world. Ours: the map, the lands and what they pay, and our own card values.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
     custom: "Custom: your own rules.\nSet every rule yourself: how the game starts, the dice, what each turn brings, the cards, how much land wins, the number of rounds, and how strongly empty land is held. Add any expansions on top.",
-    ours: "Capo: our own variation.\nEach player starts alone on one province in empty land. Ties cost both sides, cards are always worth the same, and holding 65% of the land wins. In the first round, whoever moves later places more. Quicker, with more room to grow before the fighting starts.",
+    ours: "Capo: our own variation.\nTen scored rounds. Each player starts alone on one province in empty land. From round 2 you score at the start of your turn for what you still hold: 1 for every three provinces and each whole land's bonus. After round 10 everyone scores once more and the most points wins; holding 65% of the land, or being the last one left, wins at once. Ties cost both sides, cards are always worth the same, and in the first round whoever moves later places more.",
     coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
   },
   choices: [{ key: "map", label: "Map", normal: "world", values: [["world", "The world"], ["isles", "An archipelago"], ["grown", "An inland sea"]] }],
@@ -3931,14 +4112,15 @@ createTable({
     { key: "muster", label: "Each turn", normal: SWITCHES.muster.normal, values: [["floor", "1 for every 3 provinces, at least 3"], ["plus", "3, and 1 for every 3 provinces"]] },
     { key: "cards", label: "Cards", normal: SWITCHES.cards.normal, values: [["rising", "Worth more each time"], ["flat", "Always the same"], ["none", "None"]] },
     { key: "goal", label: "To win", normal: SWITCHES.goal.normal, values: [[65, "65% of the land"], [80, "80% of the land"], [100, "All of it"]] },
-    { key: "rounds", label: "Rounds", normal: SWITCHES.rounds.normal, values: [[12, "12, quick"], [20, "20"], [40, "40"], [0, "No limit"]] },
+    { key: "rounds", label: "Rounds", normal: SWITCHES.rounds.normal, values: [[10, "10, quick"], [12, "12"], [20, "20"], [40, "40"], [0, "No limit"]] },
+    { key: "score", label: "Scoring", normal: SWITCHES.score.normal, values: [["land", "Most land when the rounds end"], ["rounds", "Points every round"]] },
     { key: "order", label: "Turn order", normal: SWITCHES.order.normal, values: [["fixed", "The same each round"], ["rotate", "First seat moves on each round"]] },
     { key: "opening", label: "First turn", normal: SWITCHES.opening.normal, values: [["open", "Full strength"], ["lean", "First player gets a third (two players)"], ["grade", "Round 1 grows down the order"], ["truce", "Nobody attacks in round 1"]] },
     { key: "spoils", label: "Put a player out", normal: SWITCHES.spoils.normal, values: [["trade", "Take their cards, hand in at once at five"], ["wait", "Take their cards, hand in next turn"]] },
     { key: "neutral", label: "Empty land held by", normal: SWITCHES.neutral.normal, values: [[1, "1"], [2, "2"], [3, "3"]] },
   ],
   expansions: EXPANSIONS.map((key) => ({ key, label: NICE[key][0], note: NICE[key][1] })),
-  stats: (p, s) => [["Army", p.str.reduce((n, v, i) => n + (p.owner[i] === s ? v : 0), 0)], p.caps ? ["Capitals", `${capsHeld(p, s)}/${capsToWin(p)}`] : ["Cards", p.hands[s].length]],
+  stats: (p, s) => [...(p.points ? [["Points", p.points[s]]] : []), ["Army", p.str.reduce((n, v, i) => n + (p.owner[i] === s ? v : 0), 0)], p.caps ? ["Capitals", `${capsHeld(p, s)}/${capsToWin(p)}`] : ["Cards", p.hands[s].length]],
   line(e, p) {
     const who = NAMES[e.seat], at = (i) => nameOf(p, i);
     if (e.kind === "place") return `${who} places ${e.n} at ${at(e.at)}.`;
@@ -3955,9 +4137,10 @@ createTable({
     if (e.kind === "event") return e.what === "harvest" ? "A good harvest: 2 more for everyone this round." : e.what === "storm" ? "Storms: nobody crosses water this round." : `Unrest: ${at(e.at)} leaves ${who}.`;
     if (e.kind === "move") return `${who} moves ${e.n} from ${at(e.from)} to ${at(e.to)}.`;
     if (e.kind === "done") return `${who} ends the turn.`;
+    if (e.kind === "score") return e.last ? `${who} scores ${e.n} at the end: ${e.all} points.` : `${who} scores ${e.n}: ${e.all} points.`;
     return "";
   },
-  seen(T, events) { for (const e of events) if (e.kind === "fight") { shown = e; shownTie = terms(T.match.position, e.from, e.to).tie === "both"; showDice(T); } else if (e.kind === "muster") { shown = null; if (!T.demo) showDice(T); } },
+  seen(T, events) { for (const e of events) if (e.kind === "fight") { shown = e; shownTie = terms(T.match.position, e.from, e.to).tie === "both"; showDice(T); onMap(T, e); } else if (e.kind === "muster") { shown = null; if (!T.demo) showDice(T); } },
   fresh(T) { source = target = null; much = -1; shown = null; showDice(T); },
   order: (events) => events.flatMap((e) => (e.kind === "take" ? [e.at] : [])),
   board(T, stage) {
@@ -3984,13 +4167,14 @@ createTable({
     if (source !== null && !o.sources.includes(source)) { source = target = null; o = offers(T); }
     if (target !== null && !o.targets.includes(target)) { target = null; o = offers(T); }
     const who = T.solo() ? "" : `${NAMES[p.seat]}: `, m = o.now[0], fight = p.phase === "attack" && m && rolls(p, m), sums = fight ? [] : keys(o.now, "n");
+    if (shown && fight && target !== shown.to) { shown = null; showDice(T); } // the last fight's dice do not sit under the next one
     $("status").textContent = who + cap(p.phase === "claim" ? "claim a province" : p.phase === "place" || p.phase === "setup" ? `place ${p.left}` : p.phase === "occupy" ? `${nameOf(p, p.pend.to)} is yours` : target !== null && fight ? `attack ${nameOf(p, target)}` : target !== null ? `move to ${nameOf(p, target)}` : "attack, move once, or end your turn");
     const g = muster(p, p.seat);
     cards(T);
     const must = p.phase === "place" && p.hands[p.seat].length >= HAND && setsOf(p, p.seat).length > 0;
-    $("info").textContent = must ? "You hold five cards or more. Hand in a set first." : p.phase === "claim" ? (source === null ? "Tap an empty province." : about(p, source)) : p.phase === "setup" ? (source === null ? `${p.reserve[p.seat]} left to set out, five at a time. Tap a province of yours.` : about(p, source)) : p.phase === "place" ? (source === null ? (p.took ? "Place what the cards brought, then attack on." : `${g.base ? `${g.base} to begin, ` : ""}${g.land} for land${g.lands ? `, ${g.lands} for whole lands` : ""}${g.event ? ", 2 for the harvest" : ""}`) + ". Tap a province of yours." : about(p, source))
+    $("info").textContent = must ? "You hold five cards or more. Hand in a set first." : p.phase === "claim" ? (source === null ? "Tap an empty province." : about(p, source)) : p.phase === "setup" ? (source === null ? `${p.reserve[p.seat]} left to set out, five at a time. Tap a province of yours.` : about(p, source)) : p.phase === "place" ? (source === null ? (p.took ? "Place what the cards brought, then attack on." : `${g.base ? `${g.base} to begin, ` : ""}${g.land} for land${g.lands ? `, ${g.lands} for whole lands` : ""}${g.event ? ", 2 for the harvest" : ""}`) + `.${p.points && p.round > 1 && !p.took ? ` You scored ${gain(p, p.seat)} for what you held.` : ""} Tap a province of yours.` : about(p, source))
       : p.phase === "occupy" ? "One has moved in. How many more?"
-        : fight ? `${p.str[source] - 1} against ${p.str[target]}. If you keep rolling, ${percent(odds(p, source, target))} in 100 to take it.`
+        : fight ? `${p.str[source] - 1} against ${p.str[target]}. If you keep rolling, ${percent(odds(p, source, target))} in 100 to take it, at a likely cost of ${Math.round(toll(p, source, target) / 1000)}.`
           : target !== null ? "Moving ends your turn." : source !== null ? about(p, source) : "Tap a province of yours, then where to.";
     $("sources").hidden = !o.sources.length;
     radio($("sources"), o.sources.map((i) => ({ value: i, label: nameOf(p, i), note: `${p.str[i]} strong` })), source, (v) => { source = v; target = null; much = -1; T.refresh(); });
@@ -4036,18 +4220,19 @@ createTable({
     else if (k === "escape") { source = target = null; T.refresh(); } else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "do")) { e.preventDefault(); $("do").click(); }
   },
   more: {
-    label: "The lands",
-    body(T) { const p = T.match.position, b = boardOf(p), u = el("ul"); u.append(...b.lands.map((n, k) => { const s = [0, 1, 2, 3, 4, 5].find((x) => x < p.seats && wholeOf(p, x).includes(k)); return el("li", `${cap(n)}: ${b.sizes[k]} provinces, ${bordersOf(b, k)} on its borders, worth ${bonusOf(b, k)} a turn. ${s === undefined ? "Nobody holds it whole." : `${NAMES[s]} holds it whole.`}`); })); return u; },
+    label: "Lands and dice",
+    body(T) { const p = T.match.position, b = boardOf(p), u = el("ul"), box = el("div"); box.append(el("h3", "Every die thrown"), tally(T), el("h3", "The lands"), u); u.append(...b.lands.map((n, k) => { const s = [0, 1, 2, 3, 4, 5].find((x) => x < p.seats && wholeOf(p, x).includes(k)); return el("li", `${cap(n)}: ${b.sizes[k]} provinces, ${bordersOf(b, k)} on its borders, worth ${bonusOf(b, k)} a turn. ${s === undefined ? "Nobody holds it whole." : `${NAMES[s]} holds it whole.`}`); })); return box; },
   },
   rules: (_, p) => {
     const r = p?.rule, d = DICE[r?.dice || SWITCHES.dice.normal];
     return [
-      ...(r ? [`This game: ${r.start === "dealt" ? "land dealt out" : r.start === "claimed" ? "land claimed in turn" : "one capital each"}; hold ${r.goal}% of the land, or be the last one left; ${p.rounds ? `after ${p.rounds} rounds the most land wins` : `no round limit, but a war still running after ${SAFETY} rounds is called off and the most land wins`}.`] : []),
+      ...(r ? [`This game: ${r.start === "dealt" ? "land dealt out" : r.start === "claimed" ? "land claimed in turn" : "one capital each"}; hold ${r.goal}% of the land, or be the last one left; ${p.rounds ? `after ${p.rounds} rounds the most ${p.points ? "points" : "land"} wins` : `no round limit, but a war still running after ${SAFETY} rounds is called off and the most land wins`}.`] : []),
       "Each turn: hand in cards if you like, place new strength, attack as often as you like, then move once or end your turn.",
       `You place ${r?.muster === "plus" ? "3, and 1 for every three provinces you hold" : "1 for every three provinces you hold, at least 3"}, and more for every land you hold whole. Gold lines mark the lands; the number by a land's name is what it pays: a third of its provinces and half of those on its borders.`,
       "To attack, tap a province of yours with 2 or more, then one beside it. Dashed lines over water are crossings.",
       `You throw a die for each of your strength but one, ${d.a} at most. The defender throws one for each of theirs, ${d.d} at most. Highest meets highest: the lower one loses 1. ${d.tie === "both" ? "If they tie, both lose 1." : "Ties go to the defender."}`,
-      "Roll once, or roll it out until somebody has won. The chance is shown first. When you win, choose how many move in.",
+      ...(p?.points ? [`Scored rounds: from round 2, at the start of your turn you score for what you still hold: 1 for every three provinces, and each whole land's bonus${p.caps ? ", and 2 for each capital" : ""}. After round ${p.rounds} everyone left scores once more. Level on points, the most land wins.`] : []),
+      "Roll once, or roll it out until somebody has won. The chance and the likely cost are shown first; the dice and the losses appear on the map, and Lands and dice in the menu counts every die thrown. When you win, choose how many move in.",
       `Take a province in your turn and you draw a card. Three alike, or one of each, can be handed in for more to place. Crowns stand for any. One more for each card that shows a province of yours. With five cards you must hand in a set. Put a player out and you take theirs${r?.spoils === "wait" ? "" : "; if that makes five or more, hand in at once and place what they bring"}.`,
       ...EXPANSIONS.filter((x) => !p || (x === "forts" ? p.forts : x === "leaders" ? p.leaders : x === "capitals" ? p.caps : x === "secrets" ? p.goals : p.event !== undefined)).map((x) => `${NICE[x][0]}: ${NICE[x][1]}`),
       "A soldier is 1 to 4, a horse 5 to 9, a gun 10 or more. Zoom with the wheel or two fingers, and drag the map.",

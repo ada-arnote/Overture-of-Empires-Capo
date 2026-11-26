@@ -576,9 +576,9 @@ export function createTable(G) {
     for (const m of marks) if (m.room > 26) { x.drawImage(sign(m.s), m.at, m.y - 13, 26, 26); x.fillStyle = inkOf(RGB[m.s]); x.fillText(nameOf(m.s), m.at + 32, m.y + 1); }
     c.setAttribute("role", "img"); c.setAttribute("aria-label", `Land held over the game. At the end: ${tally(p).map((v, s) => `${nameOf(s)} ${v}`).join(", ")}.`);
     // places
-    let rows = ranked(Array.from({ length: names ? names.length : T.kinds.length }, (_, s) => ({ seat: s, won: r.winners.includes(s), score: G.cellsOf(p, s), fell: fell[s] })));
+    let rows = ranked(Array.from({ length: names ? names.length : T.kinds.length }, (_, s) => ({ seat: s, won: r.winners.includes(s), score: (G.placeOf || G.cellsOf)(p, s), land: G.cellsOf(p, s), fell: fell[s] }))); // G.placeOf: what places are ranked by, when it is not land
     if (names) rows = rows.filter((w, i) => i < 8 || mine(w.seat));
-    rows = rows.map((w) => ({ ...w, name: nameOf(w.seat), figures: [[G.unit || "Land", w.score], ...(G.figures?.(T, w.seat) || G.stats(p, w.seat)), ...(rounds ? [["Rounds", w.fell ?? last]] : [])] }));
+    rows = rows.map((w) => ({ ...w, name: nameOf(w.seat), figures: [[G.unit || "Land", w.land], ...(G.figures?.(T, w.seat) || G.stats(p, w.seat)), ...(rounds ? [["Rounds", w.fell ?? last]] : [])] }));
     const scroll = el("div", undefined, "ranks"), table = el("table"), head = el("tr");
     head.append(...["Place", "Player", ...rows[0].figures.map(([k]) => k)].map((t) => { const th = el("th", t); th.scope = "col"; return th; }));
     table.append(head, ...rows.map((w) => {
@@ -609,7 +609,7 @@ export function createTable(G) {
     const onward = G.next?.(T); // a ladder's next step takes the main button's place
     if (onward) { again.textContent = onward.label; again.onclick = () => { closeSheet(); onward.go(); }; }
     go.append(all, change, again); minor.append(look, copyIt);
-    body.append(hero, scroll, c, go, minor);
+    body.append(hero, scroll, c, ...[G.report?.(T)].filter(Boolean), go, minor); // G.report: the figures a game adds to the end
     sheet(lost ? "Defeat" : people ? "Victory" : "The end", body, null, `end ${lost ? "lose" : "win"}`);
     again.focus();
   }
