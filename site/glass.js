@@ -37,7 +37,7 @@ function tap(T, i) {
 }
 
 createTable({
-  game: glass, key: "glass", title: "Grain and Glass", won: "The island's trade is yours.", outOf: () => false, // nobody is knocked out of a trading game seats: [2, 3, 4, 5, 6], normal: 3, lengths: [], pace: () => 420,
+  game: glass, key: "glass", title: "Grain and Glass", won: "The island's trade is yours.", outOf: () => false /* nobody is knocked out of a trading game */, seats: [2, 3, 4, 5, 6], normal: 3, lengths: [], pace: () => 420,
   unit: "Points", cellsOf: pointsOf, goalOf, landOf: (p) => goalOf(p) + 3, choose, thinking,
   about: {
     classic: "Traditional: inspired by Catan.\nThe settle-and-trade rules as players know them: hexes yield goods when their number is rolled, you build routes, depots and towns, trade with the bank and the other players, buy cards, and race to 10 points. Ours: depots and towns stand in hexes and gather from the hexes beside them, a toll gate moved on doubles in place of a robber (nothing is stolen), our own goods, costs and plans, and the first player drawn by dice.\nNot affiliated with or endorsed by its makers. Our own island, names and art.",

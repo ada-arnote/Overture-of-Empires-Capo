@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const KB = 1000;
 export const LIMITS = {
   file: 250 * KB, // any one shipped file, as stored
-  code: { "src/core": 12 * KB, "src/map": 45 * KB, "src/games": 90 * KB, "src/story": 40 * KB, site: 96 * KB }, // compressed. site: 96 is provisional (Phase 0 fixes), until the owner rules on budgets (decision 7: the synthesis recommends about 120)
+  code: { "src/core": 12 * KB, "src/map": 45 * KB, "src/games": 90 * KB, "src/story": 40 * KB, site: 120 * KB }, // compressed. site: 120, the owner's ruling on decision 7 (ruling 121)
   first: 500 * KB, // everything shipped, compressed
   map: 300 * KB, // one map file in maps/, compressed: fetched by the page that needs it, never by the first page
   lines: { "src/map": 2400, "src/games": 6500, "src/core": 700, tools: 1000 },
