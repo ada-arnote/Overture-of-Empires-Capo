@@ -5,6 +5,8 @@
 import { draw100 } from "./line.js";
 // features hook: revolt and an empty treasury stop a war or an attack
 import { barred } from "./state.js";
+// missions hook: someone away, hurt or held leads no attack
+import { unfit } from "./roster.js";
 import { chanceOf, check, checkLine } from "./check.js";
 import { relate, relationLines, treatyAnswer, treatyName } from "./relations.js";
 import { countTaken, endWar, mightOf, peaceAnswer, strengthOf, truceUntil } from "./war.js";
@@ -230,7 +232,7 @@ export const turnKey = (g) => (g.branch ? `${g.turn}b${g.branch}` : g.turn);
 const offer = (g, from, kind) => { if (!g.offers.some((o) => o.from === from && o.kind === kind)) g.offers.push({ from, kind, date: g.date }); };
 const seated = (g) => g.mode !== "citizen" && g.council ? Object.entries(g.council.seats).filter(([, m]) => m) : [];
 /** Who may lead the player's attacks: council members (the war seat in role, others at -10), or the generals. */
-export const commanders = (g) => [...seated(g).map(([seat, m]) => ({ seat, name: m.name, command: commandOf(g, m), off: seat !== "war" })), { seat: "generals", name: "its generals", command: GENERALS, off: false }];
+export const commanders = (g) => [...seated(g).filter(([, m]) => !unfit(g, m.name)).map(([seat, m]) => ({ seat, name: m.name, command: commandOf(g, m), off: seat !== "war" })), { seat: "generals", name: "its generals", command: GENERALS, off: false }];
 function commanderFor(g, c, seat) {
   const list = c === g.player ? commanders(g) : [], named = list.filter((x) => x.seat !== "generals");
   const pick = list.find((x) => x.seat === seat) || named.find((x) => x.seat === "war") || list.find((x) => x.seat === "generals");

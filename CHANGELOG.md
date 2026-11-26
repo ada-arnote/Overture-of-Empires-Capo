@@ -2,6 +2,30 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Capo: the end of Phase 4 (missions, three authored starts, a save that cannot silently fill, the accept step)
+
+**Players**
+- **Send someone.** Your council and two field agents (dealt by the rules, with code names) can go alone into another country: to scout it (missions there are 10 easier for a year), to sabotage it (its might is one lower for a year), or to bring home someone it holds. Tap a province of that country. You choose who goes, one of three approaches (quiet, bold, patient) and two standing orders (try a failed step once more or withdraw; press on or withdraw once hunted). You plan; you do not steer.
+- **Odds before the order.** The card shows the first step's chance out of 100 with its parts, and the whole mission's odds counted exactly: clean, costly, failed, held. The same check as attacks, never above 75.
+- **Alarm and alert.** Inside a mission an alarm rises with each costly or failed step; at 2 the mission is hunted, at 3 it is blown. A mission that ends noticed puts the country on alert (missions there are harder), and it knows whose hand it was: relations fall a step. Alert eases a point each quiet turn.
+- **Capture, and rescue.** Someone caught is held: they lead no attack, give no counsel and go on no mission. Send a rescue, or they are let go after six turns. Anyone sent, hurt or away is likewise out for that time; that is the price of sending them.
+- **A report, step by step.** The Ledger tells each mission in three or four short lines chosen from templates (no AI call), with the rules' numbers beside each. The receipt keeps one sentence and the whole record. A turn with a settled mission, taken back and played again, draws fresh numbers on a new numbered line, as attacks do.
+- **Three authored starts**, listed first under "Authored starts": *Late 2026: the world as it stands* (the present day with its quarrels, one great war under way), *The Nile and the Horn, 2027* (a regional brink, no war yet) and *A Cold Peace, 2029* (an armed peace, treaties everywhere). Each is fiction and says so; each names offices, never people. A start may now say where pairs of countries stand (hostile to close), so the world does not begin as a blank slate. **Their text is a first draft, waiting for the owner's review.**
+- **A save that cannot silently fill.** The Game sheet shows how big your game is and how much of this browser's room the site uses. At half you are warned and offered a file. At three quarters older turns are kept in short (what the rules decided and one sentence), take-backs fall from 20 to 5, old chat messages go, and you are told what went. If the browser still refuses, a bar across the top says "Not saved" until a save works, and the page asks before it closes.
+- **The save promise**, stated where saves are handled: until launch one a save may end when the rules version changes; from launch one the previous rules version stays loadable (ruling 143).
+- **An accept step before a first story game**: what the story game is, the one line it never crosses, where your words go, and a tick that you are 18 or older. Asked once in each browser.
+- **"Fiction" on newspapers**, and on anything copied out of the story's panels (the copy carries a line saying it is fiction from a game of Capo). A scenario file you save says so too.
+- **One sentence on AI services**, at the accept step and beside the AI settings: each service's own rules bind your key.
+- **Every prompt names its own stage** (ruling 143): the real world, an alternate history by its year and turning point, or a fictional world, in the turn prompt and in chats, the council and counsel. The correcting line beneath is gone.
+
+**Contributors**
+- New rules in `src/story`: `missions.js` (the plan, the steps, the odds, the turn's settlement; about 150 lines), `roster.js` (who can be sent and how they are), `missiontext.js` (the template report), `keep.js` (what a save lets go, and when), `authored.js` (the three starts). New page parts: `site/missions.js`, `site/keep.js`, `site/accept.js`. Tests: `test/capo4.test.mjs` (15), including 100,000 missions a kind held to the shown odds within 1 point, and a 200-turn game with fifty chats that saves every turn.
+- Hooks in existing files are single lines marked "missions hook" or "phase 4 hook": `src/story/turn.js`, `worldrules.js` (a held or absent commander), `war.js` (sabotaged might), `saves.js` (a settled mission counts for take-back), `scenarios.js` (`rel` and `fiction` in a scenario file), `presets.js`, `overlay.js` and `talk.js` (`stageOf`), `site/game.js`.
+- Take-back records no longer hold chats or counsel: what was said stays said when a turn is taken back.
+- Sizes: `src/story` 79.5 to 96.9 kB compressed (above its 90 kB guide; the three starts' text is about a third of the growth), site code 168.2 to 176.4 kB, everything shipped 596 to 622 kB.
+
 ## v0.7.0 (2026-11-26): new worlds, and a deeper Capo
 
 ### A deeper Capo: gauges, ambitions, crises, causes for war, the press

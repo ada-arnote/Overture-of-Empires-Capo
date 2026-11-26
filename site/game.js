@@ -24,6 +24,12 @@ import { BUILD, SOURCE_URL, VERSION } from "./config.js";
 import { guard } from "./guard.js";
 // features hook: the country sheet, crises, ambitions, the Turns tab (site/realm.js)
 import { NOTE, demandBox, keepMore, notices, realmSheet, stateColour, turnsTab } from "./realm.js";
+// phase 4 hook: storage that says when it is full (site/keep.js), solo missions (site/missions.js), the accept step and "Fiction" (site/accept.js)
+import { keeper } from "./keep.js";
+import { fatten, slim } from "../src/story/keep.js";
+import { keepMissions, missionBox, missionReports, rosterRows } from "./missions.js";
+import { unfit } from "../src/story/roster.js";
+import { AI_RULES, acceptStep, accepted, fictionCopy, fictionTag } from "./accept.js";
 
 const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);
@@ -52,15 +58,15 @@ const mend = mendGame;
 // A take-back record is the game without its log (the log only grows; the record keeps its length), so twenty
 // of them cost about what one full copy used to. Each says what it takes back.
 const snap = (why) => snapGame(state, why);
-const restore = (rec) => takeBack(state, rec);
-const remember = (why) => { past.push(snap(why)); past = past.slice(-20); };
+const restore = (rec) => takeBack(state, fatten(rec, state)); // phase 4 hook: a record leaves out chats and counsel
+const remember = (why) => { past.push(slim(snap(why))); past = past.slice(-20); };
 let saveFailed = false;
-const save = () => {
-  try { localStorage.setItem(KEEP, JSON.stringify({ state, past })); saveFailed = false; }
-  catch { if (!saveFailed) toast("This browser would not keep the game; it may be full. Use Game, then Save to a file."); saveFailed = true; }
-};
+// phase 4 hook: the save is measured, made smaller before the browser refuses it, and says so when it cannot be kept
+const keep = keeper(KEEP, { el, button, toast });
+const save = () => { past = keep.save(state, past); saveFailed = keep.state().failed; };
 const load = () => { try { return JSON.parse(localStorage.getItem(KEEP) || "null"); } catch { return null; } };
-const checkSave = (s) => keepMore(checkSaveOf(s, (id) => world.provinces.has(id), (c) => onMap.has(c) || homes.has(c)), (id) => world.provinces.has(id), (c) => onMap.has(c) || homes.has(c) || s?.custom?.code === c); // features hook: keepMore
+const checkSave0 = (s) => keepMore(checkSaveOf(s, (id) => world.provinces.has(id), (c) => onMap.has(c) || homes.has(c)), (id) => world.provinces.has(id), (c) => onMap.has(c) || homes.has(c) || s?.custom?.code === c); // features hook: keepMore
+const checkSave = (s) => keepMissions(checkSave0(s), (c) => onMap.has(c) || homes.has(c) || s?.custom?.code === c); // phase 4 hook
 const keptPast = keptRecords;
 /** Move focus to a heading (or a control), so a keyboard or a screen reader is where the screen now is. */
 const land = (e) => { if (!e) return; if (e.tabIndex < 0) e.tabIndex = -1; e.focus({ preventScroll: true }); };
@@ -443,6 +449,7 @@ function stepBegin(box) {
 
 function begin() {
   const why = countryProblem() || youProblem(); if (why) return toast(why);
+  if (!accepted()) return acceptStep({ el, button, toast, box: $("start-box"), shell: $("start") }, begin, startScreen); // phase 4 hook: adults only, once
   const s = scen(), own = draft.kind === "own", seed = [...crypto.getRandomValues(new Uint32Array(2))].map((v) => v.toString(36)).join("");
   const o = draft.own, code = own ? o.code : draft.country;
   const character = draft.mode === "nation" ? null : Object.fromEntries(Object.entries(draft.character).map(([k, v]) => [k, v.trim()]));
@@ -458,6 +465,7 @@ function begin() {
 
 // ---- the game ----
 function play() {
+  if (!accepted()) return acceptStep({ el, button, toast, box: $("start-box"), shell: $("start") }, () => { $("start").classList.remove("open"); play(); }); // phase 4 hook: a kept game asks once too
   stage();
   $("top").hidden = false; $("dock").hidden = false;
   if (state.told) setTimeout(() => state?.told && toast(NOTE), 3600); // features hook: a converted game says so
@@ -634,7 +642,7 @@ function ledger(box) {
     const papers = state.log.slice().reverse().flatMap((t) => { const front = (t.receipt || []).filter((x) => x.check).map((x) => `${x.check.band}: ${x.text.replace(/[.!?]$/, "")}.`); return [...(front.length ? [{ outlet: "From the front, as the rules decided", headline: `${front.length} attack${front.length > 1 ? "s" : ""} settled`, text: front.join(" "), when: t.to }] : []), ...(t.news || []).map((n) => ({ ...n, when: t.to }))]; });
     if (!papers.length) { box.append(el("p", "No papers yet. The press writes after each turn.", "note")); return; }
     const feed = el("ol", undefined, "feed");
-    feed.append(...papers.slice(0, 24).map((n) => { const li = el("li"); li.append(el("div", `${n.outlet}, ${fmtDate(n.when)}`, "note"), el("b", n.headline), ...(n.text ? [el("p", n.text)] : [])); return li; }));
+    feed.append(...papers.slice(0, 24).map((n) => { const li = el("li"), from = el("div", `${n.outlet}, ${fmtDate(n.when)}`, "note"); from.prepend(fictionTag(el), " "); li.append(from, el("b", n.headline), ...(n.text ? [el("p", n.text)] : [])); return li; }));
     box.append(el("p", "What the world's press says. Papers can be slanted or wrong; the Events tab and the rules are what is true.", "note"), feed);
     return;
   }
@@ -660,7 +668,7 @@ function ledger(box) {
   if (last.receipt?.length) {
     const list = el("ul", undefined, "list");
     list.append(...last.receipt.map((x) => { const li = el("li", undefined, x.ok ? "yes" : "no"); li.append(el("span", x.ok ? "✓" : "✗", "mark"), ...(x.check ? [el("b", `${x.check.band}: `)] : []), el("span", `${x.text.replace(/[.!?]$/, "")}.`)); return li; }));
-    box.append(el("h3", "What the rules decided"), list);
+    box.append(el("h3", "What the rules decided"), list, ...missionReports(last, X)); // phase 4 hook: missions step by step
   }
   if (last.dropped.length) box.append(el("p", `Left out of the reply: ${last.dropped.join("; ")}.`, "note"));
 }
@@ -857,7 +865,7 @@ function advisors(box) {
     box.append(el("p", `Five people to advise you, from the circle someone of your standing has: ${seats.map(([, l]) => l.toLowerCase()).join(", ")}. An AI invents them once; they stay, and their favour moves with what you do.`, "note"));
     const r = el("div", undefined, "row");
     r.append(button("Form your council", () => formCouncil(seats), "go"));
-    box.append(r); return;
+    box.append(r, ...rosterRows(X)); return; // phase 4 hook: the field agents are there before any council
   }
   for (const [seat, label] of seats) {
     const m = council.seats[seat], card = el("div", undefined, "feed");
@@ -878,6 +886,7 @@ function advisors(box) {
     }
     card.append(li); box.append(card);
   }
+  box.append(...rosterRows(X)); // phase 4 hook: who can be sent on a mission
   const q = Object.assign(el("textarea", undefined, "plain"), { rows: 2, maxLength: 600, placeholder: "Ask the whole council, for example: Should we answer Chile's insult with sanctions?" });
   q.id = "council-question"; q.setAttribute("aria-label", "Your question");
   const r = el("div", undefined, "row");
@@ -902,6 +911,7 @@ function formCouncil(seats, open1 = seats) {
   }, "advisors");
 }
 function askCouncil(members) {
+  members = members.filter(([, m]) => !unfit(state, m.name)); if (!members.length) return toast("Nobody asked is here to answer: they are away, hurt or held."); // phase 4 hook
   const q = ($("council-question")?.value || "").trim() || "What should we do next?";
   if (crossesLine([q]).length) return toast("Refused: nothing sexual involving minors.");
   askAI(askPrompt(state, talkWorld(), members, q), (text) => {
@@ -942,9 +952,10 @@ function gameSheet(box) {
     toast("Saved. Open it from the first screen, or share the file.");
   }));
   const again = el("div", undefined, "row"); again.append(button("Show the guide", () => { open(null); guide(0); }));
-  box.append(el("h2", "Game"), home(), again, ...(saveFailed ? [el("p", "This browser would not keep the game (its storage may be full). Save to a file now so nothing is lost.", "warn")] : []), el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back. A turn with a settled attack, played again, draws fresh numbers and is marked in the chronicle.`, "note"), saves, file,
+  box.append(el("h2", "Game"), home(), again, el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back. A turn with a settled attack, played again, draws fresh numbers and is marked in the chronicle.`, "note"), saves, file, ...keep.rows(state, past), // phase 4 hook: the save's size, the room left, the save promise
     el("h3", "Save the world as a scenario"), el("p", `A starting point others can play: today's date, who holds what, wars, treaties, story facts and might${state.custom ? `, and ${state.custom.name}` : ""}. Not your actions, chats or council.`, "note"), sTitle, sBlurb, sOpen, sRow,
     aiPanel(route, toast), // how Capo reaches an AI: site/ai.js (p5-ai)
+    el("p", AI_RULES, "note"), // phase 4 hook
     about());
 }
 
@@ -1009,6 +1020,7 @@ function card(p) {
   if (state && owner !== state.player) rows.push(el("div", undefined, "row")), rows[rows.length - 1].append(button(`Talk to ${name(owner)}`, () => open("chats")));
   if (state && state.mode !== "citizen" && owner !== state.player) rows.push(warsOf(state, state.player).includes(owner) ? attackBox(p) : treatyBox(owner));
   { const d = state && demandBox(p, X); if (d) rows.push(d); } // features hook
+  { const m = state && missionBox(owner, X, () => card(p)); if (m) rows.push(m); } // phase 4 hook: send someone
   box.replaceChildren(...rows);
   box.style.display = "block";
   picked = p.id;
@@ -1073,4 +1085,5 @@ async function start() {
 }
 addEventListener("keydown", (e) => { if (e.key === "Escape" && guideAt >= 0) guide(-1); });
 guard();
+fictionCopy(); // phase 4 hook: what is copied out of the story says it is fiction
 start();

@@ -6,8 +6,9 @@
 // spread it into PRESETS. Nothing else needs to change.
 import { FANTASY } from "./settings.js";
 import { ALTHIST } from "./althist.js";
+import { AUTHORED } from "./authored.js";
 
 /** The headings presets are listed under, by kind. */
-export const KINDS = { fantasy: "Fictional worlds", althist: "Alternate histories" };
-export const PRESETS = [...ALTHIST, ...FANTASY];
+export const KINDS = { authored: "Authored starts", fantasy: "Fictional worlds", althist: "Alternate histories" };
+export const PRESETS = [...AUTHORED, ...ALTHIST, ...FANTASY];
 export { checkSetting, madeWorld, settingScenario, staged, worldKey } from "./settings.js";
