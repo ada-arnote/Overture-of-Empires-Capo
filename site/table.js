@@ -7,7 +7,7 @@ import { footer } from "./footer.js";
 import { canLock, linkGames, makeLink, newId, readLink } from "./link.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
 import { coach } from "./coach.js";
-import { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, turnKey, wake } from "./shell.js";
+import { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } from "./shell.js";
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -109,6 +109,8 @@ const closeSheet = () => { if ($("sheet").open) $("sheet").close(); };
  *    panel(T), tapped(T, cell), key(T, key, event), changed(T) when a new position arrives,
  *    realtime: true, or a test of the position, for a game played on a clock: it has no turns to end or take back.
  *    Without it, a position marked `live` is real time.
+ *    stands: what Take back says when the last move showed what chance held (a roll, a draw); a plain line is said without it.
+ *    The board may add centre(cell) and focus(seat), so a map opens on, and goes home to, your own land.
  */
 export function createTable(G) {
   $("broken")?.remove();
@@ -153,20 +155,36 @@ export function createTable(G) {
   back.type = "button"; back.id = "back"; back.hidden = true;
   back.onclick = () => undo();
   $("choice").querySelector(".go")?.prepend(back);
-  const zoom = el("div", undefined, "zoom");
+  // the finished game, move by move: every game replays from its seed and moves, so any moment of it can be shown again
+  const story = el("div", undefined, "story"), storyRange = el("input"), storyAt = el("output"), storyHead = el("label", "The game again, move by move", "cap"), storyRow = el("div", undefined, "story-row");
+  const storyBack = el("button", "‹", "quiet"), storyOn = el("button", "›", "quiet");
+  Object.assign(storyRange, { type: "range", min: "0", step: "1", id: "story" });
+  storyHead.htmlFor = "story";
+  for (const [b, name, d] of [[storyBack, "One move back", -1], [storyOn, "One move on", 1]]) { b.type = "button"; b.setAttribute("aria-label", name); b.onclick = () => moment(Number(storyRange.value) + d); }
+  storyRange.oninput = () => moment(Number(storyRange.value));
+  storyAt.setAttribute("aria-live", "polite");
+  storyRow.append(storyBack, storyRange, storyOn);
+  story.append(storyHead, storyRow, storyAt);
+  story.hidden = true;
+  $("after").before(story);
+  let real = null; // the finished match, while an earlier moment of it is on the board
+  const zoom = el("div", undefined, "zoom board-zoom");
   zoom.hidden = true; zoom.setAttribute("role", "group"); zoom.setAttribute("aria-label", "Zoom the board");
-  for (const [t, name, f] of [["+", "Zoom in", 1.4], ["−", "Zoom out", 1 / 1.4], ["⌂", "Show the whole board", 0]]) { const b = el("button", t, "quiet"); b.type = "button"; b.setAttribute("aria-label", name); b.onclick = () => board?.zoom(f); zoom.append(b); }
+  for (const [t, name, f] of [["+", "Zoom in", 1.4], ["−", "Zoom out", 1 / 1.4], ["⌂", "Back to the opening view", 0]]) { const b = el("button", t, "quiet"); b.type = "button"; b.setAttribute("aria-label", name); b.onclick = () => zoomTo(f); zoom.append(b); }
   document.body.append(zoom);
+  /** Zoom by a factor; 0 goes home: the view the board opened at, a wide map centred on your own land. */
+  const zoomTo = (f) => { board?.zoom(f); if (!f) board?.centre?.(focus()); };
+  const focus = () => { const p = T.match?.position; if (!p || !board?.focus) return -1; const s = p.human ?? (T.human() ? T.match.turn : T.kinds.indexOf("you")); return board.focus(s); };
   // the status line is spoken, and every redraw writes it: the same words written again are left alone, so they are not said again
   // ("Saffron is thinking" once a turn, not at every move). The games write it plainly; this one element takes care of it.
   const text = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
   Object.defineProperty($("status"), "textContent", { configurable: true, get() { return text.get.call(this); }, set(v) { if (text.get.call(this) !== String(v ?? "")) text.set.call(this, v); } });
   const stage = $("stage");
   stage.removeAttribute("aria-hidden"); stage.tabIndex = 0; stage.setAttribute("role", "group");
-  stage.setAttribute("aria-label", "The board. Plus and minus zoom, 0 shows all of it, arrows move it. The lists in the move panel choose places.");
+  stage.setAttribute("aria-label", "The board. Plus and minus zoom, 0 goes back to the opening view, arrows move it. The lists in the move panel choose places.");
   stage.onkeydown = (e) => {
     const move = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key], f = { "+": 1.4, "=": 1.4, "-": 1 / 1.4, 0: 0 }[e.key];
-    if (move) board?.pan(move[0] * 0.12, move[1] * 0.12); else if (f !== undefined) board?.zoom(f); else return;
+    if (move) board?.pan(move[0] * 0.12, move[1] * 0.12); else if (f !== undefined) zoomTo(f); else return;
     e.preventDefault(); e.stopPropagation();
   };
   banner.id = "turn"; banner.hidden = true; banner.setAttribute("aria-hidden", "true");
@@ -202,20 +220,39 @@ export function createTable(G) {
     fold.setAttribute("aria-expanded", String(!list.hidden));
     if (!dock.hidden && !list.hidden && drawn !== log.length) { drawn = log.length; list.replaceChildren(...log.slice(-80).reverse().map((t) => el("li", t))); }
   }
+  /**
+   * Three layouts. Wide: seats and the move panel in columns either side of the board (an atlas: seats along the top).
+   * Side, for a landscape phone or a small window: the seats in a strip on top, the move panel a full-height column at the right.
+   * Narrow, a phone held upright: the seats in a strip on top, the move panel a tray below.
+   */
+  const side = () => innerWidth > innerHeight * 1.15 && (innerHeight < 600 || innerWidth <= 1100);
+  let room = "", homed = false; // homed: a wide map has been centred on your own land
   const place = () => {
+    document.body.classList.toggle("side", side());
     docked();
     if (!board) return;
-    const wide = innerWidth > 820, r = (id) => $(id).getBoundingClientRect(), z = SCALE[settings.text];
-    if (T.demo) board.layout(wide ? { left: Math.min(innerWidth / 2, $("title").querySelector(".card").getBoundingClientRect().right), right: 0, top: 20, bottom: 20 } : { left: 0, right: 0, top: 10, bottom: innerHeight * 0.5 });
+    const wide = innerWidth > 820, r = (id) => $(id).getBoundingClientRect(), z = SCALE[settings.text], atlas = document.body.classList.contains("atlas");
+    let free;
+    if (T.demo) free = wide ? { left: Math.min(innerWidth / 2, $("title").querySelector(".card").getBoundingClientRect().right), right: 0, top: 20, bottom: 20 } : { left: 0, right: 0, top: 10, bottom: innerHeight * 0.5 };
     // the move panel (with the lesson and the news in it) keeps a column of its own, so nothing floats on the board
-    else if (wide && document.body.classList.contains("atlas")) board.layout({ left: 372 * z, right: dock.hidden || list.hidden ? 0 : 360 * z, top: r("seats").bottom + 2, bottom: 4 });
-    else if (wide) board.layout({ left: 232 * z, right: 372 * z, top: 12 + 74 * z, bottom: 6 });
-    else { fitted = r("act").top; document.body.style.setProperty("--act", `${innerHeight - fitted}px`); board.layout({ left: 0, right: 0, top: r("seats").bottom + 2, bottom: innerHeight - fitted + 34 }); }
+    else if (side()) free = { left: 0, right: innerWidth - r("act").left + 4, top: r("seats").bottom + 2, bottom: 2 };
+    // a wide map opens as tall as the screen allows, centred on your own land; the panels float over its far edges
+    else if (wide && atlas) free = { left: 372 * z, right: dock.hidden || list.hidden ? 16 : 360 * z, top: r("seats").bottom + 2, bottom: 4 };
+    else if (wide) free = { left: 232 * z, right: 372 * z, top: 12 + 74 * z, bottom: 6 };
+    else { fitted = r("act").top; document.body.style.setProperty("--act", `${innerHeight - fitted}px`); free = { left: 0, right: 0, top: r("seats").bottom + 2, bottom: innerHeight - fitted + 34 }; }
+    if (atlas && !T.demo) Object.assign(free, { fill: wide || side(), at: focus() }); // a phone held upright keeps the board's own closer opening
+    // the same room as last time is left alone, so a summary opening or a tray settling does not move a board you have moved
+    const key = JSON.stringify([innerWidth, innerHeight, free.left, free.right, free.top, free.bottom, !!free.fill, T.demo]);
+    if (key === room) return;
+    room = key;
+    board.layout(free);
+    homed = free.at >= 0;
   };
   function makeBoard() {
     board?.destroy();
     $("stage").replaceChildren();
     board = G.board(T, $("stage"));
+    room = ""; // a new board is laid out afresh
     board.patterns?.(settings.patterns === "on"); board.motion?.(settings.motion);
     $("look").hidden = !board.looks.length;
     place();
@@ -247,6 +284,8 @@ export function createTable(G) {
     if (!T.human() && briefed()) { unbrief(); place(); }
     $("choice").hidden = !me;
     $("after").hidden = !over;
+    if (over && !real && !T.demo) { storyN = T.match.list.length; storyRange.max = String(storyN); storyRange.value = String(storyN); storyAt.textContent = ""; }
+    story.hidden = !over || T.demo || storyN < 1;
     if (over) { $("status").textContent = ending(); board.clear(); } else if (!me) {
       // while your own move plays out the line stays as it is, so it is not blanked and said again after
       if (!T.human()) $("status").textContent = T.away() ? `Waiting for ${NAMES[T.match.turn]}` : `${NAMES[T.match.position.seat]} is thinking`;
@@ -259,6 +298,8 @@ export function createTable(G) {
     $("round").textContent = over ? "The end" : G.roundText?.(p) || (p.classic ? `Round ${p.round}` : `Round ${p.round} of ${p.rounds}`);
     $("fills").replaceChildren(...Array.from({ length: seats }, (_, s) => { const i = el("i"); i.style.width = `${(100 * G.cellsOf(p, s)) / n}%`; i.style.background = `rgb(${RGB[s]})`; return i; }));
     $("goal").style.left = `${(100 * goal) / n}%`;
+    // a map you start on with no land yet (real time) goes to your land once you have some
+    if (!homed && !T.demo && board?.centre && document.body.classList.contains("atlas")) { const f = focus(); if (f >= 0) { homed = true; board.centre(f); } }
     $("land").setAttribute("aria-label", `${Array.from({ length: seats }, (_, s) => `${NAMES[s]} ${G.cellsOf(p, s)}`).join(", ")}. The goal is ${goal} of ${n}.`);
     $("seats").replaceChildren(...Array.from({ length: seats }, (_, s) => {
       const c = G.cellsOf(p, s), out = G.outOf ? G.outOf(p, s) : !c, li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${out ? " out" : ""}`), dl = el("dl");
@@ -507,9 +548,12 @@ export function createTable(G) {
     ready = null;
     skip.hidden = true;
     Object.assign(T, { demo: false, busy: false, catching: false, match: m, kinds: k, link });
+    real = null; storyN = 0;
     G.fresh?.(T);
     log = []; land = []; mark = -1; drawn = -1; fell = []; held = "";
     unbrief();
+    $("status").textContent = ""; // nothing said in the last game lingers in this one
+    $("toast").classList.remove("on");
     const again = createMatch(G.game, { seed: m.seed, options: m.options });
     land.push(tally(again.position));
     m.list.forEach((mv, i) => { if (i === from) mark = log.length; log.push(...again.play(mv).map((e) => G.line(e, again.position)).filter(Boolean)); land.push(tally(again.position)); watch(again.position); });
@@ -539,6 +583,7 @@ export function createTable(G) {
   function attract() {
     dress(setup.look);
     run++;
+    real = null; storyN = 0;
     Object.assign(T, { demo: true, busy: false, link: null, hurry: false, kinds: Array(Math.max(...many)).fill("easy"), match: createMatch(G.game, { seed: "title " + (run % 9), options: { ...chosen(), seats: Math.max(...many) } }) });
     G.changed?.(T);
     makeBoard();
@@ -599,32 +644,48 @@ export function createTable(G) {
     hero.append(arms, words);
     // what next: the same three in the same places every time, then two smaller ones
     const go = el("div", undefined, "go ends"), all = el("a", "All games", "quiet"), change = el("button", "Change setup", "quiet"), again = el("button", "Rematch", "main");
-    const minor = el("div", undefined, "go minor"), look = el("button", "See the board", "text"), copyIt = el("button", "Copy result", "text"), text = resultText(G.title, rows);
+    const minor = el("div", undefined, "go minor"), look = el("button", "See the board", "text"), steps = el("button", "Step through the game", "text"), copyIt = el("button", "Copy result", "text"), text = resultText(G.title, rows);
     all.href = "./";
-    change.type = again.type = look.type = copyIt.type = "button";
+    change.type = again.type = look.type = steps.type = copyIt.type = "button";
+    steps.onclick = () => { closeSheet(); panel(); moment(0); storyRange.focus(); };
     again.onclick = () => { closeSheet(); restart(); };
     change.onclick = () => { home(); $("own").open = true; };
     look.onclick = closeSheet;
     copyIt.onclick = async () => { try { await navigator.clipboard.writeText(text); copyIt.textContent = "Copied"; } catch { toast(text); } };
     const onward = G.next?.(T); // a ladder's next step takes the main button's place
     if (onward) { again.textContent = onward.label; again.onclick = () => { closeSheet(); onward.go(); }; }
-    go.append(all, change, again); minor.append(look, copyIt);
+    go.append(all, change, again); minor.append(look, ...(T.match.list.length ? [steps] : []), copyIt);
     body.append(hero, scroll, c, ...[G.report?.(T)].filter(Boolean), go, minor); // G.report: the figures a game adds to the end
     sheet(lost ? "Defeat" : people ? "Victory" : "The end", body, null, `end ${lost ? "lose" : "win"}`);
     again.focus();
   }
+  /** Show the finished game after its first n moves; n at the last move is the end itself. The match keeps every position, so the rules are not asked again. */
+  let storyN = 0;
+  function moment(n) {
+    const m = real || T.match;
+    if (!m || T.demo || m.turn !== null) return;
+    n = Math.max(0, Math.min(storyN, Math.round(n) || 0));
+    storyRange.value = String(n);
+    if (n === storyN) { T.match = m; real = null; } else { const p = m.at(n); real = m; T.match = Object.create(m, { position: { get: () => p } }); }
+    G.changed?.(T);
+    board.show([], true);
+    score();
+    const p = T.match.position, when = G.roundText?.(p) || `Round ${p.round}`;
+    storyAt.textContent = n === storyN ? `The end, after ${storyN} move${storyN === 1 ? "" : "s"}.` : n ? `Move ${n} of ${storyN}. ${when}.` : `The start. ${when}.`;
+  }
   const seed = () => [...crypto.getRandomValues(new Uint32Array(2))].map((v) => v.toString(36)).join("");
   const restart = () => begin(createMatch(G.game, { seed: seed(), options: T.match.options }), [...T.kinds], T.link ? { id: newId(), roles: T.kinds.map((x) => (x === "you" ? "host" : x === "away" ? "friend" : x)), pass: T.link.pass, floor: 0 } : null);
   const floor = () => (T.link ? T.link.floor : 0);
-  const canUndo = () => !T.catching && !realtime() && T.match.list.length > floor() && T.kinds.includes("you");
+  // take back stops where hidden things were seen: a roll, a draw or a steal, and any other seat's move (a bot's turn), so it never shows what is coming
+  const undoable = () => (T.catching || T.busy || T.demo || realtime() || !T.match ? "none" : takeBack(T.match, T.kinds, floor()));
+  const canUndo = () => undoable() === "yes";
   function undo() {
-    if (!canUndo()) return;
-    const had = T.match.list;
-    let rerolls = false; // did any move taken back roll dice? then playing it again gives the same result
-    do { if (T.match.list.length <= floor()) break; rerolls ||= T.match.rolled; if (!T.match.undo()) break; } while (!T.human());
-    if (!T.human()) { for (const mv of had.slice(T.match.list.length)) T.match.play(mv); return; } // nothing of yours to take back
+    const why = undoable();
+    if (why === "chance") return toast(G.stands || "That move stands: what chance showed in it is not taken back.");
+    if (why !== "yes") return toast("Nothing to take back this turn.");
+    T.match.undo();
     begin(T.match, T.kinds, T.link);
-    toast(rerolls ? "Taken back. The dice are already rolled: playing the same move again gives the same result." : had.length - T.match.list.length > 1 ? "Taken back, with the moves made after it." : "Taken back.");
+    toast("Taken back.");
   }
   function save() {
     const a = el("a");
@@ -642,7 +703,7 @@ export function createTable(G) {
   /** One menu, the same in every table game: Game, Settings, Link play, About. */
   function menu(at = tab) {
     tab = at;
-    if (!$("sheet").open || !$("sheet-body").contains(menuBox)) sheet(G.title, menuBox, T.demo ? "Close" : "Resume", "wide");
+    if (!$("sheet").open || !$("sheet-body").contains(menuBox)) sheet(G.title, menuBox, T.demo ? "Close" : "Resume", "wide tabbed");
     radio(tabs, [["game", "Game"], ["settings", "Settings"], ["link", "Link play"], ["about", "About"]].map(([value, label]) => ({ value, label })), tab, menu, true);
     for (const b of tabs.children) b.setAttribute("aria-controls", pane.id);
     pane.setAttribute("aria-label", tabs.querySelector("[aria-selected=true]").textContent);
@@ -688,12 +749,13 @@ export function createTable(G) {
     vol.onchange = () => { wake(); sfx("tick"); };
     volLine.append(el("span", "Volume"), vol);
     box.append(volLine);
-    row("Bot speed", ...bind("speed"), CHOICES.speed);
+    const clock = !T.demo && realtime(); // a game on a clock has no bots' turns to wait for, and no turn to end or take back
+    if (!clock) row("Bot speed", ...bind("speed"), CHOICES.speed);
     row("Motion", ...bind("motion"), CHOICES.motion);
     if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
     if (board?.styles?.length) row("Board style", () => board.style, (v) => board.setStyle(v), board.styles); // 3D hook: styles are data (src/map/style.js)
     row("Letter keys", ...bind("keys"), CHOICES.keys);
-    box.append(el("p", "E ends the turn (press twice), U takes back, and each game has a few more. Off leaves Tab, arrows, Enter and Escape.", "about"));
+    box.append(el("p", clock ? "This game's letter keys are in How to play. Off leaves Tab, arrows, Enter and Escape." : "E ends the turn (press twice), U takes back, and each game has a few more. Off leaves Tab, arrows, Enter and Escape.", "about"));
     row("Seat patterns", ...bind("patterns"), CHOICES.patterns);
     box.append(el("p", "Patterns show on the board and the score bar.", "about"));
     row("Text size", ...bind("text"), CHOICES.text);
@@ -789,20 +851,32 @@ export function createTable(G) {
   const resumeButton = () => { const k = kept(), when = k && G.roundText?.(k.m.position); $("resume").hidden = !k; if (k) $("resume").textContent = when ? `Continue: ${when}` : `Continue, round ${k.m.position.round}`; };
 
   const launch = (o, all, who, words = "") => begin(createMatch(G.game, { seed: G.seedOf?.(all) || seed(), options: o }), who, who.includes("away") ? { id: newId(), roles: who.map((k) => (k === "you" ? "host" : k === "away" ? "friend" : k)), pass: canLock() ? words : "", floor: 0 } : null, -1, setup.look.map((x) => [...x]));
-  $("start").onclick = () => launch(chosen(), chosen(true), G.kindsOf?.(chosen()) || setup.who.slice(0, setup.seats), passField.value.trim());
+  /** This browser keeps one game in progress. Starting another over it is asked first, in the page, and the old one can be gone back to. */
+  function replacing(go, what = "A new game") {
+    const k = kept();
+    if (!k) { go(); return; }
+    const box = el("div", undefined, "stack"), back = el("button", "Continue that game", "main"), fresh = el("button", `${what === "A new game" ? "Start the new game" : "Open the saved game"}`, "quiet danger"), when = G.roundText?.(k.m.position) || `Round ${k.m.position.round}`;
+    back.type = fresh.type = "button";
+    back.onclick = () => { closeSheet(); begin(k.m, k.kinds, null, -1, k.look); };
+    fresh.onclick = () => { closeSheet(); go(); };
+    box.append(el("p", `You have a game in progress: ${when}. This browser keeps one game at a time, so ${what.toLowerCase()} takes its place and that game is lost.`), back, fresh);
+    sheet("Replace your game?", box, "Back");
+    back.focus();
+  }
+  $("start").onclick = () => { const who = G.kindsOf?.(chosen()) || setup.who.slice(0, setup.seats), go = () => launch(chosen(), chosen(true), who, passField.value.trim()); if (who.includes("away")) go(); else replacing(go); }; // a game by link is kept apart
   // Play: one press starts a short game, you against bots, on the game's own preset (G.quick) or Traditional at the fewest seats and the shortest length
   const quick = { style: "classic", seats: Math.min(...many), ...(G.lengths[0] ? { rounds: G.lengths[0][0] } : {}), ...G.quick }, them = (G.kindsOf?.(quick) || Array(quick.seats)).length - 1;
   const fast = () => launch(quick, quick, G.kindsOf?.(quick) || ["you", ...Array(them).fill("normal")]);
   // the guided first game (coach.js), when the game has one: offered on the title card, at the first Play, and in the menu
   const lesson = G.lesson && coach(T, G.lesson, G.key, () => begin(createMatch(G.game, { seed: G.lesson.seed, options: G.lesson.options }), [...G.lesson.kinds], null, -1, LOOK0.map((x) => [...x])));
-  $("quick").onclick = () => lesson?.first(fast) || fast();
+  $("quick").onclick = () => lesson?.first(fast) || replacing(fast);
   $("preset").replaceChildren(...[`${STYLES[quick.style]} rules, you against ${them || "the"} bot${them === 1 ? "" : "s"}.`, ...G.about[quick.style].split("\n").filter((x) => x.startsWith("Not "))].map((x) => el("span", x)));
   linkButton.onclick = linkSheet;
   sendCopy.onclick = copy;
   sendShare.onclick = async () => { if (ready?.url) try { await navigator.share({ url: ready.url }); sent(); } catch { /* they changed their mind */ } };
   skip.onclick = () => { T.catching = false; };
   $("resume").onclick = () => { const k = kept(); if (k) begin(k.m, k.kinds, null, -1, k.look); };
-  $("menu").onclick = () => menu();
+  $("menu").onclick = () => menu("game"); // the menu always opens on its first tab
   setButton.onclick = () => menu("settings");
   // sound wakes on a press that starts a game, or when it is turned on; every button then ticks
   for (const id of ["quick", "start", "resume"]) $(id).addEventListener("click", wake);
@@ -843,8 +917,10 @@ export function createTable(G) {
     if (!f) return;
     try {
       const { match: m, warning } = openSave(await f.text(), [G.game]);
-      begin(m, G.kindsOf?.(m.options) || Array.from({ length: m.options.seats }, (_, i) => (i ? "normal" : "you")));
-      if (warning) sheet("Opened with a warning", el("p", warning));
+      replacing(() => {
+        begin(m, G.kindsOf?.(m.options) || Array.from({ length: m.options.seats }, (_, i) => (i ? "normal" : "you")));
+        if (warning) sheet("Opened with a warning", el("p", warning));
+      }, "The saved game");
     } catch (e) {
       if (!(e instanceof Refusal)) throw e;
       sheet("That file was not opened", el("p", `${e.message[0].toUpperCase()}${e.message.slice(1)}.`));

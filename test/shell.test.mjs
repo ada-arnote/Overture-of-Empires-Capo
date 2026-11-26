@@ -2,7 +2,8 @@
 // The table screen's plain helpers: settings kept in the browser, the banner's once-a-turn key, places at the end.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULTS, parseSettings, ranked, resultText, turnKey } from "../site/shell.js";
+import { DEFAULTS, parseSettings, ranked, resultText, takeBack, turnKey } from "../site/shell.js";
+import { createMatch } from "../src/core/index.js";
 
 test("settings fall back to their defaults for anything missing or strange", () => {
   assert.deepEqual(parseSettings(null), DEFAULTS);
@@ -37,4 +38,42 @@ test("places: winners first, then the standing by score, then the fallen, the la
 
 test("the result reads as one line", () => {
   assert.equal(resultText("Game", [{ place: 1, name: "Azure", figures: [["Land", 30], ["Army", 12]] }, { place: 2, name: "Rust", figures: [] }]), "Game: 1. Azure (Land 30, Army 12); 2. Rust.");
+});
+
+test("seat patterns are on unless turned off since they became the default", () => {
+  assert.equal(DEFAULTS.patterns, "on");
+  assert.equal(parseSettings('{"patterns":"off"}').patterns, "on"); // kept before patterns were on by default: not a choice
+  assert.equal(parseSettings('{"patterns":"off","v":2}').patterns, "off");
+});
+
+test("take back stops at chance and at other seats' moves, and the game still replays from its seed and moves", () => {
+  // a toy game: two seats take turns; "step" moves on, "roll" draws a die, "end" passes the turn
+  const toy = {
+    id: "toy", version: "1", options: {},
+    setup: () => ({ seat: 0, sum: 0, moves: 0 }),
+    turn: (p) => (p.moves >= 12 ? null : p.seat),
+    moves: () => [{ do: "step" }, { do: "roll" }, { do: "end" }],
+    apply(p, m, dice) {
+      const q = { ...p, moves: p.moves + 1 };
+      if (m.do === "roll") q.sum += dice.die();
+      if (m.do === "step") q.sum += 1;
+      if (m.do === "end") q.seat = 1 - p.seat;
+      return { position: q, events: [] };
+    },
+    result: (p) => (p.moves >= 12 ? { winners: [0], why: "played" } : null),
+  };
+  const kinds = ["you", "normal"], m = createMatch(toy, { seed: "s" });
+  assert.equal(takeBack(m, kinds), "none"); // nothing played yet
+  m.play({ do: "step" });
+  assert.equal(takeBack(m, kinds), "yes");
+  m.play({ do: "roll" });
+  assert.equal(takeBack(m, kinds), "chance");
+  m.play({ do: "step" });
+  assert.equal(takeBack(m, kinds), "yes");
+  assert.equal(takeBack(m, kinds, 3), "none"); // a game by link: nothing before the last link sent
+  m.play({ do: "end" }); m.play({ do: "step" }); m.play({ do: "end" }); // the bot's turn
+  assert.equal(takeBack(m, kinds), "none");
+  const again = createMatch(toy, { seed: "s" });
+  for (const mv of m.list) again.play(mv);
+  assert.equal(again.fingerprint(), m.fingerprint());
 });

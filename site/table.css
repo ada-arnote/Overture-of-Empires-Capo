@@ -13,7 +13,7 @@
 :root {
   /* colour, by role: the front page's night chart (docs/design/modern-site/direction.md). Daylight first; lamplight below. Both are the tent's
      dark blue (ruling 126), a brighter and a deeper one, so seat colours read the same. Three grounds: the room, the deep HUD, the raised sheet */
-  --ground: #22364f; --ground-2: #2b4263; --lacquer: rgba(22, 37, 58, .9); --slate: #2b4263; --shade: 15, 26, 42;
+  --ground: #22364f; --ground-2: #2b4263; --lacquer: rgba(22, 37, 58, .9); --plate: #16253a; --slate: #2b4263; --shade: 15, 26, 42;
   --text: #eef1f5; --text-2: #c9d1da; --text-3: #adb8c4;
   --edge: rgba(214, 224, 236, .5); --edge-soft: rgba(214, 224, 236, .16); --raise: rgba(214, 224, 236, .07); --sheen: rgba(214, 224, 236, .07);
   --accent: #dfe5ec; --accent-hi: #f6f8fb; --accent-lo: #6f7f93; --accent-wash: rgba(214, 224, 236, .15); --on-accent: #0f1a2a;
@@ -35,8 +35,8 @@
   --table: var(--ground); --table2: var(--ground-2); --panel: var(--lacquer); --line: var(--edge-soft); --line2: var(--edge); --soft: var(--text-3); --gold: var(--accent); --gold2: var(--accent-hi); --on: var(--on-accent);
   color-scheme: dark;
 }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ground: #0f1a2a; --ground-2: #162539; --lacquer: rgba(10, 18, 30, .9); --slate: #162539; --shade: 6, 11, 19; --text: #e6eaef; --text-2: #b9c2cc; --text-3: #9ba7b4; --edge: rgba(205, 216, 229, .45); --edge-soft: rgba(205, 216, 229, .13); --accent: #d3dbe4; --accent-hi: #eef2f6; --paper: #cdd5de; --paper-edge: #8794a4 } }
-:root[data-theme="dark"] { --ground: #0f1a2a; --ground-2: #162539; --lacquer: rgba(10, 18, 30, .9); --slate: #162539; --shade: 6, 11, 19; --text: #e6eaef; --text-2: #b9c2cc; --text-3: #9ba7b4; --edge: rgba(205, 216, 229, .45); --edge-soft: rgba(205, 216, 229, .13); --accent: #d3dbe4; --accent-hi: #eef2f6; --paper: #cdd5de; --paper-edge: #8794a4 }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ground: #0f1a2a; --ground-2: #162539; --lacquer: rgba(10, 18, 30, .9); --plate: #0b141f; --slate: #162539; --shade: 6, 11, 19; --text: #e6eaef; --text-2: #b9c2cc; --text-3: #9ba7b4; --edge: rgba(205, 216, 229, .45); --edge-soft: rgba(205, 216, 229, .13); --accent: #d3dbe4; --accent-hi: #eef2f6; --paper: #cdd5de; --paper-edge: #8794a4 } }
+:root[data-theme="dark"] { --ground: #0f1a2a; --ground-2: #162539; --lacquer: rgba(10, 18, 30, .9); --plate: #0b141f; --slate: #162539; --shade: 6, 11, 19; --text: #e6eaef; --text-2: #b9c2cc; --text-3: #9ba7b4; --edge: rgba(205, 216, 229, .45); --edge-soft: rgba(205, 216, 229, .13); --accent: #d3dbe4; --accent-hi: #eef2f6; --paper: #cdd5de; --paper-edge: #8794a4 }
 
 * { box-sizing: border-box; margin: 0 }
 [hidden] { display: none !important }
@@ -115,6 +115,7 @@ dialog > .go { background: inherit; margin: 0 -22px -22px; padding: 10px 22px 18
 dialog.paper > .go { background: var(--paper) }
 dialog hr { border: 0; border-top: 1px solid var(--edge); margin: 6px 0 } #sheet-body a { color: var(--accent-hi) }
 #sheet.wide { width: min(560px, calc((100vw - 24px) / var(--ui-scale))) }
+#sheet.tabbed { height: min(calc(84vh / var(--ui-scale)), 640px) } /* the menu keeps one size from tab to tab, so its tab row never moves under the pointer */
 #log { max-height: 34vh; overflow-y: auto; padding-left: 26px; color: var(--text-2) }
 /* words over the board: one line at a time, never in the way */
 #toast { position: fixed; z-index: 2; left: 50%; top: 84px; transform: translate(-50%, -8px); max-width: min(520px, calc(100vw - 32px)); padding: 9px 18px; border-left: 3px solid var(--accent); text-align: center; font: var(--fs-3)/1.35 var(--sans); opacity: 0; transition: opacity var(--t-3), transform var(--t-3); pointer-events: none }
@@ -149,7 +150,15 @@ dialog hr { border: 0; border-top: 1px solid var(--edge); margin: 6px 0 } #sheet
 .seat dt { color: var(--text-3); letter-spacing: .05em; font-size: 12px; white-space: nowrap } .seat dd { font-weight: 700; font-size: var(--fs-3) }
 
 /* the move: what you can do now. The tray at the bottom of a phone */
-#act { position: fixed; z-index: 3; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); width: 340px; max-height: calc((100vh - 96px) / var(--ui-scale)); overflow-y: auto; scrollbar-width: thin; padding: 14px 16px 16px }
+#act { --px: 16px; --pb: 16px; position: fixed; z-index: 3; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); width: 340px; max-height: calc((100vh - 96px) / var(--ui-scale)); overflow-y: auto; scrollbar-width: thin; padding: 14px var(--px) var(--pb) }
+/* the row that ends a move (End turn, the main button, Take back) stays at the panel's foot however far its lists scroll */
+#act #choice > .go, #act > #after { position: sticky; z-index: 1; bottom: calc(-1 * var(--pb)); margin: 0 calc(-1 * var(--px)) calc(-1 * var(--pb)); padding: 10px var(--px) var(--pb); background: var(--plate); box-shadow: 0 -10px 12px -10px rgba(0, 0, 0, .5); border-radius: 0 0 var(--r-2) var(--r-2) }
+#act #choice > .go:not(:last-child) { margin-bottom: 0 } /* a line after the row (Concede) scrolls up from under it */
+#act #live-go { position: sticky; z-index: 1; bottom: calc(8px - var(--pb)); box-shadow: 0 0 0 8px var(--plate), 0 2px 0 rgba(0, 0, 0, .4), inset 0 1px 0 #fff } /* real time: Send stays in view */
+/* the finished game again, move by move */
+.story { margin-bottom: var(--sp-2) } .story .cap { display: block; margin-bottom: 2px }
+.story-row { display: flex; align-items: center; gap: 6px } .story-row input { flex: 1; min-width: 0; height: var(--tap) } #act .story-row .quiet { flex: none; width: var(--tap); min-height: var(--tap); padding: 0; font-size: 22px; line-height: 1 }
+.story output { display: block; min-height: 1.4em; font-size: var(--fs-2); color: var(--text-2); font-variant-numeric: tabular-nums }
 #status { font: 700 var(--fs-4)/1.25 var(--sans); margin-bottom: 10px; min-height: 1.25em; text-wrap: balance }
 #act .quiet { padding: 0 14px } #send + .quiet, #act > .quiet { width: 100%; margin-top: var(--sp-2) }
 #choice > .text { display: block; margin: 2px auto -10px; font-size: var(--fs-2) }
@@ -254,6 +263,11 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
   .atlas #toast { top: 168px } .atlas .zoom { left: auto; right: 16px }
 }
 @media (max-height: 560px) and (min-width: 821px) { #seats { width: 176px } #act { width: 300px } h1 { font-size: 56px } .seat small { display: none } }
+/* a wide screen: the zoom is a row at the foot of the seats' column, which never runs down onto it */
+@media (min-width: 821px) {
+  body:not(.atlas) .board-zoom { grid-auto-flow: column }
+  body:not(.atlas):not(.side) #seats { max-height: calc((100vh - 150px) / var(--ui-scale)); overflow-y: auto; scrollbar-width: none; padding: 6px 10px 6px 0; width: 218px }
+}
 
 /* a phone: one strip on top, one tray below, the board has the rest. The tray folds to a handle with the main action still showing; sheets rise from the bottom edge */
 .tray { display: none }
@@ -264,7 +278,7 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
   .seat b { flex: 1 1 auto; min-width: 0; font-size: 17px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis } .seat small { display: none }
   .seat dl { flex: none; margin: 0 } .seat dl div + div, .seat dt { display: none } .seat dd { font-size: 15px; line-height: 1.1 }
   .zoom { left: auto; right: 8px; bottom: calc(var(--act, 290px) + 8px) }
-  #act { left: 0; right: 0; bottom: 0; width: auto; max-height: 56vh; overflow-y: auto; padding: 12px 12px max(12px, env(safe-area-inset-bottom)); border-radius: var(--r-3) var(--r-3) 0 0; border-bottom: 0 }
+  #act { --px: 12px; --pb: max(12px, env(safe-area-inset-bottom)); left: 0; right: 0; bottom: 0; width: auto; max-height: 56vh; overflow-y: auto; padding: 12px var(--px) var(--pb); border-radius: var(--r-3) var(--r-3) 0 0; border-bottom: 0 }
   #status { font-size: 17px; margin-bottom: var(--sp-2) } .pick { margin-bottom: var(--sp-2) }
   #info { min-height: 1.4em; font-size: var(--fs-1) } #dice svg { width: 26px; height: 26px } #leaders { grid-template-columns: 1fr 1fr; font-size: var(--fs-1) }
   #toast { top: auto; bottom: calc(var(--act, 290px) + 12px); font-size: 15px; width: max-content }
@@ -273,13 +287,29 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
   .menu #foot { left: 0; right: 0; bottom: 0; padding: 8px 16px; background: var(--ground); justify-content: center }
   .tray { display: block; width: calc(100% + 24px); height: var(--tap); margin: -12px -12px -8px; border: 0; background: none }
   .tray::before { content: ""; display: block; width: 48px; height: 4px; margin: 0 auto 14px; border-radius: 2px; background: var(--edge) } .shut .tray::before { background: var(--accent) }
-  .shut #act :is(#news, #dice, #bag, #info, #hand, #trades, .pick, #amount, #leaders, .live-info, #send > p, .text) { display: none }
-  .shut #status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: var(--sp-2) }
+  .shut:not(.side) #act :is(#news, #dice, #bag, #info, #hand, #trades, .pick, #amount, #leaders, .live-info, #send > p, .text) { display: none }
+  .shut:not(.side) #status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: var(--sp-2) }
+  #sheet.tabbed { height: calc(90vh / var(--ui-scale)) }
   dialog, #sheet.wide, #sheet.end { width: calc(100vw / var(--ui-scale)); max-width: none; margin: auto 0 0; max-height: calc(90vh / var(--ui-scale)); padding: 18px 16px; border-radius: var(--r-3) var(--r-3) 0 0; border-width: 1px 0 0 } dialog > .go { margin: 0 -16px -18px; padding: 10px 16px max(14px, env(safe-area-inset-bottom)) !important } dialog .go { bottom: -18px }
   .end .ends { grid-template-columns: 1fr 1fr } .end .ends .main { grid-column: 1 / -1; grid-row: 1 } .hero canvas { width: 60px; height: 60px }
   #coach { padding: 10px 12px 12px } #coach p + p { font-size: 16px; line-height: 1.4; margin-bottom: var(--sp-2) } #coach .main, #coach .quiet { min-height: var(--tap) }
   #act #coach { top: -12px; margin: 0 0 10px }
 }
+/* side: a phone on its side or a small window. The seats in a strip under the bar, the move panel a full-height column at the right,
+   the board the rest; nothing that is pressed ever falls below the fold. Set by table.js (body.side), and after the rules above on purpose */
+body.side { --side-w: min(340px, 42vw) }
+body.side #bar { left: max(8px, env(safe-area-inset-left)); transform: none; width: calc((100vw - var(--side-w) - 28px) / var(--ui-scale)); max-width: 620px; padding-top: max(4px, env(safe-area-inset-top)) }
+body.side #seats { display: flex; gap: 6px; left: max(8px, env(safe-area-inset-left)); right: calc(var(--side-w) + 20px); width: auto; max-width: none; transform: none; top: calc(max(4px, env(safe-area-inset-top)) + 58px); overflow-x: auto; scrollbar-width: none }
+body.side .seat { flex: 1 1 0; min-width: 58px; display: flex; align-items: center; gap: 6px; padding: 4px 9px 4px 4px; overflow: hidden }
+body.side .seat.now { transform: none } body.side .seat canvas { position: static; flex: none; width: 24px; height: 24px }
+body.side .seat b { flex: 1 1 auto; min-width: 0; font-size: 16px; line-height: 1.15; overflow: hidden; white-space: nowrap; text-overflow: ellipsis } body.side .seat small { display: none }
+body.side .seat dl { flex: none; margin: 0 } body.side .seat dl div + div, body.side .seat dt { display: none } body.side .seat dd { font-size: 15px; line-height: 1.1 }
+body.side #act { --px: 12px; --pb: 12px; top: max(8px, env(safe-area-inset-top)); bottom: max(8px, env(safe-area-inset-bottom)); right: max(8px, env(safe-area-inset-right)); left: auto; width: calc(var(--side-w) / var(--ui-scale)); max-height: none; padding: 10px var(--px) var(--pb); border-radius: var(--r-2); border-bottom: 1px solid var(--edge-soft) }
+body.side #act #coach { top: -10px }
+body.side .tray { display: none }
+body.side .board-zoom { left: max(8px, env(safe-area-inset-left)); right: auto; bottom: max(8px, env(safe-area-inset-bottom)); grid-auto-flow: column }
+body.side #toast { top: calc(max(4px, env(safe-area-inset-top)) + 106px); bottom: auto; left: calc((100vw - var(--side-w) - 16px) / 2); width: max-content; max-width: calc(100vw - var(--side-w) - 40px); font-size: 15px }
+
 /* reduced motion: the system's wish, or the player's in Settings */
 .still * { transition: none !important } .still #dice svg, .still #coach-ring { animation: none }
 @media (prefers-reduced-motion: reduce) { #coach-ring { animation: none } }

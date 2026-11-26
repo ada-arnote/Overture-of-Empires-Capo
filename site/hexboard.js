@@ -72,7 +72,16 @@ export function hexBoard(T, stage, o) {
     patterns(on) { pat = !!on; if (b) b.patterns(pat); else if (svg) still(); },
     motion: (mode) => b?.motion(mode),
     layout(free) { room = free; if (b) b.layout(free); else fit(); },
-    zoom: (f) => b?.zoom(f), pan: (x, y) => b?.pan(x, y),
+    zoom: (f) => b?.zoom(f), pan: (x, y) => b?.pan(x, y), centre: (i) => b?.centre?.(i),
+    /** The cell of a seat's nearest the middle of its land: where a map opens and goes home to. */
+    focus(seat) {
+      const mid = o.picture?.mid, owner = o.owner();
+      if (!mid || !(seat >= 0)) return -1;
+      const mine = owner.flatMap((s, i) => (s === seat && mid[i] ? [i] : []));
+      if (!mine.length) return -1;
+      const x = mine.reduce((n, i) => n + mid[i][0], 0) / mine.length, y = mine.reduce((n, i) => n + mid[i][1], 0) / mine.length;
+      return mine.reduce((a, i) => (Math.hypot(mid[i][0] - x, mid[i][1] - y) < Math.hypot(mid[a][0] - x, mid[a][1] - y) ? i : a));
+    },
     show(order, quick) { if (b) return b.show(o.owner(), { pieces: o.pieces(), order, quick, names: o.names?.() }); still(); return 0; },
     light: (cells, chosen) => b?.preview(cells, chosen),
     clear: () => b?.preview([]),

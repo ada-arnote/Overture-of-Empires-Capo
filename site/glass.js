@@ -176,6 +176,7 @@ const LESSON = {
 createTable({
   game: glass, key: "glass", title: "Grain and Glass", won: "The island's trade is yours.", outOf: () => false /* nobody is knocked out of a trading game */, seats: [2, 3, 4, 5, 6], normal: 3, lengths: [], pace: () => 420,
   unit: "Points", cellsOf: pointsOf, goalOf, landOf: (p) => goalOf(p) + 3, choose, thinking, lesson: LESSON,
+  stands: "That move stands: a roll, a draw or a steal, once seen, is not taken back.", // take back stops here (table.js)
   roundText: (p, wide = innerWidth > 820) => (p.over ? null : `Round ${p.round}${p.classic ? "" : `${wide ? " of " : "/"}${p.rounds}`}, ${goalOf(p)}${wide ? " points" : ""} to win`), // the goal in view all game
   about: {
     classic: "Traditional: inspired by Catan.\nThe settle-and-trade rules as players know them: hexes yield goods when their number is rolled, you build routes, depots and towns, trade with the bank and the other players, buy cards, and race to 10 points. A 7 spoils big hands and sends the toll gate to block a hex and take a good; the Great Road and the Toll Warden are worth 2 points to whoever leads; two free depots and routes to start, in order and back; offers can stay open. Ours: depots and towns stand in hexes and gather from the hexes beside them, our own goods, costs and plans, and the first player drawn by dice.\nNot affiliated with or endorsed by its makers. Our own island, names and art.",

@@ -156,7 +156,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       cam.set({ tilt: swing.a.tilt + (L.tilt - swing.a.tilt) * e, yaw: swing.a.yaw + (L.yaw - swing.a.yaw) * e, q: swing.a.q + (near() - swing.a.q) * e });
       cam.fit(ends, 14);
       base = cam.s;
-      if (k >= 1) swing = null; else moving = true;
+      if (k >= 1) { swing = null; layout(asked); } else moving = true; // shell hook (p8-shell): a new look settles at the home zoom, not the whole board
     }
     const beat = calm() || !lit ? 0 : Math.max(0, 1.5 - (t - lit) / 1000); // a preview pulses briefly, then the board is still
     if (beat > 0) moving = true;
@@ -332,16 +332,29 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   }
 
   const near = () => L.near / Math.max(cam.H, cam.W * 0.8);
+  // shell hook (site/table.js, p8-shell): `rest` is the zoom the board opens at and goes home to (the home button, the 0 key, a resize).
+  // free.fill asks for a wide map to open as tall as the free part of the screen, but no wider than a quarter more than the whole stage;
+  // free.at is a cell to centre at that zoom (the player's own land).
+  let rest = 1, asked = {};
   function layout(free = {}) {
-    cam.set({ W: host.clientWidth || 1, H: host.clientHeight || 1, left: 0, right: 0, top: 0, bottom: 0, ...free });
+    const { fill = false, at = -1, ...room } = (asked = free);
+    cam.set({ W: host.clientWidth || 1, H: host.clientHeight || 1, left: 0, right: 0, top: 0, bottom: 0, ...room });
     cam.set({ tilt: L.tilt, yaw: L.yaw, q: near() });
     cam.fit(ends, 14);
     base = cam.s; staged = false;
-    const tall = (cam.H - cam.top - cam.bottom) / (m.h * cam.s); // a wide map on a narrow screen starts closer in
-    if (zoom === 1 && picture && cam.W < 821 && tall > 1.6) zoomed(Math.min(2.6, tall)); else zoomed(zoom);
+    const tall = (cam.H - cam.top - cam.bottom) / (m.h * cam.s), was = rest; // a wide map on a narrow screen starts closer in
+    rest = fill ? Math.max(1, Math.min(3, tall / Math.max(0.3, cam.ct), (1.25 * cam.W) / (m.w * cam.s))) : picture && cam.W < 821 && tall > 1.6 ? Math.min(2.6, tall) : 1;
+    zoomed(zoom === 1 || zoom === was ? rest : zoom);
+    if (zoom === rest) centre(at);
     under.style.width = over.style.width = cam.W + "px";
     under.style.height = over.style.height = cam.H + "px";
     redraw();
+  }
+  /** shell hook (p8-shell): put a cell in the middle of the free part of the screen, as far as the map's edges allow, when zoomed in. */
+  function centre(i) {
+    if (!(i >= 0 && i < m.mid.length) || zoom <= 1) return;
+    const hw = (cam.W - cam.left - cam.right) / 2 / cam.s, hh = (cam.H - cam.top - cam.bottom) / 2 / cam.s / Math.max(0.3, cam.ct), keep = (v, h, n) => (n > 2 * h ? Math.max(h, Math.min(n - h, v)) : n / 2);
+    cam.cx = keep(m.mid[i][0], hw, m.w); cam.cy = keep(m.mid[i][1], hh, m.h); redraw();
   }
   // Zoom with the wheel or two fingers, then drag. At the widest the whole board is in view.
   let base = 1, zoom = 1, dragged = false;
@@ -395,8 +408,9 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   return {
     layout, get look() { return lookName; },
     /** Zoom and move without a wheel, a pinch or a drag: by a factor about the middle (0 shows the whole board), by a share of the board. */
-    zoom(f) { zoomed(f ? zoom * f : 1); }, pan(dx, dy) { if (zoom > 1) slide((dx * m.w) / zoom, (dy * m.h) / zoom); }, on(what, f) { (listeners[what] ||= []).push(f); },
-    setLook(name) { if (!LOOKS[name]) return; const a = { tilt: cam.tilt, yaw: cam.yaw, q: cam.q }; lookName = name; L = LOOKS[name]; if (calm()) { layout({ left: cam.left, right: cam.right, top: cam.top, bottom: cam.bottom }); for (const c of [under, over]) c.animate?.([{ opacity: 0.25 }, { opacity: 1 }], { duration: 180, easing: "ease-out" }); return; } swing = { t: performance.now(), a }; redraw(); },
+    zoom(f) { zoomed(f ? zoom * f : rest); if (!f) centre(asked.at ?? -1); }, pan(dx, dy) { if (zoom > 1) slide((dx * m.w) / zoom, (dy * m.h) / zoom); }, on(what, f) { (listeners[what] ||= []).push(f); },
+    centre,
+    setLook(name) { if (!LOOKS[name]) return; const a = { tilt: cam.tilt, yaw: cam.yaw, q: cam.q }; lookName = name; L = LOOKS[name]; if (calm()) { layout(asked); for (const c of [under, over]) c.animate?.([{ opacity: 0.25 }, { opacity: 1 }], { duration: 180, easing: "ease-out" }); return; } swing = { t: performance.now(), a }; redraw(); },
     /** Seat patterns over owned land, so colour is never the only sign of whose it is. */
     patterns(on) { pat = !!on; redraw(); },
     /** "system" (the default) follows the system's reduced-motion wish, "reduced" and "full" override it. */

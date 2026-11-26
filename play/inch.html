@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-SHRd9QZtx+7LA2chAohayZzSwFS3Nduylt8NdjuID+s='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-NE6rt540OTrZZ6BG8TrANmsmaGALN/i/A22A2t8arCg='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>An Inch of Ink</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -23,7 +23,7 @@
 :root {
   /* colour, by role: the front page's night chart (docs/design/modern-site/direction.md). Daylight first; lamplight below. Both are the tent's
      dark blue (ruling 126), a brighter and a deeper one, so seat colours read the same. Three grounds: the room, the deep HUD, the raised sheet */
-  --ground: #22364f; --ground-2: #2b4263; --lacquer: rgba(22, 37, 58, .9); --slate: #2b4263; --shade: 15, 26, 42;
+  --ground: #22364f; --ground-2: #2b4263; --lacquer: rgba(22, 37, 58, .9); --plate: #16253a; --slate: #2b4263; --shade: 15, 26, 42;
   --text: #eef1f5; --text-2: #c9d1da; --text-3: #adb8c4;
   --edge: rgba(214, 224, 236, .5); --edge-soft: rgba(214, 224, 236, .16); --raise: rgba(214, 224, 236, .07); --sheen: rgba(214, 224, 236, .07);
   --accent: #dfe5ec; --accent-hi: #f6f8fb; --accent-lo: #6f7f93; --accent-wash: rgba(214, 224, 236, .15); --on-accent: #0f1a2a;
@@ -45,8 +45,8 @@
   --table: var(--ground); --table2: var(--ground-2); --panel: var(--lacquer); --line: var(--edge-soft); --line2: var(--edge); --soft: var(--text-3); --gold: var(--accent); --gold2: var(--accent-hi); --on: var(--on-accent);
   color-scheme: dark;
 }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ground: #0f1a2a; --ground-2: #162539; --lacquer: rgba(10, 18, 30, .9); --slate: #162539; --shade: 6, 11, 19; --text: #e6eaef; --text-2: #b9c2cc; --text-3: #9ba7b4; --edge: rgba(205, 216, 229, .45); --edge-soft: rgba(205, 216, 229, .13); --accent: #d3dbe4; --accent-hi: #eef2f6; --paper: #cdd5de; --paper-edge: #8794a4 } }
-:root[data-theme="dark"] { --ground: #0f1a2a; --ground-2: #162539; --lacquer: rgba(10, 18, 30, .9); --slate: #162539; --shade: 6, 11, 19; --text: #e6eaef; --text-2: #b9c2cc; --text-3: #9ba7b4; --edge: rgba(205, 216, 229, .45); --edge-soft: rgba(205, 216, 229, .13); --accent: #d3dbe4; --accent-hi: #eef2f6; --paper: #cdd5de; --paper-edge: #8794a4 }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ground: #0f1a2a; --ground-2: #162539; --lacquer: rgba(10, 18, 30, .9); --plate: #0b141f; --slate: #162539; --shade: 6, 11, 19; --text: #e6eaef; --text-2: #b9c2cc; --text-3: #9ba7b4; --edge: rgba(205, 216, 229, .45); --edge-soft: rgba(205, 216, 229, .13); --accent: #d3dbe4; --accent-hi: #eef2f6; --paper: #cdd5de; --paper-edge: #8794a4 } }
+:root[data-theme="dark"] { --ground: #0f1a2a; --ground-2: #162539; --lacquer: rgba(10, 18, 30, .9); --plate: #0b141f; --slate: #162539; --shade: 6, 11, 19; --text: #e6eaef; --text-2: #b9c2cc; --text-3: #9ba7b4; --edge: rgba(205, 216, 229, .45); --edge-soft: rgba(205, 216, 229, .13); --accent: #d3dbe4; --accent-hi: #eef2f6; --paper: #cdd5de; --paper-edge: #8794a4 }
 
 * { box-sizing: border-box; margin: 0 }
 [hidden] { display: none !important }
@@ -125,6 +125,7 @@ dialog > .go { background: inherit; margin: 0 -22px -22px; padding: 10px 22px 18
 dialog.paper > .go { background: var(--paper) }
 dialog hr { border: 0; border-top: 1px solid var(--edge); margin: 6px 0 } #sheet-body a { color: var(--accent-hi) }
 #sheet.wide { width: min(560px, calc((100vw - 24px) / var(--ui-scale))) }
+#sheet.tabbed { height: min(calc(84vh / var(--ui-scale)), 640px) } /* the menu keeps one size from tab to tab, so its tab row never moves under the pointer */
 #log { max-height: 34vh; overflow-y: auto; padding-left: 26px; color: var(--text-2) }
 /* words over the board: one line at a time, never in the way */
 #toast { position: fixed; z-index: 2; left: 50%; top: 84px; transform: translate(-50%, -8px); max-width: min(520px, calc(100vw - 32px)); padding: 9px 18px; border-left: 3px solid var(--accent); text-align: center; font: var(--fs-3)/1.35 var(--sans); opacity: 0; transition: opacity var(--t-3), transform var(--t-3); pointer-events: none }
@@ -159,7 +160,15 @@ dialog hr { border: 0; border-top: 1px solid var(--edge); margin: 6px 0 } #sheet
 .seat dt { color: var(--text-3); letter-spacing: .05em; font-size: 12px; white-space: nowrap } .seat dd { font-weight: 700; font-size: var(--fs-3) }
 
 /* the move: what you can do now. The tray at the bottom of a phone */
-#act { position: fixed; z-index: 3; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); width: 340px; max-height: calc((100vh - 96px) / var(--ui-scale)); overflow-y: auto; scrollbar-width: thin; padding: 14px 16px 16px }
+#act { --px: 16px; --pb: 16px; position: fixed; z-index: 3; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); width: 340px; max-height: calc((100vh - 96px) / var(--ui-scale)); overflow-y: auto; scrollbar-width: thin; padding: 14px var(--px) var(--pb) }
+/* the row that ends a move (End turn, the main button, Take back) stays at the panel's foot however far its lists scroll */
+#act #choice > .go, #act > #after { position: sticky; z-index: 1; bottom: calc(-1 * var(--pb)); margin: 0 calc(-1 * var(--px)) calc(-1 * var(--pb)); padding: 10px var(--px) var(--pb); background: var(--plate); box-shadow: 0 -10px 12px -10px rgba(0, 0, 0, .5); border-radius: 0 0 var(--r-2) var(--r-2) }
+#act #choice > .go:not(:last-child) { margin-bottom: 0 } /* a line after the row (Concede) scrolls up from under it */
+#act #live-go { position: sticky; z-index: 1; bottom: calc(8px - var(--pb)); box-shadow: 0 0 0 8px var(--plate), 0 2px 0 rgba(0, 0, 0, .4), inset 0 1px 0 #fff } /* real time: Send stays in view */
+/* the finished game again, move by move */
+.story { margin-bottom: var(--sp-2) } .story .cap { display: block; margin-bottom: 2px }
+.story-row { display: flex; align-items: center; gap: 6px } .story-row input { flex: 1; min-width: 0; height: var(--tap) } #act .story-row .quiet { flex: none; width: var(--tap); min-height: var(--tap); padding: 0; font-size: 22px; line-height: 1 }
+.story output { display: block; min-height: 1.4em; font-size: var(--fs-2); color: var(--text-2); font-variant-numeric: tabular-nums }
 #status { font: 700 var(--fs-4)/1.25 var(--sans); margin-bottom: 10px; min-height: 1.25em; text-wrap: balance }
 #act .quiet { padding: 0 14px } #send + .quiet, #act > .quiet { width: 100%; margin-top: var(--sp-2) }
 #choice > .text { display: block; margin: 2px auto -10px; font-size: var(--fs-2) }
@@ -264,6 +273,11 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
   .atlas #toast { top: 168px } .atlas .zoom { left: auto; right: 16px }
 }
 @media (max-height: 560px) and (min-width: 821px) { #seats { width: 176px } #act { width: 300px } h1 { font-size: 56px } .seat small { display: none } }
+/* a wide screen: the zoom is a row at the foot of the seats' column, which never runs down onto it */
+@media (min-width: 821px) {
+  body:not(.atlas) .board-zoom { grid-auto-flow: column }
+  body:not(.atlas):not(.side) #seats { max-height: calc((100vh - 150px) / var(--ui-scale)); overflow-y: auto; scrollbar-width: none; padding: 6px 10px 6px 0; width: 218px }
+}
 
 /* a phone: one strip on top, one tray below, the board has the rest. The tray folds to a handle with the main action still showing; sheets rise from the bottom edge */
 .tray { display: none }
@@ -274,7 +288,7 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
   .seat b { flex: 1 1 auto; min-width: 0; font-size: 17px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis } .seat small { display: none }
   .seat dl { flex: none; margin: 0 } .seat dl div + div, .seat dt { display: none } .seat dd { font-size: 15px; line-height: 1.1 }
   .zoom { left: auto; right: 8px; bottom: calc(var(--act, 290px) + 8px) }
-  #act { left: 0; right: 0; bottom: 0; width: auto; max-height: 56vh; overflow-y: auto; padding: 12px 12px max(12px, env(safe-area-inset-bottom)); border-radius: var(--r-3) var(--r-3) 0 0; border-bottom: 0 }
+  #act { --px: 12px; --pb: max(12px, env(safe-area-inset-bottom)); left: 0; right: 0; bottom: 0; width: auto; max-height: 56vh; overflow-y: auto; padding: 12px var(--px) var(--pb); border-radius: var(--r-3) var(--r-3) 0 0; border-bottom: 0 }
   #status { font-size: 17px; margin-bottom: var(--sp-2) } .pick { margin-bottom: var(--sp-2) }
   #info { min-height: 1.4em; font-size: var(--fs-1) } #dice svg { width: 26px; height: 26px } #leaders { grid-template-columns: 1fr 1fr; font-size: var(--fs-1) }
   #toast { top: auto; bottom: calc(var(--act, 290px) + 12px); font-size: 15px; width: max-content }
@@ -283,13 +297,29 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
   .menu #foot { left: 0; right: 0; bottom: 0; padding: 8px 16px; background: var(--ground); justify-content: center }
   .tray { display: block; width: calc(100% + 24px); height: var(--tap); margin: -12px -12px -8px; border: 0; background: none }
   .tray::before { content: ""; display: block; width: 48px; height: 4px; margin: 0 auto 14px; border-radius: 2px; background: var(--edge) } .shut .tray::before { background: var(--accent) }
-  .shut #act :is(#news, #dice, #bag, #info, #hand, #trades, .pick, #amount, #leaders, .live-info, #send > p, .text) { display: none }
-  .shut #status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: var(--sp-2) }
+  .shut:not(.side) #act :is(#news, #dice, #bag, #info, #hand, #trades, .pick, #amount, #leaders, .live-info, #send > p, .text) { display: none }
+  .shut:not(.side) #status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: var(--sp-2) }
+  #sheet.tabbed { height: calc(90vh / var(--ui-scale)) }
   dialog, #sheet.wide, #sheet.end { width: calc(100vw / var(--ui-scale)); max-width: none; margin: auto 0 0; max-height: calc(90vh / var(--ui-scale)); padding: 18px 16px; border-radius: var(--r-3) var(--r-3) 0 0; border-width: 1px 0 0 } dialog > .go { margin: 0 -16px -18px; padding: 10px 16px max(14px, env(safe-area-inset-bottom)) !important } dialog .go { bottom: -18px }
   .end .ends { grid-template-columns: 1fr 1fr } .end .ends .main { grid-column: 1 / -1; grid-row: 1 } .hero canvas { width: 60px; height: 60px }
   #coach { padding: 10px 12px 12px } #coach p + p { font-size: 16px; line-height: 1.4; margin-bottom: var(--sp-2) } #coach .main, #coach .quiet { min-height: var(--tap) }
   #act #coach { top: -12px; margin: 0 0 10px }
 }
+/* side: a phone on its side or a small window. The seats in a strip under the bar, the move panel a full-height column at the right,
+   the board the rest; nothing that is pressed ever falls below the fold. Set by table.js (body.side), and after the rules above on purpose */
+body.side { --side-w: min(340px, 42vw) }
+body.side #bar { left: max(8px, env(safe-area-inset-left)); transform: none; width: calc((100vw - var(--side-w) - 28px) / var(--ui-scale)); max-width: 620px; padding-top: max(4px, env(safe-area-inset-top)) }
+body.side #seats { display: flex; gap: 6px; left: max(8px, env(safe-area-inset-left)); right: calc(var(--side-w) + 20px); width: auto; max-width: none; transform: none; top: calc(max(4px, env(safe-area-inset-top)) + 58px); overflow-x: auto; scrollbar-width: none }
+body.side .seat { flex: 1 1 0; min-width: 58px; display: flex; align-items: center; gap: 6px; padding: 4px 9px 4px 4px; overflow: hidden }
+body.side .seat.now { transform: none } body.side .seat canvas { position: static; flex: none; width: 24px; height: 24px }
+body.side .seat b { flex: 1 1 auto; min-width: 0; font-size: 16px; line-height: 1.15; overflow: hidden; white-space: nowrap; text-overflow: ellipsis } body.side .seat small { display: none }
+body.side .seat dl { flex: none; margin: 0 } body.side .seat dl div + div, body.side .seat dt { display: none } body.side .seat dd { font-size: 15px; line-height: 1.1 }
+body.side #act { --px: 12px; --pb: 12px; top: max(8px, env(safe-area-inset-top)); bottom: max(8px, env(safe-area-inset-bottom)); right: max(8px, env(safe-area-inset-right)); left: auto; width: calc(var(--side-w) / var(--ui-scale)); max-height: none; padding: 10px var(--px) var(--pb); border-radius: var(--r-2); border-bottom: 1px solid var(--edge-soft) }
+body.side #act #coach { top: -10px }
+body.side .tray { display: none }
+body.side .board-zoom { left: max(8px, env(safe-area-inset-left)); right: auto; bottom: max(8px, env(safe-area-inset-bottom)); grid-auto-flow: column }
+body.side #toast { top: calc(max(4px, env(safe-area-inset-top)) + 106px); bottom: auto; left: calc((100vw - var(--side-w) - 16px) / 2); width: max-content; max-width: calc(100vw - var(--side-w) - 40px); font-size: 15px }
+
 /* reduced motion: the system's wish, or the player's in Settings */
 .still * { transition: none !important } .still #dice svg, .still #coach-ring { animation: none }
 @media (prefers-reduced-motion: reduce) { #coach-ring { animation: none } }
@@ -2719,7 +2749,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       cam.set({ tilt: swing.a.tilt + (L.tilt - swing.a.tilt) * e, yaw: swing.a.yaw + (L.yaw - swing.a.yaw) * e, q: swing.a.q + (near() - swing.a.q) * e });
       cam.fit(ends, 14);
       base = cam.s;
-      if (k >= 1) swing = null; else moving = true;
+      if (k >= 1) { swing = null; layout(asked); } else moving = true; // shell hook (p8-shell): a new look settles at the home zoom, not the whole board
     }
     const beat = calm() || !lit ? 0 : Math.max(0, 1.5 - (t - lit) / 1000); // a preview pulses briefly, then the board is still
     if (beat > 0) moving = true;
@@ -2895,16 +2925,29 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   }
 
   const near = () => L.near / Math.max(cam.H, cam.W * 0.8);
+  // shell hook (site/table.js, p8-shell): `rest` is the zoom the board opens at and goes home to (the home button, the 0 key, a resize).
+  // free.fill asks for a wide map to open as tall as the free part of the screen, but no wider than a quarter more than the whole stage;
+  // free.at is a cell to centre at that zoom (the player's own land).
+  let rest = 1, asked = {};
   function layout(free = {}) {
-    cam.set({ W: host.clientWidth || 1, H: host.clientHeight || 1, left: 0, right: 0, top: 0, bottom: 0, ...free });
+    const { fill = false, at = -1, ...room } = (asked = free);
+    cam.set({ W: host.clientWidth || 1, H: host.clientHeight || 1, left: 0, right: 0, top: 0, bottom: 0, ...room });
     cam.set({ tilt: L.tilt, yaw: L.yaw, q: near() });
     cam.fit(ends, 14);
     base = cam.s; staged = false;
-    const tall = (cam.H - cam.top - cam.bottom) / (m.h * cam.s); // a wide map on a narrow screen starts closer in
-    if (zoom === 1 && picture && cam.W < 821 && tall > 1.6) zoomed(Math.min(2.6, tall)); else zoomed(zoom);
+    const tall = (cam.H - cam.top - cam.bottom) / (m.h * cam.s), was = rest; // a wide map on a narrow screen starts closer in
+    rest = fill ? Math.max(1, Math.min(3, tall / Math.max(0.3, cam.ct), (1.25 * cam.W) / (m.w * cam.s))) : picture && cam.W < 821 && tall > 1.6 ? Math.min(2.6, tall) : 1;
+    zoomed(zoom === 1 || zoom === was ? rest : zoom);
+    if (zoom === rest) centre(at);
     under.style.width = over.style.width = cam.W + "px";
     under.style.height = over.style.height = cam.H + "px";
     redraw();
+  }
+  /** shell hook (p8-shell): put a cell in the middle of the free part of the screen, as far as the map's edges allow, when zoomed in. */
+  function centre(i) {
+    if (!(i >= 0 && i < m.mid.length) || zoom <= 1) return;
+    const hw = (cam.W - cam.left - cam.right) / 2 / cam.s, hh = (cam.H - cam.top - cam.bottom) / 2 / cam.s / Math.max(0.3, cam.ct), keep = (v, h, n) => (n > 2 * h ? Math.max(h, Math.min(n - h, v)) : n / 2);
+    cam.cx = keep(m.mid[i][0], hw, m.w); cam.cy = keep(m.mid[i][1], hh, m.h); redraw();
   }
   // Zoom with the wheel or two fingers, then drag. At the widest the whole board is in view.
   let base = 1, zoom = 1, dragged = false;
@@ -2958,8 +3001,9 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   return {
     layout, get look() { return lookName; },
     /** Zoom and move without a wheel, a pinch or a drag: by a factor about the middle (0 shows the whole board), by a share of the board. */
-    zoom(f) { zoomed(f ? zoom * f : 1); }, pan(dx, dy) { if (zoom > 1) slide((dx * m.w) / zoom, (dy * m.h) / zoom); }, on(what, f) { (listeners[what] ||= []).push(f); },
-    setLook(name) { if (!LOOKS[name]) return; const a = { tilt: cam.tilt, yaw: cam.yaw, q: cam.q }; lookName = name; L = LOOKS[name]; if (calm()) { layout({ left: cam.left, right: cam.right, top: cam.top, bottom: cam.bottom }); for (const c of [under, over]) c.animate?.([{ opacity: 0.25 }, { opacity: 1 }], { duration: 180, easing: "ease-out" }); return; } swing = { t: performance.now(), a }; redraw(); },
+    zoom(f) { zoomed(f ? zoom * f : rest); if (!f) centre(asked.at ?? -1); }, pan(dx, dy) { if (zoom > 1) slide((dx * m.w) / zoom, (dy * m.h) / zoom); }, on(what, f) { (listeners[what] ||= []).push(f); },
+    centre,
+    setLook(name) { if (!LOOKS[name]) return; const a = { tilt: cam.tilt, yaw: cam.yaw, q: cam.q }; lookName = name; L = LOOKS[name]; if (calm()) { layout(asked); for (const c of [under, over]) c.animate?.([{ opacity: 0.25 }, { opacity: 1 }], { duration: 180, easing: "ease-out" }); return; } swing = { t: performance.now(), a }; redraw(); },
     /** Seat patterns over owned land, so colour is never the only sign of whose it is. */
     patterns(on) { pat = !!on; redraw(); },
     /** "system" (the default) follows the system's reduced-motion wish, "reduced" and "full" override it. */
@@ -3022,7 +3066,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.9.0";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "1f89379d";
+const BUILD = "0d2cc607";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -3301,7 +3345,8 @@ const CHOICES = {
   text: [["normal", "Normal"], ["large", "Large"], ["larger", "Larger"]],
   keys: [["on", "On"], ["off", "Off"]],
 };
-const DEFAULTS = { sound: "on", volume: 60, speed: "normal", motion: "system", patterns: "off", text: "normal", keys: "on" };
+// seat patterns are on unless a player turns them off (accessibility): settings kept before they were (no `v`) do not carry the old "off"
+const DEFAULTS = { sound: "on", volume: 60, speed: "normal", motion: "system", patterns: "on", text: "normal", keys: "on" }, SETTINGS_V = 2;
 /** How long bots wait, as a share of their usual pace; and how much bigger the words are. */
 const PACE = { normal: 1, fast: 0.3, instant: 0 }, SCALE = { normal: 1, large: 1.15, larger: 1.3 };
 
@@ -3310,12 +3355,25 @@ function parseSettings(text) {
   let o;
   try { o = JSON.parse(text || "{}"); } catch { o = null; }
   const s = { ...DEFAULTS }, v = Number(o?.volume);
-  for (const [k, list] of Object.entries(CHOICES)) if (list.some(([x]) => x === o?.[k])) s[k] = o[k];
+  for (const [k, list] of Object.entries(CHOICES)) if (list.some(([x]) => x === o?.[k]) && (k !== "patterns" || o.v >= SETTINGS_V)) s[k] = o[k];
   if (o?.volume !== undefined && Number.isFinite(v)) s.volume = Math.max(0, Math.min(100, Math.round(v)));
   return s;
 }
 const settings = parseSettings((() => { try { return localStorage.getItem(SETTINGS_KEY); } catch { return null; } })());
-function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* kept for this visit only */ } }
+function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...settings, v: SETTINGS_V })); } catch { /* kept for this visit only */ } }
+
+/**
+ * Can the last move be taken back? Only a move of the seat now to move, played since its turn began, that drew on no chance:
+ * a roll, a draw or a steal once seen stays seen, and another seat's move (a bot's turn, a friend's) is theirs.
+ * The rules stay whole: taking back is the match's own undo, so a seed and the moves still replay the game.
+ * Returns "yes", "none" (nothing of this seat's since its turn began) or "chance" (the last move showed what chance held).
+ */
+function takeBack(m, kinds, floor = 0) {
+  const n = m.list.length, seat = m.turn;
+  if (seat === null || kinds[seat] !== "you" || n <= floor) return "none";
+  if (m.game.turn(m.at(n - 1)) !== seat) return "none";
+  return m.rolled ? "chance" : "yes";
+}
 
 /** The turn a banner was shown for: once a round when one person plays, once a seat when several share the screen. */
 const turnKey = (seed, round, seat, solo) => (solo ? `${seed}/${round}` : `${seed}/${round}/${seat}`);
@@ -3371,7 +3429,7 @@ function cue(events) {
   if (events.some((e) => e.kind === "take" || (e.kind === "pour" && e.taken?.length))) sfx("capture", 0.2);
 }
 
-$x.SETTINGS_KEY = SETTINGS_KEY; $x.CHOICES = CHOICES; $x.DEFAULTS = DEFAULTS; $x.PACE = PACE; $x.SCALE = SCALE; $x.parseSettings = parseSettings; $x.settings = settings; $x.saveSettings = saveSettings; $x.turnKey = turnKey; $x.ranked = ranked; $x.resultText = resultText; $x.wake = wake; $x.sfx = sfx; $x.cue = cue;
+$x.SETTINGS_KEY = SETTINGS_KEY; $x.CHOICES = CHOICES; $x.DEFAULTS = DEFAULTS; $x.SETTINGS_V = SETTINGS_V; $x.PACE = PACE; $x.SCALE = SCALE; $x.parseSettings = parseSettings; $x.settings = settings; $x.saveSettings = saveSettings; $x.takeBack = takeBack; $x.turnKey = turnKey; $x.ranked = ranked; $x.resultText = resultText; $x.wake = wake; $x.sfx = sfx; $x.cue = cue;
 return $x; })({});
 $m[12] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -3383,7 +3441,7 @@ const { footer } = $m[21];
 const { canLock, linkGames, makeLink, newId, readLink } = $m[24];
 const { BUILD, SOURCE_URL, VERSION } = $m[22];
 const { coach } = $m[25];
-const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, turnKey, wake } = $m[26];
+const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } = $m[26];
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -3485,6 +3543,8 @@ const closeSheet = () => { if ($("sheet").open) $("sheet").close(); };
  *    panel(T), tapped(T, cell), key(T, key, event), changed(T) when a new position arrives,
  *    realtime: true, or a test of the position, for a game played on a clock: it has no turns to end or take back.
  *    Without it, a position marked `live` is real time.
+ *    stands: what Take back says when the last move showed what chance held (a roll, a draw); a plain line is said without it.
+ *    The board may add centre(cell) and focus(seat), so a map opens on, and goes home to, your own land.
  */
 function createTable(G) {
   $("broken")?.remove();
@@ -3529,20 +3589,36 @@ function createTable(G) {
   back.type = "button"; back.id = "back"; back.hidden = true;
   back.onclick = () => undo();
   $("choice").querySelector(".go")?.prepend(back);
-  const zoom = el("div", undefined, "zoom");
+  // the finished game, move by move: every game replays from its seed and moves, so any moment of it can be shown again
+  const story = el("div", undefined, "story"), storyRange = el("input"), storyAt = el("output"), storyHead = el("label", "The game again, move by move", "cap"), storyRow = el("div", undefined, "story-row");
+  const storyBack = el("button", "‹", "quiet"), storyOn = el("button", "›", "quiet");
+  Object.assign(storyRange, { type: "range", min: "0", step: "1", id: "story" });
+  storyHead.htmlFor = "story";
+  for (const [b, name, d] of [[storyBack, "One move back", -1], [storyOn, "One move on", 1]]) { b.type = "button"; b.setAttribute("aria-label", name); b.onclick = () => moment(Number(storyRange.value) + d); }
+  storyRange.oninput = () => moment(Number(storyRange.value));
+  storyAt.setAttribute("aria-live", "polite");
+  storyRow.append(storyBack, storyRange, storyOn);
+  story.append(storyHead, storyRow, storyAt);
+  story.hidden = true;
+  $("after").before(story);
+  let real = null; // the finished match, while an earlier moment of it is on the board
+  const zoom = el("div", undefined, "zoom board-zoom");
   zoom.hidden = true; zoom.setAttribute("role", "group"); zoom.setAttribute("aria-label", "Zoom the board");
-  for (const [t, name, f] of [["+", "Zoom in", 1.4], ["−", "Zoom out", 1 / 1.4], ["⌂", "Show the whole board", 0]]) { const b = el("button", t, "quiet"); b.type = "button"; b.setAttribute("aria-label", name); b.onclick = () => board?.zoom(f); zoom.append(b); }
+  for (const [t, name, f] of [["+", "Zoom in", 1.4], ["−", "Zoom out", 1 / 1.4], ["⌂", "Back to the opening view", 0]]) { const b = el("button", t, "quiet"); b.type = "button"; b.setAttribute("aria-label", name); b.onclick = () => zoomTo(f); zoom.append(b); }
   document.body.append(zoom);
+  /** Zoom by a factor; 0 goes home: the view the board opened at, a wide map centred on your own land. */
+  const zoomTo = (f) => { board?.zoom(f); if (!f) board?.centre?.(focus()); };
+  const focus = () => { const p = T.match?.position; if (!p || !board?.focus) return -1; const s = p.human ?? (T.human() ? T.match.turn : T.kinds.indexOf("you")); return board.focus(s); };
   // the status line is spoken, and every redraw writes it: the same words written again are left alone, so they are not said again
   // ("Saffron is thinking" once a turn, not at every move). The games write it plainly; this one element takes care of it.
   const text = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
   Object.defineProperty($("status"), "textContent", { configurable: true, get() { return text.get.call(this); }, set(v) { if (text.get.call(this) !== String(v ?? "")) text.set.call(this, v); } });
   const stage = $("stage");
   stage.removeAttribute("aria-hidden"); stage.tabIndex = 0; stage.setAttribute("role", "group");
-  stage.setAttribute("aria-label", "The board. Plus and minus zoom, 0 shows all of it, arrows move it. The lists in the move panel choose places.");
+  stage.setAttribute("aria-label", "The board. Plus and minus zoom, 0 goes back to the opening view, arrows move it. The lists in the move panel choose places.");
   stage.onkeydown = (e) => {
     const move = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key], f = { "+": 1.4, "=": 1.4, "-": 1 / 1.4, 0: 0 }[e.key];
-    if (move) board?.pan(move[0] * 0.12, move[1] * 0.12); else if (f !== undefined) board?.zoom(f); else return;
+    if (move) board?.pan(move[0] * 0.12, move[1] * 0.12); else if (f !== undefined) zoomTo(f); else return;
     e.preventDefault(); e.stopPropagation();
   };
   banner.id = "turn"; banner.hidden = true; banner.setAttribute("aria-hidden", "true");
@@ -3578,20 +3654,39 @@ function createTable(G) {
     fold.setAttribute("aria-expanded", String(!list.hidden));
     if (!dock.hidden && !list.hidden && drawn !== log.length) { drawn = log.length; list.replaceChildren(...log.slice(-80).reverse().map((t) => el("li", t))); }
   }
+  /**
+   * Three layouts. Wide: seats and the move panel in columns either side of the board (an atlas: seats along the top).
+   * Side, for a landscape phone or a small window: the seats in a strip on top, the move panel a full-height column at the right.
+   * Narrow, a phone held upright: the seats in a strip on top, the move panel a tray below.
+   */
+  const side = () => innerWidth > innerHeight * 1.15 && (innerHeight < 600 || innerWidth <= 1100);
+  let room = "", homed = false; // homed: a wide map has been centred on your own land
   const place = () => {
+    document.body.classList.toggle("side", side());
     docked();
     if (!board) return;
-    const wide = innerWidth > 820, r = (id) => $(id).getBoundingClientRect(), z = SCALE[settings.text];
-    if (T.demo) board.layout(wide ? { left: Math.min(innerWidth / 2, $("title").querySelector(".card").getBoundingClientRect().right), right: 0, top: 20, bottom: 20 } : { left: 0, right: 0, top: 10, bottom: innerHeight * 0.5 });
+    const wide = innerWidth > 820, r = (id) => $(id).getBoundingClientRect(), z = SCALE[settings.text], atlas = document.body.classList.contains("atlas");
+    let free;
+    if (T.demo) free = wide ? { left: Math.min(innerWidth / 2, $("title").querySelector(".card").getBoundingClientRect().right), right: 0, top: 20, bottom: 20 } : { left: 0, right: 0, top: 10, bottom: innerHeight * 0.5 };
     // the move panel (with the lesson and the news in it) keeps a column of its own, so nothing floats on the board
-    else if (wide && document.body.classList.contains("atlas")) board.layout({ left: 372 * z, right: dock.hidden || list.hidden ? 0 : 360 * z, top: r("seats").bottom + 2, bottom: 4 });
-    else if (wide) board.layout({ left: 232 * z, right: 372 * z, top: 12 + 74 * z, bottom: 6 });
-    else { fitted = r("act").top; document.body.style.setProperty("--act", `${innerHeight - fitted}px`); board.layout({ left: 0, right: 0, top: r("seats").bottom + 2, bottom: innerHeight - fitted + 34 }); }
+    else if (side()) free = { left: 0, right: innerWidth - r("act").left + 4, top: r("seats").bottom + 2, bottom: 2 };
+    // a wide map opens as tall as the screen allows, centred on your own land; the panels float over its far edges
+    else if (wide && atlas) free = { left: 372 * z, right: dock.hidden || list.hidden ? 16 : 360 * z, top: r("seats").bottom + 2, bottom: 4 };
+    else if (wide) free = { left: 232 * z, right: 372 * z, top: 12 + 74 * z, bottom: 6 };
+    else { fitted = r("act").top; document.body.style.setProperty("--act", `${innerHeight - fitted}px`); free = { left: 0, right: 0, top: r("seats").bottom + 2, bottom: innerHeight - fitted + 34 }; }
+    if (atlas && !T.demo) Object.assign(free, { fill: wide || side(), at: focus() }); // a phone held upright keeps the board's own closer opening
+    // the same room as last time is left alone, so a summary opening or a tray settling does not move a board you have moved
+    const key = JSON.stringify([innerWidth, innerHeight, free.left, free.right, free.top, free.bottom, !!free.fill, T.demo]);
+    if (key === room) return;
+    room = key;
+    board.layout(free);
+    homed = free.at >= 0;
   };
   function makeBoard() {
     board?.destroy();
     $("stage").replaceChildren();
     board = G.board(T, $("stage"));
+    room = ""; // a new board is laid out afresh
     board.patterns?.(settings.patterns === "on"); board.motion?.(settings.motion);
     $("look").hidden = !board.looks.length;
     place();
@@ -3623,6 +3718,8 @@ function createTable(G) {
     if (!T.human() && briefed()) { unbrief(); place(); }
     $("choice").hidden = !me;
     $("after").hidden = !over;
+    if (over && !real && !T.demo) { storyN = T.match.list.length; storyRange.max = String(storyN); storyRange.value = String(storyN); storyAt.textContent = ""; }
+    story.hidden = !over || T.demo || storyN < 1;
     if (over) { $("status").textContent = ending(); board.clear(); } else if (!me) {
       // while your own move plays out the line stays as it is, so it is not blanked and said again after
       if (!T.human()) $("status").textContent = T.away() ? `Waiting for ${NAMES[T.match.turn]}` : `${NAMES[T.match.position.seat]} is thinking`;
@@ -3635,6 +3732,8 @@ function createTable(G) {
     $("round").textContent = over ? "The end" : G.roundText?.(p) || (p.classic ? `Round ${p.round}` : `Round ${p.round} of ${p.rounds}`);
     $("fills").replaceChildren(...Array.from({ length: seats }, (_, s) => { const i = el("i"); i.style.width = `${(100 * G.cellsOf(p, s)) / n}%`; i.style.background = `rgb(${RGB[s]})`; return i; }));
     $("goal").style.left = `${(100 * goal) / n}%`;
+    // a map you start on with no land yet (real time) goes to your land once you have some
+    if (!homed && !T.demo && board?.centre && document.body.classList.contains("atlas")) { const f = focus(); if (f >= 0) { homed = true; board.centre(f); } }
     $("land").setAttribute("aria-label", `${Array.from({ length: seats }, (_, s) => `${NAMES[s]} ${G.cellsOf(p, s)}`).join(", ")}. The goal is ${goal} of ${n}.`);
     $("seats").replaceChildren(...Array.from({ length: seats }, (_, s) => {
       const c = G.cellsOf(p, s), out = G.outOf ? G.outOf(p, s) : !c, li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${out ? " out" : ""}`), dl = el("dl");
@@ -3883,9 +3982,12 @@ function createTable(G) {
     ready = null;
     skip.hidden = true;
     Object.assign(T, { demo: false, busy: false, catching: false, match: m, kinds: k, link });
+    real = null; storyN = 0;
     G.fresh?.(T);
     log = []; land = []; mark = -1; drawn = -1; fell = []; held = "";
     unbrief();
+    $("status").textContent = ""; // nothing said in the last game lingers in this one
+    $("toast").classList.remove("on");
     const again = createMatch(G.game, { seed: m.seed, options: m.options });
     land.push(tally(again.position));
     m.list.forEach((mv, i) => { if (i === from) mark = log.length; log.push(...again.play(mv).map((e) => G.line(e, again.position)).filter(Boolean)); land.push(tally(again.position)); watch(again.position); });
@@ -3915,6 +4017,7 @@ function createTable(G) {
   function attract() {
     dress(setup.look);
     run++;
+    real = null; storyN = 0;
     Object.assign(T, { demo: true, busy: false, link: null, hurry: false, kinds: Array(Math.max(...many)).fill("easy"), match: createMatch(G.game, { seed: "title " + (run % 9), options: { ...chosen(), seats: Math.max(...many) } }) });
     G.changed?.(T);
     makeBoard();
@@ -3975,32 +4078,48 @@ function createTable(G) {
     hero.append(arms, words);
     // what next: the same three in the same places every time, then two smaller ones
     const go = el("div", undefined, "go ends"), all = el("a", "All games", "quiet"), change = el("button", "Change setup", "quiet"), again = el("button", "Rematch", "main");
-    const minor = el("div", undefined, "go minor"), look = el("button", "See the board", "text"), copyIt = el("button", "Copy result", "text"), text = resultText(G.title, rows);
+    const minor = el("div", undefined, "go minor"), look = el("button", "See the board", "text"), steps = el("button", "Step through the game", "text"), copyIt = el("button", "Copy result", "text"), text = resultText(G.title, rows);
     all.href = "./";
-    change.type = again.type = look.type = copyIt.type = "button";
+    change.type = again.type = look.type = steps.type = copyIt.type = "button";
+    steps.onclick = () => { closeSheet(); panel(); moment(0); storyRange.focus(); };
     again.onclick = () => { closeSheet(); restart(); };
     change.onclick = () => { home(); $("own").open = true; };
     look.onclick = closeSheet;
     copyIt.onclick = async () => { try { await navigator.clipboard.writeText(text); copyIt.textContent = "Copied"; } catch { toast(text); } };
     const onward = G.next?.(T); // a ladder's next step takes the main button's place
     if (onward) { again.textContent = onward.label; again.onclick = () => { closeSheet(); onward.go(); }; }
-    go.append(all, change, again); minor.append(look, copyIt);
+    go.append(all, change, again); minor.append(look, ...(T.match.list.length ? [steps] : []), copyIt);
     body.append(hero, scroll, c, ...[G.report?.(T)].filter(Boolean), go, minor); // G.report: the figures a game adds to the end
     sheet(lost ? "Defeat" : people ? "Victory" : "The end", body, null, `end ${lost ? "lose" : "win"}`);
     again.focus();
   }
+  /** Show the finished game after its first n moves; n at the last move is the end itself. The match keeps every position, so the rules are not asked again. */
+  let storyN = 0;
+  function moment(n) {
+    const m = real || T.match;
+    if (!m || T.demo || m.turn !== null) return;
+    n = Math.max(0, Math.min(storyN, Math.round(n) || 0));
+    storyRange.value = String(n);
+    if (n === storyN) { T.match = m; real = null; } else { const p = m.at(n); real = m; T.match = Object.create(m, { position: { get: () => p } }); }
+    G.changed?.(T);
+    board.show([], true);
+    score();
+    const p = T.match.position, when = G.roundText?.(p) || `Round ${p.round}`;
+    storyAt.textContent = n === storyN ? `The end, after ${storyN} move${storyN === 1 ? "" : "s"}.` : n ? `Move ${n} of ${storyN}. ${when}.` : `The start. ${when}.`;
+  }
   const seed = () => [...crypto.getRandomValues(new Uint32Array(2))].map((v) => v.toString(36)).join("");
   const restart = () => begin(createMatch(G.game, { seed: seed(), options: T.match.options }), [...T.kinds], T.link ? { id: newId(), roles: T.kinds.map((x) => (x === "you" ? "host" : x === "away" ? "friend" : x)), pass: T.link.pass, floor: 0 } : null);
   const floor = () => (T.link ? T.link.floor : 0);
-  const canUndo = () => !T.catching && !realtime() && T.match.list.length > floor() && T.kinds.includes("you");
+  // take back stops where hidden things were seen: a roll, a draw or a steal, and any other seat's move (a bot's turn), so it never shows what is coming
+  const undoable = () => (T.catching || T.busy || T.demo || realtime() || !T.match ? "none" : takeBack(T.match, T.kinds, floor()));
+  const canUndo = () => undoable() === "yes";
   function undo() {
-    if (!canUndo()) return;
-    const had = T.match.list;
-    let rerolls = false; // did any move taken back roll dice? then playing it again gives the same result
-    do { if (T.match.list.length <= floor()) break; rerolls ||= T.match.rolled; if (!T.match.undo()) break; } while (!T.human());
-    if (!T.human()) { for (const mv of had.slice(T.match.list.length)) T.match.play(mv); return; } // nothing of yours to take back
+    const why = undoable();
+    if (why === "chance") return toast(G.stands || "That move stands: what chance showed in it is not taken back.");
+    if (why !== "yes") return toast("Nothing to take back this turn.");
+    T.match.undo();
     begin(T.match, T.kinds, T.link);
-    toast(rerolls ? "Taken back. The dice are already rolled: playing the same move again gives the same result." : had.length - T.match.list.length > 1 ? "Taken back, with the moves made after it." : "Taken back.");
+    toast("Taken back.");
   }
   function save() {
     const a = el("a");
@@ -4018,7 +4137,7 @@ function createTable(G) {
   /** One menu, the same in every table game: Game, Settings, Link play, About. */
   function menu(at = tab) {
     tab = at;
-    if (!$("sheet").open || !$("sheet-body").contains(menuBox)) sheet(G.title, menuBox, T.demo ? "Close" : "Resume", "wide");
+    if (!$("sheet").open || !$("sheet-body").contains(menuBox)) sheet(G.title, menuBox, T.demo ? "Close" : "Resume", "wide tabbed");
     radio(tabs, [["game", "Game"], ["settings", "Settings"], ["link", "Link play"], ["about", "About"]].map(([value, label]) => ({ value, label })), tab, menu, true);
     for (const b of tabs.children) b.setAttribute("aria-controls", pane.id);
     pane.setAttribute("aria-label", tabs.querySelector("[aria-selected=true]").textContent);
@@ -4064,12 +4183,13 @@ function createTable(G) {
     vol.onchange = () => { wake(); sfx("tick"); };
     volLine.append(el("span", "Volume"), vol);
     box.append(volLine);
-    row("Bot speed", ...bind("speed"), CHOICES.speed);
+    const clock = !T.demo && realtime(); // a game on a clock has no bots' turns to wait for, and no turn to end or take back
+    if (!clock) row("Bot speed", ...bind("speed"), CHOICES.speed);
     row("Motion", ...bind("motion"), CHOICES.motion);
     if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
     if (board?.styles?.length) row("Board style", () => board.style, (v) => board.setStyle(v), board.styles); // 3D hook: styles are data (src/map/style.js)
     row("Letter keys", ...bind("keys"), CHOICES.keys);
-    box.append(el("p", "E ends the turn (press twice), U takes back, and each game has a few more. Off leaves Tab, arrows, Enter and Escape.", "about"));
+    box.append(el("p", clock ? "This game's letter keys are in How to play. Off leaves Tab, arrows, Enter and Escape." : "E ends the turn (press twice), U takes back, and each game has a few more. Off leaves Tab, arrows, Enter and Escape.", "about"));
     row("Seat patterns", ...bind("patterns"), CHOICES.patterns);
     box.append(el("p", "Patterns show on the board and the score bar.", "about"));
     row("Text size", ...bind("text"), CHOICES.text);
@@ -4165,20 +4285,32 @@ function createTable(G) {
   const resumeButton = () => { const k = kept(), when = k && G.roundText?.(k.m.position); $("resume").hidden = !k; if (k) $("resume").textContent = when ? `Continue: ${when}` : `Continue, round ${k.m.position.round}`; };
 
   const launch = (o, all, who, words = "") => begin(createMatch(G.game, { seed: G.seedOf?.(all) || seed(), options: o }), who, who.includes("away") ? { id: newId(), roles: who.map((k) => (k === "you" ? "host" : k === "away" ? "friend" : k)), pass: canLock() ? words : "", floor: 0 } : null, -1, setup.look.map((x) => [...x]));
-  $("start").onclick = () => launch(chosen(), chosen(true), G.kindsOf?.(chosen()) || setup.who.slice(0, setup.seats), passField.value.trim());
+  /** This browser keeps one game in progress. Starting another over it is asked first, in the page, and the old one can be gone back to. */
+  function replacing(go, what = "A new game") {
+    const k = kept();
+    if (!k) { go(); return; }
+    const box = el("div", undefined, "stack"), back = el("button", "Continue that game", "main"), fresh = el("button", `${what === "A new game" ? "Start the new game" : "Open the saved game"}`, "quiet danger"), when = G.roundText?.(k.m.position) || `Round ${k.m.position.round}`;
+    back.type = fresh.type = "button";
+    back.onclick = () => { closeSheet(); begin(k.m, k.kinds, null, -1, k.look); };
+    fresh.onclick = () => { closeSheet(); go(); };
+    box.append(el("p", `You have a game in progress: ${when}. This browser keeps one game at a time, so ${what.toLowerCase()} takes its place and that game is lost.`), back, fresh);
+    sheet("Replace your game?", box, "Back");
+    back.focus();
+  }
+  $("start").onclick = () => { const who = G.kindsOf?.(chosen()) || setup.who.slice(0, setup.seats), go = () => launch(chosen(), chosen(true), who, passField.value.trim()); if (who.includes("away")) go(); else replacing(go); }; // a game by link is kept apart
   // Play: one press starts a short game, you against bots, on the game's own preset (G.quick) or Traditional at the fewest seats and the shortest length
   const quick = { style: "classic", seats: Math.min(...many), ...(G.lengths[0] ? { rounds: G.lengths[0][0] } : {}), ...G.quick }, them = (G.kindsOf?.(quick) || Array(quick.seats)).length - 1;
   const fast = () => launch(quick, quick, G.kindsOf?.(quick) || ["you", ...Array(them).fill("normal")]);
   // the guided first game (coach.js), when the game has one: offered on the title card, at the first Play, and in the menu
   const lesson = G.lesson && coach(T, G.lesson, G.key, () => begin(createMatch(G.game, { seed: G.lesson.seed, options: G.lesson.options }), [...G.lesson.kinds], null, -1, LOOK0.map((x) => [...x])));
-  $("quick").onclick = () => lesson?.first(fast) || fast();
+  $("quick").onclick = () => lesson?.first(fast) || replacing(fast);
   $("preset").replaceChildren(...[`${STYLES[quick.style]} rules, you against ${them || "the"} bot${them === 1 ? "" : "s"}.`, ...G.about[quick.style].split("\n").filter((x) => x.startsWith("Not "))].map((x) => el("span", x)));
   linkButton.onclick = linkSheet;
   sendCopy.onclick = copy;
   sendShare.onclick = async () => { if (ready?.url) try { await navigator.share({ url: ready.url }); sent(); } catch { /* they changed their mind */ } };
   skip.onclick = () => { T.catching = false; };
   $("resume").onclick = () => { const k = kept(); if (k) begin(k.m, k.kinds, null, -1, k.look); };
-  $("menu").onclick = () => menu();
+  $("menu").onclick = () => menu("game"); // the menu always opens on its first tab
   setButton.onclick = () => menu("settings");
   // sound wakes on a press that starts a game, or when it is turned on; every button then ticks
   for (const id of ["quick", "start", "resume"]) $(id).addEventListener("click", wake);
@@ -4219,8 +4351,10 @@ function createTable(G) {
     if (!f) return;
     try {
       const { match: m, warning } = openSave(await f.text(), [G.game]);
-      begin(m, G.kindsOf?.(m.options) || Array.from({ length: m.options.seats }, (_, i) => (i ? "normal" : "you")));
-      if (warning) sheet("Opened with a warning", el("p", warning));
+      replacing(() => {
+        begin(m, G.kindsOf?.(m.options) || Array.from({ length: m.options.seats }, (_, i) => (i ? "normal" : "you")));
+        if (warning) sheet("Opened with a warning", el("p", warning));
+      }, "The saved game");
     } catch (e) {
       if (!(e instanceof Refusal)) throw e;
       sheet("That file was not opened", el("p", `${e.message[0].toUpperCase()}${e.message.slice(1)}.`));
@@ -4325,7 +4459,16 @@ function hexBoard(T, stage, o) {
     patterns(on) { pat = !!on; if (b) b.patterns(pat); else if (svg) still(); },
     motion: (mode) => b?.motion(mode),
     layout(free) { room = free; if (b) b.layout(free); else fit(); },
-    zoom: (f) => b?.zoom(f), pan: (x, y) => b?.pan(x, y),
+    zoom: (f) => b?.zoom(f), pan: (x, y) => b?.pan(x, y), centre: (i) => b?.centre?.(i),
+    /** The cell of a seat's nearest the middle of its land: where a map opens and goes home to. */
+    focus(seat) {
+      const mid = o.picture?.mid, owner = o.owner();
+      if (!mid || !(seat >= 0)) return -1;
+      const mine = owner.flatMap((s, i) => (s === seat && mid[i] ? [i] : []));
+      if (!mine.length) return -1;
+      const x = mine.reduce((n, i) => n + mid[i][0], 0) / mine.length, y = mine.reduce((n, i) => n + mid[i][1], 0) / mine.length;
+      return mine.reduce((a, i) => (Math.hypot(mid[i][0] - x, mid[i][1] - y) < Math.hypot(mid[a][0] - x, mid[a][1] - y) ? i : a));
+    },
     show(order, quick) { if (b) return b.show(o.owner(), { pieces: o.pieces(), order, quick, names: o.names?.() }); still(); return 0; },
     light: (cells, chosen) => b?.preview(cells, chosen),
     clear: () => b?.preview([]),
