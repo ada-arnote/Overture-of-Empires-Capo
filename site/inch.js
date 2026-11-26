@@ -4,7 +4,7 @@ import { NONE, boardOf, cellsOf, goalOf, growth, inch, liveBoardFor, poolLimit, 
 import { choose, thinking } from "../src/games/inch/bot.js";
 import { $, NAMES, PAPER, RGB, createTable, radio, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
-import { board as liveBoard, ending as liveEnding, key as liveKey, leave as liveLeave, lineOf as liveLine, liveGoal, liveLand, panel as livePanel, record, rules as liveRules, seen as liveSeen, summary as liveSummary, time as liveTime } from "./inchlive.js";
+import { board as liveBoard, ending as liveEnding, key as liveKey, leave as liveLeave, lineOf as liveLine, liveGoal, liveLand, panel as livePanel, record, rules as liveRules, seen as liveSeen, stats as liveStats, summary as liveSummary, time as liveTime } from "./inchlive.js";
 
 const SHARE = { quarter: "Quarter", third: "A third", half: "Half", most: "Most", all: "All" }, HILL = [201, 178, 140];
 const cells = (n) => `${n} ${n === 1 ? "cell" : "cells"}`, place = (to) => (to === NONE ? "empty land" : NAMES[to]);
@@ -63,7 +63,7 @@ createTable({
     { key: "drawn", label: "Order with three", normal: false, only: ["custom"], when: (style, extra) => !extra.live, values: [[true, "Drawn each round"], [false, "Rotates"]] },
     { key: "limit", label: "Rounds", normal: 16, only: ["custom"], when: (style, extra) => !extra.live, values: [[10, "10"], [16, "16"], [20, "20"], [40, "40"]] },
   ],
-  stats: (p, s) => p.live ? [["Strength", p.troops[s]], ["Nations left", p.alive.filter(Boolean).length]] : (() => { const c = cellsOf(p, s), x = p.pool[s]; return [["Strength", x], ["Grows", p.home[s] === NONE ? "out" : `+${Math.max(0, Math.min(growth(p, s), poolLimit(c) - x))}`]]; })(),
+  stats: (p, s) => p.live ? liveStats(p, s) : (() => { const c = cellsOf(p, s), x = p.pool[s]; return [["Strength", x], ["Grows", p.home[s] === NONE ? "out" : `+${Math.max(0, Math.min(growth(p, s), poolLimit(c) - x))}`]]; })(),
   line(e, p) {
     if (p?.live) return liveLine(e, p);
     const who = NAMES[e.seat];
@@ -115,7 +115,7 @@ createTable({
     else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "pour")) { e.preventDefault(); $("pour").click(); }
   },
   about: {
-    classic: "Traditional: our own real-time land-grab.\nPick an ink and start anywhere on the world map or a made one, among up to 50 nations. Your strength grows with your land; send a share of it with the slider and watch the border creep. Each ink spreads in its own way, places on the map help whoever holds them, and twice a game a new age brings a choice, sooner on the smaller maps. Land you encircle soaks through. A pause button, and a clock in half-second ticks so a game can be saved.\nNot a copy of any other game: our own rules, map, names and art.",
+    classic: "Traditional: our own real-time land-grab.\nPick an ink and start anywhere on the world map or a made one, among up to 50 nations. Your strength grows with your land; send a share of it with the slider and watch the border creep. Each ink spreads in its own way, places on the map help whoever holds them, and twice a game a new age brings a choice, sooner on the smaller maps. Land you encircle soaks through. A list of the attacks under way, yours to call back; Find me; tips for your first minute; your figures at the end. A pause button, and a clock in half-second ticks so a game can be saved.\nNot a copy of any other game: our own rules, map, names and art.",
     custom: "Custom: your own rules.\nChoose the clock first. In real time: the map, the nations, how hard your rivals play, inks, places, the ages, the easing goal, the time limit, and cities. In turns, the duel for two or three at one table: a small map where land cut off from your tower falls away, homes are walled and saving pays, each of which you can change, with the shares you pour, the goal, the turn order and the number of rounds.",
     ours: "Capo: The Ink Dries.\nThe short plain game, in real time: 12 nations on a map drawn for the game, wells and nothing else. Your first cell is your capital; land cut off from it fades. From 1:00 the page dries from its edges inward. Hold 65% of what is still wet.",
     coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",

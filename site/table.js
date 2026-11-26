@@ -205,7 +205,8 @@ export function createTable(G) {
     $("choice").hidden = !me;
     $("after").hidden = !over;
     if (over) { $("status").textContent = ending(); board.clear(); } else if (!me) {
-      $("status").textContent = T.away() ? `Waiting for ${NAMES[T.match.turn]}` : T.human() ? "" : `${NAMES[T.match.position.seat]} is thinking`;
+      const say = T.away() ? `Waiting for ${NAMES[T.match.turn]}` : T.human() ? "" : `${NAMES[T.match.position.seat]} is thinking`;
+      if ($("status").textContent !== say) $("status").textContent = say; // a status is spoken when written, so the same words are written once
       board.clear();
     } else { back.hidden = !canUndo() || !!T.match.position.live; G.panel(T); refocus(); }
     lesson?.check();
@@ -560,7 +561,7 @@ export function createTable(G) {
   const seed = () => [...crypto.getRandomValues(new Uint32Array(2))].map((v) => v.toString(36)).join("");
   const restart = () => begin(createMatch(G.game, { seed: seed(), options: T.match.options }), [...T.kinds], T.link ? { id: newId(), roles: T.kinds.map((x) => (x === "you" ? "host" : x === "away" ? "friend" : x)), pass: T.link.pass, floor: 0 } : null);
   const floor = () => (T.link ? T.link.floor : 0);
-  const canUndo = () => !T.catching && T.match.list.length > floor() && T.kinds.includes("you");
+  const canUndo = () => !T.catching && !T.match.position.live && T.match.list.length > floor() && T.kinds.includes("you"); // real time has no move to take back
   function undo() {
     if (!canUndo()) return;
     const had = T.match.list;
@@ -779,7 +780,7 @@ export function createTable(G) {
     if (T.demo || $("sheet").open || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input:not([type=range]), select, textarea")) return;
     if (k.length === 1 && settings.keys === "off") return; // single letters only; Enter and Escape stay
     if (k === "u") undo();
-    else if (k === "e" && T.ready() && performance.now() > sureEnd) { sureEnd = performance.now() + 4000; toast("End your turn? Press E again."); }
+    else if (k === "e" && T.ready() && !T.match.position.live && performance.now() > sureEnd) { sureEnd = performance.now() + 4000; toast("End your turn? Press E again."); }
     else if (T.ready()) { sureEnd = 0; G.key && G.keys?.(T, k, e); }
   });
   addEventListener("resize", place);

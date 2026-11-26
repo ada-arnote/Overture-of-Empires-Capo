@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Refusal, canon, chance, createMatch, fingerprint, openSave, packGame, seedState, unpackGame } from "../src/core/index.js";
 import { NONE, SWITCHES, boardOf, cellsOf, goalOf, inch, liveBoardFor } from "../src/games/inch/rules.js";
-import { AGE_AT, CARDS, DRIES, INKS, LIVE_MAPS, MARKS, NONE as N, PCTS, PLACES, SAFE, agesOf, apart, bordersOf, cityPrice, costOf, driedOf, dryRank, gainOf, goalOf as liveGoalOf, goalPercent, held, landingPrice, landings, liveAllows, liveApply, liveMoves, maxOf, rangeOf, wetAt, wetOf } from "../src/games/inch/live.js";
+import { AGE_AT, CARDS, DRIES, INKS, LIVE_MAPS, MARKS, NONE as N, PCTS, PLACES, SAFE, agesOf, apart, bordersOf, cityPrice, costOf, driedOf, dryRank, gainOf, goalOf as liveGoalOf, goalPercent, held, landingPrice, landings, liveAllows, liveApply, liveMoves, maxOf, rangeOf, recallLoss, recallable, wetAt, wetOf } from "../src/games/inch/live.js";
 import { TIERS, choose } from "../src/games/inch/bot.js";
 import { SLOW, botGame, direct, ended, inList, passive, refused, refusedListed, replays, same, sameEachStep } from "./fixtures/bots.js";
 
@@ -242,13 +242,13 @@ function ticked(more, ticks, seed = "v7") {
 }
 const mutable = (p) => structuredClone(p);
 
-test("version 9: saves from version 8 are refused with a plain message", () => {
+test("version 10: saves from version 9 are refused with a plain message", () => {
   const m = live({}, "old");
   m.play(m.legal()[0]);
   const old = JSON.parse(m.save());
-  old.version = "8";
-  assert.throws(() => openSave(JSON.stringify(old), [inch]), (e) => e instanceof Refusal && e.code === "version" && /version 8/.test(e.message));
-  assert.equal(inch.version, "9");
+  old.version = "9";
+  assert.throws(() => openSave(JSON.stringify(old), [inch]), (e) => e instanceof Refusal && e.code === "version" && /version 9/.test(e.message));
+  assert.equal(inch.version, "10");
 });
 test("inks: the start carries your ink; bots' inks are drawn evenly by the seed; Custom can draw yours or leave inks off", () => {
   const m = live({ nations: 12 }, "inks"), p = m.position;
@@ -471,4 +471,40 @@ test("The Ink Dries: a capital and its ring cost triple; a lost capital moves to
   const kept = b.dry.filter((i) => p.owner[i] === s);
   for (let k = 0; k < DRIES.fade + 2; k++) x = liveApply(x, b, { do: "tick", n: 1 }, d).position;
   assert.ok(kept.filter((i) => x.owner[i] === s).length > 0);
+});
+
+// ---- version 10: an attack can be called back ----
+test("recall: an attack under way comes home less a quarter; nothing else is listed or allowed; the same seed and moves replay", () => {
+  const m = live({}, "recall"), b = liveBoardFor(m.position);
+  m.play(m.legal()[0]);
+  assert.ok(!m.legal().some((x) => x.do === "recall"), "nothing to call back before an attack");
+  assert.throws(() => m.play({ do: "recall", to: N }), refused("illegal"));
+  m.play({ do: "tick", n: 4 });
+  m.play({ do: "attack", to: N, pct: 100 });
+  const before = m.position, a = recallable(before, N);
+  assert.ok(a && a.left > 0);
+  assert.deepEqual(m.legal().filter((x) => x.do === "recall"), [{ do: "recall", to: N }]);
+  for (const bad of [{ do: "recall", to: 3 }, { do: "recall", to: N, pct: 50 }, { do: "recall" }, { do: "recall", to: "x" }]) assert.throws(() => m.play(bad), refused("illegal"), JSON.stringify(bad));
+  for (const x of liveMoves(before, b)) assert.ok(liveAllows(before, b, x), JSON.stringify(x));
+  const events = m.play({ do: "recall", to: N }), p = m.position, lost = recallLoss(a.left);
+  assert.deepEqual(events, [{ kind: "recall", seat: 0, to: N, back: a.left - lost, lost }]);
+  assert.equal(p.troops[0], before.troops[0] + a.left - lost);
+  assert.ok(!p.attacks.some((x) => x.by === 0), "the attack is gone");
+  assert.equal(p.tick, before.tick, "calling back takes no time");
+  assert.deepEqual(p.owner, before.owner);
+  for (const n of [1, 2, 3, 4, 5, 8, 99, 100]) { const l = recallLoss(n); assert.ok(Number.isInteger(l) && l >= 1 && l <= n && 4 * l >= n && 4 * (l - 1) < n, `a quarter of ${n}, rounded up`); }
+  assert.throws(() => m.play({ do: "recall", to: N }), refused("illegal"), "once only");
+  const again = createMatch(inch, { seed: m.seed, options: m.options });
+  for (const x of m.list) again.play(x);
+  assert.equal(fingerprint(again.position), fingerprint(m.position));
+});
+test("recall: a Flood cannot be called back, so the doubling is never cashed in", () => {
+  const { p, b, d } = ticked({ map: "continents" }, AGE_AT.continents[2] + 1, "flood-back");
+  if (p.over || !p.alive[0] || !bordersOf(p, b)[0].size) return; // this seed's game ended early: nothing to check
+  const to = [...bordersOf(p, b)[0]][0], q = liveApply(mutable({ ...p, card: p.card.map((c, s) => (s ? c : -1)) }), b, { do: "card", card: "flood" }, d).position;
+  const sent = liveApply(q, b, { do: "attack", to, pct: 50 }, d).position, a = sent.attacks.find((x) => x.by === 0 && x.to === to);
+  assert.equal(a.fl, 1);
+  assert.equal(recallable(sent, to), undefined);
+  assert.equal(liveAllows(sent, b, { do: "recall", to }), false);
+  assert.ok(!liveMoves(sent, b).some((x) => x.do === "recall" && x.to === to));
 });

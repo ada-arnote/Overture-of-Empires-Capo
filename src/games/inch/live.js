@@ -201,14 +201,20 @@ export function bordersOf(p, b) {
   return out;
 }
 
-/** Start or strengthen an attack. A Flood held ready doubles it. Changes p. */
+/** Start or strengthen an attack. A Flood held ready doubles it, and marks the attack (fl) as one that cannot be called back. Changes p. */
 function send(p, by, to, troops) {
   if (troops <= 0) return;
   p.troops[by] -= troops;
-  if (p.armed[by]) { p.armed[by] = 0; troops *= 2; }
-  const a = p.attacks.find((x) => x.by === by && x.to === to);
-  if (a) a.left += troops; else p.attacks.push({ by, to, left: troops, got: 0 });
+  const flood = !!p.armed[by];
+  if (flood) { p.armed[by] = 0; troops *= 2; }
+  let a = p.attacks.find((x) => x.by === by && x.to === to);
+  if (a) a.left += troops; else p.attacks.push(a = { by, to, left: troops, got: 0 });
+  if (flood) a.fl = 1;
 }
+/** What calling an attack back costs: a quarter of what is left of it, rounded up. */
+export const recallLoss = (left) => Math.ceil(left / 4);
+/** Your attack on `to` that can be called back, or undefined: one under way that did not carry a Flood. */
+export const recallable = (p, to) => p.attacks.find((a) => a.by === p.human && a.to === to && !a.fl);
 
 export const tier = (p) => RIVALS[p.rivals] || RIVALS.even;
 
@@ -524,6 +530,7 @@ export function liveMoves(p, b) {
   if (p.phase === "spawn") return b.dry.filter((i) => startable(p, b, i)).flatMap((at) => (p.choose ? INKS.map((k) => ({ do: "spawn", at, ink: k.id })) : [{ do: "spawn", at }]));
   const out = [{ do: "tick", n: 1 }, { do: "tick", n: 2 }, { do: "tick", n: 4 }], h = p.human, near = [...bordersOf(p, b)[h]];
   for (const to of near) for (const pct of PCTS) out.push({ do: "attack", to, pct });
+  for (const a of p.attacks) if (a.by === h && !a.fl) out.push({ do: "recall", to: a.to });
   if (p.boats) for (const at of landings(p, b)) for (const pct of PCTS) out.push({ do: "boat", at, pct });
   if (p.building) for (let i = 0; i < b.n; i++) if (p.owner[i] === h && !p.cities.includes(i) && p.troops[h] >= cityPrice(p)) out.push({ do: "city", at: i });
   if (markDue(p)) for (const k of MARKS) out.push({ do: "mark", mark: k.id });
@@ -537,7 +544,7 @@ export const cardDue = (p) => p.ages && !!p.alive[p.human] && p.tick >= agesOf(p
 
 /** Whether a move has exactly these keys and no others. */
 const shaped = (m, ...keys) => !!m && typeof m === "object" && !Array.isArray(m) && Object.keys(m).length === keys.length && keys.every((k) => Object.hasOwn(m, k));
-const KEYS = { tick: ["n"], attack: ["to", "pct"], boat: ["at", "pct"], city: ["at"], mark: ["mark"], card: ["card"] };
+const KEYS = { tick: ["n"], attack: ["to", "pct"], recall: ["to"], boat: ["at", "pct"], city: ["at"], mark: ["mark"], card: ["card"] };
 /** A quick check, so that a tick does not have to list every move to be allowed. It allows exactly what liveMoves lists. */
 export function liveAllows(p, b, m) {
   if (p.over || !m || typeof m !== "object") return false;
@@ -545,6 +552,7 @@ export function liveAllows(p, b, m) {
   if (!Object.hasOwn(KEYS, m.do) || !shaped(m, "do", ...KEYS[m.do])) return false;
   if (m.do === "tick") return [1, 2, 4].includes(m.n);
   if (m.do === "attack") return PCTS.includes(m.pct) && (m.to === NONE || (Number.isInteger(m.to) && m.to >= 0 && m.to < p.troops.length && m.to !== p.human)) && bordersOf(p, b)[p.human].has(m.to);
+  if (m.do === "recall") return Number.isInteger(m.to) && !!recallable(p, m.to);
   if (m.do === "boat") return p.boats && PCTS.includes(m.pct) && Number.isInteger(m.at) && landings(p, b).has(m.at);
   if (m.do === "city") return p.building && Number.isInteger(m.at) && p.owner[m.at] === p.human && !p.cities.includes(m.at) && p.troops[p.human] >= cityPrice(p);
   if (m.do === "mark") return markDue(p) && MARKS.some((k) => k.id === m.mark);
@@ -557,7 +565,12 @@ export function liveApply(before, b, m, dice) {
   const p = copy(before), events = [], s = p.human;
   if (m.do === "spawn") { claim(p, b, s, m.at); if (p.dries) p.cap[s] = m.at; if (m.ink) p.ink[s] = INKS.findIndex((k) => k.id === m.ink); p.phase = "play"; events.push({ kind: "spawn", at: m.at }); }
   else if (m.do === "attack") { send(p, s, m.to, Math.floor((p.troops[s] * m.pct) / 100)); events.push({ kind: "attack", seat: s, to: m.to, pct: m.pct }); }
-  else if (m.do === "boat") {
+  else if (m.do === "recall") { // the attack ends where it stands: a quarter of what is left is lost, the rest comes home
+    const a = recallable(p, m.to), lost = recallLoss(a.left);
+    p.attacks = p.attacks.filter((x) => x !== a);
+    p.troops[s] += a.left - lost;
+    events.push({ kind: "recall", seat: s, to: m.to, back: a.left - lost, lost });
+  } else if (m.do === "boat") {
     const had = p.troops[s], landed = land(p, b, s, m.at, Math.floor((had * m.pct) / 100));
     events.push({ kind: "boat", seat: s, at: m.at, landed, lost: landed ? 0 : had - p.troops[s] });
   } else if (m.do === "city") { p.troops[s] -= cityPrice(before); p.cities.push(m.at); events.push({ kind: "city", seat: s, at: m.at }); }

@@ -2,6 +2,23 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### An Inch of Ink: call an attack back, find yourself, a guided first minute, your game in figures
+
+**Players**
+- **Call an attack back.** Under the Send button the attacks under way are listed, yours and any against you. Call back one of yours and it ends where it stands: a quarter of what is left is lost, the rest comes home at once. A Flood cannot be called back. Answer puts an attacker in the Send button's sights.
+- **An attack on you is announced once**, by name, and stays in the list while it lasts.
+- **Find me** (button, or F). A zoomed map slides to your land, your border glows, and a line says where you are, how much you hold and who is beside you. Your land also glows when you first start.
+- **Tips for your first minute.** Five short tips that follow what you have done: where to start, sending into empty land, strength coming back, the first neighbour, the list and the goal. Each is said once to a screen reader. They turn themselves off after the last; the Tips button brings them back.
+- **Your game, at the end.** Where you finished, your best share and when, orders sent and called back, strength sent, most strength held, land gained and lost, the nations you finished; and a chart of the leading nations' share of the land over the game, each line named, with the goal marked. The end table now shows each nation's ink and mark where it showed "Nations left" on every row.
+- In real time the menu no longer offers to take back a move, U does nothing and E no longer asks to end a turn. In the turn duel a screen reader hears "is thinking" once a turn, not three times.
+- Rules version 10: real-time games saved before this version are refused with a plain message. Bots do not call attacks back, so their games are unchanged.
+
+**Contributors**
+- `src/games/inch/live.js`: the move `{do: "recall", to}`, `recallLoss`, `recallable`, and `fl` on an attack that carried a Flood. `site/inchlive.js`: `under`, `find`, `bring`, `guide`, `figures`, `shares`, `stats`. The end figures are counted by replaying the saved moves in 10 ms slices.
+- Shell hooks in `site/table.js`, three lines: `canUndo` and the E key ask `!T.match.position.live`; the "is thinking" status is written only when its words change.
+
 ## v0.7.0 (2026-11-26): new worlds, and a deeper Capo
 
 ### A deeper Capo: gauges, ambitions, crises, causes for war, the press
