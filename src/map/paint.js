@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The painter: WebGL2 by hand. One full-screen triangle; the shader undoes the camera and walks down to the first cell top.
+// It writes the depth of what it found, so that the mesh layer's real shapes are hidden by raised cells, and it takes their shadows.
+import { DEPTH, SHADE } from "./mesh.js";
 const VS = `#version 300 es
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS = `#version 300 es
 precision highp float; precision highp int;
-uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable;
+uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable,uPad,uK,uShade; uniform vec3 uSun,uBaize,uRule; uniform vec2 uWoodK;${SHADE}
+float dep(vec2 p,float z){ vec2 d=(p-uC)*uS; float D=(d.x*uYaw.y+d.y*uYaw.x)*uTilt.y+z*uTilt.x; return .5-.5*uK*D/(1.-uQ*D); }
 uniform vec3 uInk,uPale,uWall,uGlow,uLand; out vec4 o;
 int raw(ivec2 t){ if(t.x<0||t.y<0||t.x>=int(uSize.x)||t.y>=int(uSize.y)) return 0; vec4 v=texelFetch(uId,t,0); return int(v.r*255.+.5)+256*int(v.g*255.+.5); }
 int idAt(vec2 p){ return raw(ivec2(floor(p))); }
@@ -75,6 +78,7 @@ vec3 face(vec2 p,int id,float foot){
   return c; }
 void main(){
   vec2 uv=vec2(gl_FragCoord.x/uDpr,uView.y-gl_FragCoord.y/uDpr)-uMid;
+  gl_FragDepth=1.;
   if(uTilt.x+uQ*uv.y*uTilt.y<.03){ o=vec4(0.); return; }
   vec2 p0=plane(uv,0.),p=p0; int id=0; float z=0.; bool wall=false;
   if(uMost>0.){ vec2 p1=plane(uv,uMost); int n=int(clamp(ceil(distance(p0,p1)*uS*1.6),2.,64.)); float tp=1.;
@@ -90,21 +94,24 @@ void main(){
     if(uTable<=0.){ o=vec4(0.,0.,0.,s/20.*.55); return; }
     // walnut, with a blue baize inlay for the board to lie on and a silver rule round it
     vec2 hs=uSize*.5; float mg=max(hs.x,hs.y)*.16,r=mg*.6; vec2 d=abs(p0-hs)-hs-mg+r; float sd=length(max(d,0.))+min(max(d.x,d.y),0.)-r,fw=foot*uDpr*1.2;
-    vec3 c=texture(uWood,p0/(max(hs.x,hs.y)*vec2(1.3,.65))).rgb; c=mix(c,vec3(.3,.19,.12),.35)*.8; c*=1.-.3*smoothstep(mg*.5,0.,sd)*step(0.,sd);
-    c=mix(vec3(.055,.105,.2)*(.86+.28*grain(p0*2.)),c,smoothstep(-fw,fw,sd)); c=mix(c,vec3(.72,.77,.83),(1.-smoothstep(mg*.035,mg*.035+fw,abs(sd+mg*.32)))*.8);
-    o=vec4(c*(1.-s/20.*.62)*(1.-2.*dot(uv/uView,uv/uView)),1.); return; }
+    vec3 c=texture(uWood,p0/(max(hs.x,hs.y)*vec2(1.3,.65))).rgb; c=mix(c,vec3(.3,.19,.12),uWoodK.y)*uWoodK.x; c*=1.-.3*smoothstep(mg*.5,0.,sd)*step(0.,sd);
+    c=mix(uBaize*(.86+.28*grain(p0*2.)),c,smoothstep(-fw,fw,sd)); c=mix(c,uRule,(1.-smoothstep(mg*.035,mg*.035+fw,abs(sd+mg*.32)))*.8);
+    gl_FragDepth=dep(p0,0.);
+    o=vec4(c*(1.-s/20.*.62)*(1.-uShade*shd(p0,0.))*(1.-2.*dot(uv/uView,uv/uView)),1.); return; }
   vec3 c;
   if(wall){ vec3 b=tab(id,0).rgb; float l=.36+.30*clamp(z/max(top(id),.01),0.,1.); vec2 n=vec2(0.);
     if(uBev>0.){ for(int i=0;i<6;i++){ float t=float(i)*1.0471976+.5; vec2 d=vec2(cos(t),sin(t)); if(idAt(p+d*1.7)!=id) n+=d; } if(n!=vec2(0.)) l*=1.25+.55*dot(normalize(n),uLight); } // a side that faces the lamp is lighter
     c=mix(b*l,uWall,.45)*(.9+.12*grain(p)); if(tab(id,1).g>0.) c=mix(c,uGlow,.35); }
   else { c=face(uMost>0.?p:p,id,foot); if(uMost>0.){ float h=top(id); for(int k=1;k<=5;k++){ float d=float(k)*3.; if(top(idAt(p+uLight*d))>h+.6*float(k)){ c*=.80; break; } } } }
+  if(!wall) c*=1.-uShade*shd(p,z/uS);
+  gl_FragDepth=dep(p,z);
   if(uTable>0.) c*=1.-dot(uv/uView,uv/uView);
   o=vec4(c,1.); }`;
 
 export class Painter {
   constructor(canvas) {
     this.canvas = canvas;
-    const g = this.g = canvas.getContext("webgl2", { alpha: true, antialias: false, depth: false, stencil: false, premultipliedAlpha: false });
+    const g = this.g = canvas.getContext("webgl2", { alpha: true, antialias: false, depth: true, stencil: false, premultipliedAlpha: false });
     if (!g) throw new Error("no WebGL2");
     const shader = (type, text) => {
       const s = g.createShader(type);
@@ -119,6 +126,7 @@ export class Painter {
     g.linkProgram(P);
     if (!g.getProgramParameter(P, g.LINK_STATUS)) throw new Error(g.getProgramInfoLog(P) || "program");
     g.useProgram(P);
+    this.P = P;
     const n = g.getProgramParameter(P, g.ACTIVE_UNIFORMS);
     this.u = {};
     for (let i = 0; i < n; i++) { const { name } = g.getActiveUniform(P, i); this.u[name] = g.getUniformLocation(P, name); }
@@ -164,13 +172,19 @@ export class Painter {
     const g = this.g, u = this.u, m = this.m, W = Math.round(cam.W * dpr), H = Math.round(cam.H * dpr), cv = this.canvas;
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
     g.viewport(0, 0, W, H);
+    g.useProgram(this.P);
+    g.enable(g.DEPTH_TEST); g.depthFunc(g.ALWAYS); // the ground fills the screen and writes every depth, so nothing needs clearing
+    g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uShOn, 0);
+    o.lamp?.(u);
+    const st = o.style.table; g.uniform3f(u.uBaize, st.baize[0] / 255, st.baize[1] / 255, st.baize[2] / 255); g.uniform3f(u.uRule, st.rule[0] / 255, st.rule[1] / 255, st.rule[2] / 255); g.uniform2f(u.uWoodK, st.wood[0], st.wood[1]);
     g.uniform1i(u.uId, 0); g.uniform1i(u.uHt, 1); g.uniform1i(u.uTab, 2); g.uniform1i(u.uWood, 3);
     g.uniform2f(u.uSize, m.w, m.h); g.uniform2f(u.uView, cam.W, cam.H); g.uniform2f(u.uMid, cam.mx, cam.my); g.uniform2f(u.uC, cam.cx, cam.cy);
-    g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform2f(u.uLight, -0.6, -0.8);
+    g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform2f(u.uLight, o.style.sun[0], o.style.sun[1]);
     g.uniform1f(u.uS, cam.s); g.uniform1f(u.uQ, cam.q); g.uniform1f(u.uDpr, dpr); g.uniform1f(u.uUnit, o.unit); g.uniform1f(u.uMost, o.most); g.uniform1f(u.uRelief, o.relief); g.uniform1f(u.uTime, o.time); g.uniform1f(u.uPat, o.pat ? 1 : 0); g.uniform1f(u.uCell, m.R); g.uniform1f(u.uBev, o.bevel); g.uniform1f(u.uSlab, m.R < 20 ? 0 : 1); g.uniform1f(u.uTable, o.table ? 1 : 0); // cells too small for a rim of their own are bevelled only where the land's owner or height changes
     const f3 = (k, c) => g.uniform3f(u[k], c[0] / 255, c[1] / 255, c[2] / 255);
     f3("uInk", o.ink); f3("uPale", o.pale); f3("uWall", o.wall); f3("uGlow", o.glow); f3("uLand", o.land || o.glow);
     g.drawArrays(g.TRIANGLES, 0, 3);
+    g.disable(g.DEPTH_TEST);
   }
   destroy() { this.g.getExtension("WEBGL_lose_context")?.loseContext(); }
 }

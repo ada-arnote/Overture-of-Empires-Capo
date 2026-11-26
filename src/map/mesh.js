@@ -1,0 +1,158 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The mesh layer: real shapes standing on the ground, shared by every game. Each model is sent to the graphics card once and
+// drawn many times (instanced), lit by the same lamp as the ground, hidden by raised cells through the depth the ground writes,
+// and casting soft shadows by way of one height picture seen from the lamp, redrawn only when a piece moves.
+// A style is data (style.js): its palette, finishes and lamp go in as numbers; no code here knows one style from another.
+const HEAD = `#version 300 es
+precision highp float;
+uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt; uniform vec3 uSun; uniform float uS,uQ,uK,uLift,uPad;`;
+// corner: place, facing and finish, colour slot and shade. instance: place and size, turn, colour and dimness
+const INS = `
+layout(location=0) in vec3 aP; layout(location=1) in vec4 aN; layout(location=2) in vec4 aC;
+layout(location=3) in vec4 iP; layout(location=4) in vec2 iR; layout(location=5) in vec4 iC;
+vec3 world(out vec3 n){ vec3 l=aP*iP.w; n=vec3(aN.x*iR.x-aN.y*iR.y,aN.x*iR.y+aN.y*iR.x,aN.z); return vec3(iP.xy+vec2(l.x*iR.x-l.y*iR.y,l.x*iR.y+l.y*iR.x),iP.z*uLift+l.z); }`;
+const VS = `${HEAD}${INS}
+uniform vec3 uPal[16]; uniform vec2 uTone;
+out vec3 vN,vP,vC; out vec2 vF;
+void main(){ vec3 n,p=world(n); vN=n; vP=p; int f=int(aN.w*127.+.5);
+  vec3 c=uPal[int(aC.r*255.+.5)&15]*(aC.g*2.); if(f==3) c=iC.rgb; if(f==1) c=mix(iC.rgb,vec3(dot(iC.rgb,vec3(.3,.6,.1))),uTone.y)*uTone.x*aC.g*2.; vC=c*aC.a*iC.a; vF=vec2(float(f),iC.a);
+  vec2 d=(p.xy-uC)*uS; float X=d.x*uYaw.x-d.y*uYaw.y,Y=d.x*uYaw.y+d.y*uYaw.x,Z=p.z*uS,D=Y*uTilt.y+Z*uTilt.x,w=1.-uQ*D;
+  gl_Position=vec4(2.*(uMid.x*w+X)/uView.x-w,w-2.*(uMid.y*w+Y*uTilt.x-Z*uTilt.y)/uView.y,-uK*D,w); }`;
+/** The shadow test, shared with the ground: how much of the lamp a point at height z misses. */
+export const SHADE = `
+uniform sampler2D uSh; uniform float uShOn,uTall;
+float shd(vec2 p,float z){ if(uShOn<=0.) return 0.; vec2 q=(p-uSun.xy/uSun.z*z+uPad)/(uSize+2.*uPad); float s=0.;
+  for(int i=0;i<4;i++){ vec2 o=vec2(i<2?-1.:1.,(i&1)==0?-1.:1.)*.0011; s+=smoothstep(z+1.5,z+4.5,texture(uSh,q+o).r*uTall); } return s*.25; }`;
+const FS = `${HEAD}${SHADE}
+uniform vec4 uFin[4]; uniform vec3 uAmb;
+in vec3 vN,vP,vC; in vec2 vF; out vec4 o;
+void main(){ vec3 n=normalize(vN),L=normalize(uSun),V=vec3(uTilt.y*uYaw.y,uTilt.y*uYaw.x,uTilt.x); vec4 f=uFin[int(vF.x+.5)];
+  float df=max(dot(n,L),0.),sh=shd(vP.xy,vP.z),lit=df*(1.-uAmb.z*sh);
+  vec3 c=vC*(uAmb.x+uAmb.y*n.z+f.x*lit+.24*max(dot(n,V),0.)); // the lamp, the room, and a little light from where the player sits
+  c+=f.y*pow(max(dot(n,normalize(L+V)),0.),f.z)*(1.-sh)*vF.y+f.w*pow(1.-max(dot(n,V),0.),3.);
+  o=vec4(c,1.); }`;
+// the lamp's own view: where a corner's shadow falls on the ground, and how high the corner is
+const VS2 = `${HEAD}${INS}
+uniform float uTall; out float vH;
+void main(){ vec3 n,p=world(n); vH=p.z/uTall; vec2 q=(p.xy-uSun.xy/uSun.z*p.z+uPad)/(uSize+2.*uPad); gl_Position=vec4(q*2.-1.,0.,1.); }`;
+const FS2 = `#version 300 es
+precision highp float; in float vH; out vec4 o; void main(){ o=vec4(vH,0.,0.,1.); }`;
+const MAP = 1024, TALL = 96, PAD = 72;
+
+export function program(g, vs, fs) {
+  const shader = (type, text) => {
+    const s = g.createShader(type);
+    g.shaderSource(s, text);
+    g.compileShader(s);
+    if (!g.getShaderParameter(s, g.COMPILE_STATUS)) throw new Error(g.getShaderInfoLog(s) || "shader");
+    return s;
+  };
+  const P = g.createProgram(), u = {};
+  g.attachShader(P, shader(g.VERTEX_SHADER, vs));
+  g.attachShader(P, shader(g.FRAGMENT_SHADER, fs));
+  g.linkProgram(P);
+  if (!g.getProgramParameter(P, g.LINK_STATUS)) throw new Error(g.getProgramInfoLog(P) || "program");
+  for (let i = 0, n = g.getProgramParameter(P, g.ACTIVE_UNIFORMS); i < n; i++) { const name = g.getActiveUniform(P, i).name.replace("[0]", ""); u[name] = g.getUniformLocation(P, name); }
+  return { P, u };
+}
+
+/** The camera, as the shaders want it. K sets how depth is spread: nearer is smaller, the same sum in the ground's shader. */
+export const DEPTH = 1 / 30000;
+export function aim(g, u, cam, size) {
+  g.uniform2f(u.uSize, size[0], size[1]); g.uniform2f(u.uView, cam.W, cam.H); g.uniform2f(u.uMid, cam.mx, cam.my); g.uniform2f(u.uC, cam.cx, cam.cy);
+  g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform1f(u.uS, cam.s); g.uniform1f(u.uQ, cam.q); g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uPad, PAD);
+}
+
+export class Meshes {
+  /** g: the painter's own WebGL2. models: { name: { buf, n } } from the kit's bake. */
+  constructor(g, models) {
+    this.g = g;
+    this.draws = program(g, VS, FS); this.casts = program(g, VS2, FS2);
+    this.at = {}; this.list = []; this.count = 0; this.stale = true;
+    const all = Object.entries(models), total = all.reduce((s, [, m]) => s + m.n, 0), data = new Uint8Array(total * 20);
+    let first = 0;
+    for (const [name, m] of all) { data.set(new Uint8Array(m.buf), first * 20); this.at[name] = { first, n: m.n }; first += m.n; }
+    this.vao = g.createVertexArray();
+    g.bindVertexArray(this.vao);
+    this.corners = g.createBuffer();
+    g.bindBuffer(g.ARRAY_BUFFER, this.corners);
+    g.bufferData(g.ARRAY_BUFFER, data, g.STATIC_DRAW);
+    g.enableVertexAttribArray(0); g.vertexAttribPointer(0, 3, g.FLOAT, false, 20, 0);
+    g.enableVertexAttribArray(1); g.vertexAttribPointer(1, 4, g.BYTE, true, 20, 12);
+    g.enableVertexAttribArray(2); g.vertexAttribPointer(2, 4, g.UNSIGNED_BYTE, true, 20, 16);
+    this.each = g.createBuffer();
+    for (const k of [3, 4, 5]) { g.enableVertexAttribArray(k); g.vertexAttribDivisor(k, 1); }
+    g.bindVertexArray(null);
+    // the lamp's height picture
+    this.map = g.createTexture();
+    g.activeTexture(g.TEXTURE4);
+    g.bindTexture(g.TEXTURE_2D, this.map);
+    g.texImage2D(g.TEXTURE_2D, 0, g.R8, MAP, MAP, 0, g.RED, g.UNSIGNED_BYTE, null);
+    for (const [k, v] of [[g.TEXTURE_MIN_FILTER, g.LINEAR], [g.TEXTURE_MAG_FILTER, g.LINEAR], [g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE], [g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE]]) g.texParameteri(g.TEXTURE_2D, k, v);
+    this.frame = g.createFramebuffer();
+    g.bindFramebuffer(g.FRAMEBUFFER, this.frame);
+    g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, this.map, 0);
+    g.bindFramebuffer(g.FRAMEBUFFER, null);
+  }
+  /** What stands where: [{ m: model name, x, y, z (the ground's height there, in cell tops), s: size, t: turn, rgb, dim }]. */
+  set(list) {
+    const g = this.g, by = new Map();
+    for (const i of list) if (this.at[i.m]) (by.get(i.m) || by.set(i.m, []).get(i.m)).push(i);
+    const n = list.length, buf = new ArrayBuffer(Math.max(1, n) * 28), f = new Float32Array(buf), b = new Uint8Array(buf);
+    let k = 0;
+    this.list = [];
+    for (const [name, items] of by) {
+      this.list.push({ ...this.at[name], from: k, many: items.length });
+      for (const i of items) {
+        const o = k * 7, c = i.rgb || [255, 255, 255];
+        f[o] = i.x; f[o + 1] = i.y; f[o + 2] = i.z || 0; f[o + 3] = i.s || 1; f[o + 4] = Math.cos(i.t || 0); f[o + 5] = Math.sin(i.t || 0);
+        b[k * 28 + 24] = c[0]; b[k * 28 + 25] = c[1]; b[k * 28 + 26] = c[2]; b[k * 28 + 27] = Math.round(255 * (i.dim ?? 1));
+        k++;
+      }
+    }
+    g.bindBuffer(g.ARRAY_BUFFER, this.each);
+    g.bufferData(g.ARRAY_BUFFER, buf, g.DYNAMIC_DRAW);
+    this.stale = true;
+  }
+  pass(u) {
+    const g = this.g;
+    g.bindVertexArray(this.vao);
+    g.bindBuffer(g.ARRAY_BUFFER, this.each);
+    for (const m of this.list) {
+      const o = m.from * 28;
+      g.vertexAttribPointer(3, 4, g.FLOAT, false, 28, o); g.vertexAttribPointer(4, 2, g.FLOAT, false, 28, o + 16); g.vertexAttribPointer(5, 4, g.UNSIGNED_BYTE, true, 28, o + 24);
+      g.drawArraysInstanced(g.TRIANGLES, m.first, m.n, m.many);
+    }
+    g.bindVertexArray(null);
+  }
+  /** The lamp's picture, when something has moved. size: the board's; lift: board units to one cell top; sun: the style's lamp. */
+  cast(size, lift, sun) {
+    const g = this.g, { P, u } = this.casts;
+    if (!this.stale && this.lift === lift) return;
+    this.stale = false; this.lift = lift;
+    g.bindFramebuffer(g.FRAMEBUFFER, this.frame);
+    g.viewport(0, 0, MAP, MAP);
+    g.disable(g.DEPTH_TEST);
+    g.clearColor(0, 0, 0, 1); g.clear(g.COLOR_BUFFER_BIT);
+    g.enable(g.BLEND); g.blendEquation(g.MAX); g.blendFunc(g.ONE, g.ONE); // the tallest thing in the lamp's way wins
+    g.useProgram(P);
+    g.uniform2f(u.uSize, size[0], size[1]); g.uniform1f(u.uPad, PAD); g.uniform1f(u.uLift, lift); g.uniform1f(u.uTall, TALL); g.uniform3f(u.uSun, ...sun);
+    this.pass(u);
+    g.disable(g.BLEND); g.blendEquation(g.FUNC_ADD);
+    g.bindFramebuffer(g.FRAMEBUFFER, null);
+  }
+  /** The shadow picture's settings for a shader that tests against it (the ground's, and our own). */
+  lamp(u, on, sun) { const g = this.g; g.uniform1i(u.uSh, 4); g.uniform1f(u.uShOn, on ? 1 : 0); g.uniform1f(u.uTall, TALL); g.uniform1f(u.uPad, PAD); g.uniform3f(u.uSun, ...sun); }
+  draw(cam, size, lift, style) {
+    const g = this.g, { P, u } = this.draws;
+    if (!this.list.length) return;
+    g.useProgram(P);
+    aim(g, u, cam, size);
+    g.uniform1f(u.uLift, lift);
+    this.lamp(u, true, style.sun);
+    g.uniform3fv(u.uPal, style.pal.flat().map((v) => v / 255)); g.uniform4fv(u.uFin, style.fin.flat()); g.uniform3f(u.uAmb, ...style.amb); g.uniform2f(u.uTone, ...style.tone);
+    g.enable(g.DEPTH_TEST); g.depthFunc(g.LESS);
+    this.pass(u);
+    g.disable(g.DEPTH_TEST);
+  }
+}

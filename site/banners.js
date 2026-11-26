@@ -285,7 +285,9 @@ createTable({
       picture, lines, labels, lands: b.region, fine: { cells: b.fine, of: b.of, mid: b.mid }, cells: [], rough: [], sea: [...b.mid.map(() => false), true],
       ground: (i) => (i >= b.n ? SEA : LAND[b.region[i] % LAND.length]),
       owner: () => [...T.match.position.owner, NONE],
-      pieces: () => T.match.position.owner.map((seat, at) => ({ kind: "army", at, seat, rgb: RGB[seat], count: T.match.position.str[at], now: seat === T.match.turn, fort: !!T.match.position.forts?.[at], cap: !!T.match.position.caps?.includes(at), leader: !!T.match.position.leaders?.includes(at) })),
+      pieces: () => [...T.match.position.owner.map((seat, at) => ({ kind: "army", at, seat, rgb: RGB[seat], count: T.match.position.str[at], now: seat === T.match.turn, fort: !!T.match.position.forts?.[at], cap: !!T.match.position.caps?.includes(at), leader: !!T.match.position.leaders?.includes(at) })),
+        // the last dice thrown lie on the table beside the fight, as models (the tilted looks show them; the panel's dice stay for every look)
+        ...(shown ? shown.rolls[shown.rolls.length - 1].flatMap((list, k) => list.map((n, i) => ({ kind: "model", name: `die${n}`, at: shown.to, dx: (i - 1) * 0.5 + k * 0.2, dy: 0.95 + k * 0.5, size: 0.8, turn: (i * 5 + k * 3 + n) % 7 * 0.2 - 0.6, rgb: k ? (shown.was === NONE ? [206, 196, 170] : RGB[shown.was]) : RGB[shown.seat] }))) : [])],
       tap: (i) => tap(T, i),
       can: (i) => { const o = offers(T); return o.sources.includes(i) || o.targets.includes(i); },
     });

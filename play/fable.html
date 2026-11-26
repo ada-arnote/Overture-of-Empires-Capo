@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-sBZgWWtm3+3/ts6hNJDz82vvqfvxXczkERwYrqEug0c='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-uq/uk0NDpSNzP7YmLB5AMmzYNDjvZ7A1VUb/TgPk1Ts='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>The Island Fable</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -1628,12 +1628,445 @@ $x.noise = noise; $x.hexPicture = hexPicture;
 return $x; })({});
 $m[17] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// The mesh layer: real shapes standing on the ground, shared by every game. Each model is sent to the graphics card once and
+// drawn many times (instanced), lit by the same lamp as the ground, hidden by raised cells through the depth the ground writes,
+// and casting soft shadows by way of one height picture seen from the lamp, redrawn only when a piece moves.
+// A style is data (style.js): its palette, finishes and lamp go in as numbers; no code here knows one style from another.
+const HEAD = `#version 300 es
+precision highp float;
+uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt; uniform vec3 uSun; uniform float uS,uQ,uK,uLift,uPad;`;
+// corner: place, facing and finish, colour slot and shade. instance: place and size, turn, colour and dimness
+const INS = `
+layout(location=0) in vec3 aP; layout(location=1) in vec4 aN; layout(location=2) in vec4 aC;
+layout(location=3) in vec4 iP; layout(location=4) in vec2 iR; layout(location=5) in vec4 iC;
+vec3 world(out vec3 n){ vec3 l=aP*iP.w; n=vec3(aN.x*iR.x-aN.y*iR.y,aN.x*iR.y+aN.y*iR.x,aN.z); return vec3(iP.xy+vec2(l.x*iR.x-l.y*iR.y,l.x*iR.y+l.y*iR.x),iP.z*uLift+l.z); }`;
+const VS = `${HEAD}${INS}
+uniform vec3 uPal[16]; uniform vec2 uTone;
+out vec3 vN,vP,vC; out vec2 vF;
+void main(){ vec3 n,p=world(n); vN=n; vP=p; int f=int(aN.w*127.+.5);
+  vec3 c=uPal[int(aC.r*255.+.5)&15]*(aC.g*2.); if(f==3) c=iC.rgb; if(f==1) c=mix(iC.rgb,vec3(dot(iC.rgb,vec3(.3,.6,.1))),uTone.y)*uTone.x*aC.g*2.; vC=c*aC.a*iC.a; vF=vec2(float(f),iC.a);
+  vec2 d=(p.xy-uC)*uS; float X=d.x*uYaw.x-d.y*uYaw.y,Y=d.x*uYaw.y+d.y*uYaw.x,Z=p.z*uS,D=Y*uTilt.y+Z*uTilt.x,w=1.-uQ*D;
+  gl_Position=vec4(2.*(uMid.x*w+X)/uView.x-w,w-2.*(uMid.y*w+Y*uTilt.x-Z*uTilt.y)/uView.y,-uK*D,w); }`;
+/** The shadow test, shared with the ground: how much of the lamp a point at height z misses. */
+const SHADE = `
+uniform sampler2D uSh; uniform float uShOn,uTall;
+float shd(vec2 p,float z){ if(uShOn<=0.) return 0.; vec2 q=(p-uSun.xy/uSun.z*z+uPad)/(uSize+2.*uPad); float s=0.;
+  for(int i=0;i<4;i++){ vec2 o=vec2(i<2?-1.:1.,(i&1)==0?-1.:1.)*.0011; s+=smoothstep(z+1.5,z+4.5,texture(uSh,q+o).r*uTall); } return s*.25; }`;
+const FS = `${HEAD}${SHADE}
+uniform vec4 uFin[4]; uniform vec3 uAmb;
+in vec3 vN,vP,vC; in vec2 vF; out vec4 o;
+void main(){ vec3 n=normalize(vN),L=normalize(uSun),V=vec3(uTilt.y*uYaw.y,uTilt.y*uYaw.x,uTilt.x); vec4 f=uFin[int(vF.x+.5)];
+  float df=max(dot(n,L),0.),sh=shd(vP.xy,vP.z),lit=df*(1.-uAmb.z*sh);
+  vec3 c=vC*(uAmb.x+uAmb.y*n.z+f.x*lit+.24*max(dot(n,V),0.)); // the lamp, the room, and a little light from where the player sits
+  c+=f.y*pow(max(dot(n,normalize(L+V)),0.),f.z)*(1.-sh)*vF.y+f.w*pow(1.-max(dot(n,V),0.),3.);
+  o=vec4(c,1.); }`;
+// the lamp's own view: where a corner's shadow falls on the ground, and how high the corner is
+const VS2 = `${HEAD}${INS}
+uniform float uTall; out float vH;
+void main(){ vec3 n,p=world(n); vH=p.z/uTall; vec2 q=(p.xy-uSun.xy/uSun.z*p.z+uPad)/(uSize+2.*uPad); gl_Position=vec4(q*2.-1.,0.,1.); }`;
+const FS2 = `#version 300 es
+precision highp float; in float vH; out vec4 o; void main(){ o=vec4(vH,0.,0.,1.); }`;
+const MAP = 1024, TALL = 96, PAD = 72;
+
+function program(g, vs, fs) {
+  const shader = (type, text) => {
+    const s = g.createShader(type);
+    g.shaderSource(s, text);
+    g.compileShader(s);
+    if (!g.getShaderParameter(s, g.COMPILE_STATUS)) throw new Error(g.getShaderInfoLog(s) || "shader");
+    return s;
+  };
+  const P = g.createProgram(), u = {};
+  g.attachShader(P, shader(g.VERTEX_SHADER, vs));
+  g.attachShader(P, shader(g.FRAGMENT_SHADER, fs));
+  g.linkProgram(P);
+  if (!g.getProgramParameter(P, g.LINK_STATUS)) throw new Error(g.getProgramInfoLog(P) || "program");
+  for (let i = 0, n = g.getProgramParameter(P, g.ACTIVE_UNIFORMS); i < n; i++) { const name = g.getActiveUniform(P, i).name.replace("[0]", ""); u[name] = g.getUniformLocation(P, name); }
+  return { P, u };
+}
+
+/** The camera, as the shaders want it. K sets how depth is spread: nearer is smaller, the same sum in the ground's shader. */
+const DEPTH = 1 / 30000;
+function aim(g, u, cam, size) {
+  g.uniform2f(u.uSize, size[0], size[1]); g.uniform2f(u.uView, cam.W, cam.H); g.uniform2f(u.uMid, cam.mx, cam.my); g.uniform2f(u.uC, cam.cx, cam.cy);
+  g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform1f(u.uS, cam.s); g.uniform1f(u.uQ, cam.q); g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uPad, PAD);
+}
+
+class Meshes {
+  /** g: the painter's own WebGL2. models: { name: { buf, n } } from the kit's bake. */
+  constructor(g, models) {
+    this.g = g;
+    this.draws = program(g, VS, FS); this.casts = program(g, VS2, FS2);
+    this.at = {}; this.list = []; this.count = 0; this.stale = true;
+    const all = Object.entries(models), total = all.reduce((s, [, m]) => s + m.n, 0), data = new Uint8Array(total * 20);
+    let first = 0;
+    for (const [name, m] of all) { data.set(new Uint8Array(m.buf), first * 20); this.at[name] = { first, n: m.n }; first += m.n; }
+    this.vao = g.createVertexArray();
+    g.bindVertexArray(this.vao);
+    this.corners = g.createBuffer();
+    g.bindBuffer(g.ARRAY_BUFFER, this.corners);
+    g.bufferData(g.ARRAY_BUFFER, data, g.STATIC_DRAW);
+    g.enableVertexAttribArray(0); g.vertexAttribPointer(0, 3, g.FLOAT, false, 20, 0);
+    g.enableVertexAttribArray(1); g.vertexAttribPointer(1, 4, g.BYTE, true, 20, 12);
+    g.enableVertexAttribArray(2); g.vertexAttribPointer(2, 4, g.UNSIGNED_BYTE, true, 20, 16);
+    this.each = g.createBuffer();
+    for (const k of [3, 4, 5]) { g.enableVertexAttribArray(k); g.vertexAttribDivisor(k, 1); }
+    g.bindVertexArray(null);
+    // the lamp's height picture
+    this.map = g.createTexture();
+    g.activeTexture(g.TEXTURE4);
+    g.bindTexture(g.TEXTURE_2D, this.map);
+    g.texImage2D(g.TEXTURE_2D, 0, g.R8, MAP, MAP, 0, g.RED, g.UNSIGNED_BYTE, null);
+    for (const [k, v] of [[g.TEXTURE_MIN_FILTER, g.LINEAR], [g.TEXTURE_MAG_FILTER, g.LINEAR], [g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE], [g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE]]) g.texParameteri(g.TEXTURE_2D, k, v);
+    this.frame = g.createFramebuffer();
+    g.bindFramebuffer(g.FRAMEBUFFER, this.frame);
+    g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, this.map, 0);
+    g.bindFramebuffer(g.FRAMEBUFFER, null);
+  }
+  /** What stands where: [{ m: model name, x, y, z (the ground's height there, in cell tops), s: size, t: turn, rgb, dim }]. */
+  set(list) {
+    const g = this.g, by = new Map();
+    for (const i of list) if (this.at[i.m]) (by.get(i.m) || by.set(i.m, []).get(i.m)).push(i);
+    const n = list.length, buf = new ArrayBuffer(Math.max(1, n) * 28), f = new Float32Array(buf), b = new Uint8Array(buf);
+    let k = 0;
+    this.list = [];
+    for (const [name, items] of by) {
+      this.list.push({ ...this.at[name], from: k, many: items.length });
+      for (const i of items) {
+        const o = k * 7, c = i.rgb || [255, 255, 255];
+        f[o] = i.x; f[o + 1] = i.y; f[o + 2] = i.z || 0; f[o + 3] = i.s || 1; f[o + 4] = Math.cos(i.t || 0); f[o + 5] = Math.sin(i.t || 0);
+        b[k * 28 + 24] = c[0]; b[k * 28 + 25] = c[1]; b[k * 28 + 26] = c[2]; b[k * 28 + 27] = Math.round(255 * (i.dim ?? 1));
+        k++;
+      }
+    }
+    g.bindBuffer(g.ARRAY_BUFFER, this.each);
+    g.bufferData(g.ARRAY_BUFFER, buf, g.DYNAMIC_DRAW);
+    this.stale = true;
+  }
+  pass(u) {
+    const g = this.g;
+    g.bindVertexArray(this.vao);
+    g.bindBuffer(g.ARRAY_BUFFER, this.each);
+    for (const m of this.list) {
+      const o = m.from * 28;
+      g.vertexAttribPointer(3, 4, g.FLOAT, false, 28, o); g.vertexAttribPointer(4, 2, g.FLOAT, false, 28, o + 16); g.vertexAttribPointer(5, 4, g.UNSIGNED_BYTE, true, 28, o + 24);
+      g.drawArraysInstanced(g.TRIANGLES, m.first, m.n, m.many);
+    }
+    g.bindVertexArray(null);
+  }
+  /** The lamp's picture, when something has moved. size: the board's; lift: board units to one cell top; sun: the style's lamp. */
+  cast(size, lift, sun) {
+    const g = this.g, { P, u } = this.casts;
+    if (!this.stale && this.lift === lift) return;
+    this.stale = false; this.lift = lift;
+    g.bindFramebuffer(g.FRAMEBUFFER, this.frame);
+    g.viewport(0, 0, MAP, MAP);
+    g.disable(g.DEPTH_TEST);
+    g.clearColor(0, 0, 0, 1); g.clear(g.COLOR_BUFFER_BIT);
+    g.enable(g.BLEND); g.blendEquation(g.MAX); g.blendFunc(g.ONE, g.ONE); // the tallest thing in the lamp's way wins
+    g.useProgram(P);
+    g.uniform2f(u.uSize, size[0], size[1]); g.uniform1f(u.uPad, PAD); g.uniform1f(u.uLift, lift); g.uniform1f(u.uTall, TALL); g.uniform3f(u.uSun, ...sun);
+    this.pass(u);
+    g.disable(g.BLEND); g.blendEquation(g.FUNC_ADD);
+    g.bindFramebuffer(g.FRAMEBUFFER, null);
+  }
+  /** The shadow picture's settings for a shader that tests against it (the ground's, and our own). */
+  lamp(u, on, sun) { const g = this.g; g.uniform1i(u.uSh, 4); g.uniform1f(u.uShOn, on ? 1 : 0); g.uniform1f(u.uTall, TALL); g.uniform1f(u.uPad, PAD); g.uniform3f(u.uSun, ...sun); }
+  draw(cam, size, lift, style) {
+    const g = this.g, { P, u } = this.draws;
+    if (!this.list.length) return;
+    g.useProgram(P);
+    aim(g, u, cam, size);
+    g.uniform1f(u.uLift, lift);
+    this.lamp(u, true, style.sun);
+    g.uniform3fv(u.uPal, style.pal.flat().map((v) => v / 255)); g.uniform4fv(u.uFin, style.fin.flat()); g.uniform3f(u.uAmb, ...style.amb); g.uniform2f(u.uTone, ...style.tone);
+    g.enable(g.DEPTH_TEST); g.depthFunc(g.LESS);
+    this.pass(u);
+    g.disable(g.DEPTH_TEST);
+  }
+}
+
+$x.SHADE = SHADE; $x.program = program; $x.DEPTH = DEPTH; $x.aim = aim; $x.Meshes = Meshes;
+return $x; })({});
+$m[19] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The geometry kit: models made in code, our own work. A shape is a flat list of corners, three to a triangle,
+// ten numbers a corner: place (x, y, z with z up), which way it faces, colour (a slot in the style's palette, a shade about 128, and a spare), and finish
+// (a row of the style's finishes: 0 matte paint, 1 the owner's enamel, 2 metal, 3 the ground's own colour). A style is data: the same shapes take another palette.
+// Looks only: no rule ever reads a model.
+const N = 10;
+
+function put(out, a, b, c, col, fin, na, nb, nc) {
+  let n = na;
+  if (!n) { const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2]; n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx]; const l = Math.hypot(...n) || 1; n = n.map((v) => v / l); }
+  out.push(...a, ...n, ...col, fin, ...b, ...(nb || n), ...col, fin, ...c, ...(nc || n), ...col, fin);
+}
+
+/** The triangles of a simple outline, by clipping ears. pts: [[x, y], ...] either way round. Returns corner numbers, three to a triangle. */
+function ears(pts) {
+  const n = pts.length, out = [];
+  let area = 0;
+  for (let i = 0; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n]; area += a[0] * b[1] - b[0] * a[1]; }
+  const idx = pts.map((_, i) => i);
+  if (area < 0) idx.reverse();
+  const turn = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  let guard = n * n + 8;
+  while (idx.length > 3 && guard-- > 0) {
+    let cut = false;
+    for (let i = 0; i < idx.length; i++) {
+      const ia = idx[(i + idx.length - 1) % idx.length], ib = idx[i], ic = idx[(i + 1) % idx.length], a = pts[ia], b = pts[ib], c = pts[ic];
+      if (turn(a, b, c) <= 0) continue; // a hollow corner is no ear
+      let clear = true;
+      for (const k of idx) {
+        if (k === ia || k === ib || k === ic) continue;
+        const p = pts[k];
+        if (turn(a, b, p) >= 0 && turn(b, c, p) >= 0 && turn(c, a, p) >= 0 && !(p[0] === a[0] && p[1] === a[1]) && !(p[0] === b[0] && p[1] === b[1]) && !(p[0] === c[0] && p[1] === c[1])) { clear = false; break; }
+      }
+      if (!clear) continue;
+      out.push(ia, ib, ic); idx.splice(i, 1); cut = true; break;
+    }
+    if (!cut) idx.splice(0, 1); // a crossed or needle-thin outline: drop a corner and go on, rather than stop
+  }
+  if (idx.length === 3) out.push(...idx);
+  return out;
+}
+
+/** A turned shape, like a pawn on a lathe. prof: [[radius, z], ...] from the foot up. n sides; smooth round the axis unless flat. */
+function lathe(out, prof, n, col, fin = 0, flat = false, spin = 0) {
+  const ring = (r, z) => Array.from({ length: n }, (_, i) => { const a = spin + (i / n) * Math.PI * 2; return [Math.cos(a) * r, Math.sin(a) * r, z]; });
+  for (let k = 0; k + 1 < prof.length; k++) {
+    const [r0, z0] = prof[k], [r1, z1] = prof[k + 1], A = ring(r0, z0), B = ring(r1, z1), dr = r1 - r0, dz = z1 - z0, l = Math.hypot(dr, dz) || 1;
+    const nor = (i) => { const a = spin + (i / n) * Math.PI * 2; return [(Math.cos(a) * dz) / l, (Math.sin(a) * dz) / l, -dr / l]; };
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, ni = flat ? null : nor(i), nj = flat ? null : nor(j);
+      if (r0 > 1e-6) put(out, A[i], A[j], B[j], col, fin, ni, nj, nj);
+      if (r1 > 1e-6) put(out, A[i], B[j], B[i], col, fin, ni, nj, ni);
+    }
+  }
+  return out;
+}
+
+/** An outline pushed up into a solid, with a flat top and bottom. pts: [[x, y], ...]; in: how far the top is drawn in, for a bevel. */
+function prism(out, pts, z0, z1, col, fin = 0, inset = 0) {
+  const t = ears(pts), cx = pts.reduce((s, p) => s + p[0], 0) / pts.length, cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; area += a[0] * b[1] - b[0] * a[1]; }
+  const top = pts.map(([x, y]) => { const d = Math.hypot(x - cx, y - cy) || 1; return [x - ((x - cx) / d) * inset, y - ((y - cy) / d) * inset, z1]; }), low = pts.map(([x, y]) => [x, y, z0]);
+  for (let i = 0; i < t.length; i += 3) { put(out, top[t[i]], top[t[i + 1]], top[t[i + 2]], col, fin); put(out, low[t[i]], low[t[i + 2]], low[t[i + 1]], col, fin); }
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length, [a, b] = area > 0 ? [i, j] : [j, i];
+    put(out, low[a], low[b], top[b], col, fin); put(out, low[a], top[b], top[a], col, fin);
+  }
+  return out;
+}
+
+const box = (out, x0, y0, z0, x1, y1, z1, col, fin = 0, inset = 0) => prism(out, [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], z0, z1, col, fin, inset);
+
+/** A copy of a shape: scaled, leant back about the x axis (so a thing drawn lying down stands up), turned about the upright, then moved. */
+function move(out, part, x = 0, y = 0, z = 0, s = 1, turn = 0, lean = 0, sz = s) {
+  const ct = Math.cos(turn), st = Math.sin(turn), cl = Math.cos(lean), sl = Math.sin(lean);
+  const spin = (X, Y, Z) => { const y1 = Y * cl - Z * sl, z1 = Y * sl + Z * cl; return [X * ct - y1 * st, X * st + y1 * ct, z1]; };
+  for (let i = 0; i < part.length; i += N) {
+    const p = spin(part[i] * s, part[i + 1] * s, part[i + 2] * sz), n = spin(part[i + 3], part[i + 4], part[i + 5]);
+    out.push(p[0] + x, p[1] + y, p[2] + z, ...n, part[i + 6], part[i + 7], part[i + 8], part[i + 9]);
+  }
+  return out;
+}
+
+/** Packs a shape for the graphics card, 20 bytes a corner. A wash darkens what is near the foot, as paint settles in hollows. */
+function bake(v) {
+  const n = v.length / N, buf = new ArrayBuffer(n * 20), f = new Float32Array(buf), b = new Uint8Array(buf), s = new Int8Array(buf);
+  let tall = 0.01;
+  for (let i = 0; i < n; i++) tall = Math.max(tall, v[i * N + 2]);
+  for (let i = 0; i < n; i++) {
+    const o = i * N, at = i * 20;
+    f[i * 5] = v[o]; f[i * 5 + 1] = v[o + 1]; f[i * 5 + 2] = v[o + 2];
+    s[at + 12] = Math.round(v[o + 3] * 127); s[at + 13] = Math.round(v[o + 4] * 127); s[at + 14] = Math.round(v[o + 5] * 127); b[at + 15] = v[o + 9];
+    b[at + 16] = v[o + 6]; b[at + 17] = v[o + 7]; b[at + 18] = v[o + 8]; b[at + 19] = Math.round(255 * Math.min(1, 0.7 + (0.42 * v[o + 2]) / Math.min(tall, 0.5)));
+  }
+  return { buf, n };
+}
+
+$x.ears = ears; $x.lathe = lathe; $x.prism = prism; $x.box = box; $x.move = move; $x.bake = bake;
+return $x; })({});
+$m[20] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Styles, as data. A style is a palette, a set of finishes, a lamp, a table to lie on and a named set of models:
+// nothing in the mesh layer or the recipes knows one style from another, so a new style is a new entry here (and, for
+// sculpted sets, a pack of models to fetch), never new code.
+/** The palette's slots, by name. Recipes paint with these, never with a colour of their own. */
+const SLOT = { metal: 0, wood: 1, stone: 2, roof: 3, thatch: 4, wall: 5, pine: 6, leaf: 7, snow: 8, gold: 9, cloth: 10, hull: 11, dark: 12, field: 13, iron: 14, bone: 15 };
+/** The finishes, by row: matte paint, the owner's enamel, metal, the ground's own colour. Each: how much the lamp adds, shine, how tight the shine is, rim light. */
+const STYLES = {
+  painted: {
+    name: "Painted miniatures",
+    set: "code", // which models: the ones made in code
+    pal: [[142, 150, 162], [104, 76, 54], [146, 142, 134], [142, 70, 56], [190, 158, 92], [214, 204, 180], [44, 82, 62], [70, 112, 66], [238, 240, 240], [214, 176, 84], [232, 224, 202], [112, 80, 56], [40, 34, 32], [200, 170, 92], [74, 78, 86], [226, 220, 204]],
+    fin: [[0.62, 0.04, 12, 0.05], [0.6, 0.16, 28, 0.07], [0.5, 0.42, 20, 0.1], [0.62, 0.02, 10, 0.03]],
+    sun: [-0.6, -0.8, 1.3], // where the lamp is: up and to the left, as on a drawn map
+    amb: [0.54, 0.14, 0.7], // light with no lamp, more of it from above, and how dark a cast shadow is
+    tone: [0.92, 0.14], // the owner's colour as paint on a miniature: a little darker and greyer than on a screen
+    ground: 0.36, // how dark a cast shadow is on the ground
+    table: { baize: [14, 27, 51], rule: [184, 196, 212], wood: [0.8, 0.35] }, // the cloth, the line round it, and the wood: how bright, how far toned to one brown
+  },
+};
+
+$x.SLOT = SLOT; $x.STYLES = STYLES;
+return $x; })({});
+$m[18] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The recipes: every model the boards stand on the table, made in code with the kit (our own work, in the manner of painted
+// war-game miniatures: metal bases, matte paint, the owner's colour as enamel). One cell's radius is 1; z is up; +y is toward the player.
+// A recipe paints with the style's palette slots, so another style recolours all of them at once.
+const { bake, box, lathe, move, prism } = $m[19];
+const { SLOT } = $m[20];
+
+const c = (slot, shade = 128) => [SLOT[slot], shade, 0], TAU = Math.PI * 2, UP = Math.PI / 2;
+const ring = (n, r, f) => { for (let i = 0; i < n; i++) { const a = (i / n) * TAU; f(Math.cos(a) * r, Math.sin(a) * r, a, i); } };
+/** A roof with two slopes over a box 2w by 2d, ridge along y. */
+const gable = (o, w, d, z, rise, col, fin = 0) => move(o, prism([], [[-w, 0], [w, 0], [0, rise]], -d, d, col, fin), 0, 0, z, 1, 0, UP);
+/** A house: walls, a roof in the given colour and finish, a dark door. */
+function house(o, w, d, h, rise, roof, fin, x = 0, y = 0, turn = 0) {
+  const p = [];
+  box(p, -w, -d, 0, w, d, h, c("wall"));
+  gable(p, w + 0.03, d + 0.03, h, rise, roof, fin);
+  box(p, -w * 0.25, d - 0.01, 0, w * 0.25, d + 0.012, h * 0.62, c("dark"));
+  return move(o, p, x, y, 0, 1, turn);
+}
+/** A round tower with teeth, and a pointed roof if asked. */
+function turret(o, r, h, x = 0, y = 0, roof = null, fin = 0, n = 8) {
+  const p = lathe([], [[r * 1.08, 0], [r, 0.04], [r, h], [r * 1.16, h + 0.02], [r * 1.16, h + 0.1], [r * 0.9, h + 0.1], [r * 0.9, h + 0.04], [0, h + 0.04]], n, c("stone"));
+  if (roof) lathe(p, [[r * 1.22, h + 0.08], [0, h + 0.08 + r * 2.1]], n, roof, fin, true);
+  else ring(n / 2, r * 1.03, (x1, y1, a) => move(p, box([], -r * 0.2, -r * 0.13, 0, r * 0.2, r * 0.13, 0.07, c("stone", 140)), x1, y1, h + 0.1, 1, a + UP));
+  return move(o, p, x, y);
+}
+const base = (o, r = 0.36) => lathe(o, [[r, 0], [r * 1.04, 0.02], [r * 1.04, 0.055], [r * 0.9, 0.085], [0, 0.085]], 14, c("metal"), 2);
+const pole = (o, x, y, z0, z1, r = 0.018, col = c("wood")) => move(o, lathe([], [[r, z0], [r, z1], [0, z1 + r]], 5, col), x, y);
+/** A flag on a pole, in the owner's colour. */
+function flag(o, x, y, z0, z1, w = 0.26, h = 0.17) {
+  pole(o, x, y, z0, z1 + 0.02, 0.016, c("iron"));
+  return move(o, prism([], [[0, 0], [w, -h * 0.1], [w * 0.82, -h * 0.5], [w, -h * 0.9], [0, -h]], -0.008, 0.008, c("cloth"), 1), x, y, z1, 1, 0, UP);
+}
+/** A soldier turned on a lathe: a metal base, an enamel body, a head. */
+function pawn(o, s = 1, head = "bone") {
+  const p = base([]);
+  lathe(p, [[0.27, 0.085], [0.27, 0.12], [0.16, 0.2], [0.11, 0.46], [0.15, 0.5], [0.15, 0.53], [0.09, 0.56]], 12, c("cloth"), 1);
+  lathe(p, [[0.09, 0.56], [0.14, 0.61], [0.16, 0.68], [0.14, 0.75], [0.08, 0.8], [0, 0.82]], 10, c(head), head === "bone" ? 0 : 2);
+  return move(o, p, 0, 0, 0, s);
+}
+const crown = (o, z, r = 0.15) => { lathe(o, [[r, z], [r * 1.12, z + 0.07], [r * 0.8, z + 0.07]], 10, c("gold"), 2); ring(5, r * 1.02, (x, y) => move(o, lathe([], [[0.035, 0], [0, 0.09]], 4, c("gold"), 2), x, y, z + 0.06)); return o; };
+/** A tree: a trunk and tiers of needles, or a rounded crown. */
+function tree(o, x, y, s, leafy, turn = 0) {
+  const p = lathe([], [[0.05, 0], [0.04, 0.22]], 5, c("wood"), 0, true);
+  if (leafy) lathe(p, [[0, 0.18], [0.2, 0.26], [0.27, 0.42], [0.21, 0.6], [0, 0.7]], 7, c("leaf"), 0, true, 0.3);
+  else { lathe(p, [[0.27, 0.13], [0, 0.5]], 7, c("pine"), 0, true); lathe(p, [[0.21, 0.34], [0, 0.68]], 7, c("pine", 140), 0, true, 0.4); lathe(p, [[0.14, 0.54], [0, 0.86]], 6, c("pine", 152), 0, true, 0.8); }
+  return move(o, p, x, y, 0, s, turn);
+}
+const stone = (o, x, y, z, r, shade = 128) => move(o, lathe([], [[r * 0.8, 0], [r, r * 0.3], [r * 0.7, r * 0.72], [0, r * 0.8]], 6, c("stone", shade), 0, true, x * 9), x, y, z);
+/** A hull, pointed at the bow (+x). */
+const hull = (o, l, w, h, col, fin = 0) => { const s = [[-l, -w * 0.7], [-l * 0.5, -w], [l * 0.35, -w * 0.9], [l, 0], [l * 0.35, w * 0.9], [-l * 0.5, w], [-l, w * 0.7]]; prism(o, s.map(([x, y]) => [x * 0.86, y * 0.7]), 0, h * 0.5, col, fin); return prism(o, s, h * 0.5, h, col, fin, 0.02); };
+/** A cube with pips on three sides: n on top. */
+function die(o, n) {
+  const p = box([], -0.2, -0.2, 0, 0.2, 0.2, 0.4, c("cloth"), 1, 0.03), dots = [[], [[0, 0]], [[-1, -1], [1, 1]], [[-1, -1], [0, 0], [1, 1]], [[-1, -1], [1, -1], [-1, 1], [1, 1]], [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]], [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]]];
+  const pip = lathe([], [[0.036, 0], [0.03, 0.006], [0, 0.006]], 7, c("bone")); // in the thrower's colour, with pale pips
+  for (const [x, y] of dots[n]) move(p, pip, x * 0.1, y * 0.1, 0.4);
+  for (const [x, y] of dots[n > 3 ? n - 3 : n + 2]) move(p, pip, x * 0.1, 0.2, 0.2 + y * 0.1, 1, 0, -UP); // the side toward the player
+  return move(o, p);
+}
+
+const RECIPES = {
+  // The Island Fable's four ranks: a scout, a guard with shield and spear, a knight, a marshal with a crown
+  unit1: (o) => pawn(o, 0.9),
+  unit2(o) { pawn(o, 1); pole(o, 0.2, 0.02, 0.08, 0.95, 0.014, c("wood")); move(o, lathe([], [[0.025, 0], [0, 0.09]], 4, c("metal"), 2), 0.2, 0.02, 0.95); return move(o, prism([], [[-0.12, 0.17], [0.12, 0.17], [0.12, -0.02], [0, -0.17], [-0.12, -0.02]], -0.02, 0.02, c("metal"), 2, 0.012), -0.02, 0.19, 0.34, 1, 0, UP * 0.92); },
+  unit3: (o) => RECIPES.horse(o),
+  unit4(o) { pawn(o, 1.12, "metal"); crown(o, 0.9, 0.13); return flag(o, -0.22, 0, 0.08, 1.12); },
+  foot: (o) => pawn(o, 0.82),
+  horse(o) { // cavalry: a chess knight of our own drawing, until a rider is chosen
+    base(o, 0.38);
+    const side = [[-0.3, 0], [-0.27, 0.3], [-0.08, 0.55], [-0.02, 0.76], [0.05, 0.84], [0.1, 0.7], [0.3, 0.56], [0.4, 0.34], [0.32, 0.25], [0.12, 0.34], [0.07, 0.26], [0.24, 0]].map(([x, z]) => [x * 0.82, z * 0.86]);
+    move(o, prism([], side, -0.1, 0.1, c("cloth"), 1, 0.025), 0, 0, 0.085, 1, 0, UP);
+    return move(o, prism([], [[-0.24, 0.3], [-0.12, 0.72], [-0.02, 0.66], [-0.14, 0.3]], -0.115, 0.115, c("dark"), 0), 0, 0, 0.085, 0.82, 0, UP); // the mane
+  },
+  gun(o) { // artillery: a barrel on a carriage with two wheels
+    base(o, 0.4);
+    move(o, lathe([], [[0.06, 0], [0.085, 0.03], [0.08, 0.1], [0.06, 0.52], [0.075, 0.54], [0.075, 0.58], [0.04, 0.58], [0.04, 0.5]], 9, c("iron"), 2), -0.24, 0, 0.3, 1, UP, UP * 0.82);
+    for (const y of [-0.17, 0.17]) { const w = lathe([], [[0.2, -0.025], [0.2, 0.025], [0, 0.03]], 12, c("wood")); lathe(w, [[0.2, 0.025], [0.2, -0.025], [0, -0.03]], 12, c("wood", 110)); move(o, w, -0.02, y, 0.285, 1, 0, UP); }
+    return box(o, -0.32, -0.07, 0.15, 0.08, 0.07, 0.24, c("wood", 112));
+  },
+  ship(o) { hull(o, 0.42, 0.17, 0.16, c("hull")); pole(o, 0.02, 0, 0.14, 0.78); move(o, prism([], [[-0.26, 0], [0.26, 0], [0.2, 0.42], [-0.2, 0.42]], -0.012, 0.012, c("cloth"), 0), 0.035, 0, 0.26, 1, UP, UP); return move(o, prism([], [[0, 0], [0.16, -0.04], [0, -0.08]], -0.006, 0.006, c("cloth"), 1), 0.02, 0, 0.84, 1, 0, UP); },
+  banner: (o) => flag(base(o, 0.16), 0, 0, 0.05, 0.95, 0.34, 0.24),
+  crown: (o) => crown(o, 0, 0.2),
+  // buildings
+  hall(o) { // a village hall with a tower: the owner's roofs and flag
+    house(o, 0.24, 0.3, 0.26, 0.2, c("cloth"), 1, 0.12, 0.02);
+    turret(o, 0.13, 0.5, -0.2, -0.06, c("cloth", 110), 1);
+    return flag(o, -0.2, -0.06, 0.85, 1.02, 0.2, 0.12);
+  },
+  depot: (o) => house(o, 0.2, 0.24, 0.2, 0.17, c("cloth"), 1),
+  town(o) { house(o, 0.2, 0.25, 0.22, 0.18, c("cloth"), 1, -0.14, 0.05); house(o, 0.15, 0.2, 0.17, 0.14, c("cloth", 108), 1, 0.2, 0.12, UP); return turret(o, 0.1, 0.44, 0.14, -0.2, c("cloth"), 1, 6); },
+  hut(o) { house(o, 0.17, 0.2, 0.15, 0.16, c("thatch")); return o; },
+  farm(o) { house(o, 0.16, 0.2, 0.15, 0.16, c("thatch"), 0, -0.26, -0.2); for (const [x, y] of [[0.22, -0.3], [0.36, -0.16]]) move(o, lathe([], [[0.09, 0], [0.085, 0.08], [0, 0.17]], 7, c("field"), 0, true), x, y); for (let i = 0; i < 5; i++) box(o, -0.5 + i * 0.04, 0.08 + i * 0.085, 0, 0.5 - i * 0.04, 0.12 + i * 0.085, 0.035, c("field", i % 2 ? 118 : 138)); return o; },
+  castle(o) { // a keep with four towers: a capital
+    box(o, -0.24, -0.24, 0, 0.24, 0.24, 0.34, c("stone"));
+    box(o, -0.15, -0.15, 0.34, 0.15, 0.15, 0.56, c("stone", 138));
+    ring(4, 0.34, (x, y) => turret(o, 0.1, 0.4, x, y, c("cloth"), 1, 7));
+    box(o, -0.07, 0.23, 0, 0.07, 0.25, 0.2, c("dark"));
+    return flag(o, 0, 0, 0.56, 0.86, 0.22, 0.13);
+  },
+  wall(o) { ring(8, 0.74, (x, y, a) => { move(o, box([], -0.3, -0.035, 0, 0.3, 0.035, 0.13, c("stone")), x, y, 0, 1, a + UP); turret(o, 0.06, 0.16, Math.cos(a + TAU / 16) * 0.8, Math.sin(a + TAU / 16) * 0.8, null, 0, 6); }); return o; }, // a fort: a ring of wall round a province's middle
+  fort(o) { ring(12, 0.46, (x, y, a, i) => { if (i !== 3) move(o, lathe([], [[0.055, 0], [0.05, 0.3], [0, 0.4]], 5, c("wood", 110 + (i % 3) * 14), 0, true), x, y); }); return turret(o, 0.13, 0.36, 0, -0.04); }, // a palisade and its watchtower
+  cairn(o) { stone(o, -0.12, 0.04, 0, 0.17); stone(o, 0.13, 0.07, 0, 0.15, 116); stone(o, 0, -0.1, 0, 0.14, 138); return stone(o, 0.01, 0.02, 0.12, 0.11, 146); },
+  tree: (o) => tree(o, 0, 0, 1, false),
+  oak: (o) => tree(o, 0, 0, 1, true),
+  hill: (o) => lathe(o, [[0.56, 0], [0.46, 0.09], [0.28, 0.19], [0, 0.24]], 9, c("leaf"), 3, true),
+  peak(o) { lathe(o, [[0.5, 0], [0.36, 0.26], [0.17, 0.56], [0, 0.74]], 6, c("stone"), 0, true, 0.2); lathe(o, [[0.19, 0.53], [0, 0.76]], 6, c("snow"), 0, true, 0.2); return move(o, lathe([], [[0.3, 0], [0.16, 0.26], [0, 0.42]], 5, c("stone", 112), 0, true), 0.3, 0.2); },
+  sheep(o) { for (const [x, y, t] of [[-0.2, 0.1, 0.4], [0.16, -0.12, 2.2], [0.24, 0.22, 4]]) { const p = lathe([], [[0.05, 0.04], [0.085, 0.08], [0.07, 0.15], [0, 0.17]], 6, c("bone"), 0, true); box(p, 0.06, -0.03, 0.09, 0.12, 0.03, 0.15, c("dark")); move(o, p, x, y, 0, 1, t); } for (let i = 0; i < 4; i++) { pole(o, -0.42 + i * 0.28, -0.36, 0, 0.11, 0.016); if (i < 3) box(o, -0.42 + i * 0.28, -0.37, 0.07, -0.14 + i * 0.28, -0.35, 0.09, c("wood", 140)); } return o; },
+  port(o) { // a jetty on posts, a crane and a crate
+    box(o, -0.12, -0.5, 0.1, 0.12, 0.2, 0.13, c("wood", 140));
+    for (const y of [-0.45, -0.15, 0.15]) for (const x of [-0.1, 0.1]) pole(o, x, y, 0, 0.1, 0.02);
+    pole(o, 0, 0.1, 0.13, 0.5, 0.022); move(o, box([], -0.02, -0.02, 0, 0.02, 0.02, 0.36, c("wood", 112)), 0, 0.1, 0.48, 1, 0, -UP * 0.8);
+    return box(o, -0.09, -0.36, 0.13, 0.05, -0.22, 0.25, c("thatch"));
+  },
+  gate(o) { for (const x of [-0.42, 0.42]) turret(o, 0.07, 0.42, x, 0, null, 0, 6); box(o, -0.4, -0.03, 0.26, 0.4, 0.03, 0.33, c("gold"), 2); return box(o, -0.4, -0.02, 0.1, 0.4, 0.02, 0.14, c("gold", 100), 2); },
+  bar: (o) => box(o, -0.2, -0.045, 0, 0.2, 0.045, 0.07, c("cloth"), 1, 0.012), // a route, laid along a hex's edge
+  token: (o) => lathe(o, [[0.3, 0], [0.31, 0.02], [0.31, 0.05], [0.27, 0.075], [0, 0.075]], 18, c("bone")),
+  plate: (o) => lathe(o, [[0.3, 0], [0.31, 0.02], [0.31, 0.05], [0.27, 0.075], [0, 0.075]], 18, c("metal"), 2),
+  // An Inch of Ink's four places
+  well(o) { lathe(o, [[0.2, 0], [0.2, 0.14], [0.14, 0.14], [0.14, 0.04], [0, 0.04]], 8, c("stone")); for (const x of [-0.16, 0.16]) pole(o, x, 0, 0.12, 0.42, 0.02); return gable(o, 0.22, 0.14, 0.4, 0.13, c("roof")); },
+  quay: (o) => RECIPES.port(o),
+  tower: (o) => turret(o, 0.16, 0.74, 0, 0, c("roof"), 0),
+  archive(o) { box(o, -0.32, -0.24, 0, 0.32, 0.24, 0.05, c("stone", 140)); box(o, -0.24, -0.16, 0.05, 0.24, 0.16, 0.32, c("wall")); for (const x of [-0.26, -0.09, 0.09, 0.26]) pole(o, x, 0.2, 0.05, 0.31, 0.028, c("bone")); return gable(o, 0.32, 0.25, 0.33, 0.13, c("roof")); },
+  // Capo's map: blocks with our own drawings of the public map symbols, not toy soldiers
+  army(o) { box(o, -0.36, -0.25, 0, 0.36, 0.25, 0.2, c("cloth"), 1, 0.025); for (const t of [0.6, -0.6]) move(o, box([], -0.34, -0.022, 0, 0.34, 0.022, 0.012, c("bone")), 0, 0, 0.2, 1, t); return frame(o); },
+  armour(o) { box(o, -0.36, -0.25, 0, 0.36, 0.25, 0.2, c("cloth"), 1, 0.025); const r = lathe([], [[0.2, 0], [0.2, 0.012], [0.16, 0.012], [0.16, 0]], 16, c("bone")); for (let i = 0; i < r.length; i += 10) r[i + 1] *= 0.6; move(o, r, 0, 0, 0.2); return frame(o); },
+  guns(o) { box(o, -0.36, -0.25, 0, 0.36, 0.25, 0.2, c("cloth"), 1, 0.025); lathe(o, [[0.085, 0.2], [0.085, 0.214], [0, 0.214]], 12, c("bone")); return frame(o); },
+  fleet(o) { hull(o, 0.5, 0.15, 0.13, c("cloth"), 1); box(o, -0.16, -0.07, 0.13, 0.12, 0.07, 0.21, c("metal"), 2, 0.015); return pole(o, 0, 0, 0.2, 0.36, 0.014, c("iron")); },
+  wing(o) { pole(o, 0, 0, 0, 0.4, 0.014, c("iron")); lathe(o, [[0.1, 0], [0.11, 0.02], [0, 0.03]], 8, c("metal"), 2); return prism(o, [[0.36, 0], [-0.22, -0.32], [-0.1, 0], [-0.22, 0.32]], 0.4, 0.44, c("cloth"), 1, 0.01); },
+  leader(o) { pawn(o, 0.9, "metal"); return flag(o, 0.2, 0, 0.07, 0.98, 0.24, 0.15); }, // a commander: a pewter-headed pawn with a banner
+  keep(o) { box(o, -0.18, -0.18, 0, 0.18, 0.18, 0.3, c("metal"), 2, 0.02); ring(4, 0.25, (x, y) => move(o, lathe([], [[0.07, 0], [0.07, 0.36], [0, 0.46]], 6, c("metal"), 2), x, y)); return flag(o, 0, 0, 0.3, 0.62, 0.2, 0.12); }, // a capital
+  city(o) { for (const [x, y, w, h] of [[-0.14, 0.02, 0.12, 0.2], [0.1, -0.08, 0.1, 0.3], [0.12, 0.16, 0.09, 0.14], [-0.08, -0.2, 0.08, 0.16]]) box(o, x - w, y - w, 0, x + w, y + w, h, c("metal"), 2, 0.012); return o; },
+  pin(o) { pole(o, 0, 0, 0, 0.5, 0.012, c("iron")); return move(o, lathe([], [[0, 0], [0.07, 0.05], [0.07, 0.09], [0, 0.14]], 8, c("cloth"), 1), 0, 0, 0.46); },
+};
+function frame(o) { for (const [x0, y0, x1, y1] of [[-0.3, -0.19, 0.3, -0.165], [-0.3, 0.165, 0.3, 0.19], [-0.3, -0.19, -0.275, 0.19], [0.275, -0.19, 0.3, 0.19]]) box(o, x0, y0, 0.2, x1, y1, 0.212, c("bone")); return o; }
+for (let n = 1; n <= 6; n++) RECIPES[`die${n}`] = (o) => die(o, n);
+
+let made = null;
+/** Every model, packed for the mesh layer. Made once, when a board first needs them. */
+function models() { return (made ||= Object.fromEntries(Object.entries(RECIPES).map(([k, f]) => [k, bake(f([]))]))); }
+
+$x.models = models;
+return $x; })({});
+$m[21] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // The painter: WebGL2 by hand. One full-screen triangle; the shader undoes the camera and walks down to the first cell top.
+// It writes the depth of what it found, so that the mesh layer's real shapes are hidden by raised cells, and it takes their shadows.
+const { DEPTH, SHADE } = $m[17];
 const VS = `#version 300 es
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS = `#version 300 es
 precision highp float; precision highp int;
-uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable;
+uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable,uPad,uK,uShade; uniform vec3 uSun,uBaize,uRule; uniform vec2 uWoodK;${SHADE}
+float dep(vec2 p,float z){ vec2 d=(p-uC)*uS; float D=(d.x*uYaw.y+d.y*uYaw.x)*uTilt.y+z*uTilt.x; return .5-.5*uK*D/(1.-uQ*D); }
 uniform vec3 uInk,uPale,uWall,uGlow,uLand; out vec4 o;
 int raw(ivec2 t){ if(t.x<0||t.y<0||t.x>=int(uSize.x)||t.y>=int(uSize.y)) return 0; vec4 v=texelFetch(uId,t,0); return int(v.r*255.+.5)+256*int(v.g*255.+.5); }
 int idAt(vec2 p){ return raw(ivec2(floor(p))); }
@@ -1704,6 +2137,7 @@ vec3 face(vec2 p,int id,float foot){
   return c; }
 void main(){
   vec2 uv=vec2(gl_FragCoord.x/uDpr,uView.y-gl_FragCoord.y/uDpr)-uMid;
+  gl_FragDepth=1.;
   if(uTilt.x+uQ*uv.y*uTilt.y<.03){ o=vec4(0.); return; }
   vec2 p0=plane(uv,0.),p=p0; int id=0; float z=0.; bool wall=false;
   if(uMost>0.){ vec2 p1=plane(uv,uMost); int n=int(clamp(ceil(distance(p0,p1)*uS*1.6),2.,64.)); float tp=1.;
@@ -1719,21 +2153,24 @@ void main(){
     if(uTable<=0.){ o=vec4(0.,0.,0.,s/20.*.55); return; }
     // walnut, with a blue baize inlay for the board to lie on and a silver rule round it
     vec2 hs=uSize*.5; float mg=max(hs.x,hs.y)*.16,r=mg*.6; vec2 d=abs(p0-hs)-hs-mg+r; float sd=length(max(d,0.))+min(max(d.x,d.y),0.)-r,fw=foot*uDpr*1.2;
-    vec3 c=texture(uWood,p0/(max(hs.x,hs.y)*vec2(1.3,.65))).rgb; c=mix(c,vec3(.3,.19,.12),.35)*.8; c*=1.-.3*smoothstep(mg*.5,0.,sd)*step(0.,sd);
-    c=mix(vec3(.055,.105,.2)*(.86+.28*grain(p0*2.)),c,smoothstep(-fw,fw,sd)); c=mix(c,vec3(.72,.77,.83),(1.-smoothstep(mg*.035,mg*.035+fw,abs(sd+mg*.32)))*.8);
-    o=vec4(c*(1.-s/20.*.62)*(1.-2.*dot(uv/uView,uv/uView)),1.); return; }
+    vec3 c=texture(uWood,p0/(max(hs.x,hs.y)*vec2(1.3,.65))).rgb; c=mix(c,vec3(.3,.19,.12),uWoodK.y)*uWoodK.x; c*=1.-.3*smoothstep(mg*.5,0.,sd)*step(0.,sd);
+    c=mix(uBaize*(.86+.28*grain(p0*2.)),c,smoothstep(-fw,fw,sd)); c=mix(c,uRule,(1.-smoothstep(mg*.035,mg*.035+fw,abs(sd+mg*.32)))*.8);
+    gl_FragDepth=dep(p0,0.);
+    o=vec4(c*(1.-s/20.*.62)*(1.-uShade*shd(p0,0.))*(1.-2.*dot(uv/uView,uv/uView)),1.); return; }
   vec3 c;
   if(wall){ vec3 b=tab(id,0).rgb; float l=.36+.30*clamp(z/max(top(id),.01),0.,1.); vec2 n=vec2(0.);
     if(uBev>0.){ for(int i=0;i<6;i++){ float t=float(i)*1.0471976+.5; vec2 d=vec2(cos(t),sin(t)); if(idAt(p+d*1.7)!=id) n+=d; } if(n!=vec2(0.)) l*=1.25+.55*dot(normalize(n),uLight); } // a side that faces the lamp is lighter
     c=mix(b*l,uWall,.45)*(.9+.12*grain(p)); if(tab(id,1).g>0.) c=mix(c,uGlow,.35); }
   else { c=face(uMost>0.?p:p,id,foot); if(uMost>0.){ float h=top(id); for(int k=1;k<=5;k++){ float d=float(k)*3.; if(top(idAt(p+uLight*d))>h+.6*float(k)){ c*=.80; break; } } } }
+  if(!wall) c*=1.-uShade*shd(p,z/uS);
+  gl_FragDepth=dep(p,z);
   if(uTable>0.) c*=1.-dot(uv/uView,uv/uView);
   o=vec4(c,1.); }`;
 
 class Painter {
   constructor(canvas) {
     this.canvas = canvas;
-    const g = this.g = canvas.getContext("webgl2", { alpha: true, antialias: false, depth: false, stencil: false, premultipliedAlpha: false });
+    const g = this.g = canvas.getContext("webgl2", { alpha: true, antialias: false, depth: true, stencil: false, premultipliedAlpha: false });
     if (!g) throw new Error("no WebGL2");
     const shader = (type, text) => {
       const s = g.createShader(type);
@@ -1748,6 +2185,7 @@ class Painter {
     g.linkProgram(P);
     if (!g.getProgramParameter(P, g.LINK_STATUS)) throw new Error(g.getProgramInfoLog(P) || "program");
     g.useProgram(P);
+    this.P = P;
     const n = g.getProgramParameter(P, g.ACTIVE_UNIFORMS);
     this.u = {};
     for (let i = 0; i < n; i++) { const { name } = g.getActiveUniform(P, i); this.u[name] = g.getUniformLocation(P, name); }
@@ -1793,13 +2231,19 @@ class Painter {
     const g = this.g, u = this.u, m = this.m, W = Math.round(cam.W * dpr), H = Math.round(cam.H * dpr), cv = this.canvas;
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
     g.viewport(0, 0, W, H);
+    g.useProgram(this.P);
+    g.enable(g.DEPTH_TEST); g.depthFunc(g.ALWAYS); // the ground fills the screen and writes every depth, so nothing needs clearing
+    g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uShOn, 0);
+    o.lamp?.(u);
+    const st = o.style.table; g.uniform3f(u.uBaize, st.baize[0] / 255, st.baize[1] / 255, st.baize[2] / 255); g.uniform3f(u.uRule, st.rule[0] / 255, st.rule[1] / 255, st.rule[2] / 255); g.uniform2f(u.uWoodK, st.wood[0], st.wood[1]);
     g.uniform1i(u.uId, 0); g.uniform1i(u.uHt, 1); g.uniform1i(u.uTab, 2); g.uniform1i(u.uWood, 3);
     g.uniform2f(u.uSize, m.w, m.h); g.uniform2f(u.uView, cam.W, cam.H); g.uniform2f(u.uMid, cam.mx, cam.my); g.uniform2f(u.uC, cam.cx, cam.cy);
-    g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform2f(u.uLight, -0.6, -0.8);
+    g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform2f(u.uLight, o.style.sun[0], o.style.sun[1]);
     g.uniform1f(u.uS, cam.s); g.uniform1f(u.uQ, cam.q); g.uniform1f(u.uDpr, dpr); g.uniform1f(u.uUnit, o.unit); g.uniform1f(u.uMost, o.most); g.uniform1f(u.uRelief, o.relief); g.uniform1f(u.uTime, o.time); g.uniform1f(u.uPat, o.pat ? 1 : 0); g.uniform1f(u.uCell, m.R); g.uniform1f(u.uBev, o.bevel); g.uniform1f(u.uSlab, m.R < 20 ? 0 : 1); g.uniform1f(u.uTable, o.table ? 1 : 0); // cells too small for a rim of their own are bevelled only where the land's owner or height changes
     const f3 = (k, c) => g.uniform3f(u[k], c[0] / 255, c[1] / 255, c[2] / 255);
     f3("uInk", o.ink); f3("uPale", o.pale); f3("uWall", o.wall); f3("uGlow", o.glow); f3("uLand", o.land || o.glow);
     g.drawArrays(g.TRIANGLES, 0, 3);
+    g.disable(g.DEPTH_TEST);
   }
   destroy() { this.g.getExtension("WEBGL_lose_context")?.loseContext(); }
 }
@@ -1812,7 +2256,10 @@ $m[14] = (($x) => {
 // It never changes a game. It is told what to show and says which cell was pointed at.
 const { Camera, pick } = $m[15];
 const { hexPicture } = $m[16];
-const { Painter } = $m[17];
+const { Meshes } = $m[17];
+const { models } = $m[18];
+const { Painter } = $m[21];
+const { STYLES } = $m[20];
 
 const DEG = Math.PI / 180;
 const LOOKS = {
@@ -1877,7 +2324,7 @@ function canDraw() {
 }
 
 /** terrain(i): what the land of a cell is, shown as a shape on its top (2 grain, 3 clay, 4 sand, 5 salt, 6 rock, 7 hills). wood: the address of the table's picture. probe: time the first frames and say "slow" if they drag. */
-function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false }) {
+function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false, style = "painted" }) {
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
@@ -1887,6 +2334,45 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   const show = m.mid.map((_, i) => ({ land: lands?.[i], kind: sea[i] ? 1 : terrain?.(i) || 0, rgb: ground(i), from: ground(i), to: ground(i), owner: -1, top: sea[i] ? 0.2 : 1, topTo: sea[i] ? 0.2 : 1, glow: 0, wet: 0, start: 0, ends: 0 }));
   if (wood) { const img = new Image(); img.onload = () => { if (alive) { painter.wood(img); redraw(); } }; img.src = wood; }
   let timed = probe ? [] : null;
+  // The mesh layer: real shapes for scenery and pieces, in every look but Flat (where the drawn pieces stay, as the plain and accessible view).
+  const look3 = STYLES[style] || STYLES.painted, lift = () => 9 * L.rise;
+  let meshes = null, staged = false;
+  try { meshes = new Meshes(painter.g, models()); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); }
+  const solid = () => L.rise > 0 && !!meshes;
+  /** Pieces on a map of small cells are made larger, so that they read when the whole board is in view (they still grow as you zoom in). */
+  const grown = () => Math.max(1, Math.min(picture ? 3.2 : 1.25, 24 / (m.R * base))); // on a board of hexes a piece must still fit its own hex
+  /** What stands on the board, as models: scenery from what the land is, then the pieces the game lists. Sizes are in cell radii. */
+  function stage() {
+    const out = [], R = m.R, big = grown(), rnd = (i, k) => { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
+    const put = (name, at, dx = 0, dy = 0, s = 1, rgb = null, t = 0, dim = 1) => out.push({ m: name, x: m.mid[at][0] + dx * R * big, y: m.mid[at][1] + dy * R * big, z: show[at].top, s: s * R * big, rgb, t, dim });
+    show.forEach((c, i) => {
+      if (c.kind === 7) put("hill", i, 0, 0, (R < 20 ? 0.62 : 0.9) / big, c.rgb.map((v) => v * 0.94), rnd(i, 1) * 6);
+      else if (c.kind === 6 || c.kind === 10) put("peak", i, 0, -0.05, c.kind === 6 ? 0.62 : 1, null, rnd(i, 2) * 6);
+      else if (c.kind === 2) put("hut", i, -0.5, -0.42, 0.62, null, 0.3 + rnd(i, 3));
+      else if (c.kind === 9) put("sheep", i, 0, 0, 0.9, null, rnd(i, 4) * 6);
+      else if (c.kind === 8) for (let k = 0; k < 4; k++) put(k % 2 ? "oak" : "tree", i, (rnd(i, k) - 0.5) * 1.1, (rnd(i, k + 9) - 0.5) * 1.0, 0.6 + rnd(i, k + 5) * 0.3, null, rnd(i, k) * 6);
+    });
+    for (const s of spots) {
+      const at = s.at, rgb = s.rgb;
+      if (s.kind === "tree") [[-0.36, 0.14, 0.95], [0.32, 0.22, 0.9], [0.02, -0.24, 1.2]].forEach(([x, y, k], n) => put(rnd(at, n) > 0.7 ? "oak" : "tree", at, x + (rnd(at, n + 3) - 0.5) * 0.14, y, k * (0.9 + rnd(at, n + 6) * 0.2), null, rnd(at, n) * 6));
+      else if (["cairn", "farm", "fort", "gate", "well", "quay", "watch", "archive"].includes(s.kind)) put(s.kind === "watch" ? "tower" : s.kind, at, 0, 0, s.kind === "farm" ? 0.8 : 0.95);
+      else if (s.kind === "tower") put("hall", at, 0, 0, 1.25, rgb);
+      else if (s.kind === "unit") put(`unit${Math.min(4, s.rank)}`, at, 0, 0.08, 1.02 + s.rank * 0.05, rgb, s.rank === 3 ? -0.5 : 0, s.tired ? 0.66 : 1);
+      else if (s.kind === "army") {
+        if (s.fort) put("wall", at, 0, 0, 0.82);
+        if (s.cap) put("castle", at, -0.62, -0.5, 0.8, rgb);
+        if (s.leader) put("unit4", at, 0.62, -0.3, 0.74, rgb);
+        if (s.seat >= 0) put(s.count >= 10 ? "gun" : s.count >= 5 ? "horse" : "foot", at, 0, 0, 0.92, rgb, s.count >= 5 ? -0.45 : 0);
+      } else if (s.kind === "token") put("token", at, 0, 0, 1.18);
+      else if (s.kind === "route") s.seats.forEach((c, k) => { const a = -0.9 + k * 0.62; put("bar", at, Math.cos(a) * 0.62, Math.sin(a) * 0.62 - 0.1, 1, c, a + Math.PI / 2); });
+      else if (s.kind === "depot" || s.kind === "town") put(s.kind, at, R < 20 ? 0 : 0.5, R < 20 ? 0 : 0.36, R < 20 ? 0.8 : 0.72, rgb, 0.35);
+      else if (s.kind === "port") put("port", at, -0.55, -0.3, 0.7, null, 2.4);
+      else if (s.kind === "ship") put("ship", at, 0, 0, 0.9, rgb, s.turn || 0);
+      else if (s.kind === "model") put(s.name, at, s.dx || 0, s.dy || 0, s.size || 1, rgb, s.turn || 0, s.dim ?? 1); // any model by name: dice on the table, a ship at sea
+    }
+    meshes.set(out);
+    staged = true;
+  }
   const tops = new Float32Array(m.n + 1), listeners = { pick: [], hover: [] };
   let L = LOOKS[look], lookName = look, motion = "system", pat = false, queued = false, dirty = true, alive = true, spots = [], hovering = -1, swing = null, until = 0, lit = 0, marks = [], point = null;
 
@@ -1912,7 +2398,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
         c.wet = c.soak ? Math.max(0, 1 - Math.max(0, t - c.start) / 1500) * (k > 0 ? 1 : 0) : 0;
         if (k < 1 || c.wet > 0) moving = true;
         else { c.start = c.ends = 0; c.soak = false; }
-        dirty = true;
+        dirty = true; staged = false; // what stands on a cell rides with it
       }
       tops[i + 1] = c.top;
     });
@@ -1927,7 +2413,10 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     const beat = calm() || !lit ? 0 : Math.max(0, 1.5 - (t - lit) / 1000); // a preview pulses briefly, then the board is still
     if (beat > 0) moving = true;
     if (dirty) { painter.send(show); dirty = false; }
-    painter.draw(cam, dpr(), { unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, pat, bevel: L.rise ? Math.max(1.5, Math.min(5, m.R * 0.1)) : 0, table: L.rise > 0, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [226, 233, 241], land: [255, 226, 150] }); // silver marks what can be chosen; the lands keep their own line
+    const on = solid();
+    if (on) { if (!staged) stage(); meshes.cast([m.w, m.h], lift(), look3.sun); }
+    painter.draw(cam, dpr(), { style: look3, lamp: on ? (u) => meshes.lamp(u, true, look3.sun) : null, unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, pat, bevel: L.rise ? Math.max(1.5, Math.min(5, m.R * 0.1)) : 0, table: L.rise > 0, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [226, 233, 241], land: [255, 226, 150] }); // silver marks what can be chosen; the lands keep their own line
+    if (on) meshes.draw(cam, [m.w, m.h], lift(), look3);
     drawOver(t);
     if (moving) redraw();
   }
@@ -2016,34 +2505,37 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       ctx.setLineDash([7, 6]); ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(250,240,214,.8)"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(cam.px, cam.py); ctx.stroke(); ctx.setLineDash([]);
     }
     const chosen = new Set(spots.flatMap((s) => (s.kind === "dot" && !s.small ? [s.at] : []))), numbered = new Set(spots.flatMap((s) => (s.kind === "token" ? [s.at] : [])));
+    const on = solid(), R3 = m.R * grown();
     for (const s of spots) { // things that grow or are built on the ground
-      if (!["tree", "cairn", "farm", "fort", "token", "route", "depot", "town", "gate", "port"].includes(s.kind)) continue;
+      const kind = { well: "cairn", quay: "port", watch: "fort", archive: "depot" }[s.kind] || s.kind; // An Inch of Ink's places, as they are drawn flat
+      if (!["tree", "cairn", "farm", "fort", "token", "route", "depot", "town", "gate", "port"].includes(kind) || (on && kind !== "token")) continue;
       cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit());
       const x = cam.px, y = cam.py, h = size * 0.62 * cam.pk;
       ctx.lineJoin = "round"; ctx.lineWidth = 2; ctx.strokeStyle = "#1a1411";
       if (s.kind === "token") { // the hex's number, red when it comes up often
         const r = Math.min(size * 0.4 * cam.pk, Math.max(10, h * 0.46)); // never so big that the ground's colour is lost, or tokens touch on a small screen
         if (chosen.has(s.at) && size * cam.pk >= 30) { ctx.beginPath(); ctx.arc(x, y, r + Math.max(3, r * 0.3), 0, 7); ctx.lineWidth = 5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.lineWidth = 2.5; ctx.strokeStyle = "#eef2f6"; ctx.stroke(); ctx.strokeStyle = "#1a1411"; } // can be chosen: a ring round the number, which stays in view (small hexes have only their bright edge, so the ground still shows)
+        if (on) { cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit() + m.R * 0.09 * cam.s); ctx.fillStyle = s.hot ? "#b0302a" : "#1a1411"; ctx.font = `700 ${Math.round(r * 1.05)}px Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.save(); ctx.translate(cam.px, cam.py); ctx.scale(1, Math.max(0.62, cam.ct)); if (s.lit) { ctx.beginPath(); ctx.arc(0, 0, r * 1.08, 0, 7); ctx.lineWidth = Math.max(3, r * 0.3); ctx.strokeStyle = "#f6f8fb"; ctx.stroke(); } ctx.fillText(String(s.n), 0, 1); ctx.restore(); continue; } // the disc is a model; its number lies on it
         ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = "#f3e7c6"; ctx.fill();
         ctx.lineWidth = 1.5; ctx.stroke();
         if (s.lit) { const b = Math.max(4, r * 0.4); ctx.beginPath(); ctx.arc(x, y, r + b / 2, 0, 7); ctx.lineWidth = b + 3; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.lineWidth = b; ctx.strokeStyle = "#f6f8fb"; ctx.stroke(); } // it yielded on the last roll: a bright band round the number
         ctx.fillStyle = s.hot ? "#b0302a" : "#1a1411"; ctx.font = `700 ${Math.round(r * 1.05)}px Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(s.n), x, y + 1);
         continue;
       }
-      if (s.kind === "route") { s.seats.forEach((rgb, k) => { const a = -0.9 + k * 0.55; ctx.beginPath(); ctx.ellipse(x + Math.cos(a) * h * 0.8, y + Math.sin(a) * h * 0.55 - h * 0.35, h * 0.2, h * 0.11, a, 0, 7); ctx.fillStyle = `rgb(${rgb})`; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); }); continue; }
-      if (s.kind === "depot" || s.kind === "town") { // a house, or a house with a hall
-        const X = x + h * 0.55, Y = y + h * 0.45, k = s.kind === "town" ? 1.25 : 0.9;
+      if (kind === "route") { s.seats.forEach((rgb, k) => { const a = -0.9 + k * 0.55; ctx.beginPath(); ctx.ellipse(x + Math.cos(a) * h * 0.8, y + Math.sin(a) * h * 0.55 - h * 0.35, h * 0.2, h * 0.11, a, 0, 7); ctx.fillStyle = `rgb(${rgb})`; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); }); continue; }
+      if (kind === "depot" || kind === "town") { // a house, or a house with a hall
+        const X = x + h * 0.55, Y = y + h * 0.45, k = kind === "town" ? 1.25 : 0.9;
         ctx.beginPath(); [[-0.4, 0], [-0.4, -0.45], [0, -0.85], [0.4, -0.45], [0.4, 0]].forEach(([u, v], i) => ctx[i ? "lineTo" : "moveTo"](X + u * h * k, Y + v * h * k)); ctx.closePath();
-        if (s.kind === "town") { ctx.moveTo(X + 0.4 * h * k, Y); ctx.lineTo(X + 0.95 * h * k, Y); ctx.lineTo(X + 0.95 * h * k, Y - 0.35 * h * k); ctx.lineTo(X + 0.4 * h * k, Y - 0.35 * h * k); }
+        if (kind === "town") { ctx.moveTo(X + 0.4 * h * k, Y); ctx.lineTo(X + 0.95 * h * k, Y); ctx.lineTo(X + 0.95 * h * k, Y - 0.35 * h * k); ctx.lineTo(X + 0.4 * h * k, Y - 0.35 * h * k); }
         ctx.fillStyle = `rgb(${s.rgb})`; ctx.fill(); if (pat && s.seat >= 0) { ctx.fillStyle = seatPattern(ctx, s.seat, s.rgb); ctx.fill(); } ctx.lineWidth = 2.2; ctx.stroke();
         if (s.harbour) { ctx.beginPath(); ctx.arc(X, Y - 0.32 * h * k, h * 0.1, 0, 7); ctx.fillStyle = "#fdf6e4"; ctx.fill(); }
         continue;
       }
-      if (s.kind === "gate") { ctx.beginPath(); ctx.rect(x - h * 0.6, y - h * 0.95, h * 0.18, h * 0.9); ctx.rect(x + h * 0.42, y - h * 0.95, h * 0.18, h * 0.9); ctx.fillStyle = "#3a2c22"; ctx.fill(); ctx.beginPath(); ctx.rect(x - h * 0.6, y - h * 0.75, h * 1.2, h * 0.16); ctx.fillStyle = "#e9c46a"; ctx.fill(); ctx.stroke(); continue; }
-      if (s.kind === "port") { ctx.beginPath(); ctx.moveTo(x - h * 0.7, y - h * 0.62); ctx.lineTo(x - h * 0.7, y - h * 0.18); ctx.lineWidth = 2; ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - h * 0.7, y - h * 0.62); ctx.lineTo(x - h * 0.36, y - h * 0.5); ctx.lineTo(x - h * 0.7, y - h * 0.38); ctx.closePath(); ctx.fillStyle = s.good === 4 ? "#fdf6e4" : ["#e2c460", "#b0d0d8", "#c47852", "#e4e2d6"][s.good]; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); continue; }
-      if (s.kind === "farm") { for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.ellipse(x, y + k * h * 0.28 * flat, h * 0.62, h * 0.1 * flat + 1, 0, 0, 7); ctx.fillStyle = k ? "#d9b85a" : "#e8cc70"; ctx.fill(); ctx.stroke(); } continue; }
-      if (s.kind === "cairn") { for (const [u, v, r] of [[-0.2, 0.05, 0.2], [0.18, 0.08, 0.18], [0, -0.14, 0.17]]) { ctx.beginPath(); ctx.ellipse(x + u * h, y + v * h, r * h, r * h * 0.8, 0, 0, 7); ctx.fillStyle = "#9a9384"; ctx.fill(); ctx.stroke(); } continue; }
-      if (s.kind === "fort") {
+      if (kind === "gate") { ctx.beginPath(); ctx.rect(x - h * 0.6, y - h * 0.95, h * 0.18, h * 0.9); ctx.rect(x + h * 0.42, y - h * 0.95, h * 0.18, h * 0.9); ctx.fillStyle = "#3a2c22"; ctx.fill(); ctx.beginPath(); ctx.rect(x - h * 0.6, y - h * 0.75, h * 1.2, h * 0.16); ctx.fillStyle = "#e9c46a"; ctx.fill(); ctx.stroke(); continue; }
+      if (kind === "port") { ctx.beginPath(); ctx.moveTo(x - h * 0.7, y - h * 0.62); ctx.lineTo(x - h * 0.7, y - h * 0.18); ctx.lineWidth = 2; ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - h * 0.7, y - h * 0.62); ctx.lineTo(x - h * 0.36, y - h * 0.5); ctx.lineTo(x - h * 0.7, y - h * 0.38); ctx.closePath(); ctx.fillStyle = s.good === 4 ? "#fdf6e4" : ["#e2c460", "#b0d0d8", "#c47852", "#e4e2d6"][s.good]; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); continue; }
+      if (kind === "farm") { for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.ellipse(x, y + k * h * 0.28 * flat, h * 0.62, h * 0.1 * flat + 1, 0, 0, 7); ctx.fillStyle = k ? "#d9b85a" : "#e8cc70"; ctx.fill(); ctx.stroke(); } continue; }
+      if (kind === "cairn") { for (const [u, v, r] of [[-0.2, 0.05, 0.2], [0.18, 0.08, 0.18], [0, -0.14, 0.17]]) { ctx.beginPath(); ctx.ellipse(x + u * h, y + v * h, r * h, r * h * 0.8, 0, 0, 7); ctx.fillStyle = "#9a9384"; ctx.fill(); ctx.stroke(); } continue; }
+      if (kind === "fort") {
         ctx.beginPath(); [[-0.55, 0.2], [-0.55, -0.55], [-0.36, -0.55], [-0.36, -0.42], [-0.12, -0.42], [-0.12, -0.55], [0.12, -0.55], [0.12, -0.42], [0.36, -0.42], [0.36, -0.55], [0.55, -0.55], [0.55, 0.2]].forEach(([u, v], i) => ctx[i ? "lineTo" : "moveTo"](x + u * h, y + v * h)); ctx.closePath();
         ctx.fillStyle = s.rgb ? `rgb(${s.rgb.map((v) => Math.round(v * 0.55 + 90))})` : "#b9ad93"; ctx.fill(); ctx.lineWidth = 2.5; ctx.stroke();
         ctx.beginPath(); ctx.moveTo(x - h * 0.14, y + h * 0.2); ctx.lineTo(x - h * 0.14, y - h * 0.08); ctx.arc(x, y - h * 0.08, h * 0.14, Math.PI, 0); ctx.lineTo(x + h * 0.14, y + h * 0.2); ctx.fillStyle = "#3a2c22"; ctx.fill();
@@ -2068,6 +2560,15 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     }
     const stand = spots.filter((s) => s.kind === "tower" || s.kind === "unit" || s.kind === "army").map((s) => { cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit()); return { s, x: cam.px, y: cam.py, k: cam.pk }; }).sort((a, b) => a.y - b.y);
     for (const { s, x, y, k } of stand) {
+      if (on) { // the piece is a model: the page adds what must stay sharp, its number on a plate above it, and the owner's sign
+        const army = s.kind === "army", tall = army ? 0 : 1.5;
+        if (s.kind === "unit") { if (s.now) { ctx.beginPath(); ctx.ellipse(x, y + size * 0.08 * flat, size * 0.36 * k, size * 0.36 * k * flat, 0, 0, 7); ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(238,243,248,.95)"; ctx.stroke(); } continue; }
+        cam.projectTo(m.mid[s.at][0], m.mid[s.at][1] + (army && s.seat >= 0 ? R3 * 0.52 : 0), show[s.at].top * unit() + tall * R3 * cam.s); // an army's number lies at its foot, toward the player; a hall's floats over its roof
+        const r = Math.max(8.5, Math.min(15, R3 * cam.s * 0.3 * k)), py = cam.py - r * (tall ? 1.15 : 0);
+        plate(String(s.count), cam.px, py, r, s.warn ? "#f2a08c" : s.seat < 0 ? "rgba(214,202,172,.94)" : s.now ? "#dfe8f3" : "#f6eedb");
+        if (s.kind === "army" && s.seat >= 0) { emblem(ctx, icons[s.seat], cam.px + r * 1.9, py, r * 0.9); ctx.lineWidth = 2.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.fillStyle = `rgb(${s.rgb})`; ctx.fill("evenodd"); }
+        continue;
+      }
       if (s.kind === "army") { army(s, x, y, Math.max(16, size * 0.52 * k)); continue; }
       if (s.kind === "unit") { figure(s, x, y + size * 0.2 * flat, Math.max(26, size * (0.6 + s.rank * 0.1) * k)); continue; }
       const h = Math.max(36, size * 0.95 * k), foot = y + size * 0.22 * flat;
@@ -2087,7 +2588,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     cam.set({ W: host.clientWidth || 1, H: host.clientHeight || 1, left: 0, right: 0, top: 0, bottom: 0, ...free });
     cam.set({ tilt: L.tilt, yaw: L.yaw, q: near() });
     cam.fit(ends, 14);
-    base = cam.s;
+    base = cam.s; staged = false;
     const tall = (cam.H - cam.top - cam.bottom) / (m.h * cam.s); // a wide map on a narrow screen starts closer in
     if (zoom === 1 && picture && cam.W < 821 && tall > 1.6) zoomed(Math.min(2.6, tall)); else zoomed(zoom);
     under.style.width = over.style.width = cam.W + "px";
@@ -2173,6 +2674,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       });
       owner.forEach((o, i) => { if (marks[i]) marks[i].home = held.has(i); });
       spots = spots.filter((s) => s.kind === "dot" || s.kind === "ring").concat(pieces);
+      staged = false;
       until = t + last;
       dirty = true;
       redraw();
@@ -2190,12 +2692,13 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     },
     screenOf(i) { cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit()); return { x: cam.px, y: cam.py }; },
     destroy() { alive = false; painter.destroy(); under.remove(); over.remove(); },
+    get solid() { return solid(); },
   };
 }
 
 $x.LOOKS = LOOKS; $x.EMBLEMS = EMBLEMS; $x.emblem = emblem; $x.seatPattern = seatPattern; $x.canDraw = canDraw; $x.createBoard = createBoard;
 return $x; })({});
-$m[19] = (($x) => {
+$m[23] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Where this copy's source code can be read. Anyone who runs a changed copy puts their own address here.
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
@@ -2203,7 +2706,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.8.2";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "a1c16289";
+const BUILD = "c8ee3255";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -2223,7 +2726,7 @@ const AI_BASES = {
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_BASES = AI_BASES;
 return $x; })({});
-$m[20] = (($x) => {
+$m[24] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
 // Daylight or lamplight, as the front page's lantern last left it; every page starts here.
@@ -2243,10 +2746,10 @@ function guard() {
 
 $x.guard = guard;
 return $x; })({});
-$m[18] = (($x) => {
+$m[22] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-const { BUILD, SOURCE_URL, VERSION } = $m[19];
-const { guard } = $m[20];
+const { BUILD, SOURCE_URL, VERSION } = $m[23];
+const { guard } = $m[24];
 
 /** Every page shows its version and where its source can be read. */
 function footer() {
@@ -2262,12 +2765,12 @@ function footer() {
 
 $x.footer = footer;
 return $x; })({});
-$m[21] = (($x) => {
+$m[25] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Games played by pasting a link. The whole game is in the part after #, which browsers do not send to the host.
 // With a password the game is locked (AES-GCM, the key made from the password by PBKDF2) before it goes in the link.
 const { Refusal } = $m[7];
-const { SITE_URL } = $m[19];
+const { SITE_URL } = $m[23];
 
 const ID = 6, SALT = 16, IV = 12, ROUNDS = 250000, PLACE = "capo-link-";
 const broken = () => new Refusal("link", "that link is broken or not complete");
@@ -2327,7 +2830,7 @@ const linkGames = {
 
 $x.canLock = canLock; $x.newId = newId; $x.makeLink = makeLink; $x.readLink = readLink; $x.linkGames = linkGames;
 return $x; })({});
-$m[22] = (($x) => {
+$m[26] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The coach: a guided first game. A game gives a fixed seed, a short preset and a few steps. Each step points at a place
 // on the board or a control, says one plain sentence, and goes on when the player does the thing (or presses Next, for a step
@@ -2468,7 +2971,7 @@ function coach(T, L, key, go) {
 
 $x.coach = coach;
 return $x; })({});
-$m[23] = (($x) => {
+$m[27] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What the table games' screen keeps for the player: settings, sounds made in code, and the order of places at the end.
 // No page is touched when this is loaded, so its plain parts are tested in Node (test/shell.test.mjs).
@@ -2560,11 +3063,11 @@ $m[13] = (($x) => {
 // A game gives its rules, its board and its own move panel.
 const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } = $m[7];
 const { EMBLEMS, emblem } = $m[14];
-const { footer } = $m[18];
-const { canLock, linkGames, makeLink, newId, readLink } = $m[21];
-const { BUILD, SOURCE_URL, VERSION } = $m[19];
-const { coach } = $m[22];
-const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, turnKey, wake } = $m[23];
+const { footer } = $m[22];
+const { canLock, linkGames, makeLink, newId, readLink } = $m[25];
+const { BUILD, SOURCE_URL, VERSION } = $m[23];
+const { coach } = $m[26];
+const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, turnKey, wake } = $m[27];
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -3430,7 +3933,7 @@ function createTable(G) {
 
 $x.COLOURS = COLOURS; $x.NAMES = NAMES; $x.RGB = RGB; $x.ICONS = ICONS; $x.PAPER = PAPER; $x.dress = dress; $x.$ = $; $x.el = el; $x.sleep = sleep; $x.sign = sign; $x.radio = radio; $x.toast = toast; $x.sheet = sheet; $x.createTable = createTable;
 return $x; })({});
-$m[24] = (($x) => {
+$m[28] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The hex board for a game's screen: the moving one when the device can draw it, else a still picture that can be tapped.
 const { LOOKS, canDraw, createBoard } = $m[14];
@@ -3519,7 +4022,7 @@ const { villageName } = $m[5];
 const { ISLANDS, SEAS, island, open, step, stepOf } = $m[6];
 const { createMatch } = $m[7];
 const { $, NAMES, PAPER, RGB, createTable, el, radio, sheet, toast } = $m[13];
-const { hexBoard } = $m[24];
+const { hexBoard } = $m[28];
 
 const SEA = [72, 110, 122], SHALLOW = [98, 138, 146], GRASS = [[150, 186, 104], [142, 180, 98], [158, 190, 112]], RANK = ["", "Scout", "Guard", "Captain", "Marshal"];
 let source = null, where = null, build = "raise", give = null, sure = false; // source: "h12" a hall, "u7" a unit; give: the concede button, sure: tapped once

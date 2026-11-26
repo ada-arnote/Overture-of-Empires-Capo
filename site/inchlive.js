@@ -14,7 +14,7 @@ import { hexBoard } from "./hexboard.js";
 import { areaPicture } from "../src/map/areas.js";
 import { ledger, note, title } from "./ledger.js";
 
-const SEA = [64, 104, 128], DRY = [238, 232, 216], LAND = [[214, 204, 170], [206, 198, 162], [220, 210, 178]], HILL = [178, 160, 128], GLYPH = ["cairn", "port", "fort", "depot"];
+const SEA = [64, 104, 128], DRY = [238, 232, 216], LAND = [[214, 204, 170], [206, 198, 162], [220, 210, 178]], HILL = [178, 160, 128], GLYPH = ["well", "quay", "watch", "archive"];
 const SPEEDS = [0.5, 1, 2, 4], STEPS = [[0.25, "A quarter of the way to the goal"], [0.5, "Halfway to the goal"], [0.75, "Three quarters of the way to the goal"], [0.9, "Nearly at the goal"]];
 let pct = 40, paused = false, speed = 1, beat = 0, clock = 0, building = false, box = null, ink = "draw", me = null;
 // what the move panel has chosen: a start, a target; the ink sheet already shown; how far towards the goal was last said
