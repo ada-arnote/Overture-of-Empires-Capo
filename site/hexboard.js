@@ -16,13 +16,16 @@ function patterns(make, f) {
 }
 
 /**
- * o.picture and o.fine { cells, of } for a board of provinces. Otherwise o: cells (axial), fit (the cells to frame, or all), rough[], sea[], ground(i), owner() -> seats or -1 by cell, pieces() -> standing pieces, tap(i), can(i).
+ * o.picture and o.fine { cells, of } for a board of provinces. Otherwise o: cells (axial), fit (the cells to frame, or all), rough[], sea[], ground(i), terrain(i), owner() -> seats or -1 by cell, pieces() -> standing pieces, tap(i), can(i).
+ * A board opens tilted, as a model on a table, unless the player chose a look, or this device was found too slow for it (then Flat, which stays one tap away in Settings).
  */
 export function hexBoard(T, stage, o) {
   let b = null, svg = null, pat = false, room = {};
   /** The still picture keeps to the free part of the screen too, clear of the panels. */
   const fit = () => { if (svg) Object.assign(svg.style, { left: `${room.left || 0}px`, top: `${room.top || 0}px`, width: `calc(100% - ${(room.left || 0) + (room.right || 0)}px)`, height: `calc(100% - ${(room.top || 0) + (room.bottom || 0)}px)` }); };
-  const wide = innerWidth > 820, kept = T.read();
+  const kept = T.read(), SLOW = "capo-3d-slow", get = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+  // weak devices by their own account (2 GB or less, under 4 cores, data saver) open flat; the rest are timed as they open
+  const weak = navigator.deviceMemory <= 2 || navigator.hardwareConcurrency < 4 || !!navigator.connection?.saveData || !!get(SLOW);
   const still = () => {
     const list = o.fine ? o.fine.cells : o.cells, big = Math.max(...list.map(([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)))) + 2;
     const ns = "http://www.w3.org/2000/svg", S = 30, W = Math.sqrt(3) * S, owner = o.owner(), make = (t, at) => { const e = document.createElementNS(ns, t); for (const [k, v] of Object.entries(at)) e.setAttribute(k, v); return e; };
@@ -49,7 +52,8 @@ export function hexBoard(T, stage, o) {
   };
   if (canDraw()) {
     try {
-      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, fit: o.fit, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, look: LOOKS[kept] ? kept : wide && !o.plain ? "relief" : "flat" });
+      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, fit: o.fit, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, terrain: o.terrain, wood: "textures/walnut.webp", probe: !LOOKS[kept] && !weak, look: LOOKS[kept] ? kept : weak ? "flat" : "relief" });
+      b.on("slow", () => { try { localStorage.setItem(SLOW, "1"); } catch { /* it will be timed again next time */ } b?.setLook("flat"); });
       b.on("pick", (i) => { if (i >= 0) o.tap(i); });
       b.on("hover", (i) => b?.setCursor(i >= 0 && T.ready() && o.can(i)));
       b.on("lost", () => { b = null; still(); });

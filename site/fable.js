@@ -276,7 +276,7 @@ const T = createTable({
     const cells = [...land, ...ring], sea = cells.map((_, i) => i >= land.length || !!p.water[i]), none = cells.map(() => false);
     document.body.classList.remove("atlas");
     return hexBoard(T, stage, {
-      cells, rough: none, sea, plain: printed, ground: (i) => (sea[i] ? (i < land.length ? SHALLOW : SEA) : (printed ? GRASS : PAPER)[(i * 7 + (i >> 2)) % 3]),
+      cells, rough: none, sea, ground: (i) => (sea[i] ? (i < land.length ? SHALLOW : SEA) : (printed ? GRASS : PAPER)[(i * 7 + (i >> 2)) % 3]),
       owner: () => [...T.match.position.owner, ...ring.map(() => NONE)],
       pieces() {
         const q = T.match.position, out = [];

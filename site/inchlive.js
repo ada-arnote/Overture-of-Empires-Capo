@@ -209,7 +209,8 @@ export function board(T, stage) {
   // dried land is drawn as one more seat, the colour of bare paper; a capital is a tower showing its nation's strength
   const rank = dryRank(b), n = cs.length;
   return hexBoard(T, stage, {
-    picture, cells: [], rough: [], sea: [...b.dry.map(() => false), true], seats: [...cs, DRY], plain: true, fine: { cells: b.cells, of, mid: b.dry },
+    picture, cells: [], rough: [], sea: [...b.dry.map(() => false), true], seats: [...cs, DRY], fine: { cells: b.cells, of, mid: b.dry },
+    terrain: (k) => (k < b.dry.length && b.hill[b.dry[k]] ? 7 : 0),
     ground: (k) => (k >= b.dry.length ? SEA : b.hill[b.dry[k]] ? HILL : LAND[k % 3]),
     owner: () => { const q = T.match.position, k = driedOf(q); return [...b.dry.map((c) => (rank[c] < k ? n : q.owner[c])), NONE]; },
     pieces: () => {

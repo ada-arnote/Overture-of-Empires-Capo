@@ -222,7 +222,7 @@ createTable({
     document.body.classList.remove("atlas");
     card(T);
     return hexBoard(T, stage, {
-      cells: b.cells, rough: none, sea, plain: true, ground: (i) => (sea[i] ? SEA : p.good[i] === WASTE ? WASTEG : TILE[p.good[i]]),
+      cells: b.cells, rough: none, sea, terrain: (i) => (sea[i] ? 1 : p.good[i] === WASTE ? 6 : [2, 4, 3, 5][p.good[i]]), ground: (i) => (sea[i] ? SEA : p.good[i] === WASTE ? WASTEG : TILE[p.good[i]]),
       owner: () => b.cells.map(() => NONE),
       pieces() {
         const q = T.match.position, out = [];

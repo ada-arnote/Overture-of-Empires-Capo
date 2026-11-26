@@ -282,7 +282,7 @@ createTable({
     });
     document.body.classList.toggle("atlas", b.flat);
     return hexBoard(T, stage, {
-      picture, lines, labels, plain: true, lands: b.region, fine: { cells: b.fine, of: b.of, mid: b.mid }, cells: [], rough: [], sea: [...b.mid.map(() => false), true],
+      picture, lines, labels, lands: b.region, fine: { cells: b.fine, of: b.of, mid: b.mid }, cells: [], rough: [], sea: [...b.mid.map(() => false), true],
       ground: (i) => (i >= b.n ? SEA : LAND[b.region[i] % LAND.length]),
       owner: () => [...T.match.position.owner, NONE],
       pieces: () => T.match.position.owner.map((seat, at) => ({ kind: "army", at, seat, rgb: RGB[seat], count: T.match.position.str[at], now: seat === T.match.turn, fort: !!T.match.position.forts?.[at], cap: !!T.match.position.caps?.includes(at), leader: !!T.match.position.leaders?.includes(at) })),

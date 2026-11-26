@@ -67,14 +67,17 @@ export function canDraw() {
   return !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(name);
 }
 
-export function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null }) {
+/** terrain(i): what the land of a cell is, shown as a shape on its top (2 grain, 3 clay, 4 sand, 5 salt, 6 rock, 7 hills). wood: the address of the table's picture. probe: time the first frames and say "slow" if they drag. */
+export function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false }) {
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
   const m = picture || hexPicture(cells, rough, sea, size), painter = new Painter(under), cam = new Camera(), system = matchMedia("(prefers-reduced-motion: reduce)");
   painter.load(m);
   const ends = m.ends || (fit ? fit.map((i) => m.mid[i]) : m.mid).flatMap(([x, y]) => [[x - m.R, y], [x + m.R, y], [x, y - m.R], [x, y + m.R]]); // fit: the cells worth framing (an island without most of its sea)
-  const show = m.mid.map((_, i) => ({ land: lands?.[i], rgb: ground(i), from: ground(i), to: ground(i), owner: -1, top: sea[i] ? 0.2 : 1, topTo: sea[i] ? 0.2 : 1, glow: 0, wet: 0, start: 0, ends: 0 }));
+  const show = m.mid.map((_, i) => ({ land: lands?.[i], kind: sea[i] ? 1 : terrain?.(i) || 0, rgb: ground(i), from: ground(i), to: ground(i), owner: -1, top: sea[i] ? 0.2 : 1, topTo: sea[i] ? 0.2 : 1, glow: 0, wet: 0, start: 0, ends: 0 }));
+  if (wood) { const img = new Image(); img.onload = () => { if (alive) { painter.wood(img); redraw(); } }; img.src = wood; }
+  let timed = probe ? [] : null;
   const tops = new Float32Array(m.n + 1), listeners = { pick: [], hover: [] };
   let L = LOOKS[look], lookName = look, motion = "system", pat = false, queued = false, dirty = true, alive = true, spots = [], hovering = -1, swing = null, until = 0, lit = 0, marks = [], point = null;
 
@@ -87,6 +90,11 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     queued = false;
     if (!alive) return;
     let moving = t < until;
+    if (timed && L.rise) { // the first frames, timed: a device that drags is told so, and the page can open flat instead
+      timed.push(t);
+      if (timed.length < 14 && !document.hidden) moving = true;
+      else { const d = timed.slice(1).map((v, i) => v - timed[i]).sort((a, b) => a - b); if (timed.length > 13 && d[d.length >> 1] > 24) (listeners.slow || []).forEach((f) => f()); timed = null; }
+    }
     show.forEach((c, i) => {
       if (c.start || c.ends) {
         const k = t <= c.start ? 0 : t >= c.ends ? 1 : (t - c.start) / (c.ends - c.start);
@@ -110,7 +118,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     const beat = calm() || !lit ? 0 : Math.max(0, 1.5 - (t - lit) / 1000); // a preview pulses briefly, then the board is still
     if (beat > 0) moving = true;
     if (dirty) { painter.send(show); dirty = false; }
-    painter.draw(cam, dpr(), { unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, pat, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [226, 233, 241], land: [255, 226, 150] }); // silver marks what can be chosen; the lands keep their own line
+    painter.draw(cam, dpr(), { unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, pat, bevel: L.rise ? Math.max(1.5, Math.min(5, m.R * 0.1)) : 0, table: L.rise > 0, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [226, 233, 241], land: [255, 226, 150] }); // silver marks what can be chosen; the lands keep their own line
     drawOver(t);
     if (moving) redraw();
   }
@@ -153,6 +161,14 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     if (s.cap) { emblem(ctx, 3, x - q * 1.2, y - q * 0.1, q * 1.1); ctx.lineWidth = 2.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.fillStyle = "#ffd76a"; ctx.fill(); }
     if (s.leader) { emblem(ctx, 8, x, y - r * 2.15, q * 1.1); ctx.lineWidth = 2.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.fillStyle = "#ffd76a"; ctx.fill(); }
     ctx.fillStyle = "#1a1411"; ctx.font = `700 ${Math.round(q * (s.count > 99 ? 0.85 : 1.15))}px system-ui,"Segoe UI",sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(s.count), x, y + 0.5);
+  }
+  /** A number on its plate: round for short numbers, and it grows sideways so that five digits still fit. */
+  function plate(text, x, y, r, fill) {
+    ctx.font = `700 ${Math.round(r * 1.12)}px system-ui,"Segoe UI",sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const w = Math.max(0, ctx.measureText(text).width / 2 - r * 0.62);
+    ctx.beginPath(); ctx.arc(x - w, y, r, Math.PI / 2, Math.PI * 1.5); ctx.arc(x + w, y, r, -Math.PI / 2, Math.PI / 2); ctx.closePath();
+    ctx.fillStyle = fill; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#1a1411"; ctx.stroke();
+    ctx.fillStyle = "#1a1411"; ctx.fillText(text, x, y + 0.5);
   }
   function arrow(a, b) {
     cam.projectTo(m.mid[a][0], m.mid[a][1], show[a].top * unit()); const x = cam.px, y = cam.py; cam.projectTo(m.mid[b][0], m.mid[b][1], show[b].top * unit());
@@ -252,8 +268,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       g.addColorStop(0, `rgb(${c.map((v) => Math.min(255, Math.round(v * 1.45 + 24)))})`); g.addColorStop(1, `rgb(${c.map((v) => Math.round(v * 0.62))})`);
       tower(ctx); ctx.lineWidth = 3.4 / h; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(20,15,12,.95)"; ctx.stroke(); ctx.fillStyle = g; ctx.fill(); ctx.restore();
       const r = Math.max(10.5, h * 0.26), by = foot - h * 0.34;
-      ctx.beginPath(); ctx.arc(x, by, r, 0, 7); ctx.fillStyle = s.warn ? "#f2a08c" : s.now ? "#dfe8f3" : "#f6eedb"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#1a1411"; ctx.stroke();
-      ctx.fillStyle = "#1a1411"; ctx.font = `700 ${Math.round(r * 1.12)}px system-ui,"Segoe UI",sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(s.count), x, by + 0.5);
+      plate(String(s.count), x, by, r, s.warn ? "#f2a08c" : s.now ? "#dfe8f3" : "#f6eedb");
     }
     if (point) arrow(...point);
   }
@@ -339,7 +354,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       const t = performance.now(), slow = !quick && !calm(), fade = !quick && !slow, step = Math.min(90, 900 / Math.max(1, order.length)), place = new Map(order.map((c, i) => [c, i]));
       let last = 0;
       owner.forEach((o, i) => {
-        const c = show[i], to = o < 0 ? ground(i) : mix(seats[o], ground(i), rough[i] ? 0.1 : 0), tall = sea[i] ? 0.2 : homes.has(i) ? 1.5 : o < 0 ? 0.75 : 1.2;
+        const c = show[i], to = o < 0 ? ground(i) : mix(seats[o], ground(i), rough[i] ? 0.1 : 0), tall = sea[i] ? 0.2 : (homes.has(i) ? 1.5 : o < 0 ? 0.75 : 1.2) + (c.kind === 7 ? 0.3 : 0); // hills stand a little above the plain
         if (c.owner === o && c.topTo === tall) return;
         const wait = slow && place.has(i) ? place.get(i) * step : 0, long = slow ? 320 : fade ? 200 : 1; // reduced motion: all at once, a quick fade, no hop
         Object.assign(c, { from: c.rgb, to, topFrom: slow ? c.top : tall, topTo: tall, hop: slow ? 0.5 : 0, start: t + wait, ends: t + wait + long, soak: slow && o >= 0 && c.owner !== o });
