@@ -2,6 +2,20 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased: Grain and Glass
+
+**Players**
+- **Grain and Glass has a lesson.** The first Play offers "New here? Learn by playing": a short game on a small island against a gentle bot, 8 points to win, in nine steps. It shows where to put your first depots and routes, what the roll does, how to trade, what building costs and scores, when to end your turn, the raid roll and the toll gate, the awards and plans, and how to win. Teach me again is in the menu.
+- Grain and Glass keeps the goal in view: the top bar says "Round 3, 10 points to win", and How to play now starts with how many points win.
+- Builds you cannot pay for yet stay in the move panel, greyed, with what is missing ("missing 1 Clay") or why there is nowhere to build. On a wide screen a small cost card sits at the top left and says the same for every build.
+- Hex numbers stay in view while you choose: a hex you can pick gets a silver edge and a ring round its number instead of a mark over it. On a phone the numbers are smaller than the hexes, so the colour of the land shows and they no longer run together, and the island fills the screen with less sea around it.
+- The roll now says its total ("Rolled 6 and 3, so 9"), and the numbers that yielded get a bright band.
+- The last gold on the boards is gone: what you can choose, what yielded and the chosen piece are marked in silver in every table game, and in Capo your own land and "you" on the friends and foes map are silver.
+
+**Contributors**
+- `src/map/board.js`: a `fit` option frames only the cells given; a legal hex with a number token is ringed round the token, not dotted over it; highlights are silver, and the land lines between lands keep their own colour through a new `uLand` in `src/map/paint.js`.
+- The lesson uses the coach's existing API through the game's own `lesson` hook in `site/glass.js`; no shared file changed for it.
+
 ## v0.6.6 (2026-11-26): An Inch of Ink for every player
 
 **Players**

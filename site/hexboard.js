@@ -16,7 +16,7 @@ function patterns(make, f) {
 }
 
 /**
- * o.picture and o.fine { cells, of } for a board of provinces. Otherwise o: cells (axial), rough[], sea[], ground(i), owner() -> seats or -1 by cell, pieces() -> standing pieces, tap(i), can(i).
+ * o.picture and o.fine { cells, of } for a board of provinces. Otherwise o: cells (axial), fit (the cells to frame, or all), rough[], sea[], ground(i), owner() -> seats or -1 by cell, pieces() -> standing pieces, tap(i), can(i).
  */
 export function hexBoard(T, stage, o) {
   let b = null, svg = null, pat = false;
@@ -46,7 +46,7 @@ export function hexBoard(T, stage, o) {
   };
   if (canDraw()) {
     try {
-      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, look: LOOKS[kept] ? kept : wide && !o.plain ? "relief" : "flat" });
+      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, fit: o.fit, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, look: LOOKS[kept] ? kept : wide && !o.plain ? "relief" : "flat" });
       b.on("pick", (i) => { if (i >= 0) o.tap(i); });
       b.on("hover", (i) => b?.setCursor(i >= 0 && T.ready() && o.can(i)));
       b.on("lost", () => { b = null; still(); });
