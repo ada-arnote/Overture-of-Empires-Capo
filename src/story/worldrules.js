@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The rules of the world game: the AI proposes moves, these rules accept, trim or refuse each one and say why.
 // Land, wars and treaties change only here. Attacks are settled by replayable dice and each country's might.
-import { draw } from "./rules.js";
+import { draw } from "./line.js";
 
 // Invented numbers for a fiction, from 1 to 10. Countries not listed get 2, or 3 if they hold twelve provinces or more.
 export const MIGHT = {
@@ -164,15 +164,31 @@ export function worldFacts(g, geo) {
   ];
 }
 
-/** The provinces worth naming in the prompt: the player's, the land next to them, and both sides of every front. */
-export function placesFor(g, geo, all) {
-  const want = new Set(), me = g.player;
-  for (const id of all) if (geo.owner(id) === me) { want.add(id); for (const n of [...geo.neighbours(id), ...(geo.across?.(id) || [])]) want.add(n); }
-  for (const w of g.wars) {
-    const [a, b] = w.pair.split("|");
-    for (const id of all) if (geo.owner(id) === a || geo.owner(id) === b) for (const n of geo.neighbours(id)) { const o = geo.owner(n); if ((o === a || o === b) && o !== geo.owner(id)) { want.add(id); want.add(n); } }
-  }
-  return [...want].slice(0, 90).map((id) => `- ${id} ${geo.place(id).name} (${geo.owner(id)})`);
+/**
+ * The provinces worth naming in the prompt, most useful first, each tagged with why it is there:
+ * both sides of every front the player fights on (by land and across narrow seas); an enemy's coast when a war has
+ * no shared border; the player's heartland; land borders, then sea crossings, with a few provinces of each neighbour; other wars' fronts;
+ * then the rest of the player's land. At most `cap` lines. geo.home(code) names a country's largest province.
+ */
+export function placesFor(g, geo, all, cap = 90) {
+  const me = g.player, tag = new Map(), add = (id, why) => { if (!tag.has(id)) tag.set(id, why); };
+  const near = (id) => [...geo.neighbours(id), ...(geo.across?.(id) || [])];
+  const mine = all.filter((id) => geo.owner(id) === me);
+  const front = (a, b) => {
+    let touch = false;
+    for (const id of all) if (geo.owner(id) === a) for (const n of near(id)) if (geo.owner(n) === b) { add(id, "front"); add(n, "front"); touch = true; }
+    return touch;
+  };
+  for (const enemy of warsOf(g, me)) if (!front(me, enemy)) for (const id of all) if (geo.owner(id) === enemy && geo.coastal(id)) add(id, "enemy coast");
+  const home = geo.home?.(me); if (home) add(home, "heartland");
+  // land borders before sea crossings, and no neighbour fills the list on its own: at most four provinces each
+  // by land and two each across the sea
+  const shown = new Map(), beyond = (n, most, why) => { const o = geo.owner(n), k = `${why}:${o}`; if ((shown.get(k) || 0) >= most || tag.has(n)) return; shown.set(k, (shown.get(k) || 0) + 1); add(n, why); };
+  for (const id of mine) if (geo.neighbours(id).some((n) => geo.owner(n) !== me)) { add(id, "land border"); for (const n of geo.neighbours(id)) if (geo.owner(n) !== me) beyond(n, 4, "over the border"); }
+  for (const id of mine) if ((geo.across?.(id) || []).some((n) => geo.owner(n) !== me)) { add(id, "coast"); for (const n of geo.across(id)) if (geo.owner(n) !== me) beyond(n, 2, "across the sea"); }
+  for (const w of g.wars) { const [a, b] = w.pair.split("|"); if (a !== me && b !== me) front(a, b); }
+  for (const id of mine) add(id, "own land");
+  return [...tag].slice(0, cap).map(([id, why]) => `- ${id} ${geo.place(id).name} (${geo.owner(id)}; ${why})`);
 }
 
 // ---- counsel and favour that act (rulings 54 and 56) ----

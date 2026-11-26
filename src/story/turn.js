@@ -3,6 +3,7 @@
 // moves (wars, peace, treaties, attacks, handovers). The rules in worldrules.js decide which moves stand.
 import { VERBS, worldFacts } from "./worldrules.js";
 import { STANDING, WORDS } from "./talk.js";
+import { crosses } from "./line.js";
 
 export const JUMPS = [["1w", "A week", 0, 7], ["1m", "A month", 1, 0], ["3m", "Three months", 3, 0], ["6m", "Six months", 6, 0], ["1y", "A year", 12, 0], ["custom", "Other length", 0, 0], ["auto", "Until something happens", 12, 0]];
 export const UNITS = [["days", "days"], ["weeks", "weeks"], ["months", "months"], ["years", "years"]];
@@ -101,7 +102,7 @@ export function worldPrompt(g, world, actions, to, auto = false) {
     "", "RECENT (the last turns, oldest first)",
     ...(recent.length ? recent : ["- nothing yet: this is the first turn"]),
     "", "SAID THIS TURN (chats and counsel: words only, nothing agreed is done until a MOVE)", ...(world.talk?.length ? world.talk : ["- nothing"]),
-    "", "PLACES (province id, name, holder)", ...world.places,
+    "", "PLACES (province id, name, holder; why it is listed, most important first)", ...world.places,
     ...(world.disputes?.length ? ["", "DISPUTED LAND NEAR THE PLAYER", ...world.disputes] : []),
     "", "ACTIONS (what the player does in this turn)",
     ...(actions.length ? actions.map((a, i) => `${i + 1}. ${a}`) : ["- none: the player waits and watches"]),
@@ -118,51 +119,83 @@ export function worldPrompt(g, world, actions, to, auto = false) {
   ].join("\n");
 }
 
-/** Read a reply: keep what fits, say what was left out and why. A reply for another turn is not read at all. */
-export function readWorldReply(text, g, known, to, auto = false) {
-  const lines = String(text || "").split(/\r?\n/).map((l) => l.trim().replace(/^[*_`>-]+\s*/, "").replace(/\s*[*_`]+$/, "")), dropped = [], events = [];
-  const turn = lines.find((l) => /^TURN\s*:/i.test(l));
-  if (!turn || turn.replace(/^TURN\s*:\s*/i, "").trim() !== turnCode(g)) return { matched: false, events, moves: [], news: [], summary: "", dropped, stop: to };
+// ---- reading a reply, forgivingly: chat formatting, numbering, names for codes and dates in words are all fine ----
+const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+const pad = (n) => String(n).padStart(2, "0");
+/** A date in the forms people and models write, as YYYY-MM-DD, or "" when it is not a date. */
+export function isoDate(s) {
+  const t = String(s || "").trim().replace(/(\d)(st|nd|rd|th)\b/gi, "$1").replace(/,/g, " ").replace(/\s+/g, " ");
+  let m = t.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (m) return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
+  const month = (w) => MONTHS.findIndex((x) => w && x.startsWith(w.toLowerCase().slice(0, 3))) + 1;
+  m = t.match(/^(\d{1,2}) ([A-Za-z]+) (\d{4})$/);
+  if (m && month(m[2])) return `${m[3]}-${pad(month(m[2]))}-${pad(m[1])}`;
+  m = t.match(/^([A-Za-z]+) (\d{1,2}) (\d{4})$/);
+  if (m && month(m[1])) return `${m[3]}-${pad(month(m[1]))}-${pad(m[2])}`;
+  return "";
+}
+const LABEL = /^(TURN|MOVE|EVENT|NEWS|SUMMARY|ADVICE|STOP|STANDING|END)\s*[:.\-]\s*/i;
+/** One line of a reply, with list marks, emphasis, quote marks and a leading pipe taken off. */
+function clean(line) {
+  let l = line.trim().replace(/\*\*|__|`/g, "");
+  l = l.replace(/^(?:[-*+>•]|\d{1,2}[.)])\s+/, "").replace(/^\|\s*/, "").replace(/\s*\|$/, "").trim();
+  return l.replace(/^\*(\w)/, "$1");
+}
+
+/**
+ * Read a reply: keep what fits, say what was left out and why. A reply for another turn is not read at all.
+ * codeOf(text) turns a country code or a country's name into the map's code, or "" when it is neither.
+ * Every kept line also has to pass the hard line; a line that crosses it is dropped.
+ */
+export function readWorldReply(text, g, known, to, auto = false, codeOf = (s) => s) {
+  const lines = String(text || "").split(/\r?\n/).map(clean), dropped = [], events = [];
+  const code = (s) => { const raw = String(s || "").trim(), up = ALIASES[raw.toUpperCase()] || raw.toUpperCase(); return known(up) ? up : codeOf(raw) || up; };
+  const body = (l, label) => l.replace(LABEL, "").trim();
+  const is = (l, label) => { const m = l.match(LABEL); return m && m[1].toUpperCase() === label; };
+  // the turn's own code proves the reply belongs to this turn, wherever on the TURN line it sits
+  const turn = lines.find((l) => is(l, "TURN"));
+  if (!turn || !turn.includes(turnCode(g))) return { matched: false, events, moves: [], news: [], summary: "", dropped, stop: to };
   let summary = "", advice = null, stop = to, standing = null;
-  const moves = [], news = [];
+  const moves = [], news = [], line = (t) => (crosses(t) ? (dropped.push("a line left out because it crossed the hard line"), "") : t);
   // an automatic turn ends where the AI says, if that is inside the turn; otherwise at the latest date
   if (auto) {
-    const s = lines.find((l) => /^STOP\s*:/i.test(l)), d = s?.replace(/^STOP\s*:\s*/i, "").split("|")[0].trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(d || "") && d > g.date && d <= to) stop = d;
+    const s = lines.find((l) => is(l, "STOP")), d = isoDate(s && body(s).split("|")[0]);
+    if (d && d > g.date && d <= to) stop = d;
     else dropped.push(`no stop date inside the turn, so it runs to ${to}`);
   }
   for (const l of lines) {
-    if (/^STANDING\s*:/i.test(l)) {
-      const [dir, ...why] = l.replace(/^STANDING\s*:\s*/i, "").split("|").map((s) => s.trim());
-      if (g.mode !== "nation" && ["up", "down"].includes((dir || "").toLowerCase())) standing = { dir: dir.toLowerCase(), why: why.join(" | ").slice(0, 200) };
+    if (is(l, "STANDING")) {
+      const [dir, ...why] = body(l).split("|").map((s) => s.trim());
+      if (g.mode !== "nation" && ["up", "down"].includes((dir || "").toLowerCase())) standing = { dir: dir.toLowerCase(), why: line(why.join(" | ").slice(0, 200)) };
       continue;
     }
-    if (/^NEWS\s*:/i.test(l)) {
-      const [outlet, headline, ...rest] = l.replace(/^NEWS\s*:\s*/i, "").split("|").map((s) => s.trim());
-      if (headline && news.length < 4) news.push({ outlet: (outlet || "a newspaper").slice(0, 60), headline: headline.slice(0, 140), text: rest.join(" | ").slice(0, 300) });
+    if (is(l, "NEWS")) {
+      const [outlet, headline, ...rest] = body(l).split("|").map((s) => s.trim());
+      if (headline && news.length < 4 && line(`${outlet} ${headline} ${rest.join(" ")}`)) news.push({ outlet: (outlet || "a newspaper").slice(0, 60), headline: headline.slice(0, 140), text: rest.join(" | ").slice(0, 300) });
       continue;
     }
-    if (/^SUMMARY\s*:/i.test(l)) { summary = l.replace(/^SUMMARY\s*:\s*/i, "").slice(0, 300); continue; }
-    if (/^ADVICE\s*:/i.test(l)) {
-      const [word, ...rest] = l.replace(/^ADVICE\s*:\s*/i, "").split("|").map((s) => s.trim());
-      if (WORDS.includes((word || "").toLowerCase()) && trustedOf(g)) advice = { word: word.toLowerCase(), text: rest.join(" | ").slice(0, 400), name: trustedOf(g).name, seat: g.council.trusted };
+    if (is(l, "SUMMARY")) { summary = line(body(l).slice(0, 300)); continue; }
+    if (is(l, "ADVICE")) {
+      const [word, ...rest] = body(l).split("|").map((s) => s.trim());
+      if (WORDS.includes((word || "").toLowerCase()) && trustedOf(g)) advice = { word: word.toLowerCase(), text: line(rest.join(" | ").slice(0, 400)), name: trustedOf(g).name, seat: g.council.trusted };
       continue;
     }
-    if (/^MOVE\s*:/i.test(l)) {
-      const [, action, country, verb, target, detail] = l.replace(/^MOVE\s*:\s*/i, "").split("|").map((s) => s.trim());
-      const code = (s) => ALIASES[(s || "").toUpperCase()] || (s || "").toUpperCase();
+    if (is(l, "MOVE")) {
+      const [, action, country, verb, target, detail] = body(l).split("|").map((s) => s.trim());
       if (moves.length >= 24) { dropped.push("more than 24 moves"); continue; }
-      moves.push({ action: Number(action) || 0, country: code(country), verb: (verb || "").toUpperCase(), target: /^[A-Za-z]{3}$/.test(target || "") ? code(target) : (target || ""), detail: detail === "-" ? "" : detail || "" });
+      const tgt = /^[A-Z]{3}-\d+$/i.test(target || "") ? target.toUpperCase() : codeOf(target || "") || target || "";
+      moves.push({ action: Number(String(action || "").replace(/\D/g, "")) || 0, country: code(country), verb: (verb || "").toUpperCase().replace(/[^A-Z]/g, ""), target: tgt, detail: detail === "-" ? "" : detail || "" });
       continue;
     }
-    if (!/^EVENT\s*:/i.test(l)) continue;
-    const [date, rawCode, ...rest] = l.replace(/^EVENT\s*:\s*/i, "").split("|").map((s) => s.trim());
-    const said = rest.join(" | ").slice(0, 700), code = ALIASES[(rawCode || "").toUpperCase()] || (rawCode || "").toUpperCase();
+    if (!is(l, "EVENT")) continue;
+    const [rawDate, rawCode, ...rest] = body(l).split("|").map((s) => s.trim());
+    const said = rest.join(" | ").slice(0, 700), at = code(rawCode), date = isoDate(rawDate);
     if (events.length >= 8) { dropped.push("more than eight events"); break; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "") || date < g.date || date > stop) { dropped.push(`an event dated "${date || "nothing"}", outside the turn`); continue; }
-    if (!known(code)) { dropped.push(`an event in "${rawCode || "nowhere"}", which is not a country on the map`); continue; }
-    if (said.length < 20) { dropped.push(`an event in ${code} with almost no words`); continue; }
-    events.push({ date, at: code, text: said });
+    if (!date || date < g.date || date > stop) { dropped.push(`an event dated "${rawDate || "nothing"}", outside the turn`); continue; }
+    if (!known(at)) { dropped.push(`an event in "${rawCode || "nowhere"}", which is not a country on the map`); continue; }
+    if (said.length < 20) { dropped.push(`an event in ${at} with almost no words`); continue; }
+    if (!line(said)) continue;
+    events.push({ date, at, text: said });
   }
   events.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   return { matched: true, events, moves, news, summary, advice, standing, dropped, stop };

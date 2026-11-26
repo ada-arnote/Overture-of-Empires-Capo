@@ -30,11 +30,26 @@ def text(raw):
     except UnicodeDecodeError: return raw.decode("cp1252")
 
 
+# Small islands the source leaves unnamed (its note says only "minor island"), named from where they lie.
+MINOR = {"COL+99?": "Malpelo", "VEN+99?": "Isla de Aves", "AIA+99?": "Sombrero", "MEX+99?": "Arrecife Alacranes", "KIR+99?": "Nikumaroro", "RUS+99?": "Kara Sea islands"}
+
+
+def group_name(rows, members, big):
+    """A merged province is named after the region most of its members belong to (so Paris's departments read as
+    Ile-de-France, not as the region of their largest neighbour); a single province keeps its own name."""
+    if len(members) == 1: return name_of(rows[big])
+    count = defaultdict(float)
+    for i in members:
+        if rows[i]["region"]: count[rows[i]["region"]] += 1 + rows[i]["km2"] / 1e9
+    return max(count, key=count.get) if count else name_of(rows[big])
+
+
 def name_of(row):
-    """The source has a few broken names; another of its name fields is usually whole."""
+    """The source has a few broken or missing names; another of its name fields is usually whole."""
+    if row.get("adm1_code") in MINOR: return MINOR[row["adm1_code"]]
     for k in ("name", "gn_name", "woe_name", "gns_name", "name_alt"):
         if row.get(k) and "�" not in row[k]: return row[k].split("|")[0]
-    return row["name"].replace("�", "")
+    return row["name"].replace("�", "") or f"{row['admin']} minor islands"
 
 
 def table(path):
@@ -224,9 +239,17 @@ def main(folder, count):
         lx, ly = miller(float(rows[big]["longitude"] or 0), float(rows[big]["latitude"] or 0))
         r0 = rows[g]
         codes[g] = r0["adm1_code"]
-        out_provinces.append({"id": r0["adm1_code"], "name": name_of(rows[big]) if len(members[g]) == 1 else (rows[big]["region"] or name_of(rows[big])),
+        out_provinces.append({"id": r0["adm1_code"], "name": group_name(rows, members[g], big),
                               "country": r0["adm0_a3"], "members": sorted(rows[i]["adm1_code"] for i in members[g]),
                               "label": [round(lx), round(ly)], "rings": kept})
+    # where two provinces of one country still share a name, each adds its largest member's own name
+    seen = defaultdict(list)
+    for p in out_provinces: seen[(p["country"], p["name"])].append(p)
+    for (_, nm), same in seen.items():
+        if len(same) > 1:
+            for p in same:
+                own = name_of(rows[max((i for i in range(len(rows)) if rows[i]["adm1_code"] in p["members"]), key=lambda i: rows[i]["km2"])])
+                if own != nm: p["name"] = f"{nm} ({own})"
     # arcs no kept ring uses are left out, and the rest renumbered
     live = sorted({k if k >= 0 else ~k for p in out_provinces for r in p["rings"] for k in r})
     number = {k: n for n, k in enumerate(live)}

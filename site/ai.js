@@ -29,15 +29,22 @@ export async function ask(r, prompt, signal) {
     res = await fetch(`${base}/chat/completions`, {
       method: "POST", signal, credentials: "omit", referrerPolicy: "no-referrer",
       headers: { "Content-Type": "application/json", ...(r.key ? { Authorization: `Bearer ${r.key}` } : {}) },
-      body: JSON.stringify({ model: r.model || undefined, messages: [{ role: "user", content: prompt }], temperature: 0.8, max_tokens: 1800 }),
+      // no temperature or length is sent: some services refuse them, and thinking models can spend a short limit before answering
+      body: JSON.stringify({ model: r.model || undefined, messages: [{ role: "user", content: prompt }] }),
     });
   } catch (e) {
-    if (e.name === "AbortError") throw new Error("Stopped.");
+    if (e.name === "AbortError") throw new Error(signal?.reason === "time" ? "The AI took more than two minutes. Ask again, or copy the prompt into a chat." : "Stopped.");
     throw new Error("The service could not be reached. Check the address, your connection, and whether it allows calls from a web page.");
   }
-  if (!res.ok) throw new Error(res.status === 401 || res.status === 403 ? "The service refused the key." : res.status === 429 ? "The service says too many requests; wait a little." : `The service answered with an error (${res.status}).`);
+  if (!res.ok) {
+    // the service's own words help more than a number; only a short, plain piece of them is shown
+    const said = await res.json().then((d) => d?.error?.message || d?.message || "").catch(() => ""), why = String(said).replace(/\s+/g, " ").slice(0, 160);
+    const plain = res.status === 401 || res.status === 403 ? "The service refused the key." : res.status === 429 ? "The service says too many requests; wait a little." : `The service answered with an error (${res.status}).`;
+    throw new Error(why ? `${plain} It said: ${why}` : plain);
+  }
   const data = await res.json().catch(() => null), text = data?.choices?.[0]?.message?.content;
   if (typeof text !== "string" || !text.trim()) throw new Error("The service sent no text back.");
+  if (data?.choices?.[0]?.finish_reason === "length" && !/\bEND\b/.test(text)) throw new Error("The reply was cut off before its end. Ask again, or use a model that allows longer replies.");
   const today = new Date().toISOString().slice(0, 10);
   if (r.day !== today) { r.day = today; r.calls = 0; r.sent = 0; r.got = 0; }
   r.calls++; r.sent += data.usage?.prompt_tokens || Math.ceil(prompt.length / 4); r.got += data.usage?.completion_tokens || Math.ceil(text.length / 4);

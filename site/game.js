@@ -4,9 +4,10 @@
 // moves; the rules in src/story/worldrules.js decide which stand, and the map follows.
 import { JUMPS, MODES, UNITS, jumpFrom, monthsBetween, newWorldGame, readWorldReply, turnCode, worldPrompt } from "../src/story/turn.js";
 import { adviceFor, applyMoves, leaks, mightOf, placesFor, treatiesOf, warsOf } from "../src/story/worldrules.js";
-import { crossesLine } from "../src/story/rules.js";
+import { crossesLine } from "../src/story/line.js";
+import { checkSave as checkSaveOf, keptRecords, mendGame, restoreGame, snapGame } from "../src/story/saves.js";
 import { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacter, scenarioFrom, scenarioText } from "../src/story/scenarios.js";
-import { STANDING, askPrompt, changeStanding, chatPrompt, councilPrompt, moveFavour, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
+import { askPrompt, changeStanding, chatPrompt, councilPrompt, moveFavour, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
 import { loadWorld, ownerColour, worldMap } from "./worldmap.js";
 import { ask, forgetKey, loadRoute, saveRoute } from "./ai.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
@@ -35,9 +36,20 @@ function icon(key) {
 let world, map, state = null, past = [], route = loadRoute(), sheet = null, pending = null, jump = { key: "1m", n: 2, unit: "weeks" }, hush = 0, ledgerTab = "events", view = "countries";
 
 // games saved before wars and treaties existed get empty lists
-const mend = (s) => ({ wars: [], treaties: [], offers: [], chats: [], counsel: [], council: null, standing: STANDING[s.mode] || 5, facts: [], might: {}, edits: [], sandbox: false, ...s });
-const save = () => { try { localStorage.setItem(KEEP, JSON.stringify({ state, past: past.slice(-10) })); } catch { /* the game still runs for this visit */ } };
+const mend = mendGame;
+// A take-back record is the game without its log (the log only grows; the record keeps its length), so twenty
+// of them cost about what one full copy used to. Each says what it takes back.
+const snap = (why) => snapGame(state, why);
+const restore = (rec) => restoreGame(rec, state.log);
+const remember = (why) => { past.push(snap(why)); past = past.slice(-20); };
+let saveFailed = false;
+const save = () => {
+  try { localStorage.setItem(KEEP, JSON.stringify({ state, past })); saveFailed = false; }
+  catch { if (!saveFailed) toast("This browser would not keep the game; it may be full. Use Game, then Save to a file."); saveFailed = true; }
+};
 const load = () => { try { return JSON.parse(localStorage.getItem(KEEP) || "null"); } catch { return null; } };
+const checkSave = (s) => checkSaveOf(s, (id) => world.provinces.has(id), (c) => homes.has(c));
+const keptPast = keptRecords;
 function toast(t) { const b = $("toast"); b.textContent = t; b.classList.add("on"); clearTimeout(hush); hush = setTimeout(() => b.classList.remove("on"), 3400); }
 // a country still being made goes by YOU (no country on the map uses it) until it has a code of its own
 const ownCode = () => (/^[A-Z]{3}$/.test(draft?.own.code || "") ? draft.own.code : "YOU");
@@ -55,12 +67,33 @@ const fmtDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefin
 
 // the largest province of each country, where the camera goes to show it
 let homes = new Map();
+// A country's home is its largest province on its main landmass (the group of its provinces joined by land that has
+// the most of them), so France is centred on France and not on an overseas region that happens to be wide.
 function index() {
   homes = new Map();
-  for (const p of world.provinces.values()) {
-    const a = (p.box[2] - p.box[0]) * (p.box[3] - p.box[1]), h = homes.get(p.country);
-    if (!h || a > h.a) homes.set(p.country, { a, id: p.id });
+  const byCountry = new Map();
+  for (const p of world.provinces.values()) { if (!byCountry.has(p.country)) byCountry.set(p.country, []); byCountry.get(p.country).push(p); }
+  const area = (p) => (p.box[2] - p.box[0]) * (p.box[3] - p.box[1]);
+  for (const [c, list] of byCountry) {
+    const seen = new Set();
+    let best = null;
+    for (const start of list) {
+      if (seen.has(start.id)) continue;
+      const group = [start]; seen.add(start.id);
+      for (let i = 0; i < group.length; i++) for (const n of world.neighbours.get(group[i].id)) { const q = world.provinces.get(n); if (q.country === c && !seen.has(n)) { seen.add(n); group.push(q); } }
+      if (!best || group.length > best.length) best = group;
+    }
+    const top = best.reduce((m, p) => (area(p) > area(m) ? p : m));
+    homes.set(c, { a: area(top), id: top.id });
   }
+}
+/** A country's code from its code or its name, as an AI may write either; "" when it is neither. */
+function codeOf(s) {
+  const k = String(s || "").trim().toLowerCase().replace(/^the\s+/, "");
+  if (!k) return "";
+  if (custom()?.name?.toLowerCase() === k) return custom().code;
+  for (const [c, n] of Object.entries(world.countries)) if (n.toLowerCase().replace(/^the\s+/, "") === k && homes.has(c)) return c;
+  return "";
 }
 const showCountry = (code) => { const h = homes.get(code), first = h ? h.id : held(code)[0]; if (first) map.show(first); };
 const held = (code) => [...world.provinces.keys()].filter((id) => ownerOf(id) === code);
@@ -111,7 +144,7 @@ function disputeLines() {
 function geo() {
   return {
     name, place: (id) => world.provinces.get(id), owner: ownerOf, neighbours: (id) => world.neighbours.get(id), across: (id) => world.across.get(id), coastal: (id) => world.coast.has(id),
-    holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c, hasCoast: (c) => held(c).some((id) => world.coast.has(id)), might: (c) => state?.might?.[c],
+    home: (c) => homes.get(c)?.id, holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c, hasCoast: (c) => held(c).some((id) => world.coast.has(id)), might: (c) => state?.might?.[c],
     claims: (id, c) => (claimsOf.get(id) || []).some((d) => d.claimants.includes(c) && ownerOf(id) !== c),
     find: (s) => { const k = String(s || "").trim(); if (world.provinces.has(k)) return k; const low = k.toLowerCase(), hits = [...world.provinces.values()].filter((p) => p.name.toLowerCase() === low); return hits.length === 1 ? hits[0].id : null; },
   };
@@ -188,7 +221,8 @@ function stepScenario(box) {
   const openRow = el("div", undefined, "row"); openRow.append(button("Open a scenario file", () => file.click()), file);
   for (const [title, what] of SOON) { const l = el("label"), t = el("span"); l.style.opacity = ".55"; t.append(el("b", `${title}: coming soon`), el("small", what)); l.append(t); list.append(l); }
   box.append(el("p", "Lead a country, a leader's life or an ordinary one. You decide what to do; an AI tells what happens; the rules decide wars, borders and treaties.", "note"), el("h3", "Choose where the story starts"), list, openRow, nextRow("Next: your country", () => "", "country"));
-  if (kept?.state) { const r = el("div", undefined, "row"); r.append(button(`Continue as ${kept.state.custom?.name || name(kept.state.player)}, ${fmtDate(kept.state.date)}`, () => { state = mend(kept.state); past = (kept.past || []).map(mend); draft = null; $("start").classList.remove("open"); play(); })); box.append(el("h3", "Or carry on"), r); }
+  const good = kept?.state ? checkSave(kept.state) : null;
+  if (good) { const r = el("div", undefined, "row"); r.append(button(`Continue as ${good.custom?.name || name(good.player)}, ${fmtDate(good.date)}`, () => { state = good; past = keptPast(kept); draft = null; $("start").classList.remove("open"); play(); })); box.append(el("h3", "Or carry on"), r); }
 }
 
 function countryProblem() {
@@ -294,7 +328,7 @@ async function fillCharacter() {
   draft.fill = { prompt: characterPrompt(ownName() || "their country", draft.mode, draft.character) };
   if (route.route !== "address") { startScreen(); return; }
   toast("Asking the AI...");
-  try { takeCharacter(await ask(route, draft.fill.prompt)); } catch (e) { draft.fill.error = e.message; startScreen(); }
+  try { takeCharacter(await call(draft.fill.prompt)); } catch (e) { draft.fill.error = e.message; startScreen(); }
 }
 function takeCharacter(text) {
   const next = readCharacter(text, draft.character);
@@ -350,7 +384,7 @@ function topBar() {
     length.push(n, unit);
   }
   const date = el("span", undefined, "date"); date.append(el("b", fmtDate(state.date)), el("small", `Turn ${state.turn}`));
-  const go = button("Advance", advance, "go"); go.append(icon("go"));
+  const go = button(calling ? "Waiting..." : "Advance", advance, "go"); go.append(icon("go")); go.disabled = !!calling;
   const menu = button("", () => open(sheet === "game" ? null : "game"), "ic"); menu.append(icon("game")); menu.setAttribute("aria-label", "Game: saves, scenarios and the AI"); menu.title = "Game";
   top.replaceChildren(who, el("span", MODES[state.mode][0], "mode"), ...(state.sandbox ? [el("span", "Sandbox", "mode sandbox")] : []), date, jumpPick, ...length, go, menu);
 }
@@ -402,7 +436,13 @@ function steps() {
   return ol;
 }
 
+function waiting() {
+  const w = el("div", undefined, "row"); w.append(el("span", "Waiting for the AI (up to two minutes)...", "note"), button("Stop", stopCall));
+  return w;
+}
+
 function pasteBox() {
+  if (calling) return waiting();
   const wrap = el("div"), out = el("textarea", undefined, "plain paste"), back = el("textarea", undefined, "plain paste");
   out.value = pending.prompt; out.readOnly = true; out.setAttribute("aria-label", "The prompt");
   back.placeholder = "Paste the AI's whole reply here."; back.setAttribute("aria-label", "The AI's reply");
@@ -414,6 +454,7 @@ function pasteBox() {
 }
 
 function advance() {
+  if (calling) return toast("Capo is already waiting for the AI.");
   const acts = state.actions || [], bad = crossesLine(acts);
   if (bad.length) return toast(`Action ${bad.join(", ")} is refused: nothing sexual involving minors.`);
   const to = jumpFrom(state.date, jump);
@@ -423,15 +464,27 @@ function advance() {
   if (route.route === "paste") { open("actions"); return; }
   viaAddress();
 }
+// one call to an AI at a time, which can be stopped, and which gives up after two minutes
+let calling = null;
+async function call(prompt) {
+  if (calling) throw new Error("Capo is already waiting for the AI.");
+  calling = new AbortController();
+  const timer = setTimeout(() => calling?.abort("time"), 120000);
+  topBar(); if (sheet) open(sheet);
+  try { return await ask(route, prompt, calling.signal); }
+  finally { clearTimeout(timer); calling = null; topBar(); }
+}
+const stopCall = () => calling?.abort("stop");
 async function viaAddress() {
-  toast("Asking the AI...");
-  try { finish(await ask(route, pending.prompt)); } catch (e) { pending.error = e.message; open("actions"); toast(e.message); }
+  if (calling) return toast("Capo is already waiting for the AI.");
+  pending.error = "";
+  try { const text = await call(pending.prompt); finish(text); } catch (e) { if (pending) { pending.error = e.message; open("actions"); } toast(e.message); }
 }
 function finish(text) {
-  const r = readWorldReply(text, state, (c) => homes.has(c) || custom()?.code === c, pending.to, pending.auto);
+  const r = readWorldReply(text, state, (c) => homes.has(c) || custom()?.code === c, pending.to, pending.auto, codeOf);
   if (!r.matched) { pending.error = `That reply is not for this turn: it must start with TURN: ${turnCode(state)}.`; open("actions"); return; }
   if (!r.events.length) { pending.error = `No event could be read${r.dropped.length ? `: ${r.dropped.slice(0, 3).join("; ")}` : ""}.`; open("actions"); return; }
-  past.push(structuredClone(state));
+  remember(`turn ${state.turn}`);
   const receipt = applyMoves(state, r.moves, geo(), pending.actions, monthsBetween(state.date, r.stop));
   receipt.push(...moveFavour(state, receipt), ...changeStanding(state, r.standing));
   // advisers who have turned against the player may leak; the AI hears of it next turn
@@ -508,7 +561,7 @@ function countryInput(label) {
 }
 /** Make one sandbox change: keep the old game to undo, mark the game as edited, record what was done. */
 function edit(text, change) {
-  past.push(structuredClone(state));
+  remember(`the change "${text}"`);
   change();
   state.sandbox = true;
   state.edits = [...(state.edits || []), { turn: state.turn, date: state.date, text }].slice(-60);
@@ -563,7 +616,7 @@ function master(box) {
   box.append(el("div", "Might, from 1 to 10 (decides battles)", "note"), r4);
 
   const r5 = el("div", undefined, "row");
-  r5.append(button("Undo the last change", () => { if (!past.length) return toast("Nothing to undo."); state = past.pop(); save(); topBar(); map.refresh(); open("master"); toast("Undone."); }));
+  r5.append(button(past.length ? `Undo ${past[past.length - 1].why}` : "Undo the last change", () => { if (!past.length) return toast("Nothing to undo."); state = restore(past.pop()); save(); topBar(); map.refresh(); open("master"); toast("Undone."); }));
   box.append(r5);
   if (state.edits?.length) {
     const list = el("ul", undefined, "list");
@@ -577,9 +630,9 @@ let asking = null;
 function askAI(prompt, take, where) {
   asking = { prompt, take, where, error: "" };
   if (route.route !== "address") { open(where); return; }
-  toast("Asking the AI...");
-  ask(route, prompt).then((text) => settle(text)).catch((e) => { if (asking) { asking.error = e.message; open(where); } });
+  if (calling) return toast("Capo is already waiting for the AI.");
   open(where);
+  call(prompt).then((text) => settle(text)).catch((e) => { if (asking) { asking.error = e.message; open(where); } });
 }
 function settle(text) {
   const why = asking.take(text);
@@ -587,6 +640,7 @@ function settle(text) {
   const where = asking.where; asking = null; save(); open(where);
 }
 function askBox() {
+  if (calling) return waiting();
   const wrap = el("div"), out = Object.assign(el("textarea", undefined, "plain paste"), { value: asking.prompt, readOnly: true }), back = Object.assign(el("textarea", undefined, "plain paste"), { placeholder: "Paste the AI's whole reply here." });
   out.setAttribute("aria-label", "The prompt"); back.setAttribute("aria-label", "The AI's reply");
   const go = el("div", undefined, "row");
@@ -738,9 +792,9 @@ function gameSheet(box) {
   const aiRow = el("div", undefined, "row");
   aiRow.append(button("Save", () => { store(); toast("Saved."); }, "go"), button("Test", async () => { store(); try { const t = await ask(route, "Reply with the single word READY."); toast(`It answered: ${t.slice(0, 40)}`); } catch (e) { toast(e.message); } }), button("Forget the key", () => { route = forgetKey(route); open("game"); toast("Key forgotten."); }));
   const file = el("input"); file.type = "file"; file.accept = ".json,application/json"; file.hidden = true;
-  file.onchange = async () => { const f = file.files[0]; if (!f) return; try { const s = JSON.parse(await f.text()); if (s?.v !== 1 || !(homes.has(s.player) || s.custom?.code === s.player)) throw new Error(); state = s; past = []; save(); toast("Opened."); open(null); play(); } catch { toast("That file is not a Capo game."); } };
+  file.onchange = async () => { const f = file.files[0]; if (!f) return; try { const s = checkSave(JSON.parse(await f.text())); if (!s) throw new Error(); state = s; past = []; save(); toast("Opened."); open(null); play(); } catch { toast("That file is not a Capo game."); } };
   const saves = el("div", undefined, "row");
-  saves.append(button("Take back the last turn", () => { if (!past.length) return toast("Nothing to take back."); state = past.pop(); save(); topBar(); open("game"); map.refresh(); }),
+  saves.append(button(past.length ? `Take back ${past[past.length - 1].why}` : "Take back the last turn", () => { if (!past.length) return toast("Nothing to take back."); state = restore(past.pop()); save(); topBar(); open("game"); map.refresh(); }),
     button("Save to a file", () => { const a = el("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: "application/json" })); a.download = `capo-${state.player}-turn-${state.turn}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }),
     button("Open a file", () => file.click()),
     button("New game", () => { if (confirm("Leave this game? It stays saved until you begin another.")) { open(null); $("top").hidden = true; $("dock").hidden = true; state = null; draft = null; map.refresh(); startScreen(); } }));
@@ -758,7 +812,7 @@ function gameSheet(box) {
     toast("Saved. Open it from the first screen, or share the file.");
   }));
   const again = el("div", undefined, "row"); again.append(button("Show the guide", () => { open(null); guide(0); }));
-  box.append(el("h2", "Game"), home(), again, el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back.`, "note"), saves, file,
+  box.append(el("h2", "Game"), home(), again, ...(saveFailed ? [el("p", "This browser would not keep the game (its storage may be full). Save to a file now so nothing is lost.", "warn")] : []), el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back.`, "note"), saves, file,
     el("h3", "Save the world as a scenario"), el("p", `A starting point others can play: today's date, who holds what, wars, treaties, story facts and might${state.custom ? `, and ${state.custom.name}` : ""}. Not your actions, chats or council.`, "note"), sTitle, sBlurb, sOpen, sRow,
     el("h3", "How Capo reaches an AI"), line("Route", pick), line("Address", base), line("Model", model), line("Key", key), keepLine, aiRow,
     el("p", `Today: ${route.calls || 0} calls, about ${route.sent || 0} tokens sent and ${route.got || 0} received.`, "note"),
@@ -840,7 +894,9 @@ async function start() {
   $("out").onclick = () => map.zoomBy(1 / 1.6);
   $("home").onclick = () => (state ? showCountry(state.player) : map.reset());
   const kept = load();
-  if (kept?.state && (homes.has(kept.state.player) || kept.state.custom?.code === kept.state.player)) { state = mend(kept.state); past = (kept.past || []).map(mend); play(); } else startScreen();
+  const good = kept?.state ? checkSave(kept.state) : null;
+  if (good) { state = good; past = keptPast(kept); play(); }
+  else { if (kept) toast("The saved game in this browser could not be read, so a new one starts. Any game saved to a file can still be opened."); startScreen(); }
 }
 addEventListener("keydown", (e) => { if (e.key === "Escape" && guideAt >= 0) guide(-1); });
 guard();

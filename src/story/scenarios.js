@@ -2,6 +2,8 @@
 // The scenarios a Capo game can start from. Each sets the date, the opening and who may be played.
 // Fiction: not news and not a forecast.
 
+import { crosses } from "./line.js";
+
 export const SCENARIOS = [
   {
     id: "today",
@@ -45,7 +47,7 @@ export function readCharacter(text, character) {
     const m = line.trim().replace(/^[*_`>-]+\s*/, "").match(/^([A-Za-z ]+?)\s*:\s*(.+)$/);
     if (!m) continue;
     const hit = CHARACTER.find(([, label]) => label.toUpperCase() === m[1].trim().toUpperCase());
-    if (hit && !out[hit[0]]) out[hit[0]] = m[2].replace(/\s*[*_`]+$/, "").trim().slice(0, 200);
+    if (hit && !out[hit[0]] && !crosses(m[2])) out[hit[0]] = m[2].replace(/\s*[*_`]+$/, "").trim().slice(0, 200);
   }
   return out;
 }

@@ -2,6 +2,7 @@
 // Talking in Capo: chats with countries or people, and the council. Words only: nothing said here changes
 // land, wars or treaties. What was said goes into the next turn's prompt, and favour moves by rule.
 import { VERBS } from "./worldrules.js";
+import { crosses } from "./line.js";
 
 export const WORDS = ["favourable", "unclear", "against"];
 // Who is in the player's circle depends on their standing (ruling 59): 5 ruling, 2 an ordinary person.
@@ -67,7 +68,7 @@ export function readChat(text, chat, nameOf = (c) => c) {
     const [speaker, ...rest] = l.replace(/^REPLY\s*:\s*/i, "").split("|");
     const s = clip(speaker, 80), said = clip(rest.join("|"), 800);
     const hit = may.find((m) => m.toUpperCase() === s.toUpperCase() || (chat.with.includes(m) && nameOf(m).toLowerCase() === s.toLowerCase()) || (m.length > 3 && s.toLowerCase().startsWith(m.toLowerCase().split(",")[0])));
-    if (hit && said.length > 1 && out.length < 3) out.push({ who: hit, text: said });
+    if (hit && said.length > 1 && out.length < 3 && !crosses(said)) out.push({ who: hit, text: said });
   }
   return out;
 }
@@ -95,7 +96,7 @@ export function readCouncil(text, seats) {
     if (!/^MEMBER\s*:/i.test(l)) continue;
     const [seat, nm, traits, skill, wants, likes, hates] = l.replace(/^MEMBER\s*:\s*/i, "").split("|").map((s) => clip(s, 160));
     const key = seats.find(([k, label]) => k === (seat || "").toLowerCase() || label.toLowerCase() === (seat || "").toLowerCase())?.[0];
-    if (!key || out[key] || !nm) continue;
+    if (!key || out[key] || !nm || crosses(l)) continue;
     const verbs = (s) => (s || "").toUpperCase().split(/[\s,;/]+/).filter((v) => VERBS[v]).slice(0, 3);
     out[key] = { name: clip(nm, 60), traits: clip(traits, 60), skill: Math.max(1, Math.min(5, Number(skill) || 3)), wants: clip(wants, 120), likes: verbs(likes), hates: verbs(hates), favour: 0, since: "" };
   }
@@ -125,7 +126,7 @@ export function readAsk(text, members) {
     const [seat, word, ...rest] = l.replace(/^SAYS\s*:\s*/i, "").split("|").map((s) => s.trim());
     const hit = members.find(([k, m]) => k === (seat || "").toLowerCase() || m.name.toLowerCase() === (seat || "").toLowerCase());
     const w = WORDS.find((x) => x === (word || "").toLowerCase());
-    if (hit && w && !out.some((o) => o.seat === hit[0])) out.push({ seat: hit[0], name: hit[1].name, word: w, text: clip(rest.join("|"), 500) });
+    if (hit && w && !out.some((o) => o.seat === hit[0]) && !crosses(rest.join(" "))) out.push({ seat: hit[0], name: hit[1].name, word: w, text: clip(rest.join("|"), 500) });
   }
   return out;
 }
