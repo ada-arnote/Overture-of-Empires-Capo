@@ -22,10 +22,13 @@ export const SWITCHES = {
   neutral: { values: [1, 2, 3], normal: 2 },
   spoils: { values: ["trade", "wait"], normal: "trade" }, // trade: put a player out, take their cards, and hand in at once while you hold five or more
   score: { values: ["land", "rounds"], normal: "land" }, // rounds: from round 2 each seat scores what it holds at the start of its turn, and once more at the end; the most points wins when the rounds run out
+  luck: { values: ["fair", "bag"], normal: "fair" }, // bag: every die is drawn from an open bag of throws (see BAG), so each face comes up as often as the others
 };
+/** The bag of throws: six of each face. A die is drawn from what is left; when fewer than LOW are left, a fresh set goes in. */
+export const BAG = { each: 6, low: 12 };
 const SETS = {
-  classic: { start: "dealt", dice: "standard", muster: "floor", cards: "rising", goal: 100, rounds: 0, neutral: 2, order: "fixed", opening: "lean", spoils: "trade", score: "land" },
-  ours: { start: "far", dice: "even", muster: "plus", cards: "flat", goal: 65, rounds: 10, neutral: 3, order: "fixed", opening: "grade", spoils: "wait", score: "rounds" },
+  classic: { start: "dealt", dice: "standard", muster: "floor", cards: "rising", goal: 100, rounds: 0, neutral: 2, order: "fixed", opening: "lean", spoils: "trade", score: "land", luck: "fair" },
+  ours: { start: "far", dice: "even", muster: "plus", cards: "flat", goal: 65, rounds: 10, neutral: 3, order: "fixed", opening: "grade", spoils: "wait", score: "rounds", luck: "fair" },
 };
 export const EXPANSIONS = ["forts", "leaders", "capitals", "secrets", "events"];
 const off = { values: [false, true], normal: false };
@@ -96,7 +99,7 @@ function draw(p, dice) {
 }
 
 // ---- turns ----
-const copy = (p) => ({ ...p, owner: [...p.owner], str: [...p.str], hands: p.hands.map((h) => [...h]), deck: [...p.deck], spent: [...p.spent], reserve: [...p.reserve], outBy: [...p.outBy], back: [...p.back], points: p.points && [...p.points], forts: p.forts && [...p.forts], leaders: p.leaders && [...p.leaders], caps: p.caps && [...p.caps], goals: p.goals && p.goals.map((g) => ({ ...g })), pend: p.pend ? { ...p.pend } : null });
+const copy = (p) => ({ ...p, owner: [...p.owner], str: [...p.str], hands: p.hands.map((h) => [...h]), deck: [...p.deck], spent: [...p.spent], reserve: [...p.reserve], outBy: [...p.outBy], back: [...p.back], points: p.points && [...p.points], forts: p.forts && [...p.forts], leaders: p.leaders && [...p.leaders], caps: p.caps && [...p.caps], goals: p.goals && p.goals.map((g) => ({ ...g })), pend: p.pend ? { ...p.pend } : null, bag: p.bag && [...p.bag] });
 
 /** The start of a seat's turn. Changes p. */
 function begin(p, events) {
@@ -233,13 +236,22 @@ function spoils(p, events) {
   p.phase = "place";
   events.push({ kind: "spoils", seat: p.seat, n: p.hands[p.seat].length });
 }
+/** One die: thrown fair, or drawn from the open bag of throws, which is topped up with a fresh set when it runs low. Changes p. */
+function throwOne(p, dice) {
+  if (!p.bag) return dice.die();
+  if (p.bag.reduce((n, c) => n + c, 0) < BAG.low) p.bag = p.bag.map((c) => c + BAG.each);
+  let r = dice.below(p.bag.reduce((n, c) => n + c, 0)), face = 0;
+  while (r >= p.bag[face]) r -= p.bag[face++];
+  p.bag[face]--;
+  return face + 1;
+}
 /** One volley, or volleys until it is settled. Changes p. */
 function fight(p, m, dice, events) {
   const s = p.seat, was = p.owner[m.to], rolls = [], had = p.str[m.from], how = terms(p, m.from, m.to);
   let held = p.str[m.to];
   do {
-    const A = Array.from({ length: Math.min(how.a, p.str[m.from] - 1) }, () => dice.die()).sort((x, y) => y - x);
-    const D = Array.from({ length: Math.min(how.d, held) }, () => dice.die()).sort((x, y) => y - x);
+    const A = Array.from({ length: Math.min(how.a, p.str[m.from] - 1) }, () => throwOne(p, dice)).sort((x, y) => y - x);
+    const D = Array.from({ length: Math.min(how.d, held) }, () => throwOne(p, dice)).sort((x, y) => y - x);
     const [a, d] = meet(A, D, how);
     p.str[m.from] -= a;
     held = Math.max(0, held - d);
@@ -265,14 +277,11 @@ function fight(p, m, dice, events) {
   if (knocked) spoils(p, events);
 }
 
-/** The different amounts worth offering between one and `n`: every amount when there are few. */
-export function amounts(n) {
-  if (n <= 12) return Array.from({ length: n }, (_, i) => i + 1);
-  return [...new Set([1, 2, 3, 4, 5, Math.floor(n / 4), Math.floor(n / 2), Math.floor((n * 3) / 4), n - 1, n])].sort((a, b) => a - b);
-}
+/** Every amount from one to `n`: a stack can be split exactly. */
+export const amounts = (n) => Array.from({ length: Math.max(0, n) }, (_, i) => i + 1);
 
 export const banners = {
-  id: "banners", version: "6",
+  id: "banners", version: "7",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 4 }, map: { values: MAPS, normal: "world" },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -281,7 +290,7 @@ export const banners = {
   setup(o, dice) {
     const key = dice.below(0x40000000), b = areaBoard(key, o.map), all = b.near.map((_, i) => i);
     const rule = SETS[o.style] ? { ...SETS[o.style] } : Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]])), each = Math.floor(b.n / o.seats);
-    const p = { classic: true, style: o.style, rule, key, map: o.map, seats: o.seats, owner: Array(b.n).fill(NONE), str: Array(b.n).fill(rule.neutral), hands: Array.from({ length: o.seats }, () => []), deck: [], spent: [], traded: 0, reserve: Array(o.seats).fill(0), outBy: Array(o.seats).fill(NONE), seat: 0, step: 0, round: 1, rounds: rule.rounds, phase: "place", left: 0, took: 0, pend: null, over: null, forts: null, leaders: null, back: Array(o.seats).fill(0), caps: null, goals: null, points: rule.score === "rounds" && rule.rounds ? Array(o.seats).fill(0) : null };
+    const p = { classic: true, style: o.style, rule, key, map: o.map, seats: o.seats, owner: Array(b.n).fill(NONE), str: Array(b.n).fill(rule.neutral), hands: Array.from({ length: o.seats }, () => []), deck: [], spent: [], traded: 0, reserve: Array(o.seats).fill(0), outBy: Array(o.seats).fill(NONE), seat: 0, step: 0, round: 1, rounds: rule.rounds, phase: "place", left: 0, took: 0, pend: null, over: null, forts: null, leaders: null, back: Array(o.seats).fill(0), caps: null, goals: null, points: rule.score === "rounds" && rule.rounds ? Array(o.seats).fill(0) : null, bag: rule.luck === "bag" ? Array(6).fill(BAG.each) : null };
     if (rule.cards !== "none") p.deck = dice.shuffle([...all, b.n, b.n + 1]);
     if (o.forts) p.forts = all.map(() => 0);
     if (o.leaders) p.leaders = Array(o.seats).fill(NONE);

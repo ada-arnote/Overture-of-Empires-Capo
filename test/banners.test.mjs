@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chance, createMatch, seedState } from "../src/core/index.js";
-import { EXPANSIONS, HAND, NONE, SAFETY, SWITCHES, amounts, banners, boardOf, bonusOf, bordersOf, cellsOf, gain, goalOf, muster, nearOf, odds, setWorth, setsOf, toll, wholeOf } from "../src/games/banners/rules.js";
+import { BAG, EXPANSIONS, HAND, NONE, SAFETY, SWITCHES, amounts, banners, boardOf, bonusOf, bordersOf, cellsOf, gain, goalOf, muster, nearOf, odds, setWorth, setsOf, toll, wholeOf } from "../src/games/banners/rules.js";
 import { DICE, fair, meet, odds as diceOdds, toll as diceToll } from "../src/games/banners/dice.js";
 import { areaBoard } from "../src/games/areas.js";
 import { TIERS, choose } from "../src/games/banners/bot.js";
@@ -188,9 +188,49 @@ test("the odds shown are the odds thrown, for every dice rule", () => {
     }
   }
 });
-test("amounts: every one when few, sensible steps when many, always one and the whole", () => {
-  for (let n = 1; n <= 12; n++) assert.deepEqual(amounts(n), Array.from({ length: n }, (_, i) => i + 1));
-  for (const n of [13, 40, 99]) { const a = amounts(n); assert.equal(a[0], 1); assert.equal(a.at(-1), n); for (let i = 1; i < a.length; i++) assert.ok(a[i] > a[i - 1]); }
+test("amounts: every one from one to the whole, so a stack can be split exactly", () => {
+  for (const n of [1, 5, 12, 13, 17, 40, 99]) assert.deepEqual(amounts(n), Array.from({ length: n }, (_, i) => i + 1));
+  assert.deepEqual(amounts(0), []);
+});
+test("moving in after a conquest: any number from none to all but one may follow, exactly", () => {
+  const p = made([[A, 0, 19], [B, 1, 1], [far, 1, 1]]), q = win(p, A, B).position;
+  assert.equal(q.phase, "occupy");
+  const spare = q.str[A] - 1, list = banners.moves(q).map((m) => m.n);
+  assert.deepEqual(list, Array.from({ length: spare + 1 }, (_, i) => i), "every amount is offered, 7 and 13 among them");
+  for (const n of [0, 7, spare]) {
+    const r = banners.apply(q, { do: "occupy", n }, roller("o")).position;
+    assert.equal(r.str[B], 1 + n); assert.equal(r.str[A], q.str[A] - n); assert.equal(r.phase, "attack");
+  }
+  // placing and the last move are exact too
+  const put = Object.assign(structuredClone(p), { phase: "place", left: 23 });
+  assert.deepEqual(banners.moves(put).filter((m) => m.at === A).map((m) => m.n), amounts(23));
+  const after = banners.apply(q, { do: "occupy", n: 0 }, roller("o")).position;
+  assert.deepEqual(banners.moves(after).filter((m) => m.do === "move" && m.from === A && m.to === B).map((m) => m.n), amounts(after.str[A] - 1));
+});
+test("dice luck, an open bag: off by default in every rule set; on in Custom, every die is drawn from the bag, which never runs dry and replays", () => {
+  for (const style of STYLES) assert.equal(start(2, style).position.bag, null, style);
+  assert.equal(SWITCHES.luck.normal, "fair");
+  const m = createMatch(banners, { seed: "bag", options: { seats: 2, style: "custom", luck: "bag", start: "far" } });
+  assert.deepEqual(m.position.bag, Array(6).fill(BAG.each));
+  const p = made([[A, 0, 40], [B, 1, 30]], { style: "custom" });
+  p.bag = Array(6).fill(BAG.each);
+  const before = p.bag.reduce((n, c) => n + c, 0), r = banners.apply(p, { do: "attack", from: A, to: B, roll: "once" }, roller("b1"));
+  const e = r.events.find((x) => x.kind === "fight"), thrown = e.rolls.flat(2);
+  assert.equal(r.position.bag.reduce((n, c) => n + c, 0), before - thrown.length, "each die thrown leaves the bag");
+  for (let f = 0; f < 6; f++) assert.equal(r.position.bag[f], BAG.each - thrown.filter((v) => v === f + 1).length, `face ${f + 1}`);
+  assert.deepEqual(r, banners.apply(p, { do: "attack", from: A, to: B, roll: "once" }, roller("b1")), "the same seed draws the same dice");
+  // a long fight: the bag is topped up and never empties, and over many throws each face comes up as often as the others, within a fresh set
+  const q = made([[A, 0, 800], [B, 1, 700]], { style: "custom" });
+  q.bag = Array(6).fill(BAG.each);
+  const long = banners.apply(q, { do: "attack", from: A, to: B, roll: "all" }, roller("b2")), faces = Array(7).fill(0);
+  for (const [x, y] of long.events.find((x) => x.kind === "fight").rolls) for (const v of [...x, ...y]) faces[v]++;
+  const all = faces.reduce((n, c) => n + c, 0);
+  assert.ok(all > 600, `${all} dice`);
+  for (let f = 1; f <= 6; f++) assert.ok(Math.abs(faces[f] - all / 6) <= 6 * BAG.each, `face ${f}: ${faces[f]} of ${all}`);
+  assert.ok(long.position.bag.every((c) => c >= 0) && long.position.bag.reduce((n, c) => n + c, 0) >= BAG.low - 1);
+  const g = botGame(banners, choose, { seed: "bag game", options: { seats: 3, style: "custom", luck: "bag" }, tiers: ["normal"], each: sound });
+  ended(g, 3);
+  replays(g, [banners]);
 });
 
 test("3 against 2: Traditional throws at most 3 dice against 2, highest meets highest, and the odds shown count every throw", () => {
