@@ -62,6 +62,7 @@ export function hexBoard(T, stage, o) {
     show(order, quick) { if (b) return b.show(o.owner(), { pieces: o.pieces(), order, quick, names: o.names?.() }); still(); return 0; },
     light: (cells, chosen) => b?.preview(cells, chosen),
     clear: () => b?.preview([]),
+    at: (i) => b?.screenOf(i), // where a cell is on the screen, for the coach
     destroy: () => b?.destroy(),
   };
 }
