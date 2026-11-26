@@ -31,46 +31,37 @@ export function coach(T, L, key, go) {
   function end(text) { on = false; shown = -1; offer = null; keep(KEY, "1"); hide(); say.textContent = text; }
   function start() { offer = null; on = true; at = 0; shown = -1; events = []; match = null; starting = true; try { go(); } finally { starting = false; } match = T.match; check(); }
 
-  /** Beside what it points at and inside the screen; on a phone, clear of the move panel unless it points into it. */
-  function place(r, inside) {
-    const w = box.offsetWidth, h = box.offsetHeight, vw = innerWidth, vh = innerHeight, act = document.getElementById("act"), a = act && !act.hidden ? act.getBoundingClientRect() : null;
-    const floor = vw <= 820 && a && !inside ? a.top - 8 : vh - 8;
-    let x = (vw - w) / 2, y = Math.max(8, Math.min(floor - h, (vh - h) / 2));
-    if (r) {
-      x = Math.min(vw - w - 8, Math.max(8, r.left + r.width / 2 - w / 2));
-      const seats = document.getElementById("seats"), top = vw <= 820 && seats && !seats.hidden ? seats.getBoundingClientRect().bottom + 8 : 8;
-      y = r.top + r.height / 2 > vh / 2 ? (vw <= 820 && !inside && r.top - 16 >= top + h ? top : r.top - h - 16) : r.bottom + 16; // a phone keeps the board's middle clear
-      if (y < 8 && inside && vw > 820) { x = Math.max(8, r.left - w - 16); y = r.bottom - h; } // beside the move panel when there is no room above it
-      y = Math.max(8, Math.min(floor - h, y));
-    }
-    if (a && !inside && x < a.right && x + w > a.left && y < a.bottom && y + h > a.top && a.left - w - 16 >= 8) x = a.left - w - 16; // off the move panel
-    else if (a && !inside && x < a.right && x + w > a.left && y < a.bottom && y + h > a.top) y = Math.max(8, a.top - h - 8);
-    box.style.left = `${Math.round(x)}px`; box.style.top = `${Math.round(y)}px`;
+  /** The lesson lives at the top of the move panel, so it never lies on the board or takes a tap meant for it. Only the offer floats, over the title. */
+  function dock() {
+    const act = document.getElementById("act"), handle = act?.querySelector(".tray");
+    if (!act || box.parentNode === act) return;
+    if (handle) handle.after(box); else act.prepend(box);
+    box.style.left = box.style.top = "";
+  }
+  function float() { if (box.parentNode !== document.body) document.body.append(box); box.style.left = `${Math.round((innerWidth - box.offsetWidth) / 2)}px`; box.style.top = `${Math.round(Math.max(8, (innerHeight - box.offsetHeight) / 2))}px`; }
+  /** A control the step asks for, in the move panel: scrolled into sight below the lesson, which stays at the panel's top. */
+  function show(e) {
+    const act = document.getElementById("act");
+    if (!act || !act.contains(e) || act.scrollHeight <= act.clientHeight) return;
+    const a = act.getBoundingClientRect(), r = e.getBoundingClientRect(), top = box.getBoundingClientRect().bottom + 8;
+    if (r.bottom > a.bottom - 8) act.scrollTop += r.bottom - a.bottom + 8;
+    else if (r.top < top) act.scrollTop -= top - r.top;
   }
   const keys = (e) => (!e?.getClientRects?.().length ? null : e.matches("button:not(:disabled), input, [tabindex='0']") ? e : ["[aria-checked=true]", "[tabindex='0']", "button.main:not(:disabled)", "button:not(:disabled):not([hidden]), input"].reduce((f, q) => f || e.querySelector(q), null));
   /** Follow what is pointed at: the board moves under the finger, panels grow and shrink. */
   function frame() {
     loop = 0;
-    if (offer) { place(null); return; }
+    if (offer) { float(); return; }
     if (!on || box.hidden) return;
     if (T.demo || T.match !== match || !T.ready()) { hide(); return; }
-    let target = aimed[0], r = null, inside = false;
+    let target = aimed[0];
     unlight();
     if (typeof target === "number") {
       const p = T.board?.at?.(target), stage = document.getElementById("stage").getBoundingClientRect(), x = p && stage.left + p.x, y = p && stage.top + p.y, over = p && document.elementFromPoint(x, y);
-      if (over?.closest("#stage, #coach")) { r = { left: x - 26, top: y - 26, right: x + 26, bottom: y + 26, width: 52, height: 52 }; ring.style.left = `${Math.round(r.left)}px`; ring.style.top = `${Math.round(r.top)}px`; ring.hidden = false; }
-      else target = aimed[1]; // under a panel, or no moving board: point at the list that does the same
+      if (over?.closest("#stage")) { ring.style.left = `${Math.round(x - 26)}px`; ring.style.top = `${Math.round(y - 26)}px`; ring.hidden = false; }
+      else target = aimed[1]; // out of sight, or no moving board: point at the list that does the same
     }
-    if (target?.getClientRects?.().length) {
-      lit = target; lit.classList.add("coached");
-      inside = !!target.closest("#act");
-      r = (inside ? target.closest("#act") : target).getBoundingClientRect(); // beside the move panel, never over it
-    }
-    place(r, inside);
-    if (!ring.hidden && aimed[1]?.getClientRects?.().length) { // no room beside it (a phone with a full move panel): the list instead
-      const b = box.getBoundingClientRect();
-      if (b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top) { ring.hidden = true; lit = aimed[1]; lit.classList.add("coached"); }
-    }
+    if (target?.getClientRects?.().length) { lit = target; lit.classList.add("coached"); }
     loop = requestAnimationFrame(frame);
   }
   function draw() {
@@ -83,12 +74,14 @@ export function coach(T, L, key, go) {
     next.textContent = last ? "Done" : "Next";
     stop.textContent = "End the lesson";
     stop.hidden = last && !!s.next; // Done says it
+    dock();
     box.hidden = false;
     shown = at;
     aimed = [s.at?.(T), s.or?.(T)]; // asked once a look, followed every frame
     cancelAnimationFrame(loop);
     frame();
     if (!fresh) return;
+    if (lit) show(lit);
     say.textContent = `Lesson, step ${at + 1} of ${steps.length}. ${text}`;
     // a step that only tells waits on Next; one that asks for a move puts the keys on its control, or on the list that mirrors the board,
     // but only when they were nowhere in particular: on the page, or on this card
@@ -131,7 +124,7 @@ export function coach(T, L, key, go) {
       next.hidden = false;
       next.onclick = () => { next.onclick = step; start(); };
       box.hidden = false;
-      frame();
+      float();
       next.focus({ preventScroll: true });
       say.textContent = `New here? ${words.textContent}`;
       return true;

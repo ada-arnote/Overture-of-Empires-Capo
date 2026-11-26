@@ -89,10 +89,17 @@ function plans(p) {
   return out;
 }
 
+/**
+ * The lesson's bot ("gentle", not offered at the table): it plays as easy, but takes no rival land before round 3 and then
+ * at most one hex a turn (a unit that took or cleared this turn is marked as moved), so a newcomer has time to learn.
+ */
+const calm = (p) => p.round < 3 || p.unit.some((r, c) => r && p.moved[c] && p.owner[c] === p.seat);
+const mild = (p, all) => (calm(p) ? all.filter((m) => m.to === undefined || p.owner[m.to] === p.seat || p.owner[m.to] === NONE) : all);
+
 /** Choose one action a little at a time. `dice` breaks ties and drives random. */
 export function* thinking(p, dice, tier = "normal") {
   if (tier === "random") return dice.pick(fable.moves(p).filter((m) => m.do !== "concede"));
-  const me = p.seat, noise = tier === "easy" ? 420 : 20, all = fable.moves(p), base = value(p, me) + 5;
+  const me = p.seat, gentle = tier === "gentle", noise = tier === "easy" || gentle ? 420 : 20, all = gentle ? mild(p, fable.moves(p)) : fable.moves(p), base = value(p, me) + 5;
   if (all.some((m) => m.do === "concede") && hopeless(p, me)) return { do: "concede" };
   let best = { do: "end" }, score = base, n = 0;
   for (const m of p.classic ? sensible(p, all) : all.filter((x) => x.to !== undefined)) { // a small island can be read in full
@@ -100,7 +107,7 @@ export function* thinking(p, dice, tier = "normal") {
     if (v > score) { score = v; best = m; }
     if (++n % 4 === 0) yield;
   }
-  if (p.classic) {
+  if (p.classic && !(gentle && calm(p))) {
     for (const list of plans(p)) { // the first step now; the rest come on the next looks
       const v = value(list.reduce((q, m) => act(q, m).position, p), me) + dice.below(noise);
       if (v > score) { score = v; best = list[0]; }

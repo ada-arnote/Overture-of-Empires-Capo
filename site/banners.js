@@ -109,13 +109,19 @@ function landToShow(p) {
   const b = boardOf(p), whole = wholeOf(p, p.seat)[0], k = whole ?? nearly(p)?.[0] ?? b.lands.map((_, x) => x).sort((x, y) => p.owner.filter((o, i) => o !== p.seat && b.region[i] === x).length - p.owner.filter((o, i) => o !== p.seat && b.region[i] === y).length)[0];
   return { k, whole: whole !== undefined, at: p.owner.findIndex((o, i) => b.region[i] === k && (whole !== undefined || o === p.seat)) };
 }
+/** The weakest province of the player's that a rival could strike from next door. */
+function exposed(p) {
+  const b = boardOf(p);
+  return p.owner.map((o, i) => i).filter((i) => p.owner[i] === p.seat && b.near[i].some((j) => p.owner[j] !== p.seat && p.owner[j] !== NONE)).sort((x, y) => p.str[x] - p.str[y] || x - y)[0];
+}
 const LESSON = {
-  seed: "lesson 2", options: { style: "classic", seats: 2, map: "isles" }, kinds: ["you", "easy"],
+  // its bot is gentle (src/games/banners/bot.js): nobody is struck in round 1, then at most one province a turn
+  seed: "lesson 2", options: { style: "classic", seats: 2, map: "isles" }, kinds: ["you", "gentle"],
   steps: [
     { when: (T) => pos(T).phase === "setup", at: (T) => (source === null ? aim(pos(T))?.[0] : $("do")), or: () => $("sources"), done: (T, ev) => has(ev, "place"),
-      say: "The islands are dealt out between you and a gentle bot: choose a province of yours, on the map or in the list, then press Place to add strength there." },
-    { when: (T) => pos(T).phase !== "setup", at: () => $("info"), next: true,
-      say: "Each turn starts with new strength to place: 1 for every three provinces you hold, at least 3, and more for every land you hold whole: place it now, the same way." },
+      say: "Win by holding every province. The islands are dealt out between you and a gentle bot: choose a province of yours, on the map or in the list, then press Place to add strength there." },
+    { when: (T) => pos(T).phase !== "setup", at: () => $("info"), next: true, done: (T) => !["setup", "place"].includes(pos(T).phase), // the setup's placing does not count
+      say: (T) => { const p = pos(T), all = muster(p, p.seat).all, lean = p.round === 1 && p.rule.opening === "lean" && p.seats === 2 && p.step === 0; return `Each turn starts with new strength to place: 1 for every three provinces you hold, at least 3, and more for every land you hold whole. ${lean ? `Moving first, you place a third of your ${all} in this first turn: ${Math.floor(all / 3)}.` : `This turn you place ${all}.`} Place it now, the same way.`; } },
     { when: (T) => pos(T).phase === "attack", at: (T) => (source === null ? aim(pos(T))?.[0] : target === null ? best(pos(T), source) ?? $("targets") : $("do")), or: () => $(source === null ? "sources" : "targets"), done: (T, ev) => (target !== null && pos(T).owner[target] !== pos(T).seat) || has(ev, "fight"),
       say: "Now attack: choose a province of yours with 2 or more, then a neighbour that is not yours." },
     { when: (T) => pos(T).phase === "attack" && target !== null, at: () => $("do"), done: (T, ev) => has(ev, "fight"), pass: (T, ev) => has(ev, "done", "move"),
@@ -124,12 +130,14 @@ const LESSON = {
       say: "It is yours: choose how many more move in, then press the button; those left behind guard where you came from." },
     { when: (T) => pos(T).phase === "attack", at: () => $("end"), done: (T, ev) => has(ev, "done", "move"),
       say: "Attack again as often as you like; when you have done enough, press End turn (moving once also ends it)." },
+    { when: (T) => pos(T).round > 1 && pos(T).phase === "place", at: (T) => exposed(pos(T)) ?? null, or: () => $("sources"), done: (T, ev) => has(ev, "place"),
+      say: (T) => { const p = pos(T), at = exposed(p); return `Guard your border: a province with 1 or 2 beside a rival is easy to take.${at === undefined ? "" : ` ${nameOf(p, at)} has ${p.str[at]}.`} Place some of your ${p.left} there.`; } },
     { when: (T) => pos(T).round > 1, at: (T) => landToShow(pos(T)).at, next: true,
       say: (T) => { const p = pos(T), b = boardOf(p), { k, whole } = landToShow(p); return whole ? `You hold all of ${b.lands[k]}, so it adds ${bonusOf(b, k)} to what you place every turn; gold lines mark each land.` : `Gold lines mark the lands: hold every province of ${b.lands[k]} and it adds ${bonusOf(b, k)} to what you place every turn.`; } },
     { when: (T) => pos(T).round > 1, at: () => ($("trades").children.length ? $("trades") : $("hand").hidden ? null : $("hand")), next: true, done: (T, ev) => has(ev, "trade"),
       say: (T) => (setsOf(pos(T), pos(T).seat).length && pos(T).phase === "place" ? "You have a set: hand it in now for more strength to place." : `${pos(T).hands[pos(T).seat].length ? "You took land, so you drew a card" : "Take a province in a turn and you draw a card"}: three alike, or one of each, hand in for more strength.`) },
     { at: () => $("land"), next: true,
-      say: "Win by holding every province: the bar shows each side's share, and the bright mark is the goal. That is the lesson; play on." },
+      say: "The bar shows each side's share of the provinces, and the bright mark is the goal: all of them. That is the lesson; play on." },
   ],
 };
 const NICE = { forts: ["Forts", "Spend 4 of what you muster to build one. It throws one more die in defence."], leaders: ["Leaders", "Each player has one. It adds 1 to your best die where it stands, and comes back two rounds after it is lost."], capitals: ["Capitals", "Hold more than half of them at the start of your turn and you win. They add 1 to the defender's best die."], secrets: ["Secret goals", "Each player is dealt one. It counts at the start of your turn."], events: ["Seasons", "Some rounds bring a harvest, a storm that closes the crossings, or unrest."] };

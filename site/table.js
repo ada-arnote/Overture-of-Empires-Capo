@@ -24,7 +24,8 @@ export const el = (tag, text, cls) => { const e = document.createElement(tag); i
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const THEME = "capo-tent-theme";
 const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["away", "A friend, by link"]];
-const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
+// gentle is the lessons' bot, not offered in the setup
+const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
 const store = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* files still work */ } };
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 
@@ -117,6 +118,11 @@ export function createTable(G) {
   $("about").after(more);
   // the turn banner, one line said once to a screen reader when a person's turn starts, the tray's handle on a phone, the menu's tabs
   const banner = el("div"), say = el("p", "", "sr"), tray = el("button", undefined, "tray"), setButton = el("button", "Settings", "text"), menuBox = el("div"), tabs = el("div", undefined, "pick small tabs"), pane = el("div");
+  // take back, in sight beside End turn wherever the game allows it (the U key and the menu do the same)
+  const back = el("button", "Take back", "quiet");
+  back.type = "button"; back.id = "back"; back.hidden = true;
+  back.onclick = () => undo();
+  $("choice").querySelector(".go")?.prepend(back);
   const zoom = el("div", undefined, "zoom");
   zoom.hidden = true; zoom.setAttribute("role", "group"); zoom.setAttribute("aria-label", "Zoom the board");
   for (const [t, name, f] of [["+", "Zoom in", 1.4], ["−", "Zoom out", 1 / 1.4], ["⌂", "Show the whole board", 0]]) { const b = el("button", t, "quiet"); b.type = "button"; b.setAttribute("aria-label", name); b.onclick = () => board?.zoom(f); zoom.append(b); }
@@ -138,6 +144,7 @@ export function createTable(G) {
   document.body.append(banner, say);
   $("title").querySelector(".links").append(setButton);
   const KEY = `capo-${G.key}-2`, LOOK = `capo-${G.key}-look`, many = G.seats || [2, 3], setup = { seats: G.normal || 2, style: "classic", rounds: G.lengths[1]?.[0], who: ["you", "normal", "normal", "normal", "normal", "normal"], look: LOOK0.map((x) => [...x]), extra: Object.fromEntries([...(G.choices || []), ...(G.switches || [])].map((c) => [c.key, c.normal])), on: {} };
+  let fitted = 0; // where the phone's tray began when the board was last fitted
   let sureEnd = 0, log = [], land = [], board = null, run = 0, mark = 0, drawn = -1, fell = [], heralded = "", tab = "game";
   const T = {
     match: null, kinds: [], look: LOOK0, hurry: false, link: null, demo: true, busy: false, RGB, NAMES, read: () => read(LOOK),
@@ -159,9 +166,10 @@ export function createTable(G) {
     if (!board) return;
     const wide = innerWidth > 820, r = (id) => $(id).getBoundingClientRect(), z = SCALE[settings.text];
     if (T.demo) board.layout(wide ? { left: Math.min(innerWidth / 2, $("title").querySelector(".card").getBoundingClientRect().right), right: 0, top: 20, bottom: 20 } : { left: 0, right: 0, top: 10, bottom: innerHeight * 0.5 });
-    else if (wide && document.body.classList.contains("atlas")) board.layout({ left: 0, right: dock.hidden || list.hidden ? 0 : 360 * z, top: r("seats").bottom + 2, bottom: 4 });
-    else if (wide) board.layout({ left: 232 * z, right: innerWidth > 1180 ? (list.hidden ? 262 : 372) * z : 30, top: 12 + 74 * z, bottom: innerWidth > 1180 ? 6 : 150 * z });
-    else { document.body.style.setProperty("--act", `${innerHeight - r("act").top}px`); board.layout({ left: 0, right: 0, top: r("seats").bottom + 2, bottom: innerHeight - r("act").top + 34 }); }
+    // the move panel (with the lesson and the news in it) keeps a column of its own, so nothing floats on the board
+    else if (wide && document.body.classList.contains("atlas")) board.layout({ left: 372 * z, right: dock.hidden || list.hidden ? 0 : 360 * z, top: r("seats").bottom + 2, bottom: 4 });
+    else if (wide) board.layout({ left: 232 * z, right: 372 * z, top: 12 + 74 * z, bottom: 6 });
+    else { fitted = r("act").top; document.body.style.setProperty("--act", `${innerHeight - fitted}px`); board.layout({ left: 0, right: 0, top: r("seats").bottom + 2, bottom: innerHeight - fitted + 34 }); }
   };
   function makeBoard() {
     board?.destroy();
@@ -185,7 +193,7 @@ export function createTable(G) {
     if ((at !== document.body && at.getClientRects().length && !at.disabled) || $("sheet").open || !T.ready()) return;
     const was = !held || held === "end" ? null : $(held), ok = (e) => e && !e.disabled && e.getClientRects().length;
     const to = ok(was) && was.matches("button") ? was : was?.querySelector("[aria-checked=true], [tabindex='0']");
-    (ok(to) ? to : $("choice").querySelector("[role=radio][tabindex='0']:not(:disabled), button.main:not(:disabled), button:not(:disabled)"))?.focus({ preventScroll: true });
+    (ok(to) ? to : $("choice").querySelector("[role=radio][tabindex='0']:not(:disabled), button.main:not(:disabled), button:not(:disabled):not(#back)"))?.focus({ preventScroll: true });
   }
   function panel() {
     const at = document.activeElement;
@@ -199,7 +207,7 @@ export function createTable(G) {
     if (over) { $("status").textContent = ending(); board.clear(); } else if (!me) {
       $("status").textContent = T.away() ? `Waiting for ${NAMES[T.match.turn]}` : T.human() ? "" : `${NAMES[T.match.position.seat]} is thinking`;
       board.clear();
-    } else { G.panel(T); refocus(); }
+    } else { back.hidden = !canUndo() || !!T.match.position.live; G.panel(T); refocus(); }
     lesson?.check();
   }
   function score() {
@@ -227,7 +235,7 @@ export function createTable(G) {
     u.append(...show.map((t) => el("li", t)));
     told.textContent = `Since your last turn (${all.length})`;
     news.replaceChildren(told, u, ...(all.length > show.length ? [el("small", `${all.length - show.length} more in the log.`)] : []), hide);
-    unfold(innerWidth > 820);
+    unfold(innerWidth > 820 && innerHeight > 860); // open where there is room for it beside the board
   }
   /** A person's turn starts: said once, a bell, and at normal speed a banner for under a second. Real time has no turns. */
   let gone = 0;
@@ -560,7 +568,7 @@ export function createTable(G) {
     do { if (T.match.list.length <= floor()) break; rerolls ||= T.match.rolled; if (!T.match.undo()) break; } while (!T.human());
     if (!T.human()) { for (const mv of had.slice(T.match.list.length)) T.match.play(mv); return; } // nothing of yours to take back
     begin(T.match, T.kinds, T.link);
-    if (rerolls) toast("Taken back. The dice are already rolled: playing the same move again gives the same result.");
+    toast(rerolls ? "Taken back. The dice are already rolled: playing the same move again gives the same result." : had.length - T.match.list.length > 1 ? "Taken back, with the moves made after it." : "Taken back.");
   }
   function save() {
     const a = el("a");
@@ -709,7 +717,7 @@ export function createTable(G) {
       const s = JSON.parse(read(KEY) || "null");
       if (!s) return null;
       const { match: m } = openSave(s.save, [G.game]);
-      return Array.isArray(s.kinds) && s.kinds.length === m.options.seats && s.kinds.every((k) => k !== "away" && KINDS.some(([v]) => v === k)) ? { m, kinds: s.kinds, look: s.look || LOOK0 } : null;
+      return Array.isArray(s.kinds) && s.kinds.length === m.options.seats && s.kinds.every((k) => k !== "away" && Object.hasOwn(WORDS, k)) ? { m, kinds: s.kinds, look: s.look || LOOK0 } : null;
     } catch { return null; }
   }
   const resumeButton = () => { const k = kept(); $("resume").hidden = !k; if (k) $("resume").textContent = `Continue, round ${k.m.position.round}`; };
@@ -744,7 +752,8 @@ export function createTable(G) {
   logs.onclick = showLog;
   list.hidden = read("capo-log") === "shut";
   fold.onclick = () => { list.hidden = !list.hidden; store("capo-log", list.hidden ? "shut" : null); drawn = -1; place(); };
-  new ResizeObserver(() => document.body.style.setProperty("--ah", `${$("act").offsetHeight}px`)).observe($("act"));
+  // on a phone the board is fitted again when the tray grows or shrinks by more than a little, so the tray never sits on it and small changes do not make it jump
+  new ResizeObserver(() => { document.body.style.setProperty("--ah", `${$("act").offsetHeight}px`); if (innerWidth <= 820 && !$("act").hidden && Math.abs($("act").getBoundingClientRect().top - fitted) > 16) place(); }).observe($("act"));
   $("how").onclick = rules;
   $("review").onclick = () => { $("act").hidden = true; toast("Open the menu to start again."); };
   $("again").onclick = restart;

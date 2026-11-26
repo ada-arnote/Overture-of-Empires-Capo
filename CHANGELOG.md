@@ -2,6 +2,18 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+**Players**
+- **The lessons are fair now.** The Island Fable's lesson keeps the same turn order every round, so the bot no longer moves twice in a row straight after the truce, and its bot is gentle: it takes nothing in the first two rounds, then at most one hex a turn. Brass and Banners' lesson bot strikes nobody in round 1 and then takes at most one province a turn, on good odds only.
+- Banners' lesson says how to win in its first step, says the real number you place on your first turn (a third, when you move first), and has a new step: guard your border.
+- **Nothing floats on the board.** The lesson card and "Since your last turn" sit at the top of the move panel, and the board is fitted beside the panel at every size, phones included. The lesson card can no longer catch a tap meant for the map.
+- **Take back is a button.** Every turn game shows Take back beside End turn whenever a move can be taken back, and says so when it is done.
+- **Fable never chooses a purchase for you.** After you buy something, the button waits for you to choose where again; a first tap on the map aims a purchase and a second buys it, and tapping a ready unit of yours chooses it rather than buying a scout onto it. How to play says when the turn order moves on.
+
+**Contributors**
+- A lesson-only bot tier, `gentle`, in `src/games/fable/bot.js` and `src/games/banners/bot.js` (not in `TIERS`, not offered in the setup); `test/lessons.test.mjs`. The Fable lesson is Custom with Traditional's switches and a fixed order. No rules changed and no rules version moved.
+
 ## v0.6.3 (2026-11-26): the game screens in blue and silver
 
 **Players**

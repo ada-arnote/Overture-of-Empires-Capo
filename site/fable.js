@@ -20,8 +20,13 @@ const costOf = (p, m, t) => (m.do === "fort" ? p.rule.fort : m.do === "farm" ? f
 
 function tap(T, i) {
   if (!T.ready() || i >= boardOf(T.match.position).size) return;
-  const p = T.match.position, go = source && options(T).find((m) => m.to === i);
-  if (go && !(p.unit[i] && !p.moved[i] && source === `u${i}`)) return T.play(go);
+  const p = T.match.position, go = source && options(T).find((m) => m.to === i), ready = p.owner[i] === p.seat && p.unit[i] && legal(T).some((m) => from(m) === `u${i}`);
+  // a unit's step goes at once; anything paid for is aimed by the first tap and bought by a second (or by the button), and a ready unit of yours is chosen rather than joined
+  if (go && !(source[0] === "h" && ready)) {
+    if (go.do === "move" || where === i) return T.play(go);
+    where = i;
+    return T.refresh();
+  }
   if (p.owner[i] === p.seat) {
     const all = legal(T), t = territories(p, p.seat).find((x) => x.cells.includes(i)), unit = `u${i}`, hall = t && `h${t.hall}`;
     if (p.unit[i] && source !== unit && all.some((m) => from(m) === unit)) source = unit;
@@ -52,12 +57,13 @@ function strike(T, cut) {
   return mine ? mine.to : list[0] ? Number(from(list[0]).slice(1)) : null;
 }
 const LESSON = {
-  seed: "lesson 21", options: { style: "classic", seats: 2, isle: "round", size: "small" }, kinds: ["you", "easy"],
+  // Traditional in every rule but one: the same order every round, so the bot never moves twice running after the truce; its bot is gentle (src/games/fable/bot.js)
+  seed: "lesson 21", options: { style: "custom", order: "fixed", seats: 2, isle: "round", size: "small" }, kinds: ["you", "gentle"],
   steps: [
     { at: (T) => richest(pos(T)), or: () => $("sources"), done: (T, ev) => source?.[0] === "h" || has(ev, "raise", "clear", "take", "merge"),
       say: "Joined land is a territory with one village, and the number on its tower is its purse: choose your village, on the map or in the list." },
-    { at: (T) => (source?.[0] === "h" ? $("do") : richest(pos(T))), or: () => $("sources"), done: (T, ev) => has(ev, "raise", "clear", "take", "merge"),
-      say: (T) => `A scout costs ${raiseOf(pos(T))} from that purse: choose where it stands, then press the button, or tap the hex.` },
+    { at: (T) => (source?.[0] !== "h" ? richest(pos(T)) : where === null ? $("wheres") : $("do")), or: () => $("sources"), done: (T, ev) => has(ev, "raise", "clear", "take", "merge"),
+      say: (T) => `A scout costs ${raiseOf(pos(T))} from that purse: choose where it stands, in the list or on the map, then press the button. Take back undoes a move.` },
     { at: (T) => (source?.[0] === "u" ? $("wheres") : idle(T) ?? null), or: () => $("sources"), next: true, done: (T, ev) => has(ev, "move", "merge"),
       say: "Units walk anywhere inside your own land and can still act after; move one onto another scout and they join into a guard." },
     { at: () => document.querySelector("#seats li"), next: true,
@@ -151,7 +157,7 @@ createTable({
     const t = source && source[0] === "h" ? ts.find((x) => x.hall === Number(source.slice(1))) : null, kinds = t ? ["raise", "fort", "farm"].filter((k) => all.some((m) => from(m) === source && m.do === k)) : [];
     if (t && !kinds.includes(build)) build = kinds[0] || "raise";
     const list = source ? options(T).sort((a, b) => worth(p, a) - worth(p, b) || a.to - b.to) : [];
-    if (!list.some((m) => m.to === where)) where = list[0]?.to ?? null;
+    if (!list.some((m) => m.to === where)) where = list[0]?.do === "move" ? list[0].to : null; // a unit's best step is offered; nothing paid for is chosen for you
     $("status").textContent = `${T.solo() ? "Your turn" : `${NAMES[p.seat]}'s turn`}${p.rule.actions < 99 ? `: ${p.left} of ${p.rule.actions} ${p.left === 1 ? "action" : "actions"} left` : ""}`;
     $("sources").hidden = !sources.length;
     radio($("sources"), sources.map((s) => {
@@ -165,7 +171,7 @@ createTable({
     radio($("wheres"), list.map((m) => ({ value: m.to, label: `${verb(p, m)} ${nameOf(p, m.to)}${m.sea ? " by boat" : ""}`, note: whatAt(p, m.to), rgb: p.owner[m.to] === NONE ? PAPER[0] : RGB[p.owner[m.to]] })), where, (v) => { where = v; T.refresh(); });
     const m = list.find((x) => x.to === where);
     $("do").disabled = !m;
-    $("do").replaceChildren(m ? `${verb(p, m)} ${nameOf(p, m.to)}` : sources.length ? "Choose a village or unit" : "Nothing to do");
+    $("do").replaceChildren(m ? `${verb(p, m)} ${nameOf(p, m.to)}` : source && list.length ? "Choose where" : sources.length ? "Choose a village or unit" : "Nothing to do");
     if (m && m.do !== "move") $("do").append(el("small", ` for ${costOf(p, m, t)}`));
     $("do").onclick = () => { const now = options(T).find((x) => x.to === where); if (now) T.play(now); };
     $("end").onclick = () => { if (T.ready()) T.play({ do: "end" }); };
@@ -182,6 +188,7 @@ createTable({
     else if (k === "escape") { source = null; T.refresh(); } else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "do")) { e.preventDefault(); $("do").click(); }
   },
   rules: (classic, p) => [
+    (p ? p.rule.order === "rotate" : classic) ? "Whoever moves first changes every round, so the last player of a round moves first in the next, twice in a row." : "The same order every round.",
     "Land that is joined up is a territory. Each has one village and its own purse, the number on the tower.",
     `Every turn a territory earns 1 coin for each hex without a wood${p?.farms ? ", and 3 for each farm" : ""}, and pays its units: ${[1, 2, 3, 4].slice(0, p ? p.rule.ranks : 4).map((r) => `${upkeepOf(p || { rule: { wages: SWITCHES.wages.normal } }, r)} for a ${RANK[r].toLowerCase()}`).join(", ")}. If it cannot pay, all its units disband and leave a cairn, which grows into a wood.`,
     `${p && p.rule.actions < 99 ? `You have ${p.rule.actions} actions a turn.` : "Act as often as you like, then end your turn."} Tap a village to raise a scout for ${p ? raiseOf(p) : 8}${p?.rule.fort ? ` or build a fort for ${p.rule.fort}` : ""}, or tap a unit to move it, then tap where.`,
