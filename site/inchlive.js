@@ -4,8 +4,11 @@
 // Capo, The Ink Dries, adds a capital drawn as a tower and a page that dries from its edges.
 // Everything the map does can be done from the move panel too: a list of good places to start, a list of neighbours and coasts
 // to send to, and a button, so the game is played the same with a keyboard or a screen reader.
-import { CARDS, DRIES, INKS, MARKS, NONE, PCTS, PLACES, SAFE, TICK_MS, ageOf, agesOf, apart, bordersOf, cardDue, cityPrice, dryRank, driedOf, gainOf, goalOf, inkOf, landingPrice, landings, markDue, markOf, maxOf, rangeOf, shores, wetAt, wetOf } from "../src/games/inch/live.js";
-import { liveBoardFor } from "../src/games/inch/rules.js";
+// Beside them: the attacks under way, yours to call back and a rival's to answer; Find me, which shows and says where your land is;
+// five tips that follow your first minute; and, at the end, your figures and every leading nation's share over the game, read back from the moves.
+import { CARDS, DRIES, INKS, MARKS, NONE, PCTS, PLACES, SAFE, TICK_MS, ageOf, agesOf, apart, bordersOf, cardDue, cityPrice, dryRank, driedOf, gainOf, goalOf, inkOf, landingPrice, landings, markDue, markOf, maxOf, rangeOf, recallLoss, recallable, shores, wetAt, wetOf } from "../src/games/inch/live.js";
+import { inch, liveBoardFor } from "../src/games/inch/rules.js";
+import { createMatch } from "../src/core/index.js";
 import { $, RGB, el, radio, sheet, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
 import { areaPicture } from "../src/map/areas.js";
@@ -16,6 +19,15 @@ const SPEEDS = [0.5, 1, 2, 4], STEPS = [[0.25, "A quarter of the way to the goal
 let pct = 40, paused = false, speed = 1, beat = 0, clock = 0, building = false, box = null, ink = "draw", me = null;
 // what the move panel has chosen: a start, a target; the ink sheet already shown; how far towards the goal was last said
 let home = "", aim = "", asked = null, band = 0, reach = 0, drawn = "";
+// Find me glows until `found`; who is attacking you now; the tips: on or off (kept in this browser), the one showing, what you have sent (empty land, a rival), when the last one goes
+const TIPS_KEY = "capo-inch-tips", TIPS = ["",
+  "Tip 1 of 5. Start where there is room: choose a row below, or tap empty land on the map.",
+  "Tip 2 of 5. Grow first. Press the Send button to send a share into the empty land beside you, and watch your border creep.",
+  "Tip 3 of 5. Strength comes back every half second, faster the more land you hold. Send again whenever it is above half its limit.",
+  "Tip 4 of 5. Empty land runs out. Then choose a neighbour with little strength for its land, raise the share to 50% or more, and send.",
+  "Tip 5 of 5. Under way lists your attacks and any against you: call one back, or answer an attacker. Reach the goal on the bar at the top to win."];
+let found = 0, foes = new Set(), tips = (() => { try { return localStorage.getItem(TIPS_KEY) !== "off"; } catch { return true; } })(), tip = 0, sent = [false, false], tipEnds = 0;
+const keepTips = () => { try { localStorage.setItem(TIPS_KEY, tips ? "on" : "off"); } catch { /* the tips still work for this visit */ } };
 
 /** Colours for every nation: yours first, the rest spread round the wheel, never a near twin of yours, in two lightnesses
  *  so that nations sharing one of the six seat patterns also differ in lightness. */
@@ -120,7 +132,13 @@ function controls(T) {
   pause.setAttribute("aria-pressed", "false");
   pause.onclick = () => { paused = !paused; pause.setAttribute("aria-pressed", String(paused)); speak(paused ? "Paused. You can still send orders." : "The clock runs again."); T.refresh(); };
   city.onclick = () => { building = !building; city.setAttribute("aria-pressed", String(building)); toast(building ? "Tap one of your cells to build a city there." : "Building stopped."); };
-  btns.append(pause, city);
+  const me = button("Find me"), help = button("Tips");
+  me.onclick = () => find(T);
+  help.setAttribute("aria-pressed", String(tips));
+  help.onclick = () => { tips = !tips; tip = 0; sent = [false, false]; tipEnds = 0; keepTips(); help.setAttribute("aria-pressed", String(tips)); if (!tips) speak("Tips are off."); T.refresh(); };
+  btns.append(pause, me, help, city);
+  const runs = el("ul"), guide = el("p", "", "live-guide");
+  runs.id = "live-runs"; runs.setAttribute("aria-label", "Attacks under way");
   const fast = el("div", undefined, "line speed"), pace = el("div", undefined, "pick small");
   pace.setAttribute("role", "radiogroup"); pace.setAttribute("aria-label", "Speed of the clock");
   const pick = () => radio(pace, SPEEDS.map((v) => ({ value: v, label: `${v}x` })), speed, (v) => { speed = v; pick(); });
@@ -133,8 +151,8 @@ function controls(T) {
   mine.onclick = () => inkSheet(T);
   for (const e of [list, go]) { e.addEventListener("focusin", () => T.ready() && mark(T)); e.addEventListener("focusout", () => setTimeout(() => T.ready() && mark(T))); }
   const heading = el("p", "", "live-title"); // what to do, in plain words that are not read out at every tick
-  box.append(heading, el("p", "", "live-info"), due, mine, head, list, row, go, btns, fast, board);
-  Object.assign(box, { city, slider, due, head, list, go, ink: mine, pause, row, btns, fast, heading });
+  box.append(heading, guide, el("p", "", "live-info"), due, mine, head, list, row, go, runs, btns, fast, board);
+  Object.assign(box, { city, slider, due, head, list, go, ink: mine, pause, row, btns, fast, heading, runs, guide, me, help });
   $("choice").append(box);
   return box;
 }
@@ -154,13 +172,14 @@ const placeAt = (p, i) => p.places.find(([at]) => at === i);
 /** A spawn, an attack or a landing, from the map or from the panel. */
 function send(T, t) {
   const p = T.match.position, b = liveBoardFor(p);
+  sent[t.to === NONE ? 0 : 1] = true;
   if (!t.boat) { aim = `n${t.to}`; return T.play({ do: "attack", to: t.to, pct }); }
   const need = landingPrice(p, b, t.at) + 1;
   if (Math.floor((p.troops[p.human] * pct) / 100) < need) return toast(`Landing there takes ${need} strength. Send a bigger share, or wait and grow.`);
   aim = `b${p.owner[t.at]}:${region(p, b, t.at)}`;
   return T.play({ do: "boat", at: t.at, pct });
 }
-const spawn = (T, at) => { const p = T.match.position, want = p.choose ? INKS[ink === "draw" ? p.ink[0] : ink].id : undefined, m = T.match.legal().find((x) => x.at === at && x.ink === want); return m ? T.play(m) : undefined; };
+const spawn = (T, at) => { const p = T.match.position, want = p.choose ? INKS[ink === "draw" ? p.ink[0] : ink].id : undefined, m = T.match.legal().find((x) => x.at === at && x.ink === want); if (m) found = performance.now() + 3000; return m ? T.play(m) : undefined; };
 export function tap(T, i) {
   if (!T.ready()) return undefined;
   const p = T.match.position, b = liveBoardFor(p), spot = placeAt(p, i);
@@ -237,6 +256,8 @@ function mark(T) {
       if (f >= 0 && f !== ring) { at = f; if (!arrow) arrow = [t.boat ? p.owner.reduce((x, o, i) => (o === h && b.near[i].some((m) => !b.land[m]) && (x < 0 || apart(b, i, f) < apart(b, x, f)) ? i : x), -1) : mid, f]; }
     }
     if (p.boats && (reach > performance.now() || (now && t?.boat))) glow = [...landings(p, b)];
+    // Find me: your border glows and your middle is ringed, for a few seconds
+    if (found > performance.now()) { const edge = []; p.owner.forEach((o, i) => { if (o === h && b.near[i].some((m) => p.owner[m] !== h)) edge.push(i); }); const k = Math.ceil(edge.length / 300); glow = edge.filter((_, j) => j % k === 0); if (ring < 0) ring = mid; }
   }
   const put = (c) => (c >= 0 && slot.has(c) ? slot.get(c) : -1), sig = `${glow.length}/${glow[0]}/${ring}/${at}/${arrow}`;
   if (glow.length && sig === drawn) return; // a glow pulses when it is drawn, so it is drawn again only when it changes
@@ -249,6 +270,87 @@ function card(p, s) {
   const u = el("ul"), i = inkOf(p, s), m = markOf(p, s);
   u.append(...[i.name && `${i.name}: ${i.line}`, m.name && `${m.name}: ${m.line}`, p.card[s] >= 0 && `Played ${CARDS[p.card[s]].name}.`, `${p.land[s]} cells, ${p.troops[s]} strength.`].filter(Boolean).map((t) => el("li", t)));
   sheet(s === p.human ? "You" : p.names[s], u);
+}
+/** Find me: the map moves to your land when it is out of sight, your border glows, and a line says where you are and who is beside you. */
+function find(T) {
+  const p = T.match.position, b = liveBoardFor(p), h = p.human;
+  if (p.phase !== "play") return toast("You have no land yet. Choose where to start.");
+  if (!p.land[h]) return toast("You have no land left.");
+  const mid = centre(p, b), slot = slotOf(b).get(mid), near = [...bordersOf(p, b)[h]].filter((o) => o !== NONE).map((o) => p.names[o]).sort();
+  bring(T, slot);
+  found = performance.now() + 3000; drawn = "";
+  mark(T);
+  setTimeout(() => { if (T.match?.position.live && T.ready()) mark(T); }, 3100); // the glow goes even while the clock is paused
+  return toast(`Your land: ${region(p, b, mid)}. ${word(p.land[h], "cell", "cells")}, ${Math.round((100 * p.land[h]) / wetOf(p)) || "under 1"}% of the land. ${near.length ? `Beside you: ${near.slice(0, 4).join(", ")}${near.length > 4 ? ` and ${near.length - 4} more` : ""}.` : "Nobody is beside you."}`);
+}
+/** Slide a zoomed map so that a cell sits in the middle of the free part of the screen. The board is asked only what it already
+ *  tells (where a cell is, and to slide by a little), so two small trial slides measure how far a slide moves it. */
+function bring(T, slot) {
+  const B = T.board, at = () => B?.at(slot), a = at();
+  if (!a || !Number.isFinite(a.x)) return;
+  const act = innerWidth > 820 ? null : $("act")?.getBoundingClientRect(), cx = innerWidth / 2, cy = act && act.top > 120 ? act.top / 2 : innerHeight / 2;
+  if (Math.abs(a.x - cx) < innerWidth * 0.3 && Math.abs(a.y - cy) < innerHeight * 0.25) return; // in plain sight already
+  const e = 0.02;
+  B.pan(e, 0); const b1 = at(); B.pan(-e, 0); const a1 = at();
+  B.pan(0, e); const b2 = at(); B.pan(0, -e);
+  const ux = (b1.x - a1.x) / e, uy = (b1.y - a1.y) / e, vx = (b2.x - a1.x) / e, vy = (b2.y - a1.y) / e, det = ux * vy - uy * vx, dx = cx - a1.x, dy = cy - a1.y;
+  if (Math.abs(det) > 1) B.pan((dx * vy - dy * vx) / det, (ux * dy - uy * dx) / det); // at the widest view nothing slides, and nothing needs to
+}
+/** The attacks under way: a rival's on you first, each with Answer, then yours, each with Call back. The rows stand while their
+ *  attack does, so a button keeps the keyboard; a new attacker is said once. */
+const runRows = new Map(), warned = new Map();
+function under(T, p) {
+  const h = p.human, c = box.runs, rows = [...p.attacks.filter((a) => a.to === h), ...p.attacks.filter((a) => a.by === h)], want = [], now = new Set();
+  for (const a of rows) {
+    const out = a.by === h, key = `${a.by}:${a.to}`, who = out ? (a.to === NONE ? "empty land" : p.names[a.to]) : p.names[a.by];
+    if (!runRows.has(key)) {
+      const li = el("li", undefined, out ? "" : "in"), b = button(out ? "Call back" : "Answer");
+      b.setAttribute("aria-label", out ? `Call back your attack on ${who}` : `Answer ${who}: choose it to send to`);
+      b.onclick = () => { if (!T.ready()) return; if (!out) return answer(T, a.by); const now = recallable(T.match.position, a.to); if (now) { toast(lineOf({ kind: "recall", back: now.left - recallLoss(now.left), lost: recallLoss(now.left) })); T.play({ do: "recall", to: a.to }); } return undefined; };
+      li.append(el("span"), b);
+      runRows.set(key, li);
+    }
+    const li = runRows.get(key), t = out ? `You, ${a.to === NONE ? "into empty land" : `against ${who}`}: ${a.left}${a.fl ? ", a Flood" : ""}` : `${who} attacks you: ${a.left}`;
+    if (li.firstChild.textContent !== t) li.firstChild.textContent = t;
+    li.lastChild.hidden = out && !!a.fl; // a Flood cannot be called back
+    want.push(li);
+    if (!out) now.add(a.by);
+  }
+  for (const [key, li] of runRows) if (!want.includes(li)) runRows.delete(key);
+  if (want.length !== c.children.length || want.some((li, k) => c.children[k] !== li)) {
+    const had = c.contains(document.activeElement);
+    c.replaceChildren(...want);
+    if (had && !c.contains(document.activeElement)) box.go.focus({ preventScroll: true }); // the attack ended under the keyboard
+  }
+  c.hidden = !want.length;
+  const fresh = [...now].filter((s) => !foes.has(s) && p.tick - (warned.get(s) ?? -99) > 60); // the same attacker is not announced twice in half a minute
+  for (const s of fresh) warned.set(s, p.tick);
+  if (fresh.length && p.alive[h]) toast(`${fresh.slice(0, 3).map((s) => p.names[s]).join(" and ")}${fresh.length > 3 ? " and others" : ""} ${fresh.length > 1 ? "attack" : "attacks"} you. Answer from the list under the button.`);
+  foes = now;
+}
+/** Answer an attacker: it becomes where you send next, and the button takes the keyboard. */
+function answer(T, by) {
+  const p = T.match.position, t = targetsOf(p, liveBoardFor(p)).find((x) => x.value === `n${by}`);
+  if (!t) return toast(`${p.names[by]} is not beside your land now.`);
+  aim = t.value;
+  T.refresh();
+  box.go.focus({ preventScroll: true });
+  return undefined;
+}
+/** The first minute, in five tips that follow what you have done; each is shown, and said once. After the last they turn themselves off. */
+function guide(T, p, b) {
+  const h = p.human;
+  let n = 0;
+  if (tips && !T.demo && !p.over && (p.phase === "spawn" || p.alive[h])) {
+    if (p.phase === "spawn") n = 1;
+    else {
+      const near = bordersOf(p, b)[h], open = near.has(NONE), rival = near.size > (open ? 1 : 0);
+      n = sent[1] ? 5 : !open || (rival && p.tick > 240) ? 4 : sent[0] || p.land[h] > 12 ? 3 : 2;
+      if (n === 5) { tipEnds ||= p.tick + 60; if (p.tick > tipEnds) { tips = false; n = 0; keepTips(); box.help.setAttribute("aria-pressed", "false"); speak("That was the first minute. Tips are off now; the Tips button brings them back."); } }
+    }
+  }
+  if (n !== tip) { tip = n; box.guide.textContent = TIPS[n]; if (n) speak(TIPS[n]); }
+  box.guide.hidden = !n;
 }
 /** Your ink, chosen before the map: a sheet, so that the map is free to look at once it closes. */
 function inkSheet(T) {
@@ -335,23 +437,26 @@ export function panel(T) {
     c.go.textContent = at ? `Start in ${at.where}` : "Start";
     c.go.onclick = () => { if (T.ready() && at) spawn(T, at.at); };
     c.due.hidden = true;
+    c.runs.hidden = true; c.me.hidden = true;
+    runRows.clear(); c.runs.replaceChildren(); foes = new Set(); warned.clear();
+    if (asked !== T.match && !p.choose) { asked = T.match; sent = [false, false]; tipEnds = 0; }
+    guide(T, p, b);
     band = 0;
     rowsOf.clear(); $("leaders").replaceChildren(); // no standings left over from the last game
-    if (p.choose && asked !== T.match && !T.demo) { asked = T.match; inkSheet(T); }
+    if (p.choose && asked !== T.match && !T.demo) { asked = T.match; sent = [false, false]; tipEnds = 0; inkSheet(T); }
     const was = document.activeElement; // the game has just begun: the keyboard starts at the places to start
     if (!$("sheet").open && (!was || was === document.body || !was.getClientRects().length)) c.list.querySelector("[aria-checked=true]")?.focus({ preventScroll: true });
     mark(T);
     return;
   }
   due(T, p);
-  const going = p.attacks.filter((a) => a.by === s), mine = inkOf(p, s), top = maxOf(p, s), have = p.troops[s];
+  const mine = inkOf(p, s), top = maxOf(p, s), have = p.troops[s];
   // the shell blanks the spoken status while a move plays out, so in play it holds only what lasts: that you are out
   state(out ? "You are out. Watching to the end" : "");
   c.heading.textContent = out ? "" : paused ? "Paused. You can still send orders." : "Choose where to send a share of your strength.";
   const page = p.dries ? (p.tick < DRIES.from ? `The page dries from ${clockOf(DRIES.from)}. ` : `${Math.round((100 * wetOf(p)) / p.total)}% of the page is still wet. `) : "";
   const strength = have > top ? `Strength ${have}, over your limit of ${top}, so it falls back slowly.` : `Strength ${have} of a limit of ${top}, +${gainOf(p, s)} every half second.`;
-  const under = going.length ? ` Under way: ${going.map((a) => `${a.left} ${a.to === NONE ? "into empty land" : `against ${p.names[a.to]}`}`).join(", ")}.` : "";
-  c.querySelector(".live-info").textContent = out ? "The other nations play on to the end. Speed up the clock, or start again from the menu." : `${strength}${under} ${page}${mine.name ? `${mine.name}: ${mine.line}` : ""}${p.boats ? ` Your boats cross ${rangeOf(p, b, s)} cells of sea.` : ""}`;
+  c.querySelector(".live-info").textContent = out ? "The other nations play on to the end. Speed up the clock, or start again from the menu." : `${strength} ${page}${mine.name ? `${mine.name}: ${mine.line}` : ""}${p.boats ? ` Your boats cross ${rangeOf(p, b, s)} cells of sea.` : ""}`;
   if (!out) {
     const list = targetsOf(p, b);
     if (!list.some((x) => x.value === aim)) aim = list[0]?.value ?? "";
@@ -365,6 +470,9 @@ export function panel(T) {
     if (band < STEPS.length && r >= STEPS[band][0]) { while (band < STEPS.length && r >= STEPS[band][0]) band++; speak(`${STEPS[band - 1][1]}: land ${p.land[s]}, goal ${goalOf(p)}.`); }
     else if (band > 0 && r < STEPS[band - 1][0] - 0.05) { band--; speak(`Your land falls back: ${p.land[s]}, goal ${goalOf(p)}.`); }
   }
+  c.me.hidden = out;
+  under(T, p);
+  guide(T, p, b);
   leaders(p);
   mark(T);
   if (!clock) start(T);
@@ -377,11 +485,88 @@ export const ending = (T) => {
 /** The end screen's words: who won and how, then the leading nations' inks and marks. */
 export function summary(T) {
   const p = T.match.position, r = T.match.result, m = Math.round(p.tick / 120), who = (s) => [inkOf(p, s).name, markOf(p, s).name].filter(Boolean).join(", ");
-  const lead = p.land.map((n, s) => [n, s]).filter(([n, s]) => n || s === p.human).sort((x, y) => y[0] - x[0]).slice(0, 5);
-  if (!lead.some(([, s]) => s === p.human)) lead.push([0, p.human]);
-  return `${p.names[r.winners[0]]} ${r.why}, after ${m < 1 ? "less than a minute" : `${m} ${m === 1 ? "minute" : "minutes"}`} of game time. ${lead.map(([, s]) => `${p.names[s]}${who(s) ? `: ${who(s)}` : ""}`).join("; ")}.`;
+  queueMicrotask(() => figures(T)); // the end sheet is built around these words; the figures join it once it stands
+  return `${p.names[r.winners[0]]} ${r.why}, after ${m < 1 ? "less than a minute" : `${m} ${m === 1 ? "minute" : "minutes"}`} of game time${who(r.winners[0]) ? `, with ${who(r.winners[0])}` : ""}.`;
 }
-export const lineOf = (e, p) => (e.kind === "dries" ? "The page begins to dry from its edges." : e.kind === "capital" ? (e.seat === p.human ? "Your capital is lost: it moves to your largest land, and a quarter of your strength goes with it." : "") : e.kind === "out" ? (e.seat === p.human ? "You are out." : `${p.names[e.seat]} is gone.`) : e.kind === "city" ? "You build a city." : e.kind === "boat" ? (e.landed ? "Your boats land." : `Your boats are thrown back. They lose ${e.lost ?? 0}; the rest come home.`) : e.kind === "age" ? (e.age === 2 ? "Age II, Ink: choose your mark." : "Age III, Seal: your card is ready, and the goal begins to ease.") : e.kind === "mark" || e.kind === "card" ? `You take ${[...MARKS, ...CARDS].find((k) => k.id === e[e.kind]).name}.` : "");
+/** The figures on the end table: strength, and each nation's ink and mark where the game has them. */
+export const stats = (p, s) => (p.over ? [["Strength", p.troops[s]], ...(p.ink.some((k) => k >= 0) ? [["Ink", inkOf(p, s).name || "none"]] : []), ...(p.ages ? [["Mark", markOf(p, s).name || "none"]] : [])] : [["Strength", p.troops[s]], ["Nations left", p.alive.filter(Boolean).length]]);
+/** The end, in figures: the game is played again from its seed and moves, a little at a time, and what you did is counted on the way:
+ *  where you finished, your best share and when, what you sent, what you took and lost, whom you finished. Then every leading
+ *  nation's share of the land over the game, each line named at its end. */
+function figures(T) {
+  const m = T.match, p = m.position, h = p.human, host = $("sheet-body").firstElementChild, old = $("chart");
+  if (!host || !p.over || !old) return;
+  const wrap = el("section", undefined, "live-end"), wait = el("p", "Reading the game back for your figures.", "live-info"), again = createMatch(inch, { seed: m.seed, options: m.options });
+  const st = { orders: 0, sent: 0, back: 0, took: 0, lost: 0, best: 0, bestAt: 0, top: 0, ended: [], outAt: -1, series: [] }, every = Math.max(2, Math.ceil(p.tick / 240));
+  let k = 0, last = -every;
+  old.hidden = true;
+  wrap.append(el("h3", "Your game"), wait);
+  old.before(wrap);
+  const step = () => {
+    if (T.match !== m || !wrap.isConnected) return undefined; // another game has begun
+    for (const t0 = performance.now(); k < m.list.length && performance.now() - t0 < 10;) {
+      const mv = m.list[k++], q = again.position, events = again.play(mv), r = again.position;
+      if (mv.do === "attack" || mv.do === "boat") { st.orders++; st.sent += Math.max(0, q.troops[h] - r.troops[h]); }
+      else if (mv.do === "recall") st.back++;
+      const d = r.land[h] - q.land[h], share = Math.round((100 * r.land[h]) / wetOf(r));
+      if (d > 0) st.took += d; else st.lost -= d;
+      if (share > st.best) { st.best = share; st.bestAt = r.tick; }
+      st.top = Math.max(st.top, r.troops[h]);
+      for (const e of events) if (e.kind === "out") { if (e.seat === h) st.outAt = r.tick; else if (q.attacks.some((a) => a.by === h && a.to === e.seat)) st.ended.push(e.seat); }
+      if (r.tick - last >= every || r.over) { last = r.tick; st.series.push([r.tick, wetOf(r), [...r.land], goalOf(r)]); }
+    }
+    if (k < m.list.length) return void setTimeout(step);
+    const place = 1 + p.land.filter((n) => n > p.land[h]).length, dl = el("dl"), row = (a, b) => { const d = el("div"); d.append(el("dt", a), el("dd", String(b))); dl.append(d); };
+    row("Finished", st.outAt >= 0 ? `Out at ${clockOf(st.outAt)}` : `${place}${["th", "st", "nd", "rd"][place % 10 < 4 && (place % 100 < 11 || place % 100 > 13) ? place % 10 : 0]} of ${p.troops.length}`);
+    row("Best share", `${st.best}% at ${clockOf(st.bestAt)}`);
+    row("Orders", st.back ? `${st.orders}, ${st.back} called back` : st.orders);
+    row("Strength sent", st.sent);
+    row("Most strength held", st.top);
+    row("Land gained and lost", `${st.took} and ${st.lost}`);
+    row("Nations you finished", st.ended.length ? `${st.ended.length}: ${st.ended.slice(0, 3).map((s) => p.names[s]).join(", ")}${st.ended.length > 3 ? " and more" : ""}` : "None");
+    wait.replaceWith(dl, shares(p, st));
+    return undefined;
+  };
+  setTimeout(step);
+}
+/** Share of the land over the game: a line for you and for the four largest of the others at their best, each named at its end. */
+function shares(p, st) {
+  const c = el("canvas"), W = 880, H = 300, L = 44, Rm = 150, T0 = 14, B = 30, x = c.getContext("2d"), cs = colours(p), h = p.human, s = st.series, ink = "#e8e0cc";
+  c.id = "live-chart"; c.width = W; c.height = H;
+  const best = p.troops.map((_, n) => Math.max(...s.map(([, wet, land]) => land[n] / wet))), who = [h, ...best.map((v, n) => [v, n]).filter(([, n]) => n !== h).sort((a, b) => b[0] - a[0]).slice(0, 4).map(([, n]) => n)];
+  const goal = Math.max(...s.map(([, wet, , g]) => g / wet)), top = Math.min(1, Math.max(0.2, ...who.map((n) => best[n]), goal) * 1.05), end = s[s.length - 1][0] || 1;
+  const px = (t) => L + ((W - L - Rm) * t) / end, py = (v) => H - B - ((H - B - T0) * v) / top;
+  x.font = "16px system-ui, sans-serif"; x.textBaseline = "middle"; x.lineJoin = "round";
+  x.globalAlpha = 0.25; x.strokeStyle = ink; x.lineWidth = 1;
+  for (let v = 0; v <= top; v += top > 0.5 ? 0.2 : 0.1) { x.beginPath(); x.moveTo(L, py(v)); x.lineTo(W - Rm, py(v)); x.stroke(); }
+  x.globalAlpha = 0.8; x.fillStyle = ink; x.textAlign = "right";
+  for (let v = 0; v <= top; v += top > 0.5 ? 0.2 : 0.1) x.fillText(`${Math.round(v * 100)}%`, L - 6, py(v));
+  x.textAlign = "center";
+  const mins = Math.max(1, Math.ceil(end / 120 / 6));
+  for (let t = 0; t <= end; t += mins * 120) x.fillText(`${t / 120}:00`, px(t), H - B / 2);
+  // the goal, as a broken line that follows its easing and the drying page
+  x.globalAlpha = 0.9; x.setLineDash([6, 5]); x.strokeStyle = "#d8ae3c"; x.lineWidth = 2; x.beginPath();
+  s.forEach(([t, wet, , g], k) => (k ? x.lineTo(px(t), py(g / wet)) : x.moveTo(px(t), py(g / wet)))); x.stroke(); x.setLineDash([]);
+  x.globalAlpha = 1;
+  const ends = [];
+  for (const n of [...who].reverse()) { // yours last, so it lies on top
+    // a dark line under each, so pale inks show on the panel
+    for (const [colour, more] of [["rgba(13, 22, 35, .7)", 2], [`rgb(${cs[n]})`, 0]]) { x.beginPath(); x.strokeStyle = colour; x.lineWidth = (n === h ? 5 : 2.5) + more; s.forEach(([t, wet, land], k) => (k ? x.lineTo(px(t), py(land[n] / wet)) : x.moveTo(px(t), py(land[n] / wet)))); x.stroke(); }
+    const [, wet, land] = s[s.length - 1];
+    ends.push({ n, y: py(land[n] / wet), v: Math.round((100 * land[n]) / wet) });
+  }
+  ends.sort((a, b) => a.y - b.y);
+  for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + 18); // names never sit on each other
+  ends[ends.length - 1].y = Math.min(ends[ends.length - 1].y, H - B);
+  for (let k = ends.length - 2; k >= 0; k--) ends[k].y = Math.min(ends[k].y, ends[k + 1].y - 18); // and the lowest stays on the chart
+  x.textAlign = "left";
+  for (const e of ends) { x.fillStyle = `rgb(${cs[e.n]})`; x.beginPath(); x.arc(W - Rm + 12, e.y, 5, 0, 7); x.fill(); x.strokeStyle = ink; x.lineWidth = 1; x.stroke(); x.fillStyle = ink; x.font = `${e.n === h ? "700 " : ""}16px system-ui, sans-serif`; x.fillText(`${p.names[e.n]} ${e.v}%`, W - Rm + 22, e.y); }
+  x.fillStyle = "#d8ae3c"; x.font = "14px system-ui, sans-serif"; x.fillText("goal", L + 6, py(s[0][3] / s[0][1]) + 12);
+  c.setAttribute("role", "img");
+  c.setAttribute("aria-label", `Share of the land over the game. Your best was ${st.best}% at ${clockOf(st.bestAt)}. At the end: ${ends.map((e) => `${p.names[e.n]} ${e.v}%`).join(", ")}.`);
+  return c;
+}
+export const lineOf = (e, p) => (e.kind === "dries" ? "The page begins to dry from its edges." : e.kind === "capital" ? (e.seat === p.human ? "Your capital is lost: it moves to your largest land, and a quarter of your strength goes with it." : "") : e.kind === "out" ? (e.seat === p.human ? "You are out." : `${p.names[e.seat]} is gone.`) : e.kind === "recall" ? `You call your attack back: ${e.back} come home, ${e.lost} are lost.` : e.kind === "city" ? "You build a city." : e.kind === "boat" ? (e.landed ? "Your boats land." : `Your boats are thrown back. They lose ${e.lost ?? 0}; the rest come home.`) : e.kind === "age" ? (e.age === 2 ? "Age II, Ink: choose your mark." : "Age III, Seal: your card is ready, and the goal begins to ease.") : e.kind === "mark" || e.kind === "card" ? `You take ${[...MARKS, ...CARDS].find((k) => k.id === e[e.kind]).name}.` : "");
 /** When you lose your last cell the game goes on without you: watch it to the end, or start again. The open sheet holds the clock.
  *  When a game you played ends, the ledger notes it. */
 export function seen(T, events) {
@@ -399,6 +584,7 @@ export const leave = () => {
   for (const id of ["targets", "shares"]) $(id).hidden = false;
   $("pour").parentElement.hidden = false;
   paused = false; home = aim = drawn = ""; band = 0; rowsOf.clear(); $("leaders")?.replaceChildren();
+  runRows.clear(); box?.runs.replaceChildren(); foes = new Set(); warned.clear(); found = 0; tip = 0; if (box) box.guide.hidden = true;
 };
 export const liveGoal = goalOf, liveLand = wetOf;
 const clockOf = (tick) => `${Math.floor(tick / 120)}:${String(Math.floor((tick / 2) % 60)).padStart(2, "0")}`;
@@ -407,9 +593,10 @@ export const time = (p) => `${p.ages ? `Age ${"I".repeat(ageOf(p))}, ` : ""}${cl
 /** The ledger, from the menu. */
 const show = () => { me = null; sheet("Your record", ledger(show)); };
 export const record = { label: "Your record", body: () => ledger(show) };
-/** Keys in real time: Space pauses (unless a button or field has it), 1 to 0 choose the share, S says where you stand. */
+/** Keys in real time: Space pauses (unless a button or field has it), 1 to 0 choose the share, S says where you stand, F finds your land. */
 export function key(T, k) {
   if (k === " ") { if (document.activeElement?.matches("button, input, select, textarea, a, summary")) return false; box?.pause.click(); return true; }
+  if (k === "f") { find(T); return true; }
   if (k === "s") {
     const p = T.match.position, s = p.human, going = p.attacks.filter((a) => a.by === s);
     if (p.phase !== "play") return false;
@@ -423,12 +610,13 @@ export function key(T, k) {
   return true;
 }
 
-const KEYS = "Without a mouse: the move panel lists good places to start, then the empty land, neighbours and coasts you can reach. Choose one with the arrow keys and press the button under the share. Keys: 1 to 0 choose the share, Space pauses, S tells your strength, land and goal.";
+const KEYS = "Without a mouse: the move panel lists good places to start, then the empty land, neighbours and coasts you can reach. Choose one with the arrow keys and press the button under the share. Under the button, the attacks under way: call yours back, or answer one against you. Keys: 1 to 0 choose the share, Space pauses, S tells your strength, land and goal, F finds your land.";
 /** The rules sheet for The Ink Dries, read from the same table as the rules. */
 const driesRules = (p) => [
   "Capo: The Ink Dries. A short real-time game for 12 nations on a map drawn for the game. The clock runs on its own; pause it, or run it slower or faster, with the buttons.",
   "Choose a place to start in the list, or tap empty land. That first cell is your capital, drawn as a tower with your strength on it. Strength grows every half second: more for more land, a little more for saving, up to a limit set by your land.",
   "Choose a share with the slider, then a neighbour or empty land beside yours, in the list or on the map. That share of your strength goes, and the border creeps forward until it is spent.",
+  "Call an attack back from the list under the button: a quarter of what is left of it is lost, and the rest comes home.",
   `Each cell costs 2, 3 more on hills, and more where the owner holds much strength on little land. A capital and the cells around it cost ${DRIES.wall} times as much.`,
   `Land cut off from your capital fades to empty after ${DRIES.fade / 2} seconds unless you join it up again.${!p || p.boats ? " Where boats sail, land with a coast stays yours while your capital's land has a coast too." : ""}`,
   "If your capital is taken, or dries, it moves to your largest piece of land and you lose a quarter of your strength.",
@@ -448,6 +636,7 @@ export function rules(p, dries = false) {
     "Real time: the clock runs on its own. Pause it, or run it slower or faster, with the buttons.",
     `${inks ? "Choose an ink, or Draw for me, then choose" : "Choose"} a place to start in the list, or tap empty land. Your strength grows every half second: more for more land, a little more for saving, up to a limit set by your land.`,
     "Choose a share with the slider, then a neighbour or empty land beside yours, in the list or on the map. That share of your strength goes, and the border creeps forward until it is spent. An arrow on the map points at your biggest attack.",
+    "Call an attack back from the list under the button: a quarter of what is left of it is lost, and the rest comes home. A Flood cannot be called back.",
     "Each cell costs 2, 3 more on hills, and more where the owner holds much strength on little land. Taking a cell costs its owner some strength too.",
     ...(inks ? ["Every nation has an ink with one rule. Choose a nation in the list to see its ink.", ...INKS.map((k) => `${k.name}: ${k.line}`)] : []),
     ...(places ? ["Places on the map help whoever holds them. Take the cell to take the place; tap one to read it.", ...PLACES.map((k) => `${k.name}: ${k.line}`)] : []),
