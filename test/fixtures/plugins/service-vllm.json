@@ -1,0 +1,11 @@
+{
+  "kind": "capo-service",
+  "v": 1,
+  "name": "vLLM",
+  "shape": "openai",
+  "base": "http://localhost:8000/v1",
+  "models": ["Qwen/Qwen2.5-14B-Instruct"],
+  "about": "A vLLM server on this computer. Start it with CORS allowed for this page.",
+  "key": false,
+  "tools": false
+}

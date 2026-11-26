@@ -22,6 +22,9 @@ import { aiPanel, ask, connectBox, connected, loadRoute, waitBox, watch } from "
 import { sampleReply } from "../src/story/replyform.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
 import { guard } from "./guard.js";
+// mcp and plugins hook: orders an AI app proposes through the bridge, and scenario packs (site/aimore.js, src/story/plugins.js)
+import { aiHost } from "./aimore.js";
+import { checkPack } from "../src/story/plugins.js";
 // features hook: the country sheet, crises, ambitions, the Turns tab (site/realm.js)
 import { NOTE, demandBox, keepMore, notices, realmSheet, stateColour, turnsTab } from "./realm.js";
 
@@ -223,6 +226,21 @@ function geo() {
 
 // features hook: what site/realm.js borrows from this page
 const X = { g: () => state, geo, name, near: () => [...landNeighbours(state.player), ...seaNeighbours(state.player)], el, button, fmtDate, save: () => save(), toast, open, act: (t) => { state.actions = [...(state.actions || []), t]; save(); toast("Ordered: it is in your actions."); if (sheet === "actions") open("actions"); } };
+aiHost({ g: () => state, geo, route: () => route, most: () => turnAttacks(), order, toast }); // mcp hook: an order an AI app proposes is weighed by the rules and given only when the player accepts it
+// plugins hook: a scenario pack is several scenarios in one file; each is checked exactly as a single scenario file is
+async function openPack(raw) {
+  const pack = checkPack(raw), was = draft.scenario; if (!pack.ok) return toast(pack.why);
+  const took = [];
+  for (let s of pack.scenarios) {
+    if (s.kind === "capo-setting") { const c = checkSetting(s); if (!c.ok) continue; s = { ...settingScenario(c.setting, "first"), kind: "capo-scenario", v: 1, id: `file-${c.setting.id}` }; }
+    if (!(await enter(s.world))) continue;
+    const r = checkScenario(s, (c) => homes.has(c), (id) => world.provinces.has(id));
+    if (r.ok && !crossesLine(scenarioText(r.scenario)).length) took.push(r.scenario);
+  }
+  if (!took.length) { toast("No scenario in that pack could be opened."); return choose(was); }
+  shelve([...shelf().filter((x) => !took.some((y) => y.id === x.id)), ...took]);
+  toast(`Opened ${took.length} of ${pack.scenarios.length + pack.left} scenarios from ${pack.name}.`); choose(took[0].id);
+}
 
 /** The way back to every game, when this page has one (the double-click copy does not). */
 function home() {
@@ -293,6 +311,7 @@ function stepScenario(box) {
     const f = file.files[0]; if (!f) return;
     if (f.size > 400000) return toast("That file is too big to be a scenario.");
     let raw; try { raw = JSON.parse(await f.text()); } catch { return toast("That file is not a Capo scenario."); }
+    if (raw?.kind === "capo-pack") return openPack(raw); // plugins hook
     // presets hook: a setting file becomes a scenario on its own world; a scenario is checked against the world it is set on
     if (raw?.kind === "capo-setting") { const c = checkSetting(raw); if (!c.ok) return toast(c.why); raw = { ...settingScenario(c.setting, "first"), kind: "capo-scenario", v: 1, id: `file-${c.setting.id}` }; }
     if (!(await enter(raw?.world))) return toast("That scenario is set on a world that could not be read.");

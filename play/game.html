@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-tWJIvFLZzGLSs+jZFyvKOZqceBzwUzdlPWjRyu9xNOc='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https://openrouter.ai https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.mistral.ai https://api.deepseek.com https://api.together.xyz https://api.cerebras.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-8+zp8eobZyD8DHv2rlqvnhU5PhDKQzbNXLShIjfgVP4='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https://openrouter.ai https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.mistral.ai https://api.deepseek.com https://api.together.xyz https://api.cerebras.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -3566,7 +3566,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.7.1";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "c59d2e04";
+const BUILD = "045cf08c";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -3716,6 +3716,472 @@ function splitEvents(buf, final = false) {
 
 $x.SHAPES = SHAPES; $x.splitEvents = splitEvents;
 return $x; })({});
+$m[31] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The pure parts the MCP bridge (tools/capo-mcp.mjs) and the page (site/aimore.js) share: the read-only digest of a
+// game an AI app may see, whether a reply has the shape its prompt asked for, and the rules' answer to an order an AI
+// app proposes. Nothing here decides an outcome: a proposed order is the same order a card would give, the player must
+// accept it, and the rules carry it out at the turn as they would any other.
+const { oddsLine } = $m[6];
+const { NEED, treatyAnswer, treatyName } = $m[5];
+const { formatOf } = $m[28];
+const { peaceAnswer, strengthOf } = $m[7];
+const { APPROACHES, atWar, attackPlan, commanders, treatiesOf, treatyOf, warsOf } = $m[2];
+
+/** The port the bridge listens on, on 127.0.0.1 only, unless the player gives another. */
+const BRIDGE_PORT = 8125;
+const ORDER_VERBS = ["TREATY", "PEACE", "ATTACK"];
+
+const clip = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+
+/** What an AI app may read of a game: the date, the turn, who the player is, wars, treaties, offers, the actions waiting and the last receipt. */
+function digest(g, geo) {
+  if (!g) return null;
+  const last = g.log?.[g.log.length - 1], n = (c) => `${geo.name(c)} (${c})`;
+  return {
+    game: "Capo", date: g.date, turn: g.turn, mode: g.mode, player: g.player, country: geo.name(g.player), sandbox: !!g.sandbox,
+    wars: warsOf(g, g.player).map(n), treaties: treatiesOf(g, g.player).map((t) => `${t.kind} with ${n(t.with)}`),
+    offers: (g.offers || []).slice(0, 12).map((o) => `${n(o.from)} offers ${o.kind}`),
+    actions: (g.actions || []).slice(0, 20).map((a) => clip(a, 300)),
+    last: last ? { from: last.from, to: last.to, summary: clip(last.summary, 400), receipt: (last.receipt || []).slice(0, 40).map((x) => `${x.ok ? "stood" : "refused"}: ${clip(x.text, 240)}`) } : null,
+  };
+}
+
+/** Why a reply does not have the shape its prompt asked for, or "". The page's own readers and the rules still judge it afterwards. */
+function shapeOf(prompt, reply) {
+  const text = String(reply ?? "");
+  if (!text.trim()) return "The reply is empty.";
+  if (text.length > 60000) return "The reply is far too long.";
+  const fmt = formatOf(prompt);
+  if (!fmt) return "";
+  const lines = text.split(/\r?\n/).map((l) => l.trim().replace(/^[*_`>#-]+\s*/, "").replace(/\s+/g, " "));
+  for (const f of fmt.fixed) if (!lines.some((l) => l.toUpperCase().startsWith(f.replace(/\s+/g, " ").toUpperCase()))) return `It must have the line "${f}", exactly as the prompt gives it.`;
+  const labels = fmt.rows.map((r) => r.label);
+  if (!lines.some((l) => labels.some((k) => l.toUpperCase().startsWith(`${k}:`)))) return `No line of the reply format could be read. Each line starts with one of: ${labels.join(", ")}.`;
+  return "";
+}
+
+/**
+ * The rules' answer to an order an AI app proposes for the player's country: {ok: false, why}, or {ok: true, order,
+ * note}, where order is exactly what a card would give ({text, verb, target, detail, seat, approach}) and note is
+ * what the rules would answer today. most: how many attacks the turn ahead allows, as the attack card counts them.
+ */
+function judgeOrder(g, geo, o, most = Infinity) {
+  const no = (why) => ({ ok: false, why });
+  if (!g) return no("No game is open in Capo.");
+  if (g.mode === "citizen") return no("The player is a citizen in this game, and a citizen gives no orders of state.");
+  const me = g.player, verb = clip(o?.verb, 12).toUpperCase(), target = clip(o?.target, 80), detail = clip(o?.detail, 20).toLowerCase();
+  if (!ORDER_VERBS.includes(verb)) return no(`Only ${ORDER_VERBS.join(", ")} can be ordered this way. Anything else is an action the player writes in their own words.`);
+  if (verb === "ATTACK") {
+    const id = geo.find(target);
+    if (!id) return no(`"${target}" is not a province on the map: give its id, as the prompt's PLACES lines write it.`);
+    const a = attackPlan(g, geo, me, id, { seat: clip(o.leader ?? o.seat, 20).toLowerCase(), approach: clip(o.approach, 12).toLowerCase() }, most);
+    if (!a.ok) return no(a.why);
+    const lead = commanders(g).find((c) => c.seat === a.boss.seat);
+    return { ok: true, order: { text: `Attack ${a.place} (${id}), led by ${!lead || lead.seat === "generals" ? "our generals" : lead.name}, ${a.approach}.`, verb, target: id, seat: a.boss.seat, approach: a.approach }, note: `odds: ${oddsLine(a.chance)}${a.note}` };
+  }
+  const c = target.toUpperCase();
+  if (!geo.known(c) || c === me) return no(`"${target}" is not another country on the map: give its code.`);
+  const offered = (kind) => (g.offers || []).some((x) => x.from === c && x.kind === kind);
+  if (verb === "PEACE") {
+    if (!warsOf(g, me).includes(c)) return no(`${geo.name(me)} is not at war with ${geo.name(c)}.`);
+    if (offered("peace")) return { ok: true, order: { text: `Accept ${geo.name(c)}'s offer of peace.`, verb, target: c, detail: "" }, note: `${geo.name(c)} has offered peace` };
+    const a = peaceAnswer(g, me, c);
+    return { ok: true, order: { text: `Propose peace to ${geo.name(c)} (${c}).`, verb, target: c, detail: "" }, note: `${geo.name(c)} would ${a.ok ? "agree" : "refuse"} (${a.why})` };
+  }
+  if (!Object.hasOwn(NEED, detail)) return no(`A treaty is one of: ${Object.keys(NEED).join(", ")}. Give it as detail.`);
+  if (atWar(g, me, c)) return no(`${geo.name(me)} is at war with ${geo.name(c)}: peace comes first.`);
+  if (treatyOf(g, me, c)?.kind === detail) return no(`${geo.name(me)} already has ${treatyName(detail)} with ${geo.name(c)}.`);
+  if (offered(detail)) return { ok: true, order: { text: `Accept ${geo.name(c)}'s offer of ${treatyName(detail)}.`, verb, target: c, detail }, note: `${geo.name(c)} has offered it` };
+  const a = treatyAnswer(g, me, c, detail, (x) => strengthOf(g, geo, x));
+  return { ok: true, order: { text: `Propose ${treatyName(detail)} to ${geo.name(c)} (${c}).`, verb, target: c, detail }, note: `${geo.name(c)} would ${a.ok ? "agree" : "refuse"} (${a.why})` };
+}
+const APPROACH_NAMES = Object.keys(APPROACHES);
+
+$x.BRIDGE_PORT = BRIDGE_PORT; $x.ORDER_VERBS = ORDER_VERBS; $x.digest = digest; $x.shapeOf = shapeOf; $x.judgeOrder = judgeOrder; $x.APPROACH_NAMES = APPROACH_NAMES;
+return $x; })({});
+$m[32] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Plugins are data, never code: JSON files the player opens, checked like a save before anything uses them. Known
+// fields only, every text flattened to one line and clipped, no web address in any text, the hard line applied, and
+// nothing run. Four kinds: a prose style and a tone for the storyteller, a service preset, and a pack of scenarios
+// (each scenario in a pack is then checked by checkScenario, as a single file is). Pure: no page and no storage.
+const { crosses } = $m[3];
+
+const PLUGIN_KINDS = { "capo-style": "Prose style", "capo-tone": "Tone", "capo-service": "Service", "capo-pack": "Scenario pack" };
+const LIMITS = { name: 60, style: 600, note: 200, about: 200, models: 20, model: 80, pack: 12, kept: 12 };
+/** A tone is made of dials with fixed values, so most of it is not free text at all. */
+const DIALS = {
+  mood: ["grim", "sober", "hopeful", "wry", "epic"],
+  pace: ["slow", "steady", "brisk"],
+  detail: ["spare", "balanced", "rich"],
+  focus: ["people", "politics", "war", "money", "daily life"],
+};
+/** Styles and tones that come with Capo, so the choice means something before any file is opened. */
+const STYLES = [
+  { id: "chronicle", name: "A court chronicle", text: "Write as a chronicler of the realm would: measured, a little formal, in the past tense, naming offices and places with care and leaving judgement to the reader." },
+  { id: "wire", name: "A wire report", text: "Write as a news agency would: short declarative sentences, who did what and where first, no adjectives that a reporter could not stand behind." },
+];
+const TONES = [
+  { id: "grim", name: "Grim and spare", mood: "grim", pace: "brisk", detail: "spare", focus: "people", note: "" },
+  { id: "wry", name: "Wry and worldly", mood: "wry", pace: "steady", detail: "balanced", focus: "politics", note: "" },
+];
+
+const ADDRESS = /\b(?:https?|wss?|ftp|file|data|javascript)\s*:|\bwww\.[a-z0-9-]+\./i;
+// the labels of Capo's reply lines: a style that writes them could pass for part of the reply format
+const LABEL = /\b(?:TURN|MOVE|EVENT|NEWS|SUMMARY|PERSON|THREAD|STOP|STANDING|ADVICE|REPLY|MEMBER|SAYS|RECEIPT|END)\s*:|(?:^|\s)END(?:\s|$)/;
+/** One line of plain text, clipped: control characters and line breaks gone, and no "|" to split a reply line with. */
+const plain = (v, n) => (typeof v === "string" ? v.replace(/[\x00-\x1f\x7f-\x9f\p{Zl}\p{Zp}]+/gu, " ").replace(/\s*\|\s*/g, " / ").replace(/\s+/g, " ").trim().slice(0, n) : "");
+const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "untitled";
+const no = (why) => ({ ok: false, why });
+/** Why a set of texts may not be kept, or "". */
+function refused(texts, what) {
+  if (texts.some((t) => ADDRESS.test(t))) return `That ${what} is refused: a plugin's text may not hold a web address.`;
+  if (texts.some((t) => crosses(t))) return `That ${what} is refused: nothing sexual involving minors.`;
+  return "";
+}
+const head = (s, kind, what) => (!s || typeof s !== "object" || Array.isArray(s) || s.kind !== kind || s.v !== 1 ? `That file is not a Capo ${what}.` : !plain(s.name, LIMITS.name) ? `The ${what} has no name.` : "");
+
+/** A prose style: {kind: "capo-style", v: 1, name, text}. The text shapes the wording only. */
+function checkStyle(s) {
+  const bad = head(s, "capo-style", "prose style"); if (bad) return no(bad);
+  const name = plain(s.name, LIMITS.name), text = plain(s.text, LIMITS.style);
+  if (text.length < 10) return no("The prose style has no text.");
+  if (LABEL.test(text)) return no("That prose style is refused: it writes lines of the reply format, which only Capo's prompt may set.");
+  const why = refused([name, text], "prose style"); if (why) return no(why);
+  return { ok: true, plugin: { kind: "capo-style", v: 1, id: `file-${slug(name)}`, name, text } };
+}
+
+/** A tone: {kind: "capo-tone", v: 1, name, mood, pace, detail, focus, note}. Each dial is one of DIALS or left out. */
+function checkTone(s) {
+  const bad = head(s, "capo-tone", "tone"); if (bad) return no(bad);
+  const name = plain(s.name, LIMITS.name), note = plain(s.note, LIMITS.note), dials = {};
+  for (const [k, values] of Object.entries(DIALS)) dials[k] = values.includes(s[k]) ? s[k] : "";
+  if (!note && !Object.values(dials).some(Boolean)) return no("The tone sets nothing: it needs a mood, a pace, a detail, a focus or a note.");
+  if (LABEL.test(note)) return no("That tone is refused: its note writes lines of the reply format.");
+  const why = refused([name, note], "tone"); if (why) return no(why);
+  return { ok: true, plugin: { kind: "capo-tone", v: 1, id: `file-${slug(name)}`, name, ...dials, note } };
+}
+
+/** Whether a page that may reach only `origins` and this computer may call an address; the same rule as the page's connect-src. */
+function within(base, origins) {
+  let u; try { u = new URL(base); } catch { return false; }
+  if (u.username || u.password || u.search || u.hash) return false;
+  return (u.protocol === "http:" && ["localhost", "127.0.0.1"].includes(u.hostname)) || (u.protocol === "https:" && origins.includes(u.origin));
+}
+/**
+ * A service preset: {kind: "capo-service", v: 1, name, shape, base, models, about, key, tools, limit, choice}.
+ * `origins` are the hosted services the page may reach: a preset may only point at one of them or at this computer.
+ * Its id always starts "file-", so it can never share a kept key with a built-in service.
+ */
+function checkService(s, origins = []) {
+  const bad = head(s, "capo-service", "service preset"); if (bad) return no(bad);
+  const name = plain(s.name, LIMITS.name), about = plain(s.about, LIMITS.about), base = typeof s.base === "string" ? s.base.trim().replace(/\/+$/, "").slice(0, 200) : "";
+  if (!["openai", "anthropic", "gemini"].includes(s.shape)) return no("The service preset's shape must be openai, anthropic or gemini.");
+  if (!within(base, origins)) return no("That service preset is refused: its address must be on this computer (localhost or 127.0.0.1, over http) or one of the services Capo already lists.");
+  const why = refused([name, about], "service preset"); if (why) return no(why);
+  const models = (Array.isArray(s.models) ? s.models : []).filter((m) => typeof m === "string" && /^[\w.:/@+-]{1,80}$/.test(m)).slice(0, LIMITS.models), local = base.startsWith("http:");
+  return { ok: true, plugin: { kind: "capo-service", v: 1, id: `file-${slug(name)}`, name: `${name} (from a file)`, shape: s.shape, base, models, about, cors: local ? "local" : "check", local: local && s.key !== true, tools: s.tools === true,
+    ...(["max_tokens", "max_completion_tokens"].includes(s.limit) && { limit: s.limit }), ...(["required", "any", "auto"].includes(s.choice) && { choice: s.choice }), plugin: true } };
+}
+
+/** A scenario pack: {kind: "capo-pack", v: 1, name, about, scenarios}. Returns the raw scenarios, each still to be checked as a scenario file is. */
+function checkPack(s) {
+  const bad = head(s, "capo-pack", "scenario pack"); if (bad) return no(bad);
+  const name = plain(s.name, LIMITS.name), about = plain(s.about, LIMITS.about);
+  const list = (Array.isArray(s.scenarios) ? s.scenarios : []).filter((x) => x && typeof x === "object" && !Array.isArray(x) && ["capo-scenario", "capo-setting"].includes(x.kind));
+  if (!list.length) return no("The scenario pack holds no scenario.");
+  const why = refused([name, about], "scenario pack"); if (why) return no(why);
+  return { ok: true, name, about, scenarios: list.slice(0, LIMITS.pack), left: Math.max(0, list.length - LIMITS.pack) };
+}
+
+/** Check any plugin file by its kind. */
+function checkPlugin(s, origins = []) {
+  const kind = s && typeof s === "object" ? s.kind : "";
+  if (kind === "capo-style") return checkStyle(s);
+  if (kind === "capo-tone") return checkTone(s);
+  if (kind === "capo-service") return checkService(s, origins);
+  if (kind === "capo-pack") return checkPack(s);
+  if (kind === "capo-scenario" || kind === "capo-setting") return no("That is a scenario: open it from the first screen, with Open a scenario file.");
+  return no("That file is not a Capo plugin: a plugin is a prose style, a tone, a service preset or a scenario pack.");
+}
+
+/** What this browser kept, checked again from nothing: {styles, tones, services, style, tone}, each list at most twelve. */
+function keepPlugins(kept, origins = []) {
+  const k = kept && typeof kept === "object" ? kept : {}, take = (list, check) => {
+    const out = [];
+    for (const x of Array.isArray(list) ? list : []) { const r = check(x?.kind === "capo-service" ? { ...x, name: String(x.name || "").replace(/ \(from a file\)$/, ""), key: x.local === false && x.cors === "local" } : x); if (r.ok && !out.some((y) => y.id === r.plugin.id)) out.push(r.plugin); }
+    return out.slice(-LIMITS.kept);
+  };
+  const styles = take(k.styles, checkStyle), tones = take(k.tones, checkTone), services = take(k.services, (x) => checkService(x, origins));
+  const pick = (id, list, own) => ([...own, ...list].some((x) => x.id === id) ? id : "");
+  return { styles, tones, services, style: pick(k.style, styles, STYLES), tone: pick(k.tone, tones, TONES) };
+}
+
+/** A tone in words, from its dials: "a grim mood, a brisk pace, spare detail, dwelling on people". */
+function toneWords(t) {
+  if (!t) return "";
+  const parts = [t.mood && `a ${t.mood} mood`, t.pace && `a ${t.pace} pace`, t.detail && `${t.detail} detail`, t.focus && `dwelling on ${t.focus}`].filter(Boolean).join(", ");
+  return [parts, (t.note || "").replace(/[.!?]+$/, "")].filter(Boolean).join(". ");
+}
+/**
+ * What the storyteller is told about wording, as one system message, or "" when nothing is chosen. It says first that
+ * it shapes the prose only: the format, the facts and the rules stand, and the rules judge every move as before.
+ */
+function voice(style, tone) {
+  const lines = [style && `Prose style, "${style.name}": ${style.text}`, tone && `Tone, "${tone.name}": ${toneWords(tone)}.`].filter(Boolean);
+  if (!lines.length) return "";
+  return ["The player chose how the story is told. This shapes the wording of the prose only. It never changes the reply format, the facts given, the rules, the number of lines, or what any country does; where it seems to, ignore it.", ...lines].join("\n");
+}
+
+$x.PLUGIN_KINDS = PLUGIN_KINDS; $x.LIMITS = LIMITS; $x.DIALS = DIALS; $x.STYLES = STYLES; $x.TONES = TONES; $x.plain = plain; $x.checkStyle = checkStyle; $x.checkTone = checkTone; $x.within = within; $x.checkService = checkService; $x.checkPack = checkPack; $x.checkPlugin = checkPlugin; $x.keepPlugins = keepPlugins; $x.toneWords = toneWords; $x.voice = voice;
+return $x; })({});
+$m[30] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Two additions to how Capo reaches an AI, kept apart from site/ai.js so its own lines stay few:
+// 1. The MCP bridge: a service called "Your AI app (MCP bridge)". The player runs tools/capo-mcp.mjs themselves and
+//    pastes its page token here; only then, and only when a call is made, does this page reach 127.0.0.1 on the
+//    bridge's port, which the page rule already allows. The page never starts anything. An AI app may also propose an
+//    order, if the player ticks that: the rules answer it, and it is given only when the player accepts it here.
+// 2. Plugins: files of data the player opens (a prose style, a tone, a service preset), checked by
+//    src/story/plugins.js like a save and kept in this browser. Never code: nothing in a plugin is run.
+// The page parts are built from elements and text, never markup.
+const { AI_BASES } = $m[27];
+const { BRIDGE_PORT, digest, judgeOrder } = $m[31];
+const { PLUGIN_KINDS, STYLES, TONES, checkPlugin, keepPlugins, toneWords, voice } = $m[32];
+
+const ORIGINS = [...new Set(Object.values(AI_BASES).map((b) => new URL(b).origin).filter((o) => o.startsWith("https:")))];
+const fail = (kind, message) => Object.assign(new Error(message), { kind });
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
+const button = (text, on, cls = "plain") => { const b = el("button", text, cls); b.type = "button"; b.onclick = on; return b; };
+
+// ---- what site/ai.js lends: its list of services and the key's keeping ----
+let ai = null;
+/** Called once by site/ai.js: adds the bridge to its services, and every service preset kept from a file. */
+function aiMore(lent) { ai = lent; if (!ai.PRESETS.includes(BRIDGE)) ai.PRESETS.splice(Math.max(0, ai.PRESETS.length - 1), 0, BRIDGE); services(); }
+function services() {
+  if (!ai) return;
+  for (let i = ai.PRESETS.length - 1; i >= 0; i--) if (ai.PRESETS[i].plugin) ai.PRESETS.splice(i, 1);
+  ai.PRESETS.splice(Math.max(0, ai.PRESETS.length - 1), 0, ...kept().services);
+}
+
+// ---- 1. the bridge ----
+const BRIDGE = { id: "bridge", name: "Your AI app (MCP bridge), on this computer", shape: "bridge", cors: "local", local: true, tools: false, models: [], bridge: true, base: `http://127.0.0.1:${BRIDGE_PORT}`,
+  about: "Your own AI app (Claude Code, Claude Desktop, Codex, any MCP client) tells the story, on its own sign-in: no key. You start the bridge yourself, with node tools/capo-mcp.mjs from Capo's source, and paste the token it prints." };
+const bridgeBase = (r) => `http://127.0.0.1:${Number.isInteger(r?.bridgePort) && r.bridgePort > 0 && r.bridgePort < 65536 ? r.bridgePort : BRIDGE_PORT}`;
+const START = "Start it with: node tools/capo-mcp.mjs";
+const to = (r, token, at, more = {}) => fetch(`${bridgeBase(r)}/capo/${at}`, { credentials: "omit", referrerPolicy: "no-referrer", cache: "no-store", ...more, headers: { Authorization: `Bearer ${token}`, ...(more.body && { "Content-Type": "application/json" }) } });
+const post = (r, token, at, body) => to(r, token, at, { method: "POST", body: JSON.stringify(body) }).catch(() => null);
+/** Reads a reply that stays open, one JSON object a line, handing each to take(); take returns true to stop. */
+async function lines(res, take) {
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  try {
+    for (let buf = "", done = false; !done;) {
+      const piece = await reader.read();
+      done = piece.done; buf += dec.decode(piece.value, { stream: !done });
+      const all = buf.split("\n"); buf = done ? "" : all.pop();
+      for (const l of all) { let d = null; try { d = JSON.parse(l); } catch { /* an empty line */ } if (d && take(d)) return true; }
+    }
+    return false;
+  } finally { reader.cancel().catch(() => {}); }
+}
+const refusal = (res) => (res.status === 401 ? fail("key", "The bridge refused the token. Paste the page token it prints (node tools/capo-mcp.mjs --tokens shows it again).")
+  : res.status === 403 ? fail("blocked", "The bridge turned this page away: it lets in Capo's own site and this computer. Start it with --origin and this page's address, or --allow-file for a page opened by double-click.")
+    : fail("other", `The bridge answered with an error (${res.status}).`));
+
+/**
+ * One prompt through the bridge: it waits there until the player's AI app takes it (capo_next) and hands a reply back
+ * (capo_reply). The reply is plain lines, read and judged like any other. o: kind, onStatus(sentence).
+ */
+async function bridgeAsk(r, token, prompt, signal, o = {}) {
+  if (!token) throw fail("key", `Give the bridge's page token first: Game, How Capo reaches an AI. ${START}`);
+  if (signal?.aborted) throw fail("stop", "Stopped.");
+  const stopped = () => fail(signal?.reason === "time" ? "time" : "stop", "Stopped.");
+  let res;
+  try { res = await to(r, token, "ask", { method: "POST", signal, body: JSON.stringify({ kind: o.kind || "turn", prompt, note: voiceNow(o.kind), state: snapshot() }) }); }
+  catch { throw signal?.aborted ? stopped() : fail("blocked", `Nothing answered at ${bridgeBase(r)}. ${START} Your browser may also ask whether this page may reach devices on your network: allow it.`); }
+  if (!res.ok) throw refusal(res);
+  o.onStatus?.("The prompt is at the bridge. Tell your AI app: play my Capo turn.");
+  let text = null, gone = false;
+  try {
+    await lines(res, (d) => {
+      if (d.at === "taken") o.onStatus?.("Your AI app has the prompt and is writing.");
+      if (d.gone) gone = true;
+      if (typeof d.text === "string") text = d.text;
+      return gone || text !== null;
+    });
+  } catch { throw signal?.aborted ? stopped() : fail("blocked", "The bridge went away before a reply came. Start it again, then ask again."); }
+  if (gone) throw fail("other", "Another prompt took this one's place at the bridge. Ask again.");
+  if (text === null) throw fail("blocked", "The bridge closed before a reply came. Start it again, then ask again.");
+  if (!text.trim()) throw fail("empty", "Your AI app sent no text back.");
+  hear(); // the bridge is there: listen for proposals again, if the player allows them
+  for (const ms of [1500, 12000]) setTimeout(() => tell(r, token), ms).unref?.(); // once the page has read the reply and the rules have run, capo_state can show the receipt
+  return text;
+}
+/** Is the bridge there, does it take the token, and has an AI app called it? Returns a sentence. */
+async function bridgeCheck(r, token, signal) {
+  if (!token) throw fail("key", "Paste the bridge's page token first.");
+  let res;
+  try { res = await to(r, token, "hello", { signal }); } catch { throw fail("blocked", `Nothing answered at ${bridgeBase(r)}. ${START}`); }
+  if (!res.ok) throw refusal(res);
+  const d = await res.json().catch(() => null);
+  if (d?.bridge !== "capo-bridge") throw fail("other", `Something else answers at ${bridgeBase(r)}, not the Capo bridge. Give the bridge another port.`);
+  hear();
+  return `The bridge is running (version ${String(d.version).slice(0, 12)}). ${d.appSecondsAgo == null ? "No AI app has called it yet: add it to your AI app as an MCP server." : `Your AI app last called it ${d.appSecondsAgo} seconds ago.`}`;
+}
+
+// ---- orders an AI app proposes: answered by the rules, given only when the player accepts ----
+let host = null, hearing = null, offers = [], card = null;
+/** Called once by the game page: g() the game, geo(), route(), most() attacks this turn allows, order(o), toast(text). */
+function aiHost(h) { host = h; hear(); }
+const snapshot = () => { try { const g = host?.g(); return g ? digest(g, host.geo()) : null; } catch { return null; } };
+let told = "";
+/** Tells the bridge the game's digest when it has changed; never the game itself. */
+function tell(r, token) { const s = snapshot(), now = JSON.stringify(s); if (!s || now === told) return; told = now; post(r, token, "state", { state: s }); }
+const wanted = (r) => !!r && r.route === "address" && r.preset === "bridge" && r.propose === true;
+/** Listens for proposals while the player allows them. A bridge that is not there ends it quietly, until the next call or check. */
+function hear() {
+  const r = host?.route(), token = r && ai ? ai.keyOf(r) : "";
+  if (hearing || !wanted(r) || !token) return;
+  const ctl = hearing = new AbortController();
+  (async () => {
+    try {
+      const res = await to(r, token, "listen", { signal: ctl.signal });
+      if (!res.ok) return;
+      told = ""; tell(r, token);
+      await lines(res, (d) => { if (d.order) take(r, token, d.order); else tell(r, token); if (offers.length && !host.g()) { offers = []; show(); } return !!d.gone || !wanted(host.route()); }); // a game that was left takes its proposals with it
+    } catch { /* the bridge is not there, or the player stopped listening */ } finally { ctl.abort(); if (hearing === ctl) hearing = null; }
+  })();
+}
+function unhear() { hearing?.abort(); hearing = null; }
+function take(r, token, o) {
+  let v; try { v = judgeOrder(host.g(), host.geo(), o, host.most()); } catch { v = { ok: false, why: "Capo could not weigh that order." }; }
+  post(r, token, "answer", { id: o.id, ok: v.ok, text: v.order?.text, note: v.note, why: v.why });
+  if (!v.ok) return;
+  offers = [...offers.filter((x) => !(x.verb === v.order.verb && x.target === v.order.target)), { ...v.order, note: v.note }].slice(-6);
+  show();
+}
+/** The proposals waiting, in a small box over the map: each with the rules' answer, Accept and Dismiss. */
+function show() {
+  card?.remove(); card = null;
+  if (!offers.length || !globalThis.document?.body) return;
+  card = el("section", undefined, "glass");
+  card.setAttribute("aria-label", "Orders your AI app proposes"); card.setAttribute("role", "region");
+  Object.assign(card.style, { position: "fixed", right: "8px", top: "112px", zIndex: "6", width: "min(360px, calc(100vw - 16px))", maxHeight: "50vh", overflow: "auto", padding: "10px 14px", boxSizing: "border-box" });
+  const list = el("ul", undefined, "list"), said = el("p", `Your AI app proposes ${offers.length === 1 ? "an order" : `${offers.length} orders`}. Nothing is ordered unless you accept it; the rules carry it out when you advance.`, "note");
+  said.setAttribute("role", "status");
+  for (const o of offers) {
+    const li = el("li"), row = el("div", undefined, "row"), drop = () => { offers = offers.filter((x) => x !== o); show(); };
+    row.append(button("Accept", () => {
+      const v = judgeOrder(host.g(), host.geo(), { verb: o.verb, target: o.target, detail: o.detail, seat: o.seat, approach: o.approach }, host.most()); // the game may have moved on since it was proposed
+      drop();
+      if (!v.ok) return host.toast(`No longer possible: ${v.why}`);
+      host.order(v.order);
+    }, "go"), button("Dismiss", drop));
+    const words = el("span", `${o.text} By the rules today: ${o.note}.`);
+    li.style.display = "grid"; row.style.margin = "0"; li.append(words, row); list.append(li);
+  }
+  card.append(el("h3", "Proposed by your AI app"), said, list);
+  document.body.append(card);
+}
+const proposals = () => offers.slice();
+
+/** The bridge's part of the settings: the token, the port, a check, and whether an AI app may propose orders. ui: what site/ai.js lends its panel. */
+function bridgePart(r, ui) {
+  const token = Object.assign(el("input", undefined, "plain"), { type: "password", value: ai.keyOf(r), placeholder: "The page token the bridge prints", autocomplete: "off", spellcheck: false });
+  token.oninput = () => { ai.setKey(r, token.value); unhear(); };
+  const port = Object.assign(el("input", undefined, "plain"), { type: "number", min: 1, max: 65535, value: String(new URL(bridgeBase(r)).port), inputMode: "numeric" });
+  port.onchange = () => { const n = Number(port.value); r.bridgePort = Number.isInteger(n) && n > 0 && n < 65536 ? n : BRIDGE_PORT; port.value = String(new URL(bridgeBase(r)).port); ui.keep(); unhear(); hear(); };
+  const result = ui.status(), steps = el("ol", undefined, "steps");
+  for (const s of ["Get Capo's source and Node 22 or newer. Nothing else is installed.", "In a terminal there, run: node tools/capo-mcp.mjs. It prints a page token and how to add it to your AI app.", "Paste the page token below, and add the bridge to your AI app as it says.", "Start a turn here, then tell your AI app: play my Capo turn."]) steps.append(el("li", s));
+  const check = button("Check the bridge", async () => {
+    check.disabled = true; result.className = "note"; result.textContent = "Checking the bridge...";
+    const stop = new AbortController(), t = setTimeout(() => stop.abort(), 8000);
+    try { const said = await bridgeCheck(r, ai.keyOf(r), stop.signal); result.textContent = said; ui.linked?.(said); } catch (e) { result.className = "warn"; result.textContent = e.message; }
+    finally { clearTimeout(t); check.disabled = false; }
+  }, "go");
+  const may = Object.assign(el("input"), { type: "checkbox", checked: r.propose === true }), ml = el("label", undefined, "note"), row = el("div", undefined, "row");
+  may.dataset.k = "propose";
+  may.onchange = () => { r.propose = may.checked; ui.keep(); if (may.checked) hear(); else { unhear(); offers = []; show(); } };
+  ml.append(may, " Let my AI app propose orders (a treaty, peace, an attack). The rules answer each one, and none is given unless I accept it here.");
+  row.append(check, button("Forget the token", () => { ai.setKey(r, ""); unhear(); ui.draw("key"); ui.done("The bridge's token is forgotten."); }));
+  return [steps, ui.line("Page token", token, "key"),
+    ui.radios("Keep the token", "keep", [["session", "Only while this tab is open"], ["device", "Remember on this device"]], r.keep, (v) => { ai.setKeep(r, v); ui.draw(`keep-${v}`); }),
+    ui.line("Port", port, "port"), ml, row, result,
+    el("p", "This page reaches only 127.0.0.1 on that port, and only once you have chosen this and pasted the token. It never starts the bridge. Your AI app sees each prompt, as any AI service would, and a short summary of the game.", "note")];
+}
+
+// ---- 2. plugins: data the player opens, never code ----
+const PLACE = "capo-plugins-1";
+let store = null;
+function kept() {
+  if (store) return store;
+  let raw = null; try { raw = JSON.parse(globalThis.localStorage?.getItem(PLACE) || "null"); } catch { /* nothing kept */ }
+  return (store = keepPlugins(raw, ORIGINS));
+}
+function keep(next) {
+  store = keepPlugins(next, ORIGINS); // checked again on the way in, as on the way out
+  try { globalThis.localStorage?.setItem(PLACE, JSON.stringify(store)); } catch { /* it works for this visit */ }
+  services();
+  return store;
+}
+/** Take one plugin file's contents. Returns {ok, said} with a sentence for the player. */
+function openPlugin(raw) {
+  const r = checkPlugin(raw, ORIGINS);
+  if (!r.ok) return { ok: false, said: r.why };
+  if (!r.plugin) return { ok: false, said: "A scenario pack opens from the first screen: New game, then Open a scenario file." };
+  const k = kept(), p = r.plugin, list = { "capo-style": "styles", "capo-tone": "tones", "capo-service": "services" }[p.kind];
+  keep({ ...k, [list]: [...k[list].filter((x) => x.id !== p.id), p], ...(p.kind === "capo-style" && { style: p.id }), ...(p.kind === "capo-tone" && { tone: p.id }) });
+  return { ok: true, said: `Opened the ${PLUGIN_KINDS[p.kind].toLowerCase()} "${p.name}".${p.kind === "capo-service" ? " It is in the Service list now." : " It is chosen now."}` };
+}
+function dropPlugin(id, kind) { const k = kept(), list = { "capo-style": "styles", "capo-tone": "tones", "capo-service": "services" }[kind]; if (list) keep({ ...k, [list]: k[list].filter((x) => x.id !== id) }); }
+const choosePlugin = (what, id) => keep({ ...kept(), [what]: id });
+const pluginsNow = () => kept();
+/** What the storyteller is told about wording for one call: the chosen style and tone, or "". Never for the connection check. */
+function voiceNow(kind) {
+  if (kind === "check") return "";
+  const k = kept();
+  return voice([...STYLES, ...k.styles].find((s) => s.id === k.style), [...TONES, ...k.tones].find((t) => t.id === k.tone));
+}
+
+/** The plugins section of the settings. ui: what site/ai.js lends its panel (line, status, draw, done). */
+function pluginPart(r, ui) {
+  const k = kept(), box = el("div"), said = ui.status(), file = el("input");
+  const pick = (label, key, own, mine, about) => {
+    const s = el("select", undefined, "plain"), a = el("optgroup"), b = el("optgroup");
+    s.append(new Option("None: as the AI writes", ""));
+    a.label = "With Capo"; a.append(...own.map((x) => new Option(x.name, x.id))); s.append(a);
+    if (mine.length) { b.label = "From your files"; b.append(...mine.map((x) => new Option(x.name, x.id))); s.append(b); }
+    s.value = k[key];
+    s.onchange = () => { choosePlugin(key, s.value); ui.draw(`plug-${key}`); };
+    const chosen = [...own, ...mine].find((x) => x.id === k[key]);
+    return [ui.line(label, s, `plug-${key}`), ...(chosen ? [el("p", about(chosen), "note")] : [])];
+  };
+  file.type = "file"; file.accept = ".json,application/json"; file.hidden = true;
+  file.onchange = async () => {
+    const f = file.files[0]; if (!f) return;
+    let got;
+    if (f.size > 400000) got = { ok: false, said: "That file is too big to be a plugin." };
+    else { try { got = openPlugin(JSON.parse(await f.text())); } catch { got = { ok: false, said: "That file is not a Capo plugin: it is not JSON." }; } }
+    if (got.ok) { ui.draw("plug-open"); ui.done(got.said); } else { said.className = "warn"; said.textContent = got.said; }
+  };
+  const open = button("Open a plugin file", () => file.click()), row = el("div", undefined, "row"), list = el("ul", undefined, "list");
+  open.dataset.k = "plug-open"; row.append(open, file);
+  for (const p of [...k.styles, ...k.tones, ...k.services]) {
+    const li = el("li");
+    li.append(el("span", `${PLUGIN_KINDS[p.kind]}: ${p.name}${p.kind === "capo-service" ? `, at ${p.base}` : ""}`), button("Remove", () => { if (r.preset === p.id) { r.preset = "openrouter"; r.model = ""; ui.keep(); } dropPlugin(p.id, p.kind); ui.draw("plug-open"); ui.done(`Removed "${p.name}".`); }));
+    list.append(li);
+  }
+  box.append(el("h3", "Plugins: files, never code"),
+    el("p", "A plugin is a small JSON file you open: a prose style or a tone for the storyteller, or a service preset. Capo checks each like a save, keeps only the parts it knows, and runs nothing from it. Scenario packs open from the first screen, with Open a scenario file.", "note"),
+    ...pick("Prose style", "style", STYLES, k.styles, (s) => s.text), ...pick("Tone", "tone", TONES, k.tones, (t) => `${toneWords(t)}.`),
+    el("p", "A style and a tone shape the wording only. The reply format, the facts and the rules stay as they are, and the rules judge every move as before.", "note"),
+    row, said, ...(list.children.length ? [list] : []));
+  return box;
+}
+
+$x.aiMore = aiMore; $x.BRIDGE = BRIDGE; $x.bridgeBase = bridgeBase; $x.bridgeAsk = bridgeAsk; $x.bridgeCheck = bridgeCheck; $x.aiHost = aiHost; $x.hear = hear; $x.unhear = unhear; $x.proposals = proposals; $x.bridgePart = bridgePart; $x.openPlugin = openPlugin; $x.dropPlugin = dropPlugin; $x.choosePlugin = choosePlugin; $x.pluginsNow = pluginsNow; $x.voiceNow = voiceNow; $x.pluginPart = pluginPart;
+return $x; })({});
 $m[26] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // How Capo reaches an AI: a service the player connects with their own key, or a server on the player's computer
@@ -3726,6 +4192,8 @@ $m[26] = (($x) => {
 const { AI_BASES } = $m[27];
 const { formatOf, linesFrom, toolOf } = $m[28];
 const { SHAPES, splitEvents } = $m[29];
+// mcp and plugins hook: the bridge to the player's own AI app, and data-only plugins (site/aimore.js)
+const { aiMore, bridgeAsk, bridgePart, pluginPart, voiceNow } = $m[30];
 
 /** The reply allowance in tokens for each kind of call (lane 2 review). A thinking model gets four times as much. */
 const BUDGET = { turn: 1800, chat: 400, council: 500, ask: 500, character: 300, check: 300 };
@@ -3885,11 +4353,13 @@ async function once(c, o) {
 async function ask(r, prompt, signal, o = {}) {
   if (!connected(r)) throw fail("connect", "No AI is connected yet. Connect one in Game, How Capo reaches an AI.");
   const p = presetOf(r), base = baseOf(r), key = keyOf(r), kind = o.kind || "turn", model = r.model || p.models[0] || "";
+  if (p.bridge) return bridgeAsk(r, key, prompt, signal, { kind, onStatus: o.onStatus }); // mcp hook: the player's own AI app answers, through the bridge they started
   if (!reachable(base)) throw fail("address", "The address must be a server on this computer, such as http://localhost:8000/v1: this page may reach only the services it lists and this computer.");
   if (!key && !p.local && !p.custom) throw fail("key", `Give your ${p.name} key first: Game, How Capo reaches an AI.`);
   if (!model && p.shape !== "openai") throw fail("model", `Choose a model for ${p.name}.`);
   const fmt = p.tools && r.tools !== false && !r.plain?.[p.id] && kind !== "check" && formatOf(prompt), tool = fmt && toolOf(fmt);
   const c = { p, base, key, model, prompt, signal, tool, stream: !!o.onText && kind !== "check", max: r.loose?.[p.id] ? 0 : allowance(r, kind, !!tool) };
+  c.system = voiceNow(kind); // plugins hook: the prose style and tone the player chose, as a system message; wording only
   let a;
   for (let tries = 0; !a;) {
     try { a = await once(c, o); } catch (e) {
@@ -4007,7 +4477,7 @@ const CORS = { yes: "Works from this page.", check: "Not yet seen working from a
  */
 function aiPanel(r, done = () => {}, o = {}) {
   const box = el("section", undefined, "aipanel");
-  const draw = (focus) => { box.replaceChildren(...parts()); if (focus) box.querySelector(`[data-k="${focus}"]`)?.focus(); };
+  const draw = (focus) => { box.replaceChildren(...parts(), pluginPart(r, ui)); if (focus) box.querySelector(`[data-k="${focus}"]`)?.focus(); };
   const keep = () => saveRoute(r);
   let said = ""; // what Check connection found, kept across the redraw that follows a first connection
   const line = (label, input, k) => { const l = el("label", undefined, "note field"); input.dataset.k = k; l.append(label, input); return l; };
@@ -4016,6 +4486,9 @@ function aiPanel(r, done = () => {}, o = {}) {
     for (const [v, text] of list) { const l = el("label"), i = el("input"); Object.assign(i, { type: "radio", name, value: v, checked: v === value }); i.dataset.k = `${k}-${v}`; i.onchange = () => on(v); l.append(i, ` ${text}`); f.append(l); }
     return f;
   };
+  // A check that passed connects, as Check connection does; true when this was the first connection (the panel redraws or closes).
+  const linked = (text) => { const first = !connected(r); r.route = "address"; delete r.gone; keep(); if (!first) return false; if (o.onConnect) { done(text); o.onConnect(); } else { said = text; draw("check"); } return true; };
+  const ui = { status, line, radios, draw, keep, done, linked }; // mcp and plugins hook: what this panel lends site/aimore.js
   function parts() {
     const head = el("h3", o.title || "How Capo reaches an AI"), result = status(), p = presetOf(r);
     head.id = uid("head"); box.setAttribute("aria-labelledby", head.id); result.id = uid("result"); result.textContent = said; said = "";
@@ -4027,6 +4500,7 @@ function aiPanel(r, done = () => {}, o = {}) {
     pick.value = p.id;
     pick.onchange = () => { r.preset = pick.value; r.model = ""; keep(); draw("preset"); };
     out.push(line("Service", pick, "preset"), el("p", `${p.about} ${CORS[p.cors] || ""}`, "note"));
+    if (p.bridge) return [...out, ...bridgePart(r, ui), ...tail()]; // mcp hook: the bridge has a token and a port, no model and no key
     const fields = {};
     if (p.custom) {
       const base = Object.assign(el("input", undefined, "plain"), { type: "url", value: r.base, placeholder: "For example http://localhost:8000/v1", spellcheck: false });
@@ -4087,10 +4561,11 @@ function aiPanel(r, done = () => {}, o = {}) {
   draw();
   return box;
 }
+aiMore({ PRESETS, keyOf, setKey, setKeep }); // mcp and plugins hook: adds the bridge and any service presets kept from files
 
 $x.BUDGET = BUDGET; $x.thinks = thinks; $x.allowance = allowance; $x.PRESETS = PRESETS; $x.NEEDS_PROXY = NEEDS_PROXY; $x.WORKS = WORKS; $x.CONNECT = CONNECT; $x.reachable = reachable; $x.connected = connected; $x.loadRoute = loadRoute; $x.saveRoute = saveRoute; $x.keyOf = keyOf; $x.setKey = setKey; $x.setKeep = setKeep; $x.forgetKeys = forgetKeys; $x.scrub = scrub; $x.presetOf = presetOf; $x.baseOf = baseOf; $x.explain = explain; $x.ask = ask; $x.check = check; $x.watch = watch; $x.waitBox = waitBox; $x.connectBox = connectBox; $x.aiPanel = aiPanel;
 return $x; })({});
-$m[30] = (($x) => {
+$m[33] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
 // Daylight or lamplight, as the front page's lantern last left it; every page starts here.
@@ -4110,7 +4585,7 @@ function guard() {
 
 $x.guard = guard;
 return $x; })({});
-$m[31] = (($x) => {
+$m[34] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's page for what the rules keep about your country: its three gauges, your ambition, an open crisis, causes
 // for war, the press, the reckoning, and every past turn in full. The rules live in src/story (state.js,
@@ -4222,9 +4697,12 @@ const { loadWorld, ownerColour, unpackWorld, worldMap } = $m[25];
 const { aiPanel, ask, connectBox, connected, loadRoute, waitBox, watch } = $m[26];
 const { sampleReply } = $m[28];
 const { BUILD, SOURCE_URL, VERSION } = $m[27];
-const { guard } = $m[30];
+const { guard } = $m[33];
+// mcp and plugins hook: orders an AI app proposes through the bridge, and scenario packs (site/aimore.js, src/story/plugins.js)
+const { aiHost } = $m[30];
+const { checkPack } = $m[32];
 // features hook: the country sheet, crises, ambitions, the Turns tab (site/realm.js)
-const { NOTE, demandBox, keepMore, notices, realmSheet, stateColour, turnsTab } = $m[31];
+const { NOTE, demandBox, keepMore, notices, realmSheet, stateColour, turnsTab } = $m[34];
 
 const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);
@@ -4424,6 +4902,21 @@ function geo() {
 
 // features hook: what site/realm.js borrows from this page
 const X = { g: () => state, geo, name, near: () => [...landNeighbours(state.player), ...seaNeighbours(state.player)], el, button, fmtDate, save: () => save(), toast, open, act: (t) => { state.actions = [...(state.actions || []), t]; save(); toast("Ordered: it is in your actions."); if (sheet === "actions") open("actions"); } };
+aiHost({ g: () => state, geo, route: () => route, most: () => turnAttacks(), order, toast }); // mcp hook: an order an AI app proposes is weighed by the rules and given only when the player accepts it
+// plugins hook: a scenario pack is several scenarios in one file; each is checked exactly as a single scenario file is
+async function openPack(raw) {
+  const pack = checkPack(raw), was = draft.scenario; if (!pack.ok) return toast(pack.why);
+  const took = [];
+  for (let s of pack.scenarios) {
+    if (s.kind === "capo-setting") { const c = checkSetting(s); if (!c.ok) continue; s = { ...settingScenario(c.setting, "first"), kind: "capo-scenario", v: 1, id: `file-${c.setting.id}` }; }
+    if (!(await enter(s.world))) continue;
+    const r = checkScenario(s, (c) => homes.has(c), (id) => world.provinces.has(id));
+    if (r.ok && !crossesLine(scenarioText(r.scenario)).length) took.push(r.scenario);
+  }
+  if (!took.length) { toast("No scenario in that pack could be opened."); return choose(was); }
+  shelve([...shelf().filter((x) => !took.some((y) => y.id === x.id)), ...took]);
+  toast(`Opened ${took.length} of ${pack.scenarios.length + pack.left} scenarios from ${pack.name}.`); choose(took[0].id);
+}
 
 /** The way back to every game, when this page has one (the double-click copy does not). */
 function home() {
@@ -4494,6 +4987,7 @@ function stepScenario(box) {
     const f = file.files[0]; if (!f) return;
     if (f.size > 400000) return toast("That file is too big to be a scenario.");
     let raw; try { raw = JSON.parse(await f.text()); } catch { return toast("That file is not a Capo scenario."); }
+    if (raw?.kind === "capo-pack") return openPack(raw); // plugins hook
     // presets hook: a setting file becomes a scenario on its own world; a scenario is checked against the world it is set on
     if (raw?.kind === "capo-setting") { const c = checkSetting(raw); if (!c.ok) return toast(c.why); raw = { ...settingScenario(c.setting, "first"), kind: "capo-scenario", v: 1, id: `file-${c.setting.id}` }; }
     if (!(await enter(raw?.world))) return toast("That scenario is set on a world that could not be read.");

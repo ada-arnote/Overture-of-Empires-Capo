@@ -7,6 +7,8 @@
 import { AI_BASES } from "./config.js";
 import { formatOf, linesFrom, toolOf } from "../src/story/replyform.js";
 import { SHAPES, splitEvents } from "../src/story/wire.js";
+// mcp and plugins hook: the bridge to the player's own AI app, and data-only plugins (site/aimore.js)
+import { aiMore, bridgeAsk, bridgePart, pluginPart, voiceNow } from "./aimore.js";
 
 /** The reply allowance in tokens for each kind of call (lane 2 review). A thinking model gets four times as much. */
 export const BUDGET = { turn: 1800, chat: 400, council: 500, ask: 500, character: 300, check: 300 };
@@ -166,11 +168,13 @@ async function once(c, o) {
 export async function ask(r, prompt, signal, o = {}) {
   if (!connected(r)) throw fail("connect", "No AI is connected yet. Connect one in Game, How Capo reaches an AI.");
   const p = presetOf(r), base = baseOf(r), key = keyOf(r), kind = o.kind || "turn", model = r.model || p.models[0] || "";
+  if (p.bridge) return bridgeAsk(r, key, prompt, signal, { kind, onStatus: o.onStatus }); // mcp hook: the player's own AI app answers, through the bridge they started
   if (!reachable(base)) throw fail("address", "The address must be a server on this computer, such as http://localhost:8000/v1: this page may reach only the services it lists and this computer.");
   if (!key && !p.local && !p.custom) throw fail("key", `Give your ${p.name} key first: Game, How Capo reaches an AI.`);
   if (!model && p.shape !== "openai") throw fail("model", `Choose a model for ${p.name}.`);
   const fmt = p.tools && r.tools !== false && !r.plain?.[p.id] && kind !== "check" && formatOf(prompt), tool = fmt && toolOf(fmt);
   const c = { p, base, key, model, prompt, signal, tool, stream: !!o.onText && kind !== "check", max: r.loose?.[p.id] ? 0 : allowance(r, kind, !!tool) };
+  c.system = voiceNow(kind); // plugins hook: the prose style and tone the player chose, as a system message; wording only
   let a;
   for (let tries = 0; !a;) {
     try { a = await once(c, o); } catch (e) {
@@ -288,7 +292,7 @@ const CORS = { yes: "Works from this page.", check: "Not yet seen working from a
  */
 export function aiPanel(r, done = () => {}, o = {}) {
   const box = el("section", undefined, "aipanel");
-  const draw = (focus) => { box.replaceChildren(...parts()); if (focus) box.querySelector(`[data-k="${focus}"]`)?.focus(); };
+  const draw = (focus) => { box.replaceChildren(...parts(), pluginPart(r, ui)); if (focus) box.querySelector(`[data-k="${focus}"]`)?.focus(); };
   const keep = () => saveRoute(r);
   let said = ""; // what Check connection found, kept across the redraw that follows a first connection
   const line = (label, input, k) => { const l = el("label", undefined, "note field"); input.dataset.k = k; l.append(label, input); return l; };
@@ -297,6 +301,9 @@ export function aiPanel(r, done = () => {}, o = {}) {
     for (const [v, text] of list) { const l = el("label"), i = el("input"); Object.assign(i, { type: "radio", name, value: v, checked: v === value }); i.dataset.k = `${k}-${v}`; i.onchange = () => on(v); l.append(i, ` ${text}`); f.append(l); }
     return f;
   };
+  // A check that passed connects, as Check connection does; true when this was the first connection (the panel redraws or closes).
+  const linked = (text) => { const first = !connected(r); r.route = "address"; delete r.gone; keep(); if (!first) return false; if (o.onConnect) { done(text); o.onConnect(); } else { said = text; draw("check"); } return true; };
+  const ui = { status, line, radios, draw, keep, done, linked }; // mcp and plugins hook: what this panel lends site/aimore.js
   function parts() {
     const head = el("h3", o.title || "How Capo reaches an AI"), result = status(), p = presetOf(r);
     head.id = uid("head"); box.setAttribute("aria-labelledby", head.id); result.id = uid("result"); result.textContent = said; said = "";
@@ -308,6 +315,7 @@ export function aiPanel(r, done = () => {}, o = {}) {
     pick.value = p.id;
     pick.onchange = () => { r.preset = pick.value; r.model = ""; keep(); draw("preset"); };
     out.push(line("Service", pick, "preset"), el("p", `${p.about} ${CORS[p.cors] || ""}`, "note"));
+    if (p.bridge) return [...out, ...bridgePart(r, ui), ...tail()]; // mcp hook: the bridge has a token and a port, no model and no key
     const fields = {};
     if (p.custom) {
       const base = Object.assign(el("input", undefined, "plain"), { type: "url", value: r.base, placeholder: "For example http://localhost:8000/v1", spellcheck: false });
@@ -368,3 +376,4 @@ export function aiPanel(r, done = () => {}, o = {}) {
   draw();
   return box;
 }
+aiMore({ PRESETS, keyOf, setKey, setKeep }); // mcp and plugins hook: adds the bridge and any service presets kept from files

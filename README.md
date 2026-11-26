@@ -2,7 +2,7 @@
 
 Table games on one shared map, in the browser, and Capo, a story game played with an AI you bring. Free software, AGPL-3.0-or-later.
 
-An early build, at an unlisted address: https://ada-arnote.github.io/Overture-of-Empires-Capo/site/ . Four table games, with bots, saves, take-back and play by pasted link: **Brass and Banners**, **The Island Fable**, **Grain and Glass** and **An Inch of Ink**. And **Capo**, the story game, as an early test: the whole world, any country, an AI you connect (a service with your own key, or one on your own computer) that writes the story, and rules that decide what is true. Expect all of it to change.
+An early build, at an unlisted address: https://ada-arnote.github.io/Overture-of-Empires-Capo/site/ . Four table games, with bots, saves, take-back and play by shared link: **Brass and Banners**, **The Island Fable**, **Grain and Glass** and **An Inch of Ink**. And **Capo**, the story game, as an early test: the whole world, any country, an AI you connect (a service with your own key, or one on your own computer) that writes the story, and rules that decide what is true. Expect all of it to change.
 
 | Command | What it does |
 |---|---|
@@ -14,6 +14,7 @@ An early build, at an unlisted address: https://ada-arnote.github.io/Overture-of
 | `node tools/bundle.mjs` | Makes `dist/play-*.html`, one file for each game, that opens by double-click |
 | `node tools/play.mjs banners 200 3` | Plays bots against each other and prints the balance |
 | `node tools/pack.mjs` | Makes `dist/` for a static host. Uploads nothing |
+| `node tools/capo-mcp.mjs` | The Capo bridge, optional: lets your own AI app (any MCP client) tell Capo's story, on this computer only. It prints a token to give Capo and how to add it to the app; `--tokens` shows them again |
 
 | Folder | What |
 |---|---|
