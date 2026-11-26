@@ -2,6 +2,23 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.6.5 (2026-11-26): wars that end, people who matter
+
+**Players**
+- **Capo remembers people and open matters.** The AI may name up to two people a turn and open or move up to two threads; neither is required, and no reply is refused for lacking them. The game then follows each mention by its own code. Twelve people are sent to the AI each turn: your council, the people you chat with and the people you pin, always; the rest by who was mentioned most recently. Six threads stay open; one that nothing touches for twelve turns closes by rule and is noted in the chronicle. The Ledger has a People tab with Pin, Forget and Close.
+- **Wars end.** Each side of a war grows weary: one point for every six months, one for every two provinces lost. Peace is now answered by rule, with its reasons, as treaties are (weariness, +1 for every province between the two sides in the war's score, at most +3, and +1 for another war to fight; it needs 4, and each side keeps the land it holds). At the end of every turn, whatever the AI wrote, two countries that would both say yes make peace, an enemy of yours that would say yes offers you peace, and at weariness 6 the rules make a white peace for anyone. A truce of two years follows every peace. An enemy's province card shows what it would answer before you ask.
+- **Strength changes.** A country's might in a check is its might from the table, less one while it is weary (3 or more), less one once it has lost a third of the land it began with, plus one once it has gained a third. Cards show it with its parts.
+- **The world moves without an AI.** When the AI is down, or its reply proposed nothing for other countries, they move by published rules: a country at war attacks where its chance is 45 or more, a country with a grudge (-2 or lower) and an edge of 2 in might may declare war one time in four, and one country a turn asks a neighbour for the next treaty up when the answer would be yes. "Advance by the rules alone" plays a turn with no AI at all: orders given by card are carried out, and no story is told.
+- **Your moves are shown before the rules run.** When the AI reads a move for your country out of your actions (a war, a treaty, an attack you did not order by card), it is listed with a tick. Untick it and the rules never see it.
+- **Suggested actions, with the rules' answer.** Actions lists orders built from the state of the game: peace with each enemy and what it would answer, the best attack and its odds, the next treaty up with neighbours who would agree. One tap orders it.
+- **The story is told with the result known.** For an attack you ordered, the AI writes one sentence for each ending; the rules settle the attack and the page shows the ending they chose, in the same turn.
+- **Nothing typed is dropped, and the first turn can be tried with no AI.** Advance now takes an action you typed but had not added; a reply that was refused stays in its box; a chat message whose call failed is kept. The paste step says what kinds of AI work, shows the prompt taller, confirms the copy on the button, and offers "Try a sample reply", a reply Capo writes itself.
+- Focus follows the screen: a panel's heading takes focus when it opens and the dock button gets it back on Close, each setup step focuses its heading, and Advance moves focus to "Copy the prompt" and says the prompt is ready.
+- Games saved under the previous rules are converted with a note; past turns keep their results.
+
+**Contributors**
+- `src/story/people.js`, `war.js`, `rivals.js`, `suggest.js`; `reviewMoves` and `untick` in `worldrules.js`; the might table moved to `war.js` (still exported from `worldrules.js`). Story rules are version 4. `src/story` is about 43 of its 60 kB. `site/game.html` is unchanged: every page addition is in `site/game.js`.
+
 ## v0.6.4 (2026-11-26): the games come first
 
 **Players**

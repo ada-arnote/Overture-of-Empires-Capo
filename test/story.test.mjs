@@ -349,6 +349,8 @@ test("relations move only by what countries do, one step up a turn, and drift ba
   applyMoves(g, [mv("CHL", "WAR", "BOL")], G, [], 1);
   assert.equal(relOf(g, "CHL", "BOL"), -3);
   assert.equal(relOf(g, "BRA", "CHL"), 0, "a trade partner does not join, and is not moved");
+  assert.match(applyMoves(g, [mv("CHL", "PEACE", "BOL")], G, [], 1)[0].text, /asks Bolivia for peace, which refuses .no reason yet to stop: 0, needing 4./, "peace is answered by rule");
+  g.wars[0].since = "2024-12-01";
   applyMoves(g, [mv("CHL", "PEACE", "BOL")], G, [], 1);
   assert.equal(relOf(g, "CHL", "BOL"), -2, "peace leaves them bitter");
   applyMoves(g, [mv("BOL", "BREAK", "BRA")], G, [], 1);
@@ -437,7 +439,7 @@ test("a game saved under older rules is converted: relations empty, a chronicle 
   const old = warGame("old-2", { log: [{ from: "2026-12-01", to: "2027-01-01", summary: "A hard month.", events: [], receipt: [{ ok: true, text: "Peru: declares war on Chile", verb: "WAR", country: "PER" }] }], turn: 2, orders: [{ text: "Attack Arica", target: "CHL-1", seat: "war", approach: "bold" }, { text: "x", verb: "TREATY", target: "ZZZ", detail: "trade" }, { text: "y", verb: "TREATY", target: "CHL", detail: "loan" }] });
   old.rules = 2; delete old.chron; delete old.branch; delete old.word;
   old.rel = { "CHL|PER": [9, "2026-12-01"], "CHL|ZZZ": [1, "2026-12-01"], junk: 3 };
-  assert.match(convertNote(old), /relations and answer treaties by rule/);
+  assert.match(convertNote(old), /answer treaties and peace by rule, wars end by rule/);
   const g = checkSave(old, (id) => !!P[id], (c) => ["PER", "CHL"].includes(c));
   assert.equal(g.rules, RULES);
   assert.deepEqual([g.rel, g.word, g.branch], [{}, {}, 0], "relations that do not fit are dropped");
@@ -448,4 +450,297 @@ test("a game saved under older rules is converted: relations empty, a chronicle 
   const kept = checkSave({ ...old, rel: { "CHL|PER": [-2, "2026-12-01"] }, chron: "junk", branch: 2 }, (id) => !!P[id], (c) => ["PER", "CHL"].includes(c));
   assert.deepEqual([kept.rel, kept.branch, kept.chron.turns.length], [{ "CHL|PER": [-2, "2026-12-01"] }, 2, 1]);
   assert.ok(closeTurn(g, reply(g), geoOf(g), []), "and it plays on");
+});
+
+// ---- Phase 4, items 4 to 6: people and threads, wars that end, the rules-only turn, rules that answer part 2 ----
+import { PEOPLE, THREADS, peopleLines, pin, threadLines } from "../src/story/people.js";
+import { WAR, peaceAnswer, settleWars, strength, strengthLine, truceUntil, weariness } from "../src/story/war.js";
+import { RIVALS, bestAttack, borders, rivalMoves } from "../src/story/rivals.js";
+import { suggest } from "../src/story/suggest.js";
+import { reviewMoves, untick } from "../src/story/worldrules.js";
+
+const geoAll = (g) => ({ ...geo4(g), all: Object.keys(P4) });
+const world4 = (g, extra = {}) => ({ name: name4, neighbours: () => ["CHL", "BOL", "BRA"], size: () => 1, geo: geo4(g), places: ["- PER-1 Tacna (PER; own land)"], ...extra });
+const circle = () => ({ seats: { war: { name: "Iva Rojas", traits: "blunt, loyal", wants: "a larger army", favour: 0, likes: [], hates: [] }, treasury: null, foreign: null, home: null, outsider: null }, trusted: null, former: [] });
+const person = (name, line = "Seen once.") => ({ name, role: "a clerk", country: "PER", line });
+
+test("people: PERSON lines are optional and read forgivingly; someone from turn 3 is still known at turn 40", () => {
+  const g = game4("ppl-1", { council: circle(), chats: [{ id: "c1", with: [], person: "Marta Rios, union leader", messages: [] }] });
+  const seen = {};
+  for (let t = 1; t <= 60; t++) {
+    let r = reply(g, [], 1, t === 30 ? "The editor Vargas is in print again, and Santiago is not pleased." : "A quiet month.");
+    if (t === 3) {
+      r = readWorldReply([`TURN: ${turnCode(g)}`, `EVENT: ${g.date} | PER | Lima is calm and the markets are steady this month.`, "**PERSON:** Tomas Quispe | governor of Tacna | Peru | Ambitious, and owed a favour by the army.",
+        "- PERSON: Elena Vargas | editor | CHL | Prints what Santiago would rather hide.", "PERSON: One Too Many | x | PER | A third person is over the limit of two.", "PERSON: | nobody | PER | no name"].join("\n"), g, known, r.stop, false, codeOf);
+      assert.deepEqual(r.people, [{ name: "Tomas Quispe", role: "governor of Tacna", country: "PER", line: "Ambitious, and owed a favour by the army." }, { name: "Elena Vargas", role: "editor", country: "CHL", line: "Prints what Santiago would rather hide." }]);
+    } else if (t > 3) r.people = [person(`Filler Number${t}`)];
+    closeTurn(g, r, geo4(g), []);
+    if (t === 3) assert.equal(pin(g, "Tomas Quispe"), "");
+    seen[g.turn] = peopleLines(g);
+    assert.ok(seen[g.turn].length <= PEOPLE.sent && seen[g.turn].every((l) => l.length <= PEOPLE.line + 2), `turn ${g.turn}`);
+  }
+  assert.equal(readWorldReply(`TURN: ${turnCode(g)}\nEVENT: ${g.date} | PER | Lima is calm and the markets are steady this month.`, g, known, "2099-01-01", false, codeOf).people.length, 0, "a reply with no PERSON line is whole");
+  assert.equal(seen[4][0], "- Iva Rojas (war, the player's council): blunt, loyal; wants a larger army");
+  assert.equal(seen[4][1], "- Marta Rios, union leader (the player talks with them)");
+  assert.equal(seen[4][2], "- Tomas Quispe, governor of Tacna (PER): Ambitious, and owed a favour by the army.");
+  for (const t of [4, 40, 61]) assert.ok(seen[t].slice(0, 3).every((l, i) => l === seen[4][i]), `the council, the chat partner and the pinned are never trimmed (turn ${t})`);
+  const has = (t, who) => seen[t].some((l) => l.includes(who));
+  assert.ok(has(40, "Tomas Quispe"), "the character from turn 3 is known at turn 40");
+  assert.deepEqual([has(12, "Elena Vargas"), has(20, "Elena Vargas"), has(35, "Elena Vargas"), has(45, "Elena Vargas")], [true, false, true, false], "the rest go by the most recent mention: a surname in the summary of turn 30 brings her back");
+  assert.equal(g.people.find((p) => p.name === "Elena Vargas").seen, 30);
+  assert.equal(g.people.length, PEOPLE.held, "forty are held");
+  assert.ok(g.people.some((p) => p.name === "Elena Vargas") && !g.people.some((p) => p.name === "Filler Number4"), "the one mentioned longest ago is forgotten first");
+  assert.match(worldPrompt(g, world4(g), [], "2099-01-01"), /\nPEOPLE \(kept by the game[^\n]*\n- Iva Rojas[^\n]*\n- Marta Rios[^\n]*\n- Tomas Quispe/);
+  // pins are limited by the twelve, and say so
+  const full = game4("ppl-2", { people: Array.from({ length: 13 }, (_, i) => ({ ...person(`Pinned Person${i}`), first: 1, seen: 1 })) });
+  for (let i = 0; i < 12; i++) assert.equal(pin(full, `Pinned Person${i}`), "");
+  assert.match(pin(full, "Pinned Person12"), /Unpin someone first/);
+  assert.equal(pin(full, "Pinned Person0", false), "");
+  assert.equal(pin(full, "Pinned Person12"), "");
+  assert.match(pin(full, "Nobody Known"), /Nobody of that name/);
+});
+
+test("threads: opened and moved by optional THREAD lines, six open, closed by rule after twelve untouched turns, and the closing is in the chronicle", () => {
+  const g = game4("thr-1"), turn = (extra = {}, summary) => closeTurn(g, { ...reply(g, [], 1, summary), ...extra }, geo4(g), []);
+  const r = readWorldReply([`TURN: ${turnCode(g)}`, "THREAD: The Tacna water dispute | Talks stall over who pays for the canal.", "* THREAD: The missing envoy | Nobody has seen him since the reception.", "THREAD: A third | over the limit of two", "THREAD: x | y"].join("\n"), g, known, "2027-01-01", false, codeOf);
+  assert.deepEqual(r.threads, [{ title: "The Tacna water dispute", state: "Talks stall over who pays for the canal." }, { title: "The missing envoy", state: "Nobody has seen him since the reception." }]);
+  turn({ threads: r.threads });
+  assert.deepEqual(threadLines(g), ["- The Tacna water dispute: Talks stall over who pays for the canal. (open since turn 1)", "- The missing envoy: Nobody has seen him since the reception. (open since turn 1)"]);
+  turn({ threads: [{ title: "the missing envoy", state: "closed: he turns up in Santiago, unharmed" }] });
+  assert.deepEqual(g.threads.map((t) => t.title), ["The Tacna water dispute"], "the AI may say a matter is over");
+  assert.match(g.log[1].receipt.at(-1).text, /^The thread "The missing envoy" closes: closed: he turns up/);
+  turn(); turn();
+  turn({}, "In Lima the Tacna water dispute is argued in the papers again.");
+  assert.equal(g.threads[0].t, 5, "a mention in the turn's kept lines touches the thread");
+  turn({ threads: [{ title: "The Tacna water dispute", state: "A commission is named." }] });
+  assert.deepEqual([g.threads[0].t, g.threads[0].t0, g.threads[0].state], [6, 1, "A commission is named."]);
+  for (let t = 7; t <= 17; t++) turn();
+  assert.equal(g.threads.length, 1, "eleven turns untouched: still open");
+  const e = turn();
+  assert.equal(g.threads.length, 0);
+  assert.deepEqual(e.receipt.at(-1), { ok: true, text: 'The thread "The Tacna water dispute" closes by rule: nothing touched it for twelve turns', fact: ["thread", "The Tacna water dispute"] });
+  assert.match(chronicleLines(g, name4).at(-1), /the thread "The Tacna water dispute" closed/);
+  // six stay open: a seventh closes the one longest untouched
+  for (let i = 0; i < 4; i++) turn({ threads: [{ title: `Matter ${2 * i}`, state: "open" }, { title: `Matter ${2 * i + 1}`, state: "open" }] });
+  assert.deepEqual(g.threads.map((t) => t.title).sort(), ["Matter 2", "Matter 3", "Matter 4", "Matter 5", "Matter 6", "Matter 7"]);
+  assert.ok(threadLines(g).length <= THREADS.open);
+  assert.match(worldPrompt(g, world4(g), [], "2099-01-01"), /\nTHREADS \(matters still open in the story\)\n- Matter [67]: open \(open since turn 22\)/);
+});
+
+test("the prompt bar with people and threads full, and the fixed order in which a long prompt gives things up", () => {
+  const g = game4("bar-1", { council: circle() }), size = {};
+  const told = "The capital argued about the budget while the border stayed quiet and the papers looked for a scandal to print.";
+  for (let t = 1; t <= 60; t++) {
+    const moves = t % 6 === 1 ? [mv("BOL", "WAR", "CHL")] : [];
+    closeTurn(g, { ...reply(g, moves, 1, `Turn ${t}. ${told}`), people: [person(`Minister Number${t}`, "Said to be patient, and to want the border quiet above all else, whatever it costs in pride at home."), person(`Envoy Number${t}`, "Carries messages nobody admits to sending.")],
+      threads: [{ title: `The matter of the river, part ${t % 8}`, state: "Talks go on, slowly, with neither side willing to be first to give way." }] }, geo4(g), []);
+    if (t === 2) pin(g, "Minister Number1");
+    size[t] = worldPrompt(g, world4(g), [], "2099-01-01").length;
+  }
+  const pct = Math.round((100 * (size[50] - size[10])) / size[10]);
+  assert.ok(Math.abs(pct) <= 10, `turn 50 is ${pct} percent larger than turn 10`);
+  assert.equal(peopleLines(g).length, 12);
+  assert.equal(threadLines(g).length, 6);
+  // too long: era lines go first, then people beyond those never trimmed, then threads; nothing else, ever
+  const at = (limit) => worldPrompt(g, world4(g, { limit }), ["Hold the line."], "2099-01-01"), p0 = at(0), p1 = at(p0.length - 1), p2 = at(p1.length - 1), p3 = at(p2.length - 1);
+  assert.match(p0, /turns 1 to /);
+  assert.doesNotMatch(p1, /turns 1 to /);
+  assert.match(p1, /Envoy Number60/);
+  assert.doesNotMatch(p2, /Envoy Number60/);
+  assert.match(p2, /- Iva Rojas[^\n]*\n- Minister Number1, a clerk/, "the council and the pinned stay");
+  assert.match(p2, /The matter of the river/);
+  assert.match(p3, /THREADS \(matters still open in the story\)\n- none yet/);
+  assert.equal(at(1), p3, "and no further");
+  for (const part of ["RULES FOR YOU", "\nMOVES\n", "RECEIPT (what the rules decided last turn)", "1. Hold the line.", "- Iva Rojas", "Turn 60."]) assert.ok(p3.includes(part), part);
+});
+
+test("wars end by rule: weariness, a peace that is answered, a white peace at six, and a truce of two years", () => {
+  const g = game4("war-1", { wars: [{ pair: "BOL|CHL", since: "2026-12-01", by: "CHL" }] }), G = geo4(g);
+  assert.deepEqual([weariness(g, "CHL", "BOL", "2027-05-31"), weariness(g, "CHL", "BOL", "2027-06-01"), weariness(g, "CHL", "PER")], [0, 1, 0], "a point for every six months");
+  g.wars[0].took = { CHL: 2 };
+  assert.deepEqual([weariness(g, "BOL", "CHL", "2027-06-01"), weariness(g, "CHL", "BOL", "2027-06-01")], [2, 1], "and one for every two provinces lost");
+  const loser = peaceAnswer(g, "CHL", "BOL", "2027-06-01"), winner = peaceAnswer(g, "BOL", "CHL", "2027-06-01");
+  assert.deepEqual([loser.ok, loser.why], [true, "weary of war 2 of 6 +2, it is 2 behind and losing land +2: 4, needing 4"]);
+  assert.deepEqual([winner.ok, winner.why], [false, "weary of war 1 of 6 +1, it is 2 ahead and keeps what it took +2: 3, needing 4"]);
+  assert.deepEqual(settleWars(g, "2027-06-01", name4), [], "one side ready is not peace");
+  g.date = "2027-06-01";
+  assert.equal(applyMoves(g, [mv("BOL", "PEACE", "CHL")], G, [], 1)[0].text, "Bolivia: asks Chile for peace, which refuses (weary of war 1 of 6 +1, it is 2 ahead and keeps what it took +2: 3, needing 4)");
+  const done = settleWars(g, "2027-12-01", name4);
+  assert.equal(done.length, 1);
+  assert.match(done[0].text, /^Bolivia and Chile: make peace by rule, both ready to stop \(.*\); each keeps the land it holds$/);
+  assert.deepEqual([done[0].fact, g.wars.length, relOf(g, "BOL", "CHL"), g.truce], [["peace", "BOL", "CHL"], 0, -2, { "BOL|CHL": "2027-12-01" }]);
+  // the truce: two years in which war between the two is refused
+  g.date = "2028-06-01";
+  assert.equal(truceUntil(g, "CHL", "BOL"), "2029-12");
+  assert.equal(applyMoves(g, [mv("CHL", "WAR", "BOL")], G, [], 1)[0].text, "Chile: war on Bolivia refused: a truce holds between them until 2029-12");
+  g.date = "2029-12-01";
+  assert.equal(applyMoves(g, [mv("CHL", "WAR", "BOL")], G, [], 1)[0].ok, true);
+  // the player's wars: a foe that would say yes offers peace, once; the player's own request is answered by the same sum
+  const p = warGame("war-2", { wars: [{ pair: "CHL|PER", since: "2025-06-01", by: "PER", took: { PER: 2 } }] });
+  assert.equal(applyMoves({ ...structuredClone(p), wars: [{ pair: "CHL|PER", since: "2026-11-01", by: "PER" }] }, [mv("PER", "PEACE", "CHL", "", 1)], geoOf(p), ["Peace"], 1)[0].text, "Peru: asks Chile for peace, which refuses (no reason yet to stop: 0, needing 4)");
+  const offer = settleWars(p, "2027-01-01", name4);
+  assert.equal(offer[0].text, "Chile: offers you peace by rule (weary of war 4 of 6 +4, it is 2 behind and losing land +2: 6, needing 4); accept it from your actions");
+  assert.deepEqual([p.offers, p.wars.length, settleWars(p, "2027-01-01", name4)], [[{ from: "CHL", kind: "peace", date: "2027-01-01" }], 1, []]);
+  assert.equal(applyMoves(p, [mv("PER", "PEACE", "CHL", "", 1)], geoOf(p), ["Peace"], 1)[0].text, "Peru: makes peace with Chile, as offered; each keeps the land it holds");
+  assert.deepEqual([p.wars.length, p.offers.length, !!p.truce["CHL|PER"]], [0, 0, true]);
+  // at six the rules stop the war, the player's too
+  const w = warGame("war-3", { wars: [{ pair: "CHL|PER", since: "2023-12-01", by: "PER" }] });
+  const e = closeTurn(w, reply(w), geoOf(w), []);
+  assert.equal(e.receipt.find((x) => x.fact)?.text, "Chile and Peru: worn out by their war (weariness 6 and 6 of 6), they stop by rule; a white peace, each keeps the land it holds");
+  assert.deepEqual([w.wars.length, relOf(w, "PER", "CHL"), WAR.most], [0, -2, 6]);
+  assert.match(chronicleLines(w, name4)[0], /Chile and Peru made peace/);
+  // a province taken is counted in the war's score
+  for (let i = 0; i < 40; i++) {
+    const a = warGame(`war-take-${i}`, { actions: ["Attack"] }), got = closeTurn(a, reply(a, [attackMove]), geoOf(a), ["Attack"]).receipt[0];
+    assert.deepEqual(a.wars[0]?.took, got.check.band === "failed" ? undefined : { PER: 1 });
+    assert.equal(got.at, "CHL-1");
+  }
+});
+
+test("strength changes: weariness and land move a country's might by one, shown with its parts", () => {
+  const g = game4("str-1");
+  assert.deepEqual(strength(g, geo4(g), "BRA"), { base: 6, parts: [], might: 6 });
+  g.owners["BRA-2"] = "BOL";
+  assert.equal(strengthLine(strength(g, geo4(g), "BRA")), "might 5 (6 by the table, a third of its land lost -1)");
+  assert.equal(strengthLine(strength(g, geo4(g), "BOL")), "might 3 (2 by the table, a third more land than it began with +1)");
+  g.wars = [{ pair: "BOL|BRA", since: "2025-06-01", by: "BRA" }];
+  assert.equal(strengthLine(strength(g, geo4(g), "BRA")), "might 4 (6 by the table, weary of war -1, a third of its land lost -1)");
+  const plan = attackPlan(g, geo4(g), "BRA", "BRA-2").plan;
+  assert.deepEqual([plan.skill, plan.difficulty], [4, 2], "the check uses the strength of the day");
+  // land a game began with (a scenario's own map, a country of the player's making) is not a gain or a loss
+  const s = newWorldGame("PER", "nation", "str-2", { owners: { "BRA-2": "BOL" } });
+  assert.deepEqual([strength(s, geo4(s), "BRA").might, strength(s, geo4(s), "BOL").might], [6, 2]);
+  const weak = game4("str-3", { owners: { "CHL-2": "PER" } }), G = { ...geo4(weak), might: (c) => ({ CHL: 1, PER: 10 })[c] };
+  assert.deepEqual([strength(weak, G, "CHL").might, strength(weak, G, "PER").might], [1, 10], "never below 1 or above 10");
+});
+
+test("the rules-only turn: other countries move by published thresholds when no AI proposed for them, and the turn replays", () => {
+  const quiet = game4("alone-1");
+  assert.deepEqual(borders(geoAll(quiet)).get("PER"), ["BOL", "BRA", "CHL"]);
+  assert.deepEqual(rivalMoves(quiet, geo4(quiet)), [], "a map with no province list moves nobody");
+  const first = rivalMoves(quiet, geoAll(quiet));
+  assert.deepEqual(first, rivalMoves(quiet, geoAll(quiet)), "the same game and turn propose the same moves");
+  assert.ok(first.length <= RIVALS.treaties && first.every((m) => m.verb === "TREATY" && m.country !== "PER" && m.action === 0));
+  // a turn with no AI at all: the receipt says who moved and why, and says the rules moved them
+  const a = game4("alone-2"), b = game4("alone-2");
+  for (let t = 0; t < 30; t++) { closeTurn(a, reply(a), geoAll(a), []); closeTurn(b, reply(b), geoAll(b), []); }
+  assert.deepEqual(a, b);
+  assert.deepEqual(a.treaties.map((t) => `${t.pair} ${t.kind}`).sort(), ["BOL|BRA trade", "BOL|CHL trade"], "trade is signed; in a quiet world nobody is asked for more");
+  assert.ok(a.log.some((t) => t.receipt.some((x) => /offers you a trade treaty/.test(x.text))), "and offered to the player");
+  assert.ok(a.log.some((t) => t.receipt.some((x) => x.text === "Other countries moved by the rules alone this turn: no AI proposed anything for them")));
+  const c = game4("alone-2"), told = closeTurn(c, reply(c, [mv("BOL", "TREATY", "BRA", "trade")]), geoAll(c), []);
+  assert.ok(!told.receipt.some((x) => /by the rules alone/.test(x.text)), "a reply that moved other countries is not topped up");
+  // war: only on a grudge of -2 or lower, with an edge of 2 in might, no treaty, no truce, no war already; one time in four
+  let wars = 0;
+  for (let i = 0; i < 80; i++) {
+    const g = game4(`alone-war-${i}`, { rel: { "BOL|BRA": [-2, "2026-12-01"], "BRA|CHL": [-1, "2026-12-01"], "BOL|CHL": [-2, "2026-12-01"] }, truce: { "BOL|CHL": "2026-06-01" } });
+    const w = rivalMoves(g, geoAll(g)).filter((m) => m.verb === "WAR");
+    assert.ok(w.length <= 1 && w.every((m) => m.country === "BRA" && m.target === "BOL"), "only Brazil, six against two, may turn on Bolivia");
+    wars += w.length;
+  }
+  assert.ok(wars >= 8 && wars <= 32, `${wars} wars in 80 games`);
+  // attack: only at a chance of 45 or more
+  const f = game4("alone-3", { wars: [{ pair: "BOL|BRA", since: "2026-12-01", by: "BRA" }] });
+  assert.deepEqual([bestAttack(f, geoAll(f), "BRA", "BOL").chance, bestAttack(f, geoAll(f), "BOL", "BRA").chance], [75, 16]);
+  for (let i = 0; i < 20; i++) { f.seed = `alone-3-${i}`; assert.ok(rivalMoves(f, geoAll(f)).filter((m) => m.verb === "ATTACK").every((m) => m.country === "BRA" && m.target === "BOL-1")); }
+});
+
+test("with an AI that never asks for peace, every war still ends, a truce follows, and the game replays", () => {
+  const play = () => {
+    const g = game4("long-1"), wars = [];
+    for (let t = 1; t <= 150; t++) {
+      const moves = [mv("CHL", "WAR", "BOL"), ...(g.wars.length ? [mv("BOL", "ATTACK", "CHL-1")] : [])], before = g.wars.length;
+      closeTurn(g, reply(g, moves), geo4(g), []);
+      if (g.wars.length > before) wars.push({ from: t });
+      else if (g.wars.length < before) wars.at(-1).to = t;
+    }
+    return { g, wars };
+  };
+  const { g, wars } = play();
+  assert.ok(wars.length >= 3, `${wars.length} wars`);
+  for (const [i, w] of wars.entries()) {
+    assert.ok(w.to ? w.to - w.from <= 36 : w.from > 150 - 36, `war ${i + 1} ran from turn ${w.from} to ${w.to}`);
+    if (i) assert.ok(w.from - wars[i - 1].to >= 23, "no war inside the truce");
+  }
+  assert.equal(geo4(g).holds("BOL") > 0, true);
+  assert.deepEqual(play().g, g);
+  for (const t of g.log) for (const x of t.receipt) assert.doesNotMatch(x.text, /\d\.\d/, "whole numbers");
+});
+
+test("the player's moves are listed for a tick before the rules run, and an unticked move never reaches them", () => {
+  const acts = ["Make friends with Bolivia, and frighten Brazil.", "Attack Arica"];
+  const g = game4("rev-1", { wars: [{ pair: "CHL|PER", since: "2026-12-01", by: "PER" }], actions: acts, orders: [{ text: "Attack Arica", verb: "ATTACK", target: "CHL-1", seat: "generals", approach: "steady" }] }), G = geo4(g);
+  const r = reply(g, [mv("PER", "TREATY", "BOL", "trade", 1), mv("PER", "WAR", "BRA", "", 1), mv("PER", "ATTACK", "CHL-1", "", 2), mv("BOL", "TREATY", "BRA", "trade")]);
+  const list = reviewMoves(g, r.moves, acts, G);
+  assert.deepEqual(list, [
+    { i: 0, card: false, text: 'Propose a treaty to Bolivia (trade), from action 1: "Make friends with Bolivia, and frighten Brazil."' },
+    { i: 1, card: false, text: 'Declare war on Brazil, from action 1: "Make friends with Bolivia, and frighten Brazil."' },
+    { i: 2, card: true, text: 'Attack Arica, from action 2: "Attack Arica"' },
+  ]);
+  const kept = untick(r, list, [1]);
+  assert.deepEqual(kept.moves.map((m) => m.verb), ["TREATY", "ATTACK", "TREATY"]);
+  assert.deepEqual(kept.dropped, ['a move you did not mean: Declare war on Brazil, from action 1: "Make friends with Bolivia, and frighten Brazil."']);
+  const e = closeTurn(g, kept, G, acts);
+  assert.deepEqual([g.wars.some((w) => w.pair === "BRA|PER"), g.treaties.some((t) => t.pair === "BOL|PER"), e.dropped.length], [false, true, 1]);
+  assert.deepEqual(reviewMoves({ ...g, mode: "citizen" }, r.moves, acts, G), [], "a citizen commands nothing");
+  assert.deepEqual(untick(r, list, []).moves, r.moves);
+});
+
+test("suggested actions are built from the state of the game, each with the answer or the odds the rules would give", () => {
+  const g = game4("sug-1", { wars: [{ pair: "CHL|PER", since: "2026-12-01", by: "PER" }] }), G = geoAll(g), s = suggest(g, G);
+  const plan = attackPlan(g, G, "PER", "CHL-1");
+  assert.deepEqual(s.map((x) => [x.verb, x.target, x.text, x.note]), [
+    ["PEACE", "CHL", "Propose peace to Chile (CHL).", "Chile would refuse (no reason yet to stop: 0, needing 4)"],
+    ["ATTACK", "CHL-1", "Attack Arica (CHL-1), led by our generals, steady.", `odds: ${oddsLine(plan.chance)}`],
+    ["TREATY", "BOL", "Propose a trade treaty to Bolivia (BOL).", "Bolivia would agree (relations neutral 0: 0, needing 0)"],
+    ["TREATY", "BRA", "Propose a trade treaty to Brazil (BRA).", "Brazil would agree (relations neutral 0: 0, needing 0)"],
+  ]);
+  // what is already ordered or offered is not suggested again; the next treaty up is suggested only when it would be agreed
+  g.orders = [{ text: "x", verb: "PEACE", target: "CHL", detail: "" }]; g.treaties = [{ pair: "BOL|PER", kind: "trade", since: g.date }]; g.offers = [{ from: "BRA", kind: "trade", date: g.date }];
+  assert.deepEqual(suggest(g, G).map((x) => [x.verb, x.detail || ""]), [["ATTACK", ""], ["TREATY", "defence"]], "a trade partner reads as warm, which is enough for defence");
+  g.treaties[0].kind = "defence";
+  assert.deepEqual(suggest(g, G).map((x) => x.verb), ["ATTACK"], "an alliance needs more");
+  g.rel = { "BOL|PER": [2, g.date] };
+  assert.deepEqual(suggest(g, G).map((x) => [x.verb, x.detail || ""]), [["ATTACK", ""], ["TREATY", "alliance"]]);
+  assert.deepEqual(suggest({ ...g, mode: "citizen" }, G), []);
+  // the order a suggestion gives is carried out by the rules with no line from the AI
+  const o = s[1], w = game4("sug-1", { wars: [{ pair: "CHL|PER", since: "2026-12-01", by: "PER" }], actions: [o.text], orders: [{ text: o.text, verb: o.verb, target: o.target, seat: o.seat, approach: o.approach }] });
+  assert.equal(closeTurn(w, reply(w), geo4(w), [o.text]).receipt[0].check.chance, plan.chance);
+});
+
+test("the story is told with the result known: both endings are asked for, and the one the rules chose is kept", () => {
+  const text = "Attack Arica (CHL-1), led by our generals, steady.", bands = new Set();
+  for (let i = 0; i < 30; i++) {
+    const g = warGame(`if-${i}`, { actions: [text], orders: [{ text, verb: "ATTACK", target: "CHL-1", seat: "generals", approach: "steady" }] });
+    const prompt = worldPrompt(g, world4(g, { geo: geoOf(g) }), [text], "2027-01-01");
+    assert.match(prompt, /\nORDERED ATTACKS \(the rules settle each one after your reply\)\n- CHL-1 Arica\n/);
+    assert.match(prompt, /\nIF: province id \| one sentence if the attack takes it \| one sentence if the attack is thrown back\n/);
+    const r = readWorldReply([`TURN: ${turnCode(g)}`, `EVENT: ${g.date} | PER | The army moves south along the coast road at dawn.`, "**IF:** chl-1 | Arica falls by dusk, its garrison gone south. | The column is thrown back at the river.", "IF: CHL-2 | Not ordered. | Not ordered."].join("\n"), g, known, "2027-01-01", false, codeOf);
+    assert.deepEqual(r.ifs[0], { target: "CHL-1", won: "Arica falls by dusk, its garrison gone south.", lost: "The column is thrown back at the river." });
+    const e = closeTurn(g, r, geoOf(g), [text]), band = e.receipt[0].check.band;
+    bands.add(band);
+    assert.deepEqual(e.told, [{ at: "CHL-1", band, text: band === "failed" ? "The column is thrown back at the river." : "Arica falls by dusk, its garrison gone south." }]);
+  }
+  assert.equal(bands.size, 3, "every result was met");
+  const none = warGame("if-none");
+  assert.doesNotMatch(worldPrompt(none, world4(none, { geo: geoOf(none) }), ["Wait."], "2027-01-01"), /ORDERED ATTACKS|\nIF: /, "no attack ordered, nothing asked");
+  assert.equal(closeTurn(none, reply(none, [attackMove]), geoOf(none), ["Attack"]).told, undefined, "a reply with no IF line is whole");
+});
+
+test("a game saved under the rules before these is converted: empty memory, no truces, the land it began with", () => {
+  const old = { ...warGame("old-4"), rules: 3 };
+  for (const k of ["people", "threads", "truce", "start"]) delete old[k];
+  assert.match(convertNote(old), /wars end by rule when both sides are worn out, a country's might changes with its land and its wars, and the story keeps a chronicle, people and open threads\.$/);
+  const ok = (id) => !!P[id], land = (c) => ["PER", "CHL"].includes(c), g = checkSave(old, ok, land);
+  assert.deepEqual([g.rules, g.people, g.threads, g.truce, g.start], [RULES, [], [], {}, {}]);
+  assert.equal(convertNote(g), "");
+  assert.ok(closeTurn(g, reply(g), geoOf(g), []), "and it plays on");
+  // what a save holds is checked before use
+  const s = checkSave({ ...old, rules: RULES, people: [{ name: "Ana Ruiz", role: 5, country: "ZZZ", seen: "x", pin: 1 }, "junk", { name: "" }], threads: [{ title: "The canal", state: "open", t0: 2, t: 3 }, { state: "no title" }],
+    truce: { "CHL|PER": "2026-12-01", "CHL|ZZZ": "2026-12-01", junk: 1 }, start: { "CHL-2": "PER", "NOPE-1": "PER" } }, ok, land);
+  assert.deepEqual(s.people, [{ name: "Ana Ruiz", role: "", country: "", line: "", first: 1, seen: 1, pin: true }]);
+  assert.deepEqual([s.threads, s.truce, s.start], [[{ title: "The canal", state: "open", t0: 2, t: 3 }], { "CHL|PER": "2026-12-01" }, { "CHL-2": "PER" }]);
+  // a country of the player's own, in an old save, began with the land it holds
+  const own = checkSave({ ...old, custom: { code: "YOU", name: "Mine", colour: "#fff" }, owners: { "CHL-2": "YOU", "CHL-1": "PER" } }, ok, land);
+  assert.deepEqual(own.start, { "CHL-2": "YOU" });
 });

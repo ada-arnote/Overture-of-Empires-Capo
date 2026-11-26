@@ -6,14 +6,17 @@ import { STANDING } from "./talk.js";
 import { APPROACHES } from "./worldrules.js";
 import { RULES } from "./check.js";
 import { chronicleFrom } from "./chronicle.js";
+import { keepMemory } from "./people.js";
 
 // Older games are converted, never refused: nothing they hold needs the old rule, their turns keep the receipts
 // they had, and every attack from the next turn on is made under these rules.
 /** The plain words for a game converted from older rules, or "" when it needs none. */
-export const convertNote = (s) => (s && typeof s === "object" && s.rules !== RULES ? "This game was saved under older rules. It has been brought up to date: its past turns keep the results they had. From now on countries keep relations and answer treaties by rule, the story keeps a chronicle, and your advisers' skill is dealt by the rules." : "");
+export const convertNote = (s) => (s && typeof s === "object" && s.rules !== RULES ? "This game was saved under older rules. It has been brought up to date: its past turns keep the results they had. From now on countries keep relations and answer treaties and peace by rule, wars end by rule when both sides are worn out, a country's might changes with its land and its wars, and the story keeps a chronicle, people and open threads." : "");
 
 /** A game saved before some part existed gets that part empty. */
-export const mendGame = (s) => ({ wars: [], treaties: [], offers: [], chats: [], counsel: [], council: null, standing: STANDING[s.mode] || 5, facts: [], might: {}, edits: [], sandbox: false, orders: [], rel: {}, word: {}, branch: 0, ...s, chron: s.chron || chronicleFrom(s.log || [], s.turn || 1), rules: RULES });
+export const mendGame = (s) => ({ wars: [], treaties: [], offers: [], chats: [], counsel: [], council: null, standing: STANDING[s.mode] || 5, facts: [], might: {}, edits: [], sandbox: false, orders: [], rel: {}, word: {}, truce: {}, people: [], threads: [], branch: 0, ...s, start: s.start || startOf(s), chron: s.chron || chronicleFrom(s.log || [], s.turn || 1), rules: RULES });
+// A game saved before land was counted from its start: a country of the player's own began with the land it holds.
+const startOf = (s) => Object.fromEntries(Object.entries(s.owners || {}).filter(([, c]) => s.custom && c === s.custom.code));
 /**
  * The player's orders by card, each tied to the action that asked for it: an attack {text, verb, target, seat,
  * approach}, or a treaty or peace with a country {text, verb, target, detail}.
@@ -40,9 +43,11 @@ export function checkSave(s, isProvince, isCountry) {
   const owners = Object.fromEntries(Object.entries(s.owners && typeof s.owners === "object" ? s.owners : {}).filter(([id, c]) => isProvince(id) && known(c)));
   const council = s.council && typeof s.council === "object" && s.council.seats && typeof s.council.seats === "object" ? { trusted: null, ...s.council, former: list(s.council.former) } : null;
   const log = list(s.log).filter((t) => t && typeof t === "object"), word = Object.fromEntries(Object.entries(s.word && typeof s.word === "object" ? s.word : {}).filter(([c, d]) => known(c) && DATE.test(d || "")));
+  const dated = (v) => Object.fromEntries(Object.entries(v && typeof v === "object" ? v : {}).filter(([p, d]) => pairOk(p, known) && DATE.test(d || "")));
+  const land = (v) => (v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([id, c]) => isProvince(id) && known(c))) : null);
   const offers = list(s.offers).filter((o, i, all) => o && known(o.from) && typeof o.kind === "string" && DATE.test(o.date || "") && all.findIndex((x) => x && x.from === o.from && x.kind === o.kind) === i);
   return mendGame({ ...s, owners, log, wars: list(s.wars), treaties: list(s.treaties), offers, chats: list(s.chats), counsel: list(s.counsel), facts: list(s.facts), edits: list(s.edits), council, actions: list(s.actions).filter((a) => typeof a === "string"), orders: keepOrders(s.orders, isProvince, known),
-    rel: keepRel(s.rel, known), word, branch: Number.isInteger(s.branch) && s.branch > 0 ? s.branch : 0, chron: keepChron(s.chron) || chronicleFrom(log, s.turn) });
+    rel: keepRel(s.rel, known), word, truce: dated(s.truce), ...keepMemory(s, known), start: land(s.start) || startOf({ ...s, owners }), branch: Number.isInteger(s.branch) && s.branch > 0 ? s.branch : 0, chron: keepChron(s.chron) || chronicleFrom(log, s.turn) });
 }
 
 // A take-back record is the game without its log (the log only grows; the record keeps its length), so twenty of
