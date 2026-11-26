@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-IV6O3N1pPh6O/wMl4sE2ox94ld1KFIKZ4v6lSAKdzLY='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-nwQY3jyTeUBM2V7bNS9sulY+AcGl+i8x8EAxrkf7Ew8='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>The Island Fable</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -313,6 +313,7 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
     <div class="pick strip" id="sources" role="radiogroup" aria-label="Halls and units"></div>
     <div class="pick small" id="builds" role="radiogroup" aria-label="What to build"></div>
     <div class="pick strip" id="wheres" role="radiogroup" aria-label="Where to"></div>
+    <p id="ledger" class="about" role="status" hidden></p>
     <div class="go"><button id="end" type="button" class="quiet">End turn</button><button id="do" type="button" class="main"></button></div>
   </div>
   <div id="after" hidden class="go"><button id="review" type="button" class="quiet">See the board</button><button id="again" type="button" class="main">Play again</button></div>
@@ -327,6 +328,7 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
   <div class="panel card">
     <div class="go"><button id="resume" type="button" class="quiet" hidden>Continue</button><button id="quick" type="button" class="main">Play</button></div>
     <p id="preset" class="about"></p>
+    <div class="go"><button id="voyage" type="button" class="quiet">The voyage</button></div>
     <details id="own"><summary>Choose your own</summary>
     <div class="line"><span>Rules</span><div class="pick small" id="style" role="radiogroup" aria-label="Rules"></div></div>
     <p id="about" class="about"></p>
@@ -868,9 +870,10 @@ $m[4] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Bots for The Island Fable. One action at a time: try each on a copy and keep the best, or stop.
 // It also looks a few steps ahead for one strike: raise scouts onto a unit, or join two where steps at home are free, then take.
+// Tiers: random, easy (noisy), normal, and hard, which reads its rivals too (keen). Gentle is the lesson's and the voyage's first rival.
 const { NONE, WOOD, act, beats, boardOf, cellsOf, defence, fable, goalOf, groupsOf, landOf, raiseOf, territories, topOf, upkeepOf } = $m[1];
 
-const TIERS = ["random", "easy", "normal"];
+const TIERS = ["random", "easy", "normal", "hard"];
 
 /** The bots' plain rule for giving up: one rival holds at least half the island and at least three times their land. */
 function hopeless(p, seat) {
@@ -897,6 +900,24 @@ function value(p, seat) {
       if (p.farm[c]) v += 45;
       if (p.fort[c]) v += 26;
       if (near[c].some((m) => p.owner[m] !== NONE && p.owner[m] !== seat)) { const d = defence(p, c); if (d < 1) v -= 30; else if (d > 1 && p.classic) v += 5; }
+    }
+  }
+  return v;
+}
+
+/**
+ * The hard bot's reading: the same count, and it also weighs its rivals. Their units, their purses and what they earn
+ * count against it, except in a territory that cannot pay next turn: cut one off from its village and its units are as
+ * good as gone, which is how this bot comes to look for the cut. (Weighing its own open borders as well made it timid
+ * and weaker on larger islands, so it does not: measured over 150 to 420 games an island.)
+ */
+function keen(p, seat) {
+  let v = value(p, seat);
+  for (let s = 0; s < p.seats; s++) {
+    if (s === seat) continue;
+    for (const t of territories(p, s)) {
+      if (t.purse + t.net < 0) continue;
+      v -= 30 * t.cells.reduce((n, c) => n + p.unit[c], 0) + Math.min(t.purse, 40) + 8 * Math.max(0, Math.min(6, t.net));
     }
   }
   return v;
@@ -966,17 +987,17 @@ const mild = (p, all) => (calm(p) ? all.filter((m) => m.to === undefined || p.ow
 /** Choose one action a little at a time. `dice` breaks ties and drives random. */
 function* thinking(p, dice, tier = "normal") {
   if (tier === "random") return dice.pick(fable.moves(p).filter((m) => m.do !== "concede"));
-  const me = p.seat, gentle = tier === "gentle", noise = tier === "easy" || gentle ? 420 : 20, all = gentle ? mild(p, fable.moves(p)) : fable.moves(p), base = value(p, me) + 5;
+  const me = p.seat, gentle = tier === "gentle", noise = tier === "easy" || gentle ? 420 : tier === "hard" ? 6 : 20, all = gentle ? mild(p, fable.moves(p)) : fable.moves(p), read = tier === "hard" ? keen : value, base = read(p, me) + 5;
   if (all.some((m) => m.do === "concede") && hopeless(p, me)) return { do: "concede" };
   let best = { do: "end" }, score = base, n = 0;
   for (const m of p.classic ? sensible(p, all) : all.filter((x) => x.to !== undefined)) { // a small island can be read in full
-    const raw = value(act(p, m).position, me), v = free(p, m) ? (raw > base ? raw : -Infinity) : raw + dice.below(noise); // a free step must gain, or a bot could walk all day
+    const raw = read(act(p, m).position, me), v = free(p, m) ? (raw > base ? raw : -Infinity) : raw + dice.below(noise); // a free step must gain, or a bot could walk all day
     if (v > score) { score = v; best = m; }
     if (++n % 4 === 0) yield;
   }
   if (p.classic && !(gentle && calm(p))) {
     for (const list of plans(p)) { // the first step now; the rest come on the next looks
-      const v = value(list.reduce((q, m) => act(q, m).position, p), me) + dice.below(noise);
+      const v = read(list.reduce((q, m) => act(q, m).position, p), me) + dice.below(noise);
       if (v > score) { score = v; best = list[0]; }
       if (++n % 4 === 0) yield;
     }
@@ -989,9 +1010,21 @@ function choose(p, dice, tier) {
   for (;;) { const s = t.next(); if (s.done) return s.value; }
 }
 
-$x.TIERS = TIERS; $x.hopeless = hopeless; $x.value = value; $x.thinking = thinking; $x.choose = choose;
+$x.TIERS = TIERS; $x.hopeless = hopeless; $x.value = value; $x.keen = keen; $x.thinking = thinking; $x.choose = choose;
 return $x; })({});
-$m[7] = (($x) => {
+$m[5] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Village names for The Island Fable: our own, each made of two plain parts. A village is named for the hex its hall
+// stands on, from the game's own shuffle of the island, so a seed always gives the same names and no two villages share one.
+const HEAD = ["Alder", "Amber", "Brack", "Bram", "Cold", "Crow", "Dove", "Elder", "Fen", "Gorse", "Grey", "Gull", "Hazel", "Heron", "Kelp", "Lark", "Marsh", "Moss", "Nettle", "Otter", "Pike", "Quill", "Reed", "Salt", "Stone", "Thorn", "Wren", "Yarrow"];
+const TAIL = ["mere", "ford", "holt", "wick", "stead", "combe", "haven", "rise", "garth", "mouth", "wade", "hythe"];
+
+/** The name of the village whose hall stands on this hex. */
+const villageName = (p, hall) => { const k = p.order[hall]; const h = k % HEAD.length; return HEAD[h] + TAIL[(Math.floor(k / HEAD.length) + 5 * h) % TAIL.length]; };
+
+$x.villageName = villageName;
+return $x; })({});
+$m[8] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // One exact way to write a value as text, the same on every machine.
 // Only whole numbers, text, true, false, null, lists and plain objects are allowed:
@@ -1054,10 +1087,10 @@ function deepFreeze(v) {
 
 $x.canon = canon; $x.deepFreeze = deepFreeze;
 return $x; })({});
-$m[9] = (($x) => {
+$m[10] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SHA-256, written out so that it also works on a page without https.
-const { canon } = $m[7];
+const { canon } = $m[8];
 
 const K = new Uint32Array(64);
 const START = new Uint32Array(8);
@@ -1116,11 +1149,11 @@ const fingerprint = (value) => sha256(new TextEncoder().encode(canon(value))).sl
 
 $x.sha256 = sha256; $x.fingerprint = fingerprint;
 return $x; })({});
-$m[11] = (($x) => {
+$m[12] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Seeded chance, in whole numbers only. The state is four numbers kept beside the position,
 // so a replay rolls the same dice.
-const { sha256 } = $m[9];
+const { sha256 } = $m[10];
 
 function seedState(seed) {
   const hex = sha256(new TextEncoder().encode("capo/" + String(seed)));
@@ -1163,7 +1196,7 @@ function chance(state) {
 
 $x.seedState = seedState; $x.next = next; $x.chance = chance;
 return $x; })({});
-$m[10] = (($x) => {
+$m[11] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // One game being played. It keeps the options, the seed and the list of moves; everything else follows from them.
 //
@@ -1176,9 +1209,9 @@ $m[10] = (($x) => {
 //   apply(position, move, dice) -> { position, events }
 //   result(position)     { winners: [seat], why } when over, else null
 //   allows(position, move) optional: a quick yes or no, for games whose list of moves is long
-const { canon, deepFreeze } = $m[7];
-const { fingerprint } = $m[9];
-const { chance, seedState } = $m[11];
+const { canon, deepFreeze } = $m[8];
+const { fingerprint } = $m[10];
+const { chance, seedState } = $m[12];
 
 const FORMAT = 1;
 const MAX_MOVES = 20000, MAX_FILE = 2000000;
@@ -1314,16 +1347,16 @@ function openSave(text, games) {
 
 $x.FORMAT = FORMAT; $x.Refusal = Refusal; $x.checkGame = checkGame; $x.readOptions = readOptions; $x.createMatch = createMatch; $x.whenReplayFails = whenReplayFails; $x.openSave = openSave;
 return $x; })({});
-$m[8] = (($x) => {
+$m[9] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A whole game as a few hundred bytes, small enough for one chat message. Each move is stored as its place in the
 // list of legal moves, so a link cannot hold a move that is not allowed.
-const { canon } = $m[7];
-const { fingerprint } = $m[9];
-const { Refusal, createMatch } = $m[10];
+const { canon } = $m[8];
+const { fingerprint } = $m[10];
+const { Refusal, createMatch } = $m[11];
 
 const LAYOUT = 2, MOST_MOVES = 4000, MOST_BYTES = 32000, CHECK = 8;
-const ROLES = ["host", "friend", "normal", "easy"];
+const ROLES = ["host", "friend", "normal", "easy", "hard"];
 const broken = () => new Refusal("link", "that link is broken or not complete");
 
 function put(out, n) { // a whole number, seven bits to a byte
@@ -1406,17 +1439,72 @@ function compareGames(ours, theirs) {
 
 $x.packGame = packGame; $x.unpackGame = unpackGame; $x.compareGames = compareGames;
 return $x; })({});
-$m[6] = (($x) => {
+$m[7] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-$x.canon = $m[7].canon; $x.deepFreeze = $m[7].deepFreeze;
-$x.compareGames = $m[8].compareGames; $x.packGame = $m[8].packGame; $x.unpackGame = $m[8].unpackGame;
-$x.fingerprint = $m[9].fingerprint; $x.sha256 = $m[9].sha256;
-$x.chance = $m[11].chance; $x.next = $m[11].next; $x.seedState = $m[11].seedState;
-$x.FORMAT = $m[10].FORMAT; $x.Refusal = $m[10].Refusal; $x.checkGame = $m[10].checkGame; $x.readOptions = $m[10].readOptions; $x.createMatch = $m[10].createMatch; $x.openSave = $m[10].openSave; $x.whenReplayFails = $m[10].whenReplayFails;
+$x.canon = $m[8].canon; $x.deepFreeze = $m[8].deepFreeze;
+$x.compareGames = $m[9].compareGames; $x.packGame = $m[9].packGame; $x.unpackGame = $m[9].unpackGame;
+$x.fingerprint = $m[10].fingerprint; $x.sha256 = $m[10].sha256;
+$x.chance = $m[12].chance; $x.next = $m[12].next; $x.seedState = $m[12].seedState;
+$x.FORMAT = $m[11].FORMAT; $x.Refusal = $m[11].Refusal; $x.checkGame = $m[11].checkGame; $x.readOptions = $m[11].readOptions; $x.createMatch = $m[11].createMatch; $x.openSave = $m[11].openSave; $x.whenReplayFails = $m[11].whenReplayFails;
 
 
 return $x; })({});
-$m[13] = (($x) => {
+$m[6] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The voyage: a ladder of islands for one player against bots, each harder than the last. Nothing here changes a rule.
+// An island is harder by its rivals (more of them, and better ones), by its size and shape, and by the hand it deals:
+// of six islands grown for a step, an early step takes the one kindest to the player, a late one a middling one, and never
+// the two worst, so that no step starts lost.
+const { createMatch } = $m[7];
+const { fable, territories } = $m[1];
+
+const SEAS = ["The Sheltered Sound", "The Trade Winds", "The Grey Reaches", "The Storm Gates"];
+const BOTS = { g: "gentle", e: "easy", n: "normal", h: "hard" }, PAR = { small: 10, medium: 14, large: 18, huge: 22 }, TRIES = "abcdef";
+// name, shape, size, rivals (one letter each), expansions
+const STEPS = [
+  ["Lambing Holm", "round", "small", "g"], ["Two Wells", "lakes", "small", "e"], ["The Skerry", "round", "small", "ee"], ["Sickle Bay", "crescent", "medium", "e"], ["Crab Claw", "arms", "small", "en"], ["Wardens' Rock", "round", "medium", "nn"],
+  ["Mirror Tarns", "lakes", "medium", "n"], ["The Stepping Stones", "chain", "medium", "nn", "boats"], ["Harvest Horn", "crescent", "medium", "nn", "farms"], ["Four Corners", "round", "medium", "nnn"], ["The Long Fingers", "arms", "large", "nn"], ["Eel Waters", "lakes", "large", "nnn"],
+  ["The Duel Stone", "round", "medium", "h"], ["Widow's Hook", "crescent", "large", "hn"], ["The Broken Necklace", "chain", "large", "hnn", "boats"], ["Granary Reach", "arms", "large", "hnn", "farms"], ["Fivefold Fen", "lakes", "large", "hnnn"], ["The Great Round", "round", "huge", "hhn"],
+  ["Knife Bay", "crescent", "medium", "hh"], ["The Kraken", "arms", "large", "hhh"], ["Gale Chain", "chain", "huge", "hhhn", "boats gales"], ["The Drowned Shire", "lakes", "huge", "hhhh", "farms"], ["Crown of Six", "round", "huge", "hhhhn"], ["World's End", "arms", "huge", "hhhhh", "boats farms gales"],
+];
+const ISLANDS = STEPS.length;
+
+/** How a start looks for one seat: its land and coin, and four more for each hex of its largest territory. */
+function hand(p, seat) {
+  const ts = territories(p, seat);
+  return ts.reduce((n, t) => n + 2 * t.cells.length + t.purse, 0) + 4 * Math.max(0, ...ts.map((t) => t.cells.length));
+}
+
+/** A step of the voyage, counted from 1, without growing its island: its name, sea, rules, rivals and par. The player is the first seat. */
+function step(n) {
+  const [name, isle, size, rivals, extra = ""] = STEPS[n - 1], seats = rivals.length + 1, more = extra.split(" ").filter(Boolean);
+  return { n, name, sea: Math.floor((n - 1) / 6), isle, size, seats, extra: more, options: { style: "classic", isle, size, seats, ...Object.fromEntries(more.map((k) => [k, true])) }, kinds: ["you", ...[...rivals].map((k) => BOTS[k])], par: PAR[size] + 2 * (seats - 2) };
+}
+
+const grown = new Map();
+/** A step with the seed that grows its island. Six are grown and one is kept, so this takes a moment; it is done once. */
+function island(n) {
+  if (grown.has(n)) return grown.get(n);
+  const v = step(n), { options, seats, sea } = v;
+  // the player's start against the mean of the rivals', in whole numbers; the kindest first
+  const dealt = [...TRIES].map((t) => {
+    const seed = `voyage ${n} ${t}`, p = createMatch(fable, { seed, options }).position;
+    let rest = 0;
+    for (let s = 1; s < seats; s++) rest += hand(p, s);
+    return { seed, edge: hand(p, 0) * (seats - 1) - rest };
+  }).sort((a, b) => b.edge - a.edge || (a.seed < b.seed ? -1 : 1));
+  grown.set(n, { ...v, seed: dealt[sea].seed });
+  return grown.get(n);
+}
+
+/** Which step a game belongs to, from its seed; 0 for any other game. */
+const stepOf = (seed) => { const m = /^voyage (\d+) [a-f]$/.exec(String(seed)), n = m ? Number(m[1]) : 0; return n >= 1 && n <= ISLANDS ? n : 0; };
+/** The steps open to a player who has won these: every one up to two past the furthest won, so one hard island never bars the way. */
+const open = (won) => Math.min(ISLANDS, Math.max(0, ...won) + 2);
+
+$x.SEAS = SEAS; $x.ISLANDS = ISLANDS; $x.step = step; $x.island = island; $x.stepOf = stepOf; $x.open = open;
+return $x; })({});
+$m[15] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // One camera for every look. Board point (x, y) in board pixels, height Z in screen pixels.
 // The *To methods write into fields and make no objects, so picking makes no garbage.
@@ -1485,7 +1573,7 @@ function pick(cam, m, sx, sy, top, unit, most) {
 
 $x.Camera = Camera; $x.pick = pick;
 return $x; })({});
-$m[14] = (($x) => {
+$m[16] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Turns a list of hexes into what the painter needs: a picture of cell numbers and a picture of heights.
 const ROOT3 = Math.sqrt(3);
@@ -1537,7 +1625,7 @@ function hexPicture(cells, rough, sea = [], size = 44) {
 
 $x.noise = noise; $x.hexPicture = hexPicture;
 return $x; })({});
-$m[15] = (($x) => {
+$m[17] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The painter: WebGL2 by hand. One full-screen triangle; the shader undoes the camera and walks down to the first cell top.
 const VS = `#version 300 es
@@ -1676,13 +1764,13 @@ class Painter {
 
 $x.Painter = Painter;
 return $x; })({});
-$m[12] = (($x) => {
+$m[14] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A hex board on a page: the painted surface, standing pieces and emblems, picking, looks and animation.
 // It never changes a game. It is told what to show and says which cell was pointed at.
-const { Camera, pick } = $m[13];
-const { hexPicture } = $m[14];
-const { Painter } = $m[15];
+const { Camera, pick } = $m[15];
+const { hexPicture } = $m[16];
+const { Painter } = $m[17];
 
 const DEG = Math.PI / 180;
 const LOOKS = {
@@ -2050,7 +2138,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
 
 $x.LOOKS = LOOKS; $x.EMBLEMS = EMBLEMS; $x.emblem = emblem; $x.seatPattern = seatPattern; $x.canDraw = canDraw; $x.createBoard = createBoard;
 return $x; })({});
-$m[17] = (($x) => {
+$m[19] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Where this copy's source code can be read. Anyone who runs a changed copy puts their own address here.
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
@@ -2058,7 +2146,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.7.0";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "50b9c14d";
+const BUILD = "7e059a91";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -2078,7 +2166,7 @@ const AI_BASES = {
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_BASES = AI_BASES;
 return $x; })({});
-$m[18] = (($x) => {
+$m[20] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
 // Daylight or lamplight, as the front page's lantern last left it; every page starts here.
@@ -2098,10 +2186,10 @@ function guard() {
 
 $x.guard = guard;
 return $x; })({});
-$m[16] = (($x) => {
+$m[18] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-const { BUILD, SOURCE_URL, VERSION } = $m[17];
-const { guard } = $m[18];
+const { BUILD, SOURCE_URL, VERSION } = $m[19];
+const { guard } = $m[20];
 
 /** Every page shows its version and where its source can be read. */
 function footer() {
@@ -2117,12 +2205,12 @@ function footer() {
 
 $x.footer = footer;
 return $x; })({});
-$m[19] = (($x) => {
+$m[21] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Games played by pasting a link. The whole game is in the part after #, which browsers do not send to the host.
 // With a password the game is locked (AES-GCM, the key made from the password by PBKDF2) before it goes in the link.
-const { Refusal } = $m[6];
-const { SITE_URL } = $m[17];
+const { Refusal } = $m[7];
+const { SITE_URL } = $m[19];
 
 const ID = 6, SALT = 16, IV = 12, ROUNDS = 250000, PLACE = "capo-link-";
 const broken = () => new Refusal("link", "that link is broken or not complete");
@@ -2182,7 +2270,7 @@ const linkGames = {
 
 $x.canLock = canLock; $x.newId = newId; $x.makeLink = makeLink; $x.readLink = readLink; $x.linkGames = linkGames;
 return $x; })({});
-$m[20] = (($x) => {
+$m[22] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The coach: a guided first game. A game gives a fixed seed, a short preset and a few steps. Each step points at a place
 // on the board or a control, says one plain sentence, and goes on when the player does the thing (or presses Next, for a step
@@ -2323,7 +2411,7 @@ function coach(T, L, key, go) {
 
 $x.coach = coach;
 return $x; })({});
-$m[21] = (($x) => {
+$m[23] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What the table games' screen keeps for the player: settings, sounds made in code, and the order of places at the end.
 // No page is touched when this is loaded, so its plain parts are tested in Node (test/shell.test.mjs).
@@ -2409,17 +2497,17 @@ function cue(events) {
 
 $x.SETTINGS_KEY = SETTINGS_KEY; $x.CHOICES = CHOICES; $x.DEFAULTS = DEFAULTS; $x.PACE = PACE; $x.SCALE = SCALE; $x.parseSettings = parseSettings; $x.settings = settings; $x.saveSettings = saveSettings; $x.turnKey = turnKey; $x.ranked = ranked; $x.resultText = resultText; $x.wake = wake; $x.sfx = sfx; $x.cue = cue;
 return $x; })({});
-$m[5] = (($x) => {
+$m[13] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What every table game's screen shares: title, seats, score bar, words, taking back, saving, bots' turns and the end.
 // A game gives its rules, its board and its own move panel.
-const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } = $m[6];
-const { EMBLEMS, emblem } = $m[12];
-const { footer } = $m[16];
-const { canLock, linkGames, makeLink, newId, readLink } = $m[19];
-const { BUILD, SOURCE_URL, VERSION } = $m[17];
-const { coach } = $m[20];
-const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, turnKey, wake } = $m[21];
+const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } = $m[7];
+const { EMBLEMS, emblem } = $m[14];
+const { footer } = $m[18];
+const { canLock, linkGames, makeLink, newId, readLink } = $m[21];
+const { BUILD, SOURCE_URL, VERSION } = $m[19];
+const { coach } = $m[22];
+const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, turnKey, wake } = $m[23];
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -2435,9 +2523,9 @@ const $ = (id) => document.getElementById(id);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const THEME = "capo-tent-theme";
-const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["away", "A friend, by link"]];
+const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["hard", "Hard bot"], ["away", "A friend, by link"]];
 // gentle is the lessons' bot, not offered in the setup
-const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
+const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", hard: "Hard bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
 const store = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* files still work */ } };
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 
@@ -2565,7 +2653,7 @@ function createTable(G) {
     human: () => !!T.match && T.match.turn !== null && T.kinds[T.match.turn] === "you",
     ready: () => !T.demo && T.human() && !T.busy,
     solo: () => T.kinds.filter((k) => k === "you" || k === "away").length === 1 || (!!T.link && T.kinds.filter((k) => k === "you").length === 1),
-    play, refresh: panel,
+    play, refresh: panel, begin: (m, kinds) => begin(m, kinds), // begin: a game's own ladder starts its next step
   };
   function docked() {
     dock.hidden = T.demo || T.catching || innerWidth <= 1180;
@@ -2936,7 +3024,7 @@ function createTable(G) {
     // places
     let rows = ranked(Array.from({ length: names ? names.length : T.kinds.length }, (_, s) => ({ seat: s, won: r.winners.includes(s), score: G.cellsOf(p, s), fell: fell[s] })));
     if (names) rows = rows.filter((w, i) => i < 8 || mine(w.seat));
-    rows = rows.map((w) => ({ ...w, name: nameOf(w.seat), figures: [[G.unit || "Land", w.score], ...G.stats(p, w.seat), ...(rounds ? [["Rounds", w.fell ?? last]] : [])] }));
+    rows = rows.map((w) => ({ ...w, name: nameOf(w.seat), figures: [[G.unit || "Land", w.score], ...(G.figures?.(T, w.seat) || G.stats(p, w.seat)), ...(rounds ? [["Rounds", w.fell ?? last]] : [])] }));
     const scroll = el("div", undefined, "ranks"), table = el("table"), head = el("tr");
     head.append(...["Place", "Player", ...rows[0].figures.map(([k]) => k)].map((t) => { const th = el("th", t); th.scope = "col"; return th; }));
     table.append(head, ...rows.map((w) => {
@@ -2964,6 +3052,8 @@ function createTable(G) {
     change.onclick = () => { home(); $("own").open = true; };
     look.onclick = closeSheet;
     copyIt.onclick = async () => { try { await navigator.clipboard.writeText(text); copyIt.textContent = "Copied"; } catch { toast(text); } };
+    const onward = G.next?.(T); // a ladder's next step takes the main button's place
+    if (onward) { again.textContent = onward.label; again.onclick = () => { closeSheet(); onward.go(); }; }
     go.append(all, change, again); minor.append(look, copyIt);
     body.append(hero, scroll, c, go, minor);
     sheet(lost ? "Defeat" : people ? "Victory" : "The end", body, null, `end ${lost ? "lose" : "win"}`);
@@ -3084,7 +3174,7 @@ function createTable(G) {
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
       const li = el("li"), k = el("select");
-      k.append(...KINDS.map(([v, t]) => new Option(t, v)));
+      k.append(...KINDS.filter(([v]) => v !== "hard" || G.hard).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one
       k.value = setup.who[s];
       k.setAttribute("aria-label", NAMES[s]);
       k.onchange = () => { setup.who[s] = k.value; passLine(); };
@@ -3208,11 +3298,11 @@ function createTable(G) {
 
 $x.COLOURS = COLOURS; $x.NAMES = NAMES; $x.RGB = RGB; $x.ICONS = ICONS; $x.PAPER = PAPER; $x.dress = dress; $x.$ = $; $x.el = el; $x.sleep = sleep; $x.sign = sign; $x.radio = radio; $x.toast = toast; $x.sheet = sheet; $x.createTable = createTable;
 return $x; })({});
-$m[22] = (($x) => {
+$m[24] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The hex board for a game's screen: the moving one when the device can draw it, else a still picture that can be tapped.
-const { LOOKS, canDraw, createBoard } = $m[12];
-const { ICONS, RGB } = $m[5];
+const { LOOKS, canDraw, createBoard } = $m[14];
+const { ICONS, RGB } = $m[13];
 
 /** The seats' patterns for the still board, the same six as on the moving board and the score bar: /, dots, |, x, \, -. */
 function patterns(make, f) {
@@ -3287,13 +3377,17 @@ return $x; })({});
 $m[0] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Island Fable on the table: choose a hall or a unit, then what to build or where it goes.
-const { EXPANSIONS, NONE, SAFETY, SWITCHES, WOOD, act, boardOf, cellsOf, fable, farmPrice, goalOf, landOf, nameOf, raiseOf, territories, upkeepOf } = $m[1];
+const { EXPANSIONS, FORT_GUARD, NONE, SAFETY, SWITCHES, WOOD, act, beats, boardOf, cellsOf, defence, fable, farmPrice, goalOf, landOf, nameOf, raiseOf, territories, topOf, upkeepOf } = $m[1];
 const { choose, thinking } = $m[4];
-const { $, NAMES, PAPER, RGB, createTable, el, radio, toast } = $m[5];
-const { hexBoard } = $m[22];
+const { villageName } = $m[5];
+const { ISLANDS, SEAS, island, open, step, stepOf } = $m[6];
+const { createMatch } = $m[7];
+const { $, NAMES, PAPER, RGB, createTable, el, radio, sheet, toast } = $m[13];
+const { hexBoard } = $m[24];
 
 const SEA = [72, 110, 122], SHALLOW = [98, 138, 146], GRASS = [[150, 186, 104], [142, 180, 98], [158, 190, 112]], RANK = ["", "Scout", "Guard", "Captain", "Marshal"];
 let source = null, where = null, build = "raise", give = null, sure = false; // source: "h12" a hall, "u7" a unit; give: the concede button, sure: tapped once
+let guards = [], guardsShown = "", warned = -1; // guards: the numbers on rival land beside the chosen village or unit; warned: the move count when End turn last warned
 
 const legal = (T) => (T.ready() ? T.match.legal() : []);
 const from = (m) => (m.do === "move" ? `u${m.from}` : m.hall === undefined ? m.do : `h${m.hall}`);
@@ -3303,6 +3397,35 @@ const weight = { Take: 0, Claim: 1, Clear: 2, Join: 3, Stand: 4, "Fort at": 5, "
 const worth = (p, m) => weight[verb(p, m)] * 100 - (p.hall[m.to] ? 60 : 0) - (p.owner[m.to] !== NONE && p.owner[m.to] !== p.seat ? p.unit[m.to] * 10 : 0);
 /** A hex in words: whose it is and what stands on it. */
 const whatAt = (p, i) => [p.owner[i] === NONE ? "No one's" : p.owner[i] === p.seat ? "Yours" : NAMES[p.owner[i]], p.hall[i] ? "village" : p.unit[i] ? RANK[p.unit[i]].toLowerCase() : p.fort[i] ? "fort" : p.farm[i] ? "farm" : p.tree[i] ? (p.tree[i] === WOOD ? "wood" : "cairn") : ""].filter(Boolean).join(", ");
+/** What guards a hex best, and from where: a unit, a fort or a village on it or beside it. */
+function guardOf(p, c) {
+  let n = 0, at = -1;
+  if (p.owner[c] === NONE) return { n, at, what: "" };
+  for (const x of [c, ...boardOf(p).near[c]]) { const g = p.owner[x] === p.owner[c] ? Math.max(p.unit[x], p.hall[x], p.fort[x] ? FORT_GUARD : 0) : 0; if (g > n) { n = g; at = x; } }
+  return { n, at, what: at < 0 ? "" : p.unit[at] === n ? RANK[n].toLowerCase() : p.fort[at] ? "fort" : "village" };
+}
+/** The land of the chosen village or unit, and the hexes beside it that are not the player's. */
+function reach(p) {
+  const t = source && territories(p, p.seat).find((x) => x.cells.includes(Number(source.slice(1))));
+  if (!t) return null;
+  const inside = new Set(t.cells), edge = new Set();
+  for (const c of t.cells) for (const m of boardOf(p).near[c]) if (!inside.has(m) && !p.water[m] && p.owner[m] !== p.seat) edge.add(m);
+  return { t, edge };
+}
+/** Why a hex cannot be taken from the chosen village or unit, in a sentence. */
+function refusal(p, i) {
+  const r = reach(p), rank = source[0] === "u" ? p.unit[Number(source.slice(1))] : 1;
+  if (!r || !r.edge.has(i)) return "It cannot reach there: a unit takes only land beside its own territory.";
+  if (p.rule.opening === "truce" && p.round === 1 && p.owner[i] !== NONE) return "Round 1 is a truce: nobody takes a rival's land yet.";
+  const g = guardOf(p, i), need = g.n + 1;
+  if (source[0] === "u" && p.moved[Number(source.slice(1))]) return "That unit has moved this turn.";
+  if (!g.n || beats(p, rank, g.n)) return "It cannot go there now.";
+  return `${nameOf(p, i)} is guarded ${g.n} by the ${g.what} at ${nameOf(p, g.at)}. ${need <= topOf(p) ? `It takes a ${RANK[need].toLowerCase()}${source[0] === "h" ? ": a new scout takes only unguarded land" : ""}.` : "Nothing can take it while that stands."}`;
+}
+/** A territory's money in a sentence. */
+const money = (t) => `${t.purse} coin. Earns ${t.income}, pays ${t.upkeep}: ${t.net >= 0 ? "+" : ""}${t.net} a turn.`;
+/** The territories that cannot pay their units at the start of the player's next turn. */
+const doomed = (p) => territories(p, p.seat).filter((t) => t.purse + t.net < 0 && t.cells.some((c) => p.unit[c]));
 const costOf = (p, m, t) => (m.do === "fort" ? p.rule.fort : m.do === "farm" ? farmPrice(p, t.cells) : raiseOf(p));
 
 function tap(T, i) {
@@ -3324,7 +3447,93 @@ function tap(T, i) {
     return T.refresh();
   }
   if (p.water[i]) return undefined;
-  return toast(source ? "It cannot reach there, or the land is too well guarded." : "Choose one of your halls or units first.");
+  return toast(source ? refusal(p, i) : "Choose one of your villages or units first.");
+}
+/** What the chosen village or unit has, and what the aimed move would leave: the purse is seen before it is spent. */
+function ledger(T, p, m, ts) {
+  const at = source ? Number(source.slice(1)) : -1, t = ts.find((x) => x.cells.includes(at)), out = [];
+  if (t) out.push(el("span", `${villageName(p, t.hall)}: ${money(t)}`));
+  if (t && m) {
+    const made = act(p, m), q = made.position, u = territories(q, p.seat).find((x) => x.cells.includes(m.to)), took = made.events.find((e) => e.kind === "take");
+    if (u) {
+      const short = u.purse + u.net < 0 && u.cells.some((c) => q.unit[c]), turns = u.net < 0 ? Math.floor(u.purse / -u.net) : 0;
+      const line = el("span", `After: ${u.purse} coin, ${u.net >= 0 ? "+" : ""}${u.net} a turn${u.cells.length !== t.cells.length ? `, ${u.cells.length} hexes` : ""}.${short ? " It could not pay next turn: every unit there would disband." : u.net < 0 ? ` It can pay for ${turns} more ${turns === 1 ? "turn" : "turns"}.` : ""}`);
+      if (short) line.style.color = "var(--danger)";
+      out.push(line);
+    }
+    const tell = [made.events.some((e) => e.kind === "split") && "This cuts their land in two.", p.hall[m.to] && p.owner[m.to] !== p.seat && "Their village falls.", took?.lost && `Its purse of ${took.lost} is lost.`].filter(Boolean);
+    if (tell.length) out.push(el("span", tell.join(" ")));
+  }
+  $("ledger").hidden = !out.length;
+  $("ledger").replaceChildren(...out);
+}
+/** End the turn. A village that cannot pay is named first, once. */
+function endTurn(T) {
+  if (!T.ready()) return;
+  const p = T.match.position, lost = doomed(p);
+  if (lost.length && warned !== T.match.list.length) {
+    warned = T.match.list.length;
+    toast(`${lost.map((t) => villageName(p, t.hall)).join(" and ")} cannot pay next turn: every unit there would disband. End turn again to go on anyway, or first take land, clear woods or join the land to a richer village.`);
+    return;
+  }
+  T.play({ do: "end" });
+}
+// ---- the count: what each seat did, read again from the game's own moves ----
+let counted = { key: "", rows: [] };
+function count(T) {
+  const m = T.match, key = `${m.seed}/${m.list.length}`;
+  if (counted.key === key) return counted.rows;
+  const again = createMatch(fable, { seed: m.seed, options: m.options }), rows = Array.from({ length: m.options.seats }, () => ({ peak: 0, took: 0, lost: 0, raised: 0, starved: 0, cuts: 0 }));
+  const peaks = () => rows.forEach((r, s) => { r.peak = Math.max(r.peak, cellsOf(again.position, s)); });
+  peaks();
+  for (const mv of m.list) {
+    if (mv.do === "raise") rows[again.position.seat].raised++;
+    let by = -1;
+    for (const e of again.play(mv)) {
+      if (e.kind === "take") { by = e.seat; if (e.was !== NONE) { rows[e.seat].took++; rows[e.was].lost++; } }
+      else if (e.kind === "split" && by >= 0) rows[by].cuts++;
+      else if (e.kind === "starve" || e.kind === "stranded") rows[e.seat].starved += e.cells.length;
+    }
+    peaks();
+  }
+  counted = { key, rows };
+  return rows;
+}
+function countTable(T) {
+  const box = el("div", undefined, "ranks"), t = el("table"), row = (cells, tag) => { const r = el("tr"); r.append(...cells.map((c) => el(tag, String(c)))); return r; }, c = count(T), p = T.match.position;
+  t.append(row(["Player", "Land", "Most", "Taken", "Lost", "Raised", "Starved", "Cuts"], "th"), ...c.map((r, s) => row([NAMES[s], cellsOf(p, s), r.peak, r.took, r.lost, r.raised, r.starved, r.cuts], "td")));
+  box.append(t, el("p", "Most: the most land held at once. Taken and Lost: rival hexes. Raised: scouts bought. Starved: units lost to an empty purse. Cuts: times a rival's land was cut in two.", "about"));
+  return box;
+}
+// ---- the voyage: the ladder of islands (src/games/fable/ladder.js); what is won is kept in this browser ----
+const VOYAGE = "capo-fable-voyage", SHAPE = { round: "round", lakes: "with lakes", crescent: "a crescent", arms: "long arms", chain: "a chain" }, BOT = { gentle: "gentle", easy: "easy", normal: "", hard: "hard" };
+const INSPIRED = "Traditional rules are inspired by Slay, the hex island game by Sean O'Connor. Not affiliated with or endorsed by its makers. Our own map, names, numbers and art.";
+function voyage() { try { const v = JSON.parse(localStorage.getItem(VOYAGE) || "{}"); return v && typeof v === "object" ? v : {}; } catch { return {}; } }
+function keepVoyage(v) { try { localStorage.setItem(VOYAGE, JSON.stringify(v)); } catch { /* the voyage is then only for this visit */ } }
+const wonSteps = () => Object.keys(voyage()).map(Number).filter((n) => n >= 1 && n <= ISLANDS);
+/** A step's rivals in words: "2 rivals (1 hard)". */
+function rivals(v) {
+  const them = v.kinds.slice(1), kinds = [...new Set(them)].filter((k) => BOT[k]).map((k) => `${them.filter((x) => x === k).length} ${BOT[k]}`);
+  return `${them.length} ${them.length === 1 ? "rival" : "rivals"}${kinds.length ? ` (${kinds.join(", ")})` : ""}`;
+}
+function sail(n) {
+  const v = island(n);
+  if ($("sheet").open) $("sheet").close();
+  T.begin(createMatch(fable, { seed: v.seed, options: v.options }), v.kinds);
+  toast(`Island ${n} of ${ISLANDS}: ${v.name}. ${rivals(v)}. Par ${v.par} rounds.`);
+}
+function voyageSheet() {
+  const log = voyage(), last = open(wonSteps()), box = el("div", undefined, "stack");
+  box.append(el("p", `${ISLANDS} islands in four seas, each harder than the last: more rivals, better ones, larger and stranger islands, and a start less kind to you. Win an island to open the next two. ${wonSteps().length} of ${ISLANDS} won.`));
+  for (let n = 1; n <= ISLANDS; n++) {
+    const v = step(n), b = el("button", `${n}. ${v.name}`, log[n] ? "quiet" : n <= last ? "main" : "quiet");
+    if (v.n % 6 === 1) box.append(el("h3", SEAS[v.sea]));
+    b.type = "button"; b.disabled = n > last;
+    b.append(el("small", ` ${v.size}, ${SHAPE[v.isle]}, ${rivals(v)}${v.extra.length ? `, ${v.extra.join(" and ")}` : ""}. ${log[n] ? `Won in ${log[n]} rounds${log[n] <= v.par ? ", within par" : `, par ${v.par}`}.` : n <= last ? `Par ${v.par} rounds.` : "Not yet open."}`));
+    b.onclick = () => sail(n);
+    box.append(b);
+  }
+  sheet("The voyage", box, "Close", "wide");
 }
 // ---- the guided first game: Traditional on a small round island, against one gentle bot ----
 const has = (ev, ...kinds) => ev.some((e) => kinds.includes(e.kind));
@@ -3358,7 +3567,7 @@ const LESSON = {
     { at: () => $("end"), done: (T, ev) => has(ev, "done"),
       say: (T) => (pos(T).round === 1 && pos(T).rule.opening === "truce" ? "Nobody may take a rival's land in the first round, so press End turn now." : "Press End turn when you are done.") },
     { when: (T) => pos(T).round > 1, at: (T) => strike(T, false), or: () => $(source ? "wheres" : "sources"), next: true, done: (T, ev) => ev.some((e) => e.kind === "take" && e.was !== NONE),
-      say: "Take a rival hex beside your land: your unit must outrank every unit on and beside it, and a village guards like a scout." },
+      say: "Take a rival hex beside your land: your unit must outrank every unit on and beside it, and a village guards like a scout. With a unit chosen, the numbers on rival land are its guard; a red one is too strong for that unit." },
     { when: (T) => pos(T).round > 1, at: (T) => strike(T, true), or: () => $(source ? "wheres" : "sources"), next: true, done: (T, ev) => has(ev, "split"),
       say: "Cut a rival's territory in two: the part left without its village has no purse, so its units starve next turn." },
     { at: () => (give && !give.hidden ? give : $("land")), next: true,
@@ -3368,11 +3577,13 @@ const LESSON = {
 const SHAPES = [["round", "Round"], ["lakes", "With lakes"], ["crescent", "A crescent"], ["arms", "Long arms"], ["chain", "A chain of islands"]];
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
-createTable({
+const T = createTable({
   game: fable, key: "fable", title: "The Island Fable", won: "The island is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 3, lengths: [[10, "Short"], [14, "Normal"], [18, "Long"]], pace: (p) => (p.classic ? 240 : 480),
-  cellsOf, goalOf, landOf, choose, thinking, lesson: LESSON,
+  cellsOf, goalOf, landOf, choose, thinking, lesson: LESSON, hard: true,
+  // where the Traditional rules come from: shown in the How to play sheet, and for the menu's About tab
+  inspired: INSPIRED,
   about: {
-    classic: "Traditional: inspired by Slay.\nThe hex island rules as players know them: the island is dealt out, villages keep purses, soldiers cost wages and merge into higher ranks, woods spread over idle land, you act as often as you like and move freely inside your own land, and you play until one is left or the rest concede. Ours: four ranks of our own, our prices and wages, forts of our own, and a first round of truce.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
+    classic: "Traditional: the hex island game.\nThe hex island rules as players know them: the island is dealt out, villages keep purses, soldiers cost wages and merge into higher ranks, woods spread over idle land, you act as often as you like and move freely inside your own land, and you play until one is left or the rest concede. Ours: four ranks of our own, our prices and wages, forts of our own, and a first round of truce.",
     custom: "Custom: your own rules.\nSet every rule yourself: island shape and size, the start, actions a turn, ranks, prices, wages, woods, forts, the goal, the number of rounds, turn order, the first round and moving at home. Add any expansions on top.",
     ours: "Capo: our own variation.\nA small island settled from one village each, three actions a turn, no woods and no forts. A quick game of about ten rounds.",
     coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
@@ -3399,12 +3610,31 @@ createTable({
   ],
   expansions: EXPANSIONS.map((key) => ({ key, label: { farms: "Farms", boats: "Boats", gales: "Gales" }[key], note: { farms: "Build a farm beside a hall or another farm. It pays 3 a turn, and each costs more than the last.", boats: "A unit on the coast can cross up to three hexes of sea. A landing party on one hex feeds itself for its first turn ashore; still alone after that, it disbands.", gales: "Some rounds a gale keeps boats ashore and fells some woods." }[key] })),
   stats(p, s) { const t = territories(p, s); return [["Coin", t.reduce((n, x) => n + x.purse, 0)], ["A turn", `${t.reduce((n, x) => n + x.net, 0) >= 0 ? "+" : ""}${t.reduce((n, x) => n + x.net, 0)}`]]; },
+  figures: (T, s) => { const c = count(T)[s]; return [["Most", c.peak], ["Taken", c.took], ["Lost", c.lost], ["Raised", c.raised], ["Starved", c.starved], ["Cuts", c.cuts]]; },
+  more: { label: "The count so far", body: countTable },
+  summary(T) {
+    const r = T.match.result, p = T.match.position, n = stepOf(T.match.seed), me = T.kinds.indexOf("you"), c = me >= 0 && T.solo() ? count(T)[me] : null, why = String(r.why);
+    const head = n ? `Island ${n} of ${ISLANDS}, ${step(n).name}: ${r.winners.includes(0) ? `yours in ${p.round} rounds (par ${step(n).par})` : `lost in round ${p.round}`}.` : r.winners.length > 1 ? `They ${why}.` : `${why[0].toUpperCase()}${why.slice(1)}, in ${p.round} rounds.`;
+    return c ? `${head} You took ${c.took} rival ${c.took === 1 ? "hex" : "hexes"}, cut rival land ${c.cuts === 1 ? "once" : `${c.cuts} times`} and lost ${c.starved} ${c.starved === 1 ? "unit" : "units"} to hunger.` : head;
+  },
+  next(T) {
+    const n = stepOf(T.match.seed);
+    if (!n || T.kinds[0] !== "you") return null;
+    const won = T.match.result.winners.includes(0);
+    return won && n < ISLANDS ? { label: "Next island", go: () => sail(n + 1) } : won ? null : { label: "Sail again", go: () => sail(n) };
+  },
+  seen(T, events) {
+    const n = stepOf(T.match.seed), end = events.find((e) => e.kind === "end");
+    if (!n || !end || T.demo || T.kinds[0] !== "you" || !end.winners.includes(0) || end.winners.length > 1) return;
+    const log = voyage(), best = log[n];
+    if (!best || T.match.position.round < best) { log[n] = T.match.position.round; keepVoyage(log); }
+  },
   line(e, p) {
     const who = NAMES[e.seat], name = (i) => nameOf(p, i);
     if (e.kind === "take") return e.was === NONE ? `${who} claims ${name(e.at)}.` : `${who} takes ${name(e.at)} from ${NAMES[e.was]}${e.won ? `, with ${e.won} coin` : e.lost ? `, whose purse of ${e.lost} is lost` : ""}.`;
     if (e.kind === "split") return `${who}'s land is cut in two.`;
-    if (e.kind === "starve") return `${who} cannot pay: ${e.cells.length === 1 ? "a unit disbands" : `${e.cells.length} units disband`}.`;
-    if (e.kind === "room") return `${who} needs a new village at ${name(e.at)}: ${[e.rank && `a ${RANK[e.rank].toLowerCase()}`, e.fort && "a fort", e.farm && "a farm"].filter(Boolean).join(" and ")} there is lost to make room.`;
+    if (e.kind === "starve") { const t = territories(p, e.seat).find((x) => x.cells.includes(e.cells[0])); return `${who}${t ? `'s ${villageName(p, t.hall)}` : ""} cannot pay: ${e.cells.length === 1 ? "a unit disbands" : `${e.cells.length} units disband`}.`; }
+    if (e.kind === "room") return `${who} needs a new village, ${villageName(p, e.at)}, at ${name(e.at)}: ${[e.rank && `a ${RANK[e.rank].toLowerCase()}`, e.fort && "a fort", e.farm && "a farm"].filter(Boolean).join(" and ")} there is lost to make room.`;
     if (e.kind === "stranded") return `${who}'s stranded ${e.cells.length === 1 ? "unit disbands" : "units disband"}.`;
     if (e.kind === "raise") return `${who} raises a scout at ${name(e.at)}.`;
     if (e.kind === "clear") return `${who} clears the wood at ${name(e.at)}.`;
@@ -3431,6 +3661,7 @@ createTable({
         q.farm.forEach((f, at) => { if (f) out.push({ kind: "farm", at }); });
         q.fort.forEach((f, at) => { if (f) out.push({ kind: "fort", at, rgb: RGB[q.owner[at]] }); });
         for (let s = 0; s < q.seats; s++) for (const t of territories(q, s)) out.push({ kind: "tower", at: t.hall, rgb: RGB[s], count: t.purse, now: s === T.match.turn, warn: t.purse + t.net < 0 });
+        if (T.ready()) for (const g of guards) out.push({ kind: "token", at: g.at, n: g.n, hot: g.hot });
         q.unit.forEach((rank, at) => { if (rank) out.push({ kind: "unit", at, rank, rgb: RGB[q.owner[at]], tired: !!q.moved[at] || q.owner[at] !== T.match.turn, now: !q.moved[at] && q.owner[at] === T.match.turn }); });
         return out;
       },
@@ -3445,33 +3676,40 @@ createTable({
     if (t && !kinds.includes(build)) build = kinds[0] || "raise";
     const list = source ? options(T).sort((a, b) => worth(p, a) - worth(p, b) || a.to - b.to) : [];
     if (!list.some((m) => m.to === where)) where = list[0]?.do === "move" ? list[0].to : null; // a unit's best step is offered; nothing paid for is chosen for you
-    $("status").textContent = `${T.solo() ? "Your turn" : `${NAMES[p.seat]}'s turn`}${p.rule.actions < 99 ? `: ${p.left} of ${p.rule.actions} ${p.left === 1 ? "action" : "actions"} left` : ""}`;
+    const idleUnits = sources.filter((x) => x[0] === "u").length, buyers = sources.filter((x) => x[0] === "h").length, lost = doomed(p);
+    $("status").textContent = `${T.solo() ? "Your turn" : `${NAMES[p.seat]}'s turn`}: ${p.rule.actions < 99 ? `${p.left} of ${p.rule.actions} ${p.left === 1 ? "action" : "actions"} left, ` : ""}${idleUnits} ${idleUnits === 1 ? "unit" : "units"} ready, ${buyers} ${buyers === 1 ? "village" : "villages"} can buy${lost.length ? `. ${lost.map((x) => villageName(p, x.hall)).join(" and ")} cannot pay next turn` : ""}.`;
     $("sources").hidden = !sources.length;
     radio($("sources"), sources.map((s) => {
       const c = Number(s.slice(1));
-      if (s[0] === "h") { const x = ts.find((y) => y.hall === c); return { value: s, label: `Village ${nameOf(p, c)}`, note: `${x.purse} coin, ${x.net >= 0 ? "+" : ""}${x.net} a turn` }; }
+      if (s[0] === "h") { const x = ts.find((y) => y.hall === c); return { value: s, label: villageName(p, c), note: `${nameOf(p, c)}: ${x.purse} coin, ${x.net >= 0 ? "+" : ""}${x.net} a turn` }; }
       return { value: s, label: `${RANK[p.unit[c]]} ${nameOf(p, c)}`, note: `costs ${upkeepOf(p, p.unit[c])} a turn` };
     }), source, (v) => { source = source === v ? null : v; where = null; T.refresh(); });
     $("builds").hidden = kinds.length < 2;
     radio($("builds"), kinds.map((k) => ({ value: k, label: { raise: "Scout", fort: "Fort", farm: "Farm" }[k], note: String(costOf(p, { do: k }, t || { cells: [] })) })), build, (v) => { build = v; where = null; T.refresh(); });
     $("wheres").hidden = !list.length;
-    radio($("wheres"), list.map((m) => ({ value: m.to, label: `${verb(p, m)} ${nameOf(p, m.to)}${m.sea ? " by boat" : ""}`, note: whatAt(p, m.to), rgb: p.owner[m.to] === NONE ? PAPER[0] : RGB[p.owner[m.to]] })), where, (v) => { where = v; T.refresh(); });
+    radio($("wheres"), list.map((m) => ({ value: m.to, label: `${verb(p, m)} ${nameOf(p, m.to)}${m.sea ? " by boat" : ""}`, note: `${whatAt(p, m.to)}${p.owner[m.to] !== p.seat && guardOf(p, m.to).n ? `, guard ${guardOf(p, m.to).n}` : ""}`, rgb: p.owner[m.to] === NONE ? PAPER[0] : RGB[p.owner[m.to]] })), where, (v) => { where = v; T.refresh(); });
     const m = list.find((x) => x.to === where);
     $("do").disabled = !m;
     $("do").replaceChildren(m ? `${verb(p, m)} ${nameOf(p, m.to)}` : source && list.length ? "Choose where" : sources.length ? "Choose a village or unit" : "Nothing to do");
     if (m && m.do !== "move") $("do").append(el("small", ` for ${costOf(p, m, t)}`));
     $("do").onclick = () => { const now = options(T).find((x) => x.to === where); if (now) T.play(now); };
-    $("end").onclick = () => { if (T.ready()) T.play({ do: "end" }); };
+    ledger(T, p, m, ts);
+    $("end").onclick = () => endTurn(T);
     if (!give) { give = el("button", "", "text"); give.type = "button"; $("end").parentNode.after(give); } // apart from End turn, and small: it ends your game
     give.hidden = !all.some((x) => x.do === "concede");
     give.textContent = sure ? "Concede: tap again" : "Concede";
     give.onclick = () => { if (!T.ready()) return; if (sure) T.play({ do: "concede" }); else { sure = true; T.refresh(); } };
+    // the guard on each rival hex beside the chosen land: red where this village or unit cannot take it
+    const r = reach(p), rank = source?.[0] === "u" ? p.unit[Number(source.slice(1))] : 0, truce = p.rule.opening === "truce" && p.round === 1;
+    guards = r ? [...r.edge].flatMap((c) => { const n = defence(p, c); return n ? [{ at: c, n, hot: truce || !rank || !beats(p, rank, n) }] : []; }) : [];
+    const sig = `${T.match.list.length}/${guards.map((g) => `${g.at}.${g.n}.${g.hot ? 1 : 0}`).join()}`;
+    if (sig !== guardsShown) { guardsShown = sig; T.board.show([], true); }
     T.board.light(list.filter((x) => ["Take", "Claim"].includes(verb(p, x))).map((x) => x.to), { ring: source ? Number(source.slice(1)) : -1, aim: where ?? -1, dots: list.filter((x) => !["Take", "Claim"].includes(verb(p, x))).map((x) => x.to) });
   },
   listing: (T) => { const p = T.match.position; return { head: ["Hex", "Whose and what"], rows: boardOf(p).cells.map((_, i) => i).filter((i) => !p.water[i]).map((i) => [nameOf(p, i), whatAt(p, i)]) }; },
   changed: () => { where = null; sure = false; },
   keys(T, k, e) {
-    if (k === "e") T.play({ do: "end" });
+    if (k === "e") endTurn(T);
     else if (k === "escape") { source = null; T.refresh(); } else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "do")) { e.preventDefault(); $("do").click(); }
   },
   rules: (classic, p) => [
@@ -3484,11 +3722,18 @@ createTable({
     "A unit guards its own hex and every hex beside it. A village guards like a scout and a fort like a guard. You need a higher rank to take guarded land; a marshal can take anything.",
     "Woods earn nothing and spread over empty land. A unit that steps in clears them, and its move is done.",
     "Cut a rival's land in two, and the part without the village starts with no money. Take a village, and its purse is lost.",
-    "A number turning red means that territory cannot pay next turn.",
+    "With a village or unit chosen, each guarded rival hex beside its land shows its guard as a number: red where that village or unit cannot take it. Tapping one says what guards it and what rank it takes.",
+    "The move panel shows the chosen village's purse, what it earns and pays, and what the move you are aiming would leave, before you pay for it. A purse turning red on the map cannot pay next turn, and End turn names such a village once before it goes on.",
+    "The voyage, on the title card, is a ladder of 24 islands in four seas against rivals that grow in number and skill. The menu's count so far shows what each player has taken, lost, raised and starved.",
     (p ? p.rule.goal === "last" : classic) ? `Win by being the last one standing. You may concede instead; a computer player concedes when one rival holds half the island and three times its land. ${p?.rule.limit ? "After the last round" : `After ${SAFETY} rounds`}, the most land wins.` : "Reach the bright mark on the bar to win, or hold the most land after the last round.",
     "Keys: Tab and arrows choose, Enter acts, E ends the turn, Escape lets go, U takes back.",
+    ...(classic ? [INSPIRED] : []),
   ],
 });
+function voyageButton() { const won = wonSteps(); $("voyage").textContent = won.length >= ISLANDS ? "The voyage: all won" : `The voyage: island ${Math.min(ISLANDS, Math.max(0, ...won) + 1)} of ${ISLANDS}`; }
+$("voyage").onclick = voyageSheet;
+$("sheet").addEventListener("close", voyageButton);
+voyageButton();
 
 
 return $x; })({});

@@ -6,7 +6,7 @@ import { fingerprint } from "./digest.js";
 import { Refusal, createMatch } from "./match.js";
 
 const LAYOUT = 2, MOST_MOVES = 4000, MOST_BYTES = 32000, CHECK = 8;
-const ROLES = ["host", "friend", "normal", "easy"];
+const ROLES = ["host", "friend", "normal", "easy", "hard"];
 const broken = () => new Refusal("link", "that link is broken or not complete");
 
 function put(out, n) { // a whole number, seven bits to a byte

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Bots for The Island Fable. One action at a time: try each on a copy and keep the best, or stop.
 // It also looks a few steps ahead for one strike: raise scouts onto a unit, or join two where steps at home are free, then take.
+// Tiers: random, easy (noisy), normal, and hard, which reads its rivals too (keen). Gentle is the lesson's and the voyage's first rival.
 import { NONE, WOOD, act, beats, boardOf, cellsOf, defence, fable, goalOf, groupsOf, landOf, raiseOf, territories, topOf, upkeepOf } from "./rules.js";
 
-export const TIERS = ["random", "easy", "normal"];
+export const TIERS = ["random", "easy", "normal", "hard"];
 
 /** The bots' plain rule for giving up: one rival holds at least half the island and at least three times their land. */
 export function hopeless(p, seat) {
@@ -30,6 +31,24 @@ export function value(p, seat) {
       if (p.farm[c]) v += 45;
       if (p.fort[c]) v += 26;
       if (near[c].some((m) => p.owner[m] !== NONE && p.owner[m] !== seat)) { const d = defence(p, c); if (d < 1) v -= 30; else if (d > 1 && p.classic) v += 5; }
+    }
+  }
+  return v;
+}
+
+/**
+ * The hard bot's reading: the same count, and it also weighs its rivals. Their units, their purses and what they earn
+ * count against it, except in a territory that cannot pay next turn: cut one off from its village and its units are as
+ * good as gone, which is how this bot comes to look for the cut. (Weighing its own open borders as well made it timid
+ * and weaker on larger islands, so it does not: measured over 150 to 420 games an island.)
+ */
+export function keen(p, seat) {
+  let v = value(p, seat);
+  for (let s = 0; s < p.seats; s++) {
+    if (s === seat) continue;
+    for (const t of territories(p, s)) {
+      if (t.purse + t.net < 0) continue;
+      v -= 30 * t.cells.reduce((n, c) => n + p.unit[c], 0) + Math.min(t.purse, 40) + 8 * Math.max(0, Math.min(6, t.net));
     }
   }
   return v;
@@ -99,17 +118,17 @@ const mild = (p, all) => (calm(p) ? all.filter((m) => m.to === undefined || p.ow
 /** Choose one action a little at a time. `dice` breaks ties and drives random. */
 export function* thinking(p, dice, tier = "normal") {
   if (tier === "random") return dice.pick(fable.moves(p).filter((m) => m.do !== "concede"));
-  const me = p.seat, gentle = tier === "gentle", noise = tier === "easy" || gentle ? 420 : 20, all = gentle ? mild(p, fable.moves(p)) : fable.moves(p), base = value(p, me) + 5;
+  const me = p.seat, gentle = tier === "gentle", noise = tier === "easy" || gentle ? 420 : tier === "hard" ? 6 : 20, all = gentle ? mild(p, fable.moves(p)) : fable.moves(p), read = tier === "hard" ? keen : value, base = read(p, me) + 5;
   if (all.some((m) => m.do === "concede") && hopeless(p, me)) return { do: "concede" };
   let best = { do: "end" }, score = base, n = 0;
   for (const m of p.classic ? sensible(p, all) : all.filter((x) => x.to !== undefined)) { // a small island can be read in full
-    const raw = value(act(p, m).position, me), v = free(p, m) ? (raw > base ? raw : -Infinity) : raw + dice.below(noise); // a free step must gain, or a bot could walk all day
+    const raw = read(act(p, m).position, me), v = free(p, m) ? (raw > base ? raw : -Infinity) : raw + dice.below(noise); // a free step must gain, or a bot could walk all day
     if (v > score) { score = v; best = m; }
     if (++n % 4 === 0) yield;
   }
   if (p.classic && !(gentle && calm(p))) {
     for (const list of plans(p)) { // the first step now; the rest come on the next looks
-      const v = value(list.reduce((q, m) => act(q, m).position, p), me) + dice.below(noise);
+      const v = read(list.reduce((q, m) => act(q, m).position, p), me) + dice.below(noise);
       if (v > score) { score = v; best = list[0]; }
       if (++n % 4 === 0) yield;
     }
