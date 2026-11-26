@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6GWRXpOgj+oXlYoEKunQKnhkqDW1wtMgV8V6rbgGa5I='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-MMiJrpj80Y2yuFnxtbhijoZ8QbZuxTPDqWw7NRgnzPM='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Grain and Glass</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -3147,7 +3147,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.9.3";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "18a5861e";
+const BUILD = "6e71f8cd";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -4363,7 +4363,8 @@ function createTable(G) {
       return Array.isArray(s.kinds) && fits && s.kinds.every((k) => k !== "away" && Object.hasOwn(WORDS, k)) ? { m, kinds: s.kinds, look: s.look || LOOK0 } : null;
     } catch { return null; }
   }
-  const resumeButton = () => { const k = kept(), when = k && G.roundText?.(k.m.position); $("resume").hidden = !k; if (k) $("resume").textContent = when ? `Continue: ${when}` : `Continue, round ${k.m.position.round}`; };
+  // G.continueText: a game's own words for the button (Inch's real time says it comes back paused)
+  const resumeButton = () => { const k = kept(), when = k && G.roundText?.(k.m.position); $("resume").hidden = !k; if (k) $("resume").textContent = G.continueText?.(k.m.position) || (when ? `Continue: ${when}` : `Continue, round ${k.m.position.round}`); };
 
   const launch = (o, all, who, words = "") => begin(createMatch(G.game, { seed: G.seedOf?.(all) || seed(), options: o }), who, who.includes("away") ? { id: newId(), roles: who.map((k) => (k === "you" ? "host" : k === "away" ? "friend" : k)), pass: canLock() ? words : "", floor: 0 } : null, -1, setup.look.map((x) => [...x]));
   /** This browser keeps one game in progress. Starting another over it is asked first, in the page, and the old one can be gone back to. */
