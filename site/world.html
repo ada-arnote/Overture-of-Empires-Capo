@@ -30,7 +30,7 @@ html, body { height: 100%; margin: 0; overflow: hidden }
 <body>
 <canvas id="map" aria-label="World map of provinces. Drag to move, scroll or pinch to zoom, tap a province to see it."></canvas>
 <div class="bar"><span class="mapname glass">Capo: the world map</span><input id="find" class="plain" type="search" placeholder="Find a province or country" aria-label="Find a province or country" list="names"><datalist id="names"></datalist></div>
-<div class="zoom"><button type="button" class="plain" id="in" aria-label="Zoom in">+</button><button type="button" class="plain" id="out" aria-label="Zoom out">&minus;</button><button type="button" class="plain" id="home" aria-label="Whole world">&#8962;</button></div>
+<div class="zoom"><button type="button" class="plain" id="in" aria-label="Zoom in">+</button><button type="button" class="plain" id="out" aria-label="Zoom out">&minus;</button><button type="button" class="plain" id="home" aria-label="Whole world">&#8962;</button><button type="button" class="plain" id="relief" aria-label="Relief map with pieces. Press for the flat map." aria-pressed="true" hidden>&#9651;</button></div>
 <section id="card" class="glass" aria-live="polite"></section>
 <p id="note">Loading the map...</p>
 <span class="credit">Made with Natural Earth</span>

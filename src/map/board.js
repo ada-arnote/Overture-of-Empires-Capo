@@ -134,8 +134,8 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     let moving = t < until;
     if (timed && L.rise) { // the first frames, timed: a device that drags is told so, and the page can open flat instead
       timed.push(t);
-      if (timed.length < 14 && !document.hidden) moving = true;
-      else { const d = timed.slice(1).map((v, i) => v - timed[i]).sort((a, b) => a - b); if (timed.length > 13 && d[d.length >> 1] > 24) (listeners.slow || []).forEach((f) => f()); timed = null; }
+      if (timed.length < 16 && !document.hidden) moving = true;
+      else { const d = timed.slice(4).map((v, i) => v - timed[i + 3]).sort((a, b) => a - b); if (timed.length > 15 && d[d.length >> 2] > 24) (listeners.slow || []).forEach((f) => f()); timed = null; } // the quickest quarter is judged, so a busy moment on the page is not taken for a slow graphics card
     }
     show.forEach((c, i) => {
       if (c.start || c.ends) {
@@ -161,9 +161,9 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     if (beat > 0) moving = true;
     if (dirty) { painter.send(show); dirty = false; }
     const on = solid();
-    if (on) { if (!staged) stage(); meshes.cast([m.w, m.h], lift(), look3.sun); }
+    if (on) { if (!staged) stage(); meshes.cast([-72, -72, m.w + 144, m.h + 144], lift(), look3.sun); }
     painter.draw(cam, dpr(), { style: look3, lamp: on ? (u) => meshes.lamp(u, true, look3.sun) : null, unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, pat, bevel: L.rise ? Math.max(1.5, Math.min(5, m.R * 0.1)) : 0, table: L.rise > 0, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [226, 233, 241], land: [255, 226, 150] }); // silver marks what can be chosen; the lands keep their own line
-    if (on) meshes.draw(cam, [m.w, m.h], lift(), look3);
+    if (on) meshes.draw(cam, lift(), look3);
     drawOver(t);
     if (moving) redraw();
   }

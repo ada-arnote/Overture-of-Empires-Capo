@@ -3,9 +3,11 @@
 // drawn many times (instanced), lit by the same lamp as the ground, hidden by raised cells through the depth the ground writes,
 // and casting soft shadows by way of one height picture seen from the lamp, redrawn only when a piece moves.
 // A style is data (style.js): its palette, finishes and lamp go in as numbers; no code here knows one style from another.
-const HEAD = `#version 300 es
+export const HEAD = `#version 300 es
 precision highp float;
-uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt; uniform vec3 uSun; uniform float uS,uQ,uK,uLift,uPad;`;
+uniform vec2 uView,uMid,uC,uYaw,uTilt; uniform vec3 uSun; uniform vec4 uWin; uniform float uS,uQ,uK,uLift,uTall;
+vec4 clip(vec3 p){ vec2 d=(p.xy-uC)*uS; float X=d.x*uYaw.x-d.y*uYaw.y,Y=d.x*uYaw.y+d.y*uYaw.x,Z=p.z*uS,D=Y*uTilt.y+Z*uTilt.x,w=1.-uQ*D;
+  return vec4(2.*(uMid.x*w+X)/uView.x-w,w-2.*(uMid.y*w+Y*uTilt.x-Z*uTilt.y)/uView.y,-uK*D,w); }`;
 // corner: place, facing and finish, colour slot and shade. instance: place and size, turn, colour and dimness
 const INS = `
 layout(location=0) in vec3 aP; layout(location=1) in vec4 aN; layout(location=2) in vec4 aC;
@@ -16,13 +18,12 @@ uniform vec3 uPal[16]; uniform vec2 uTone;
 out vec3 vN,vP,vC; out vec2 vF;
 void main(){ vec3 n,p=world(n); vN=n; vP=p; int f=int(aN.w*127.+.5);
   vec3 c=uPal[int(aC.r*255.+.5)&15]*(aC.g*2.); if(f==3) c=iC.rgb; if(f==1) c=mix(iC.rgb,vec3(dot(iC.rgb,vec3(.3,.6,.1))),uTone.y)*uTone.x*aC.g*2.; vC=c*aC.a*iC.a; vF=vec2(float(f),iC.a);
-  vec2 d=(p.xy-uC)*uS; float X=d.x*uYaw.x-d.y*uYaw.y,Y=d.x*uYaw.y+d.y*uYaw.x,Z=p.z*uS,D=Y*uTilt.y+Z*uTilt.x,w=1.-uQ*D;
-  gl_Position=vec4(2.*(uMid.x*w+X)/uView.x-w,w-2.*(uMid.y*w+Y*uTilt.x-Z*uTilt.y)/uView.y,-uK*D,w); }`;
-/** The shadow test, shared with the ground: how much of the lamp a point at height z misses. */
+  gl_Position=clip(p); }`;
+/** The shadow test, shared with the grounds: how much of the lamp a point at height z misses. Needs uSun, uWin (the picture's window on the ground) and uTall. */
 export const SHADE = `
-uniform sampler2D uSh; uniform float uShOn,uTall;
-float shd(vec2 p,float z){ if(uShOn<=0.) return 0.; vec2 q=(p-uSun.xy/uSun.z*z+uPad)/(uSize+2.*uPad); float s=0.;
-  for(int i=0;i<4;i++){ vec2 o=vec2(i<2?-1.:1.,(i&1)==0?-1.:1.)*.0011; s+=smoothstep(z+1.5,z+4.5,texture(uSh,q+o).r*uTall); } return s*.25; }`;
+uniform sampler2D uSh; uniform float uShOn;
+float shd(vec2 p,float z){ if(uShOn<=0.) return 0.; vec2 q=(p-uSun.xy/uSun.z*z-uWin.xy)/uWin.zw; float s=0.;
+  for(int i=0;i<4;i++){ vec2 o=vec2(i<2?-1.:1.,(i&1)==0?-1.:1.)*.0011; s+=smoothstep(z+.016*uTall,z+.047*uTall,texture(uSh,q+o).r*uTall); } return s*.25; }`;
 const FS = `${HEAD}${SHADE}
 uniform vec4 uFin[4]; uniform vec3 uAmb;
 in vec3 vN,vP,vC; in vec2 vF; out vec4 o;
@@ -33,11 +34,11 @@ void main(){ vec3 n=normalize(vN),L=normalize(uSun),V=vec3(uTilt.y*uYaw.y,uTilt.
   o=vec4(c,1.); }`;
 // the lamp's own view: where a corner's shadow falls on the ground, and how high the corner is
 const VS2 = `${HEAD}${INS}
-uniform float uTall; out float vH;
-void main(){ vec3 n,p=world(n); vH=p.z/uTall; vec2 q=(p.xy-uSun.xy/uSun.z*p.z+uPad)/(uSize+2.*uPad); gl_Position=vec4(q*2.-1.,0.,1.); }`;
+out float vH;
+void main(){ vec3 n,p=world(n); vH=p.z/uTall; vec2 q=(p.xy-uSun.xy/uSun.z*p.z-uWin.xy)/uWin.zw; gl_Position=vec4(q*2.-1.,0.,1.); }`;
 const FS2 = `#version 300 es
 precision highp float; in float vH; out vec4 o; void main(){ o=vec4(vH,0.,0.,1.); }`;
-const MAP = 1024, TALL = 96, PAD = 72;
+const MAP = 1024;
 
 export function program(g, vs, fs) {
   const shader = (type, text) => {
@@ -58,9 +59,9 @@ export function program(g, vs, fs) {
 
 /** The camera, as the shaders want it. K sets how depth is spread: nearer is smaller, the same sum in the ground's shader. */
 export const DEPTH = 1 / 30000;
-export function aim(g, u, cam, size) {
-  g.uniform2f(u.uSize, size[0], size[1]); g.uniform2f(u.uView, cam.W, cam.H); g.uniform2f(u.uMid, cam.mx, cam.my); g.uniform2f(u.uC, cam.cx, cam.cy);
-  g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform1f(u.uS, cam.s); g.uniform1f(u.uQ, cam.q); g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uPad, PAD);
+export function aim(g, u, cam) {
+  g.uniform2f(u.uView, cam.W, cam.H); g.uniform2f(u.uMid, cam.mx, cam.my); g.uniform2f(u.uC, cam.cx, cam.cy);
+  g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform1f(u.uS, cam.s); g.uniform1f(u.uQ, cam.q); g.uniform1f(u.uK, DEPTH);
 }
 
 export class Meshes {
@@ -68,7 +69,7 @@ export class Meshes {
   constructor(g, models) {
     this.g = g;
     this.draws = program(g, VS, FS); this.casts = program(g, VS2, FS2);
-    this.at = {}; this.list = []; this.count = 0; this.stale = true;
+    this.at = {}; this.list = []; this.stale = true; this.win = [0, 0, 1, 1]; this.tall = 96;
     const all = Object.entries(models), total = all.reduce((s, [, m]) => s + m.n, 0), data = new Uint8Array(total * 20);
     let first = 0;
     for (const [name, m] of all) { data.set(new Uint8Array(m.buf), first * 20); this.at[name] = { first, n: m.n }; first += m.n; }
@@ -125,29 +126,30 @@ export class Meshes {
     }
     g.bindVertexArray(null);
   }
-  /** The lamp's picture, when something has moved. size: the board's; lift: board units to one cell top; sun: the style's lamp. */
-  cast(size, lift, sun) {
-    const g = this.g, { P, u } = this.casts;
-    if (!this.stale && this.lift === lift) return;
-    this.stale = false; this.lift = lift;
+  /** The lamp's picture, when something has moved. win: the part of the ground it covers [x, y, wide, high]; lift: ground units to one cell top; tall: the tallest thing; sun: the style's lamp. */
+  cast(win, lift, sun, tall = 96) {
+    const g = this.g, { P, u } = this.casts, key = `${win},${lift},${tall}`;
+    if (!this.stale && this.key === key) return;
+    this.stale = false; this.key = key; this.win = win; this.tall = tall;
     g.bindFramebuffer(g.FRAMEBUFFER, this.frame);
     g.viewport(0, 0, MAP, MAP);
     g.disable(g.DEPTH_TEST);
     g.clearColor(0, 0, 0, 1); g.clear(g.COLOR_BUFFER_BIT);
     g.enable(g.BLEND); g.blendEquation(g.MAX); g.blendFunc(g.ONE, g.ONE); // the tallest thing in the lamp's way wins
     g.useProgram(P);
-    g.uniform2f(u.uSize, size[0], size[1]); g.uniform1f(u.uPad, PAD); g.uniform1f(u.uLift, lift); g.uniform1f(u.uTall, TALL); g.uniform3f(u.uSun, ...sun);
+    g.uniform1f(u.uLift, lift);
+    this.lamp(u, true, sun);
     this.pass(u);
     g.disable(g.BLEND); g.blendEquation(g.FUNC_ADD);
     g.bindFramebuffer(g.FRAMEBUFFER, null);
   }
-  /** The shadow picture's settings for a shader that tests against it (the ground's, and our own). */
-  lamp(u, on, sun) { const g = this.g; g.uniform1i(u.uSh, 4); g.uniform1f(u.uShOn, on ? 1 : 0); g.uniform1f(u.uTall, TALL); g.uniform1f(u.uPad, PAD); g.uniform3f(u.uSun, ...sun); }
-  draw(cam, size, lift, style) {
+  /** The shadow picture's settings for a shader that tests against it (a ground's, and our own). */
+  lamp(u, on, sun) { const g = this.g; g.uniform1i(u.uSh, 4); g.uniform1f(u.uShOn, on ? 1 : 0); g.uniform1f(u.uTall, this.tall); g.uniform4f(u.uWin, ...this.win); g.uniform3f(u.uSun, ...sun); }
+  draw(cam, lift, style) {
     const g = this.g, { P, u } = this.draws;
     if (!this.list.length) return;
     g.useProgram(P);
-    aim(g, u, cam, size);
+    aim(g, u, cam);
     g.uniform1f(u.uLift, lift);
     this.lamp(u, true, style.sun);
     g.uniform3fv(u.uPal, style.pal.flat().map((v) => v / 255)); g.uniform4fv(u.uFin, style.fin.flat()); g.uniform3f(u.uAmb, ...style.amb); g.uniform2f(u.uTone, ...style.tone);

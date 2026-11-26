@@ -18,6 +18,8 @@ import { askPrompt, chatPrompt, councilPrompt, readAsk, readChat, readCouncil, s
 // presets hook: ready-made starts and the worlds they are set on
 import { KINDS, PRESETS, checkSetting, madeWorld, settingScenario, staged, worldKey } from "../src/story/presets.js";
 import { loadWorld, ownerColour, unpackWorld, worldMap } from "./worldmap.js";
+// 3D hook: what stands on the lit map
+import { mapPieces } from "./mappieces.js";
 import { aiPanel, ask, connectBox, connected, loadRoute, waitBox, watch } from "./ai.js";
 import { sampleReply } from "../src/story/replyform.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
@@ -1087,7 +1089,10 @@ async function start() {
   const kept = load();
   // presets hook: a kept game opens on its own world; anything else starts on the real one
   try { if (!(await enter(kept?.state?.world))) await enter(); } catch (e) { toast(`${e.message} Capo needs its web address, not a file opened by double-click.`); return; }
-  map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked, mine: () => state?.player, tint: (id) => viewTint(view, X, id) }); // features hook: tint
+  map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked, mine: () => state?.player, tint: (id) => viewTint(view, X, id), // features hook: tint
+    // 3D hook: fronts as lines, and capitals, armies, fleets, air wings and commanders as pieces, all read off the state
+    wars: () => (state ? state.wars.map((w) => w.pair.split("|")) : []),
+    pieces: () => mapPieces({ world, homes, owner: ownerOf, might: (c) => mightOf(geo(), c), wars: state ? state.wars.map((w) => w.pair.split("|")) : [], player: state?.player, staff: state ? commanders(state).filter((x) => !x.off && x.seat !== "generals").length : 0 }) });
   $("view").onchange = (e) => { view = e.target.value; map.refresh(); };
   legend = viewsInit($("view"), X, () => view); // features hook: more map views, and their legend
   $("in").onclick = () => map.zoomBy(1.6);
