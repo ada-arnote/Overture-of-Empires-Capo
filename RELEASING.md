@@ -12,6 +12,7 @@ Copy this into the pull request or your notes and tick it as you go.
 - [ ] The work to release is merged, and your copy of `main` is up to date with nothing uncommitted (`git status` is clean).
 - [ ] Version bumped in both places, to the same number: `"version"` in `package.json` and `VERSION` in `site/config.js`.
 - [ ] `CHANGELOG.md`: the Unreleased notes become `## vX.Y.Z (date): a short title`, in plain words, under **Players** and **Contributors**, with any **Known problem**. Players first: what they will notice, not which files changed.
+- [ ] The front page's three "What is new" cards (`site/index.html`, `#news`) show the newest entries players will care about.
 
 **Build and gate**
 - [ ] `node tools/bundle.mjs`, so every page in `play/` is rebuilt and stamped with the fingerprint of its code. Commit `play/` with the change; the GitHub check fails if the built pages differ from the source.

@@ -6,187 +6,258 @@
 <meta name="robots" content="noindex">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Overture of Empires: Capo</title>
-<meta name="description" content="Table games on one shared map, free and open, and Capo, a story game played with an AI you bring.">
+<meta name="description" content="Five strategy games on one world, free and open: four table games that play whole in your browser, and Capo, a story game played with an AI you bring.">
 <link rel="preload" href="fonts/tent-roman/tent-roman.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="tent.css">
+<link rel="stylesheet" href="front.css">
 <link rel="icon" href="data:,">
 <script type="module" src="main.js"></script>
 </head>
 <body>
-<a class="skip" href="#games">Skip to the table games</a>
-<header class="ridge">
+<a class="skip" href="#games">Skip to the games</a>
+<header class="top">
   <div class="in">
-    <nav aria-label="On this page">
+    <a class="brand" href="#main"><span class="mk rose" aria-hidden="true"></span><span>Overture of Empires <b>Capo</b></span></a>
+    <nav id="nav" aria-label="On this page">
       <ul>
         <li><a href="#capo">Capo</a></li>
         <li><a href="#games">Table games</a></li>
-        <li><a href="#soon">Coming soon</a></li>
-        <li><a href="#coda">Coda</a></li>
-        <li><a href="#ledger">Privacy and credits</a></li>
+        <li><a href="#table">Features</a></li>
+        <li><a href="#news">News</a></li>
+        <li><a href="#road">Road map</a></li>
+        <li><a href="#open">Open source</a></li>
       </ul>
     </nav>
-    <button class="lantern" id="lantern" type="button" aria-pressed="false"><span class="mk" aria-hidden="true"></span>Night theme</button>
+    <div class="tools">
+      <button class="lantern" id="lantern" type="button" aria-pressed="false"><span class="mk" aria-hidden="true"></span><span class="t">Night theme</span></button>
+      <button class="burger" id="burger" type="button" aria-expanded="false" aria-controls="nav" hidden>Menu</button>
+      <a class="btn small" href="#games">Play</a>
+    </div>
   </div>
 </header>
-<div class="valance-wrap" aria-hidden="true"><div class="valance"></div></div>
 
-<div class="wrap">
-  <main>
-  <div class="intro">
-    <div class="words">
+<main id="main">
+  <section class="hero" aria-label="Overture of Empires: Capo">
+    <div class="in">
+      <p class="pill"><a href="#news"><span id="pill-v">New</span><span>What is new</span></a></p>
       <h1>Overture of Empires: Capo</h1>
-      <p class="lede">Table games on one shared map. Free, whole, and yours to change.</p>
-      <p class="note">The map on the desk is Capo, the story game, and it needs an AI you bring. The trunk holds four table games that play whole with no AI, no account and no payment.</p>
+      <p class="lede">Five strategy games on one world. Take it with dice, settle it, flood it with ink, or lead a nation through a story the rules keep honest.</p>
+      <div class="cta">
+        <a class="btn" href="../play/banners.html"><span class="mk play" aria-hidden="true"></span>Play Brass and Banners</a>
+        <a class="btn ghost" href="#capo">Meet Capo, the story game</a>
+      </div>
+      <ul class="promise">
+        <li>Free</li><li>Plays in your browser</li><li>No account</li><li>No tracking</li><li>Open source</li>
+      </ul>
+      <figure class="desk">
+        <div class="stage" id="stage">
+          <img src="shots/banners.webp" width="960" height="420" alt="The world board of Brass and Banners in the middle of a game: four colours hold provinces from the Americas to the Southern Isles, each with a numbered army piece." fetchpriority="high">
+        </div>
+        <figcaption>
+          <span class="say"><span class="dot" aria-hidden="true"></span><span id="live-say">A game of Brass and Banners in progress, from our own board.</span></span>
+          <button class="chip" id="live-go" type="button" hidden>Watch a live game</button>
+        </figcaption>
+      </figure>
     </div>
-    <figure class="print">
-      <img src="icons/engraved/sandby-tent.webp" width="360" height="199" alt="An old etching of a commander's pavilion beneath a broad tree, its doorway framed in carved ornament.">
-      <figcaption>The commander's tent, after Paul Sandby, 1780</figcaption>
-    </figure>
-  </div>
+  </section>
 
-  <section id="capo" aria-labelledby="capo-h">
-    <div class="head">
-      <p class="eyebrow">On the campaign desk</p>
-      <h2 id="capo-h">Capo, the story game</h2>
-    </div>
-    <div class="desk">
-      <div class="map" role="img" aria-label="A campaign map of the world laid on the desk, with wooden unit blocks, a marching route, a compass rose and dividers.">
-        <div class="coast"><div></div></div>
-        <svg viewBox="0 0 600 340" aria-hidden="true">
-          <path class="grid" d="M0 57h600M0 113h600M0 227h600M0 283h600M50 0v340M100 0v340M150 0v340M250 0v340M300 0v340M350 0v340M450 0v340M500 0v340M550 0v340"/>
-          <path class="fold" d="M200 0v340M400 0v340M0 170h600"/>
-          <path class="route" d="M312 120c18 16 40 4 65 20"/>
-          <g class="blk-s"><rect x="298" y="114" width="17" height="11" rx="1"/><rect x="327" y="103" width="17" height="11" rx="1"/><rect x="380" y="139" width="17" height="11" rx="1"/><rect x="488" y="130" width="17" height="11" rx="1"/><rect x="168" y="124" width="17" height="11" rx="1"/></g>
-          <g class="blk blk-b"><rect x="296" y="111" width="17" height="11" rx="1"/><path d="M300 113v7M304 113v7"/><rect x="325" y="100" width="17" height="11" rx="1"/><path d="M329 102v7"/><rect x="166" y="121" width="17" height="11" rx="1"/><path d="M170 123v7M174 123v7M178 123v7"/></g>
-          <g class="blk blk-r"><rect x="378" y="136" width="17" height="11" rx="1"/><path d="M382 138v7M386 138v7"/><rect x="486" y="127" width="17" height="11" rx="1"/><path d="M490 129v7"/></g>
-          <path class="cart" d="M362 296h196v30H362zM366 300h188v22H366z"/><text class="maptitle" x="460" y="316" text-anchor="middle">THE WORLD TODAY</text>
-          <text class="maptext" x="228" y="172" text-anchor="middle">Atlantic</text><text class="maptext" x="80" y="210" text-anchor="middle">Pacific</text><text class="maptext" x="428" y="238" text-anchor="middle">Indian Ocean</text>
-          <g transform="translate(268 222) rotate(-18)"><path class="brasss" d="M0 0-9 44M0 0 9 44"/><path class="steel" d="M-9 44-10 53M9 44 10 53"/><circle class="brassf" r="5"/></g>
-        </svg>
-        <span class="mk rose" aria-hidden="true"></span>
-      </div>
-      <div class="side">
-      <img class="inkstand" src="icons/tent/inkstand.svg" width="132" height="84" alt="">
-      <div class="orders">
-        <h3>Capo</h3>
+  <section class="figures" aria-label="In numbers">
+    <dl class="in">
+      <div><dt>5</dt><dd>games to play today</dd></div>
+      <div><dt>3,000</dt><dd>provinces on Capo's world map</dd></div>
+      <div><dt>1,000</dt><dd>bot games behind every fairness figure</dd></div>
+      <div><dt>0</dt><dd>accounts, ads, trackers or payments</dd></div>
+    </dl>
+  </section>
+
+  <section id="capo" class="band" aria-labelledby="capo-h">
+    <div class="in split">
+      <div class="words reveal">
+        <p class="eyebrow">The story game</p>
+        <h2 id="capo-h">Capo: lead any country in the world today</h2>
+        <p class="lede">Or live in one. You write what you do, an AI tells the story, and the rules decide wars, borders and treaties.</p>
+        <ol class="steps">
+          <li><b>Write your move.</b> An order, a speech, a quiet word with a neighbour: plain sentences, no menus of fixed choices.</li>
+          <li><b>The AI tells the story.</b> Paste the turn into any AI chat you already use, or connect one. Capo sends it nowhere else.</li>
+          <li><b>The rules decide.</b> You see an attack's odds before you order it, and a receipt afterwards that says why it went the way it did.</li>
+        </ol>
         <ul class="tags"><li>Early test build</li><li>Needs an AI you bring</li><li>For adults</li></ul>
-        <p>Lead any country in the world today, or live in one. You write what you do, an AI tells the story, and the rules decide wars, borders and treaties. Paste into any AI chat, or connect one.</p>
-        <a class="seal" href="../play/game.html"><img src="icons/tent/seal.svg" width="56" height="56" alt="">Open Capo's map</a>
-        <a class="how" href="#ledger">Where what you write goes</a>
+        <div class="cta">
+          <a class="btn" href="../play/game.html"><span class="mk play" aria-hidden="true"></span>Open Capo's map</a>
+          <a class="more" href="#open">Where what you write goes</a>
+        </div>
       </div>
-      </div>
+      <figure class="shot reveal">
+        <img src="shots/capo.webp" width="720" height="450" loading="lazy" decoding="async" alt="Capo's world map: Europe, Africa and Asia divided into countries, each in its own colour, with country names lettered across them.">
+        <figcaption>Capo's map, drawn from Natural Earth: 250 countries and territories, 3,000 provinces.</figcaption>
+      </figure>
     </div>
   </section>
 
   <section id="games" aria-labelledby="games-h">
-    <div class="head">
-      <p class="eyebrow">In the trunk</p>
-      <h2 id="games-h">Table games</h2>
-      <p>Four war games kept for the quiet hours. Each plays whole in your browser, with bots, and sends nothing anywhere.</p>
-    </div>
-    <div class="trunk">
-      <div class="lid" aria-hidden="true"><span>Table games, four sets</span><span>No AI. No account. No payment.</span></div>
-      <ul class="tray">
-        <li class="box g-banners">
-          <div class="band" aria-hidden="true"><span>Dice</span><span class="mk"></span></div>
+    <div class="in">
+      <div class="head reveal">
+        <p class="eyebrow">The table games</p>
+        <h2 id="games-h">Four games that play whole, right now</h2>
+        <p>No AI, no account, no payment. Each one runs in your browser against bots or friends and sends nothing anywhere.</p>
+      </div>
+      <ul class="games">
+        <li class="lead g-banners reveal"><article class="game">
+          <div class="pic"><img src="shots/banners.webp" width="960" height="420" loading="lazy" decoding="async" alt="Brass and Banners: a world map of provinces in four players' colours, with army pieces and dashed sea crossings."></div>
           <div class="body">
-            <h3><a href="../play/banners.html">Brass and Banners</a></h3>
-            <p>A world-conquest dice game. Muster, attack, and raise your banner over the map.</p>
-            <div class="facts">Two to six players, with bots</div>
-            <span class="plate" aria-hidden="true"><span class="mk"></span>Play</span>
+            <p class="kind"><span class="mk" aria-hidden="true"></span>World conquest, with dice</p>
+            <h3>Brass and Banners</h3>
+            <p>Muster, attack, and raise your banner over the map. Fifty-seven provinces, ten lands worth holding, and cards to hand in when the moment comes.</p>
+            <ul class="facts"><li>2 to 6 players</li><li>Bots or friends</li><li>A lesson in nine steps</li></ul>
+            <a class="btn" href="../play/banners.html" data-save="capo-banners-2" aria-label="Play Brass and Banners"><span class="mk play" aria-hidden="true"></span>Play</a>
           </div>
-        </li>
-        <li class="box g-fable">
-          <div class="band" aria-hidden="true"><span>Hex island</span><span class="mk"></span></div>
+        </article></li>
+        <li class="g-fable reveal"><article class="game">
+          <div class="pic"><img src="shots/fable.webp" width="560" height="350" loading="lazy" decoding="async" alt="The Island Fable: a hex island split between five colours, with villages, towers and scouts standing on it."></div>
           <div class="body">
-            <h3><a href="../play/fable.html">The Island Fable</a></h3>
-            <p>A hex island war of villages and upkeep. Cut a rival's land in two.</p>
-            <div class="facts">Two to six players, with bots</div>
-            <span class="plate" aria-hidden="true"><span class="mk"></span>Play</span>
+            <p class="kind"><span class="mk" aria-hidden="true"></span>Hex island war</p>
+            <h3>The Island Fable</h3>
+            <p>Villages, purses and upkeep. Cut a rival's land in two and watch the far half starve.</p>
+            <ul class="facts"><li>2 to 6 players</li><li>A lesson in eight steps</li></ul>
+            <a class="btn" href="../play/fable.html" data-save="capo-fable-2" aria-label="Play The Island Fable"><span class="mk play" aria-hidden="true"></span>Play</a>
           </div>
-        </li>
-        <li class="box g-glass">
-          <div class="band" aria-hidden="true"><span>Settle and trade</span><span class="mk"></span></div>
+        </article></li>
+        <li class="g-glass reveal"><article class="game">
+          <div class="pic"><img src="shots/glass.webp" width="560" height="350" loading="lazy" decoding="async" alt="Grain and Glass: an island of numbered hexes in five kinds of land, with settlements and roads in the players' colours."></div>
           <div class="body">
-            <h3><a href="../play/glass.html">Grain and Glass</a></h3>
-            <p>A settle-and-trade game. Roll for goods, build, trade, and race to the points.</p>
-            <div class="facts">Two to six players, with bots</div>
-            <span class="plate" aria-hidden="true"><span class="mk"></span>Play</span>
+            <p class="kind"><span class="mk" aria-hidden="true"></span>Settle and trade</p>
+            <h3>Grain and Glass</h3>
+            <p>Roll for goods, build, strike a bargain, and race to the points before the raider comes.</p>
+            <ul class="facts"><li>2 to 6 players</li><li>Standing offers</li></ul>
+            <a class="btn" href="../play/glass.html" data-save="capo-glass-2" aria-label="Play Grain and Glass"><span class="mk play" aria-hidden="true"></span>Play</a>
           </div>
-        </li>
-        <li class="box g-inch">
-          <div class="band" aria-hidden="true"><span>Real time</span><span class="mk"></span></div>
+        </article></li>
+        <li class="g-inch reveal"><article class="game">
+          <div class="pic"><img src="shots/inch.webp" width="560" height="350" loading="lazy" decoding="async" alt="An Inch of Ink: the world drawn in small hexes, with a dozen nations spreading across it in bright inks."></div>
           <div class="body">
-            <h3><a href="../play/inch.html">An Inch of Ink</a></h3>
-            <p>A real-time land-grab among up to fifty nations, or a quick turn-based duel.</p>
-            <div class="facts">Up to fifty nations, with bots</div>
-            <span class="plate" aria-hidden="true"><span class="mk"></span>Play</span>
+            <p class="kind"><span class="mk" aria-hidden="true"></span>Real time</p>
+            <h3>An Inch of Ink</h3>
+            <p>A land-grab among up to fifty nations, or The Ink Dries: two minutes on a page that dries from its edges.</p>
+            <ul class="facts"><li>Up to 50 nations</li><li>Six inks</li></ul>
+            <a class="btn" href="../play/inch.html" data-save="capo-inch-2" aria-label="Play An Inch of Ink"><span class="mk play" aria-hidden="true"></span>Play</a>
           </div>
-        </li>
+        </article></li>
       </ul>
     </div>
   </section>
 
-  <section id="soon" aria-labelledby="soon-h">
-    <div class="head">
-      <p class="eyebrow">Dispatches, not yet arrived</p>
-      <h2 id="soon-h">Coming soon</h2>
+  <section id="table" class="band" aria-labelledby="table-h">
+    <div class="in">
+      <div class="head reveal">
+        <p class="eyebrow">At every table</p>
+        <h2 id="table-h">Everything a good table needs</h2>
+      </div>
+      <ol class="pillars">
+        <li class="reveal"><h3>Three sets of rules</h3><p>Traditional plays the way its kind of game taught you. Capo is our own shorter take. Custom hands you the switches.</p></li>
+        <li class="reveal"><h3>Learn by playing</h3><p>Brass and Banners and The Island Fable teach themselves in a short game against a gentle bot, one sentence at a time.</p></li>
+        <li class="reveal"><h3>Play a friend by link</h3><p>The whole game travels in a link you send, turn by turn, with a password if you like. No server sits between you.</p></li>
+        <li class="reveal"><h3>Measured to be fair</h3><p>Every game and seat count is played 1,000 times by bots. No seat wins more than ten points off even.</p></li>
+        <li class="reveal"><h3>Made to be read</h3><p>Colour-blind-safe seats, patterns on the board, three text sizes, reduced motion, sound cues and bot speed, all remembered.</p></li>
+        <li class="reveal"><h3>Yours to keep</h3><p>Saves stay in this browser or in files you hold. Take a game with you, open it anywhere, change the code.</p></li>
+      </ol>
     </div>
-    <ul class="dispatches">
-      <li><b>Margins of Trust</b><small>Coming soon</small><span>Talk, make promises, then everyone writes their orders at once. No dice.</span></li>
-      <li><b>A garden game</b><small>Coming soon, name to come</small><span>Two gardeners share a bed of tiles around a pond. Link plants that grow well together and close a ring to win.</span></li>
-      <li><b>A stacking game</b><small>Coming soon, name to come</small><span>Stack stones up to three high. Only the top stone acts, and taller stacks strike further.</span></li>
-      <li><b>Legacy campaigns</b><small>Coming soon</small><span>The Coda rules for every table game: each game changes the next. Start from a shared story or design one with an AI.</span></li>
-    </ul>
   </section>
 
-  <section id="coda" aria-labelledby="coda-h">
-    <div class="head">
-      <p class="eyebrow">The intelligence board</p>
-      <h2 id="coda-h">Overture of Empires: Coda</h2>
+  <section id="news" aria-labelledby="news-h">
+    <div class="in">
+      <div class="head row reveal">
+        <div><p class="eyebrow">Dispatches</p><h2 id="news-h">What is new</h2></div>
+        <a class="more" href="https://github.com/ada-arnote/Overture-of-Empires-Capo/blob/main/CHANGELOG.md" target="_blank" rel="noopener">The full changelog</a>
+      </div>
+      <ul class="news">
+        <li class="reveal"><p class="when"><b>v0.5.4</b><time datetime="2026-11-26">26 November 2026</time></p><h3>The Ink Dries</h3><p>An Inch of Ink gains a two-minute game for twelve nations on a fresh map: land cut off from your capital fades, and the page dries from its edges inward.</p></li>
+        <li class="reveal"><p class="when"><b>v0.5.3</b><time datetime="2026-11-26">26 November 2026</time></p><h3>Learn by playing</h3><p>Brass and Banners and The Island Fable can teach themselves. A card points at the board, says one sentence, and moves on when you do the thing.</p></li>
+        <li class="reveal"><p class="when"><b>v0.5.1</b><time datetime="2026-11-26">26 November 2026</time></p><h3>Attacks with odds in Capo</h3><p>Before you order an attack you see who leads it, the approach and its odds out of 100. The AI tells the story of the result; it never decides it.</p></li>
+      </ul>
     </div>
-    <div class="hang">
-      <div class="rail" aria-hidden="true"></div>
-      <div class="board">
-        <div class="cork">
-        <div class="pins" id="pins">
-          <svg class="threads" id="threads" aria-hidden="true"></svg>
-          <div class="pinned p-main">
-            <h3>The desktop game</h3>
-            <small>Coming soon, for desktop</small>
-            <p>Made in Godot: a deep world that runs itself, with no AI needed, script mods and server-checked play.</p>
-            <a href="https://github.com/ada-arnote/Overture-of-Empires-Capo" target="_blank" rel="noopener"><span class="mk" aria-hidden="true"></span>Follow the work on GitHub</a>
-          </div>
-          <div class="pinned p-a"><b>A deep world</b>It runs itself.</div>
-          <div class="pinned p-b"><b>No AI needed</b>Rules all the way down.</div>
-          <div class="pinned sketch p-c" aria-hidden="true"><span class="mk bust"></span></div>
-          <div class="pinned p-d"><b>Script mods</b>Change it and share it.</div>
-          <div class="pinned p-e"><b>Server-checked play</b>Fair games between players.</div>
-          <div class="pinned p-f"><b>Legacy campaigns</b>The Coda rules: each game changes the next.</div>
-          <div class="pinned sketch p-g" aria-hidden="true"><img src="icons/tent/camp-plan.svg" width="90" height="100" alt=""></div>
-        </div>
-        </div>
+  </section>
+
+  <section id="road" class="band" aria-labelledby="road-h">
+    <div class="in">
+      <div class="head reveal">
+        <p class="eyebrow">On the road map</p>
+        <h2 id="road-h">Coming soon</h2>
+      </div>
+      <div class="road">
+        <article class="coda reveal">
+          <p class="kind">For desktop, in the making</p>
+          <h3>Overture of Empires: Coda</h3>
+          <p>The desktop game, made in Godot: a deep world that runs itself with no AI needed, script mods, and server-checked play between players.</p>
+          <a class="more" href="https://github.com/ada-arnote/Overture-of-Empires-Capo" target="_blank" rel="noopener">Follow the work on GitHub</a>
+        </article>
+        <ul class="soon">
+          <li class="reveal"><h3>Margins of Trust</h3><p>Talk, make promises, then everyone writes their orders at once. No dice.</p></li>
+          <li class="reveal"><h3>A garden game</h3><p>Two gardeners share a bed of tiles around a pond. Link plants that grow well together and close a ring to win.</p></li>
+          <li class="reveal"><h3>A stacking game</h3><p>Stack stones up to three high. Only the top stone acts, and taller stacks strike further.</p></li>
+          <li class="reveal"><h3>Legacy campaigns</h3><p>The Coda rules for every table game: each game changes the next. Start from a shared story or design one with an AI.</p></li>
+        </ul>
       </div>
     </div>
   </section>
-  </main>
 
-  <footer id="ledger" aria-labelledby="ledger-h">
-    <div class="head">
-      <p class="eyebrow">The quartermaster's ledger</p>
-      <h2 id="ledger-h">Privacy, saves and credits</h2>
+  <section id="open" aria-labelledby="open-h">
+    <div class="in split">
+      <div class="words reveal">
+        <p class="eyebrow">Open source</p>
+        <h2 id="open-h">Free, whole, and yours to change</h2>
+        <dl class="ledger">
+          <div><dt>Privacy</dt><dd>The table games send nothing anywhere: no account, no tracking, no ads. In Capo, what you write goes to the AI you choose, and nowhere else.</dd></div>
+          <div><dt>Saves</dt><dd>Your saves stay in this browser or in files you keep.</dd></div>
+          <div><dt>Licence</dt><dd>Free software under the GNU AGPL, version 3 or later. Plain modules, no dependencies, no build step to read.</dd></div>
+          <div><dt>Feedback</dt><dd><a href="https://github.com/ada-arnote/Overture-of-Empires-Capo/issues" target="_blank" rel="noopener">Report a problem or send an idea</a> (on GitHub).</dd></div>
+        </dl>
+        <div class="cta">
+          <a class="btn" href="#games"><span class="mk play" aria-hidden="true"></span>Choose a game</a>
+          <a class="btn ghost" href="https://github.com/ada-arnote/Overture-of-Empires-Capo" target="_blank" rel="noopener">Read the source</a>
+        </div>
+      </div>
+      <figure class="plate reveal">
+        <img src="icons/engraved/sandby-tent.webp" width="360" height="199" loading="lazy" decoding="async" alt="An old etching of a commander's pavilion beneath a broad tree, its doorway framed in carved ornament.">
+        <figcaption>The commander's tent, after Paul Sandby, 1780</figcaption>
+      </figure>
     </div>
-    <dl class="ledger">
-      <div><dt>Privacy</dt><dd>The table games send nothing anywhere: no account, no tracking, no ads. In Capo, what you write goes to the AI you choose, and nowhere else.</dd></div>
-      <div><dt>Saves</dt><dd>Your saves stay in this browser or in files you keep.</dd></div>
-      <div><dt>Settings</dt><dd>The lantern at the top switches between daylight canvas and lamplight. This browser remembers your choice.</dd></div>
-      <div><dt>Feedback</dt><dd><a href="https://github.com/ada-arnote/Overture-of-Empires-Capo/issues" target="_blank" rel="noopener">Report a problem or send feedback</a> (on GitHub).</dd></div>
-      <div><dt>Source</dt><dd><span id="source"><a href="https://github.com/ada-arnote/Overture-of-Empires-Capo">Source code</a></span>. Free software under the GNU AGPL, version 3 or later.</dd></div>
-      <div><dt>Credits</dt><dd>Type: Tent Roman (from IM FELL English by Igino Marini), Spectral by the Spectral Project Authors, and Atkinson Hyperlegible by the Braille Institute of America, all under the SIL Open Font License 1.1. Game marks and the lantern: icons made by Delapouite and Lorc, available on <a href="https://game-icons.net">game-icons.net</a> under CC BY 3.0. Play and link icons: Phosphor Icons, MIT License. Wood, canvas, cork and paper: Poly Haven and ambientCG, CC0. The tent print is a detail of Paul Sandby's etching of 1780 (Rijksmuseum, public domain); the headpiece, tailpiece and bust are eighteenth-century printers' ornaments (Wikimedia Commons, public domain). The camp plan follows Rochambeau's plans of 1782 (Library of Congress, Geography and Map Division). The coast on the desk map is from Natural Earth, in the public domain. The seal, inkstand, pins and compass rose are our own drawings.</dd></div>
-      <div><dt>Version</dt><dd id="version">Version</dd></div>
-    </dl>
-  </footer>
-</div>
-<div class="hem" aria-hidden="true"></div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="in">
+    <div class="cols">
+      <div>
+        <p class="brand"><span class="mk rose" aria-hidden="true"></span><span>Overture of Empires <b>Capo</b></span></p>
+        <p>Table games on one shared map, and a story game played with an AI you bring.</p>
+        <p id="version">Version</p>
+      </div>
+      <nav aria-label="Games">
+        <h2>Games</h2>
+        <ul>
+          <li><a href="../play/game.html">Capo, the story game</a></li>
+          <li><a href="../play/banners.html">Brass and Banners</a></li>
+          <li><a href="../play/fable.html">The Island Fable</a></li>
+          <li><a href="../play/glass.html">Grain and Glass</a></li>
+          <li><a href="../play/inch.html">An Inch of Ink</a></li>
+          <li><a href="../play/world.html">The world map</a></li>
+        </ul>
+      </nav>
+      <nav aria-label="Project">
+        <h2>Project</h2>
+        <ul>
+          <li><span id="source"><a href="https://github.com/ada-arnote/Overture-of-Empires-Capo">Source code</a></span></li>
+          <li><a href="https://github.com/ada-arnote/Overture-of-Empires-Capo/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a></li>
+          <li><a href="https://github.com/ada-arnote/Overture-of-Empires-Capo/issues" target="_blank" rel="noopener">Report a problem</a></li>
+          <li><a href="https://github.com/ada-arnote/Overture-of-Empires-Capo/blob/main/LICENSE" target="_blank" rel="noopener">GNU AGPL 3 or later</a></li>
+        </ul>
+      </nav>
+    </div>
+    <details class="credits">
+      <summary>Credits</summary>
+      <p>Type: Tent Roman (from IM FELL English by Igino Marini), Spectral by the Spectral Project Authors, and Atkinson Hyperlegible by the Braille Institute of America, all under the SIL Open Font License 1.1. Game marks and the lantern: icons made by Delapouite and Lorc, available on <a href="https://game-icons.net">game-icons.net</a> under CC BY 3.0. Play and link icons: Phosphor Icons, MIT License. Walnut: Poly Haven, CC0. The tent print is a detail of Paul Sandby's etching of 1780 (Rijksmuseum, public domain). The world coast and Capo's map are drawn from Natural Earth, in the public domain. The pictures of the games are taken from the games themselves, and the compass rose is our own drawing.</p>
+    </details>
+    <p class="fine">The lantern at the top switches between daylight and lamplight; this browser remembers your choice.</p>
+  </div>
+</footer>
 </body>
 </html>
