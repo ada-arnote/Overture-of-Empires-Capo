@@ -35,7 +35,9 @@ test("the gate is clear for what is here now", () => assert.deepEqual(check(root
 test("a release needs the licence text and a source address", () => {
   stops({}, /LICENSE is missing/, { release: true });
   stops({ "site/config.js": MARK + 'export const SOURCE_URL = "";\nexport const VERSION = "1";\n' }, /no source address/, { release: true });
-  const ok = withFiles({ LICENSE: "GNU AFFERO GENERAL PUBLIC LICENSE", "site/config.js": MARK + 'export const SOURCE_URL = "https://example.org/capo";\nexport const VERSION = "1";\n' }, { release: true });
+  // the AI services stay as they are: the Capo page's connect-src must match them (p5-ai)
+  const services = readFileSync(path.join(root, "site/config.js"), "utf8").match(/export const AI_BASES[\s\S]*?\};\n/)[0];
+  const ok = withFiles({ LICENSE: "GNU AFFERO GENERAL PUBLIC LICENSE", "site/config.js": MARK + 'export const SOURCE_URL = "https://example.org/capo";\nexport const VERSION = "1";\n' + services }, { release: true });
   assert.deepEqual(ok.bad, []);
 });
 test("rules code may not use chance, the clock, the page, uneven maths or language settings", () => {
@@ -100,7 +102,7 @@ test("MIT and ISC icons pass with their notice text and copyright line in NOTICE
 test("assets have their own budgets, counted at full size and apart from the site code budget", () => {
   const credit = (f) => `${f},A,Someone,CC0-1.0,https://example.org,2026-11-26,none\n`, s = "site/sounds/a.ogg", f = "site/fonts/a/a.woff2", i = "site/icons/a.webp";
   stops({ [s]: "x".repeat(61000), "CREDITS.csv": HEAD + credit(s) }, /site\/sounds: 61 kB is over its 60 kB asset budget/);
-  clear({ [s]: "x".repeat(59000), "CREDITS.csv": HEAD + credit(s) }); // 59 kB on the site code budget would break it
+  { const { bad } = withFiles({ [s]: "x".repeat(59000), "CREDITS.csv": HEAD + credit(s) }); assert.deepEqual(bad.filter((x) => /site\/sounds|^site:/.test(x)), [], JSON.stringify(bad)); } // 59 kB fits the sound shelf and is not counted as site code (the whole-site total is checked elsewhere)
   stops({ [f]: "x".repeat(111000), "CREDITS.csv": HEAD + credit(f), "NOTICES.md": NOTES + "\nsite/fonts/a/\n" }, /site\/fonts: \d+ kB is over its 110 kB/);
   stops({ [i]: "x".repeat(26000), "CREDITS.csv": HEAD + credit(i) }, /site\/icons: \d+ kB is over its 25 kB/);
   stops({ "site/a.ogg": "x", "CREDITS.csv": HEAD + credit("site/a.ogg") }, /ship only from/);

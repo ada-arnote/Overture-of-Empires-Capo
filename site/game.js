@@ -15,7 +15,8 @@ import { checkSave as checkSaveOf, convertNote, keptRecords, mendGame, snapGame,
 import { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacter, scenarioFrom, scenarioText } from "../src/story/scenarios.js";
 import { askPrompt, chatPrompt, councilPrompt, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
 import { loadWorld, ownerColour, worldMap } from "./worldmap.js";
-import { ask, forgetKey, loadRoute, saveRoute } from "./ai.js";
+import { aiPanel, ask, loadRoute, pasteBox as pastePanel, waitBox, watch } from "./ai.js";
+import { fold, sampleReply, unfold } from "../src/story/replyform.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
 import { guard } from "./guard.js";
 
@@ -200,7 +201,7 @@ function startScreen() {
   STEPS.forEach(([k, t], i) => { const b = button(`${i + 1}. ${t}`, () => { if (i <= at || ready(i)) { draft.step = k; startScreen(); } }); b.setAttribute("aria-pressed", String(k === draft.step)); pills.append(b); });
   box.replaceChildren(el("p", "Overture of Empires", "eyebrow"), el("h1", "Capo"), pills);
   ({ scenario: stepScenario, country: stepCountry, you: stepYou, begin: stepBegin })[draft.step](box);
-  box.append(home(), el("p", "Fiction for adults. Not news and not a forecast. Real public figures may appear. Needs an AI: paste each turn into any chat AI you use (a large hosted one, or one on your own computer), or give an address. To try it with no AI, the paste step offers a sample reply.", "note"));
+  box.append(home(), el("p", "Fiction for adults. Not news and not a forecast. Real public figures may appear. Needs an AI: paste each turn into any chat AI (free ones work), or connect one with your key. The first turn has a sample reply to try without one.", "note"));
   $("start").classList.add("open");
   if (stepShown !== draft.step) { stepShown = draft.step; land(box.querySelector("h2") || box.querySelector("h1")); }
 }
@@ -339,7 +340,7 @@ async function fillCharacter() {
   draft.fill = { prompt: characterPrompt(ownName() || "their country", draft.mode, draft.character) };
   if (route.route !== "address") { startScreen(); return; }
   toast("Asking the AI...");
-  try { takeCharacter(await call(draft.fill.prompt)); } catch (e) { draft.fill.error = e.message; startScreen(); }
+  try { takeCharacter(await call(draft.fill.prompt, "character")); } catch (e) { draft.fill.error = e.message; startScreen(); }
 }
 function takeCharacter(text) {
   const next = readCharacter(text, draft.character);
@@ -455,19 +456,9 @@ function actions(box) {
     return li;
   }));
   box.append(el("h2", "Actions"), ...(state.offers.length ? [el("h3", "Offers to you"), offers] : []), el("p", "Write what you do, in your own words, as many as you like. The AI reads them all and proposes moves; the rules decide what stands: wars, peace, treaties, attacks and handovers.", "note"), list, input, go, ...(hints.children.length ? [el("h3", "Suggested, with the rules' answer"), hints] : []), el("h3", "Ideas"), ideas);
+  if (heldAsks.length && !pending) { const r = el("div", undefined, "row"); r.append(el("span", `Going with your next turn: ${heldAsks.map((h) => h.title.toLowerCase()).join(", ")}.`, "note"), button("Drop them", () => { heldAsks = []; open("actions"); })); box.append(r); }
   if (pending) box.append(pending.review ? reviewBox() : pasteBox());
-}
-
-/** How the paste route goes, in three steps. */
-function steps() {
-  const ol = el("ol", undefined, "steps");
-  for (const s of route.route === "paste" ? ["Copy the prompt.", "Paste it into a new chat with any AI you use.", "Paste the whole reply back here, and read it."] : ["The AI at your address did not answer.", "Ask again, or copy the prompt into any AI chat.", "Paste the reply back here."]) ol.append(el("li", s));
-  return ol;
-}
-
-function waiting() {
-  const w = el("div", undefined, "row"); w.append(el("span", "Waiting for the AI (up to two minutes)...", "note"), button("Stop", stopCall));
-  return w;
+  if (pending && !pending.review && !calling) { const r = el("div", undefined, "row"); r.append(button("Advance by the rules alone", rulesOnly)); box.append(r); } // the rules-only turn (Phase 4), kept beside the AI wiring's paste panel
 }
 
 /** The moves the AI read for the player's country, each with a tick, before the rules run. */
@@ -484,18 +475,15 @@ function rulesOnly() {
   settleTurn({ events: [], moves: [], news: [], summary: "No story was told this turn: the rules alone moved the world.", dropped: [], stop: pending.to });
 }
 
+// ---- AI wiring (p5-ai): the paste box, the waiting box and the AI settings are built in site/ai.js ----
+// questions to chats and the council held by the paste route, to go in the same prompt as the next turn
+let heldAsks = [];
+function waiting() { return waitBox(stopCall); }
 function pasteBox() {
   if (calling) return waiting();
-  const wrap = el("div"), out = el("textarea", undefined, "plain paste"), back = el("textarea", undefined, "plain paste");
-  out.value = pending.prompt; out.readOnly = true; out.setAttribute("aria-label", "The prompt");
-  back.placeholder = "Paste the AI's whole reply here."; back.setAttribute("aria-label", "The AI's reply"); back.value = pending.back || ""; out.rows = 12;
-  const go = el("div", undefined, "row"), copy = button("Copy the prompt", async () => { try { await navigator.clipboard.writeText(pending.prompt); copy.textContent = "Copied"; toast("Copied. Paste it into a new chat."); } catch { out.select(); toast("Select all of the prompt and copy it by hand."); } });
-  // a reply written by Capo itself, so the steps can be tried with no AI: three plain events and no moves
-  const sample = () => [`TURN: ${turnCode(state)}`, ...[state.player, ...landNeighbours(state.player).slice(0, 2)].map((c, i) => `EVENT: ${state.date} | ${c} | ${["The cabinet meets late into the night, and the capital waits to hear what was decided.", "Its papers watch the border and print what they can learn of its neighbour's plans.", "Ministers speak of trade and of old quarrels, and promise nothing yet."][i]}`), "SUMMARY: A sample turn, written by Capo itself to show the steps: no AI told this one.", ...(pending.auto ? [`STOP: ${pending.to} | a sample`] : []), "END"].join("\n");
-  go.append(copy, button("Read the reply", () => finish(back.value), "go"), button("Try a sample reply", () => { back.value = sample(); toast("A sample reply is in the box. Press Read the reply."); }), button("Cancel", () => { pending = null; open("actions"); }), button("Advance by the rules alone", rulesOnly));
-  if (route.route === "address") go.prepend(button("Ask again", () => viaAddress()));
-  wrap.append(el("h3", route.route === "paste" ? "Paste this into a new chat" : "The AI did not answer"), ...(pending.error ? [el("p", pending.error, "warn")] : []), steps(), el("p", "Any chat AI that can follow a format works: the large hosted ones, or one running on your own computer. No AI to hand? Try a sample reply, or advance by the rules alone.", "note"), out, back, go);
-  return wrap;
+  return pastePanel({ prompt: pending.prompt, back: pending.back, route, error: pending.error, read: finish, again: () => viaAddress(),
+    cancel: () => { heldAsks = [...(pending.held || []), ...heldAsks]; pending = null; open("actions"); },
+    sample: () => sampleReply(state, pending.to, pending.auto, name, landNeighbours(state.player)) });
 }
 
 function advance() {
@@ -508,18 +496,19 @@ function advance() {
   const g = geo();
   const auto = jump.key === "auto";
   pending = { prompt: worldPrompt(state, { name, neighbours: landNeighbours, across: seaNeighbours, size: (c) => held(c).length, geo: g, places: placesFor(state, g, [...world.provinces.keys()]), talk: talkLines(state, { name }), disputes: disputeLines() }, acts, to, auto), to, auto, actions: acts };
-  if (route.route === "paste") { open("actions"); const b = [...$("sheet").querySelectorAll("button")].find((x) => x.textContent === "Copy the prompt"); b?.scrollIntoView({ block: "center" }); land(b); toast("Prompt ready. Copy it, paste it into your AI, then paste the reply here."); return; }
-  viaAddress();
+  if (route.route === "paste" && heldAsks.length) { pending.held = heldAsks; heldAsks = []; pending.prompt = fold([{ title: "This turn", prompt: pending.prompt }, ...pending.held]); } // one paste for the turn and what was held (p5-ai)
+  open("actions");
+  if (route.route !== "paste") viaAddress();
 }
-// one call to an AI at a time, which can be stopped, and which gives up after two minutes
+// one call to an AI at a time, which can be stopped; ask() gives up when nothing arrives for two minutes
 let calling = null;
-async function call(prompt) {
+async function call(prompt, kind = "turn") {
   if (calling) throw new Error("Capo is already waiting for the AI.");
   calling = new AbortController();
-  const timer = setTimeout(() => calling?.abort("time"), 120000);
+  const w = watch(route); // the waiting box's clock and the text as it arrives (p5-ai)
   topBar(); if (sheet) open(sheet);
-  try { return await ask(route, prompt, calling.signal); }
-  finally { clearTimeout(timer); calling = null; topBar(); }
+  try { return await ask(route, prompt, calling.signal, { kind, ...w }); }
+  finally { w.done(); calling = null; topBar(); }
 }
 const stopCall = () => calling?.abort("stop");
 async function viaAddress() {
@@ -529,7 +518,8 @@ async function viaAddress() {
 }
 function finish(text) {
   pending.back = text;
-  const r = readWorldReply(text, state, (c) => homes.has(c) || custom()?.code === c, pending.to, pending.auto, codeOf);
+  const parts = pending.held?.length ? unfold(text, pending.held.length + 1) : [text]; // a folded reply: the turn first, then each held question (p5-ai)
+  const r = readWorldReply(parts[0], state, (c) => homes.has(c) || custom()?.code === c, pending.to, pending.auto, codeOf);
   if (!r.matched) { pending.error = `That reply is not for this turn: it must start with TURN: ${turnCode(state)}.`; open("actions"); return; }
   if (!r.events.length) { pending.error = `No event could be read${r.dropped.length ? `: ${r.dropped.slice(0, 3).join("; ")}` : ""}.`; open("actions"); return; }
   // moves the AI wrote for the player's country, beyond the orders given by card, are shown for a tick first
@@ -539,10 +529,11 @@ function finish(text) {
 }
 function settleTurn(r) {
   remember(`turn ${state.turn}`);
+  const missed = (pending.held || []).filter((h, i) => h.take(parts[i + 1])).length;
   const { receipt } = closeTurn(state, r, geo(), pending.actions);
   pending = null; save(); topBar(); ledgerTab = "events"; open("ledger"); map.refresh();
   const changed = receipt.filter((x) => x.ok && / takes it from | hands /.test(x.text)).length;
-  toast(`Now ${fmtDate(state.date)}.${changed ? ` ${changed} province${changed > 1 ? "s" : ""} changed hands.` : ""}`);
+  toast(`Now ${fmtDate(state.date)}.${changed ? ` ${changed} province${changed > 1 ? "s" : ""} changed hands.` : ""}${missed ? ` ${missed} held question${missed > 1 ? "s" : ""} had no answer that could be read: ask again.` : ""}`);
 }
 
 function ledger(box) {
@@ -699,7 +690,7 @@ function askAI(prompt, take, where) {
   if (route.route !== "address") { open(where); return; }
   if (calling) return toast("Capo is already waiting for the AI.");
   open(where);
-  call(prompt).then((text) => settle(text)).catch((e) => { if (asking) { asking.error = e.message; open(where); } });
+  call(prompt, where === "chats" ? "chat" : "ask").then((text) => settle(text)).catch((e) => { if (asking) { asking.error = e.message; open(where); } });
 }
 function settle(text) {
   const why = asking.take(text);
@@ -708,13 +699,8 @@ function settle(text) {
 }
 function askBox() {
   if (calling) return waiting();
-  const wrap = el("div"), out = Object.assign(el("textarea", undefined, "plain paste"), { value: asking.prompt, readOnly: true }), back = Object.assign(el("textarea", undefined, "plain paste"), { placeholder: "Paste the AI's whole reply here." });
-  out.setAttribute("aria-label", "The prompt"); back.setAttribute("aria-label", "The AI's reply");
-  const go = el("div", undefined, "row");
-  if (route.route === "address") go.append(button("Ask again", () => askAI(asking.prompt, asking.take, asking.where)));
-  go.append(button("Copy the prompt", async () => { try { await navigator.clipboard.writeText(asking.prompt); toast("Copied. Paste it into a new chat."); } catch { out.select(); } }), button("Read the reply", () => settle(back.value), "go"), button("Cancel", () => { const w = asking.where; asking = null; open(w); }));
-  wrap.append(el("h3", route.route === "paste" ? "Paste this into a new chat" : "Waiting for the AI"), ...(asking.error ? [el("p", asking.error, "warn")] : []), steps(), out, back, go);
-  return wrap;
+  const w = asking.where, hold = () => { heldAsks.push({ title: w === "chats" ? "A chat message" : "A question to the council", prompt: asking.prompt, take: asking.take }); asking = null; open(w); toast("Held: it goes in the same prompt as your next turn."); };
+  return pastePanel({ prompt: asking.prompt, route, error: asking.error, read: settle, again: () => askAI(asking.prompt, asking.take, w), hold: route.route === "paste" ? hold : null, cancel: () => { asking = null; open(w); } });
 }
 const talkWorld = () => ({ name });
 
@@ -848,17 +834,6 @@ function about() {
 }
 
 function gameSheet(box) {
-  const pick = el("select", undefined, "plain"), base = el("input", undefined, "plain"), model = el("input", undefined, "plain"), key = el("input", undefined, "plain"), keep = el("input");
-  pick.append(new Option("Paste by hand into any AI", "paste"), new Option("An address I give (chat-completions form)", "address")); pick.value = route.route;
-  Object.assign(base, { type: "text", value: route.base, placeholder: "The service's address, ending in /v1" });
-  Object.assign(model, { type: "text", value: route.model, placeholder: "Model name, as the service writes it" });
-  Object.assign(key, { type: "password", value: route.key, placeholder: "Key, if the service needs one", autocomplete: "off" });
-  Object.assign(keep, { type: "checkbox", checked: !!route.remember });
-  const line = (label, input) => { const l = el("label", undefined, "note"); l.style.display = "grid"; l.style.gap = "4px"; l.append(label, input); return l; };
-  const keepLine = el("label", undefined, "note"); keepLine.append(keep, " Remember the key in this browser (not on a shared device)");
-  const store = () => { route = { ...route, route: pick.value, base: base.value.trim(), model: model.value.trim(), key: key.value, remember: keep.checked }; saveRoute(route); };
-  const aiRow = el("div", undefined, "row");
-  aiRow.append(button("Save", () => { store(); toast("Saved."); }, "go"), button("Test", async () => { store(); try { const t = await ask(route, "Reply with the single word READY."); toast(`It answered: ${t.slice(0, 40)}`); } catch (e) { toast(e.message); } }), button("Forget the key", () => { route = forgetKey(route); open("game"); toast("Key forgotten."); }));
   const file = el("input"); file.type = "file"; file.accept = ".json,application/json"; file.hidden = true;
   file.onchange = async () => { const f = file.files[0]; if (!f) return; try { const raw = JSON.parse(await f.text()), s = checkSave(raw); if (!s) throw new Error(); state = s; past = []; save(); toast(convertNote(raw) || "Opened."); open(null); play(); } catch { toast("That file is not a Capo game."); } };
   const saves = el("div", undefined, "row");
@@ -882,9 +857,7 @@ function gameSheet(box) {
   const again = el("div", undefined, "row"); again.append(button("Show the guide", () => { open(null); guide(0); }));
   box.append(el("h2", "Game"), home(), again, ...(saveFailed ? [el("p", "This browser would not keep the game (its storage may be full). Save to a file now so nothing is lost.", "warn")] : []), el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back. A turn with a settled attack, played again, draws fresh numbers and is marked in the chronicle.`, "note"), saves, file,
     el("h3", "Save the world as a scenario"), el("p", `A starting point others can play: today's date, who holds what, wars, treaties, story facts and might${state.custom ? `, and ${state.custom.name}` : ""}. Not your actions, chats or council.`, "note"), sTitle, sBlurb, sOpen, sRow,
-    el("h3", "How Capo reaches an AI"), line("Route", pick), line("Address", base), line("Model", model), line("Key", key), keepLine, aiRow,
-    el("p", `Today: ${route.calls || 0} calls, about ${route.sent || 0} tokens sent and ${route.got || 0} received.`, "note"),
-    el("p", "A key goes only to the address you give, straight from this page; Capo has no server and never sees it. Use a key with a spending cap. A remembered key stays in this browser, where other pages at this site's address could read it, so leave Remember off on a shared or borrowed device.", "note"),
+    aiPanel(route, toast), // how Capo reaches an AI: site/ai.js (p5-ai)
     about());
 }
 
@@ -896,11 +869,11 @@ const GUIDE = [
   [() => $("map"), "The world", () => "Drag to move and pinch or scroll to zoom. Tap any province to see who holds it, its neighbours, and anything disputed. Your land has a silver edge."],
   [dockButton(0), "1. Decide", () => "Write what you do in Actions, in your own words, as many as you like. Ideas are there to start you off."],
   [() => $("top").querySelector("select"), "2. Choose how far", () => "Jump a week, a month, a year, any length, or until something happens."],
-  [() => $("top").querySelector("button.go"), "3. Advance", () => "Capo writes a prompt. Copy it into a new chat with any AI you use and paste the whole reply back. Or give Capo an AI's address in the Game menu, and it asks for you."],
+  [() => $("top").querySelector("button.go"), "3. Advance", () => "Capo writes a prompt. Copy it into a new chat with any AI you use and paste the whole reply back, or try the sample reply. Or connect an AI in the Game menu, and Capo asks for you."],
   [dockButton(2), "4. Read what happened", () => "The Ledger shows the events, the papers, and what the rules decided: which moves stood, which were refused, and why. The AI tells the story; the rules keep the facts."],
   [dockButton(3), "Your people", () => "Form a council in Advisors and choose whom you trust. In Chats, talk with any country. Words only: only actions change the world."],
   [dockButton(4), "Game Master", () => "Tell the story something true, or change the world by hand. Hand changes mark the game Sandbox, and every one can be undone."],
-  [() => $("top").querySelector("button.ic"), "That's it", () => "Saves, scenario files and the AI's address are in the Game menu, along with this guide. Good luck."],
+  [() => $("top").querySelector("button.ic"), "That's it", () => "Saves, scenario files and how Capo reaches an AI are in the Game menu, along with this guide. Good luck."],
 ];
 let guideAt = -1, lit = null;
 function guide(i) {

@@ -44,6 +44,7 @@ export function check(root, { release = false } = {}) {
   const bad = [], note = [], rel = (f) => path.relative(root, f).split(path.sep).join("/");
   const files = SHIPPED.flatMap((d) => walk(path.join(root, d)));
   const read = (name) => (existsSync(path.join(root, name)) ? readFileSync(path.join(root, name), "utf8") : null);
+  const ai = (read("site/config.js") || "").split("AI_BASES")[1] || "", aiOrigins = [...new Set([...ai.matchAll(/"(https:\/\/[^/"]+)/g)].map((m) => m[1]))]; // the AI services Capo may call
 
   let total = 0;
   const code = Object.fromEntries(Object.keys(LIMITS.code).map((k) => [k, 0])), assets = Object.fromEntries(Object.keys(LIMITS.assets).map((k) => [k, 0]));
@@ -65,13 +66,15 @@ export function check(root, { release = false } = {}) {
       if (rule["default-src"]?.join(" ") !== "'none'") bad.push(`${name}: its page rule must start from default-src 'none'`);
       if (rule["require-trusted-types-for"]?.join(" ") !== "'script'") bad.push(`${name}: its page rule must keep require-trusted-types-for 'script'`);
       for (const k of ["font-src", "media-src"]) if (!rule[k] || rule[k].some((v) => !["'self'", "data:"].includes(v))) bad.push(`${name}: its page rule needs ${k} with only 'self' or data:`);
+      const reach = rule["connect-src"] || [], want = ["'self'", ...aiOrigins, "http://localhost:*", "http://127.0.0.1:*"]; // past its own site: exactly the AI services and this computer
+      if (reach.some((v) => v !== "'self'") && [...reach].sort().join(" ") !== [...want].sort().join(" ")) bad.push(`${name}: its connect-src must list exactly 'self', the AI services in site/config.js and this computer`);
     }
     if (ext === ".js" && !text.startsWith("// SPDX-License-Identifier: AGPL-3.0-or-later")) bad.push(`${name}: first line must be the licence mark`);
     if (ext !== ".svg" && text.includes("—")) bad.push(`${name}: has an em dash`);
     // Nothing is fetched from elsewhere. Links a person follows are fine, and so are the two fixed names below.
     for (const m of text.matchAll(/\b(?:https?|wss?):\/\/[^\s"'`<>)]+/g)) {
       if (/^http:\/\/(localhost|127\.0\.0\.1)[:/]/.test(m[0])) continue; // this computer is not elsewhere
-      if (/^http:\/\/www\.w3\.org\//.test(m[0]) || (ext === ".html" && new RegExp(`<a [^>]*href="${m[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(text)) || name === "site/config.js") continue;
+      if (/^http:\/\/www\.w3\.org\//.test(m[0]) || (csp && aiOrigins.includes(m[0]) && csp.includes(` ${m[0]} `)) || (ext === ".html" && new RegExp(`<a [^>]*href="${m[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(text)) || name === "site/config.js") continue;
       bad.push(`${name}: names an outside address, ${m[0].slice(0, 60)}`);
     }
     if (ext === ".js") {
