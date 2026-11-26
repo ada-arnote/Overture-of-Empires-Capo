@@ -1,0 +1,262 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* The front page: a night chart. Blue ground, walnut and brass as accents, the games' own boards as its pictures.
+   Design notes: docs/design/modern-site/direction.md. Assets and their makers: CREDITS.csv */
+@font-face { font-family: "Tent Roman"; src: url("fonts/tent-roman/tent-roman.woff2") format("woff2"); font-display: swap }
+@font-face { font-family: "Spectral"; src: url("fonts/spectral/spectral-400.woff2") format("woff2"); font-display: swap }
+@font-face { font-family: "Atkinson Hyperlegible"; src: url("fonts/atkinson/atkinson-400.woff2") format("woff2"); font-display: swap }
+@font-face { font-family: "Atkinson Hyperlegible"; font-weight: 700; src: url("fonts/atkinson/atkinson-700.woff2") format("woff2"); font-display: swap }
+
+/* daylight: the tent's blue (ruling 126). Three tiers of ground, one accent */
+:root {
+  --bg: #22364f; --deep: #1b2c43; --raised: #2b4263; --raised-2: #33507a;
+  --ink: #f6f0df; --soft: #d3d8dc; --line: rgba(246, 240, 223, .16); --line-2: rgba(246, 240, 223, .44);
+  --brass: #ecc77e; --brass-2: #f6dca6; --brass-ink: #1d1608; --glow: rgba(236, 199, 126, .13); --chart: rgba(246, 240, 223, .05);
+  --sea: #3f6170; --shade: rgba(6, 12, 22, .45); --halo: #0d1a2c;
+  --g-banners: #f0a79b; --g-fable: #8fd0bd; --g-glass: #ecc77e; --g-inch: #b4c2ee;
+  --display: "Tent Roman", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --text: "Spectral", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --ui: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --gutter: max(16px, env(safe-area-inset-left, 0px)); --gap: clamp(64px, 9vw, 128px);
+  color-scheme: dark;
+}
+/* lamplight: the same room after dark */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1a2a; --deep: #0a121e; --raised: #162539; --raised-2: #1e3350;
+    --ink: #efe6cd; --soft: #bcc3c8; --line: rgba(239, 230, 205, .12); --line-2: rgba(239, 230, 205, .42);
+    --brass: #e0b866; --brass-2: #f0d595; --glow: rgba(224, 184, 102, .1); --chart: rgba(239, 230, 205, .04);
+    --sea: #2f4a57; --shade: rgba(0, 0, 0, .55); --halo: #060c15;
+    --g-banners: #e58f82; --g-fable: #7cc2ad; --g-glass: #e0b866; --g-inch: #a3b2e6;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1a2a; --deep: #0a121e; --raised: #162539; --raised-2: #1e3350;
+  --ink: #efe6cd; --soft: #bcc3c8; --line: rgba(239, 230, 205, .12); --line-2: rgba(239, 230, 205, .42);
+  --brass: #e0b866; --brass-2: #f0d595; --glow: rgba(224, 184, 102, .1); --chart: rgba(239, 230, 205, .04);
+  --sea: #2f4a57; --shade: rgba(0, 0, 0, .55); --halo: #060c15;
+  --g-banners: #e58f82; --g-fable: #7cc2ad; --g-glass: #e0b866; --g-inch: #a3b2e6;
+}
+
+*, *::before, *::after { box-sizing: border-box }
+html { background: var(--bg); scroll-padding-top: 84px; -webkit-text-size-adjust: 100%; text-size-adjust: 100% }
+body { margin: 0; color: var(--ink); background: var(--bg); font: 1rem/1.6 var(--ui); overflow-x: clip }
+img { display: block; max-width: 100%; height: auto }
+a { color: var(--brass); text-underline-offset: .2em; text-decoration-thickness: 1px }
+a:hover { color: var(--brass-2) }
+h1, h2, h3, p, ul, ol, dl, dd, figure { margin: 0 }
+ul, ol { padding: 0; list-style: none }
+h1, h2, h3 { font-family: var(--display); font-weight: 400; text-wrap: balance }
+h2 { font-size: clamp(1.9rem, 1.2rem + 2.6vw, 3.1rem); line-height: 1.08; letter-spacing: -.01em }
+h3 { font-size: 1.5rem; line-height: 1.2 }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; box-shadow: 0 0 0 6px var(--halo); border-radius: 4px }
+.in { width: 100%; max-width: 77rem; margin-inline: auto; padding-inline: var(--gutter) }
+.skip { position: absolute; left: 12px; top: -80px; z-index: 30; padding: 12px 16px; background: var(--brass); color: var(--brass-ink); font-weight: 700 }
+.skip:focus { top: calc(env(safe-area-inset-top, 0px) + 8px) }
+/* marks are one-colour drawings: the page paints them through a mask */
+.mk { display: inline-block; flex: none; width: 1.1em; height: 1.1em; background: currentColor; -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat }
+.mk.play { --m: url("icons/phosphor/play.svg") }
+.mk.rose { --m: url("icons/tent/rose.svg") }
+.eyebrow, .kind { font: 700 .8125rem/1.3 var(--ui); letter-spacing: .16em; text-transform: uppercase; color: var(--brass) }
+.eyebrow::before { content: ""; display: inline-block; width: 28px; margin-right: 12px; border-top: 1px solid currentColor; vertical-align: .3em }
+.lede { font: 400 clamp(1.125rem, 1rem + .5vw, 1.375rem)/1.5 var(--text); color: var(--ink); max-width: 34em; text-wrap: pretty }
+.more { display: inline-flex; align-items: center; gap: .4em; min-height: 44px; font-weight: 700 }
+.more::after { content: "\2192"; transition: translate .2s }
+.more:hover::after { translate: 3px 0 }
+
+/* buttons: one solid brass action, a ghost beside it, a chip for small controls */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .55em; min-height: 48px; padding: 0 1.4em; border: 1px solid var(--brass); border-radius: 4px; background: var(--brass); color: var(--brass-ink); font: 700 1rem/1 var(--ui); letter-spacing: .01em; text-decoration: none; transition: background-color .2s, border-color .2s, translate .2s }
+.btn:hover { background: var(--brass-2); border-color: var(--brass-2); color: var(--brass-ink); translate: 0 -1px }
+.btn.ghost { background: none; color: var(--ink); border-color: var(--line-2) }
+.btn.ghost:hover { background: var(--line); border-color: var(--ink); color: var(--ink) }
+.btn.small { min-height: 44px; padding: 0 1.15em }
+.cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px }
+.chip, .lantern, .burger { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 4px; background: none; color: var(--ink); font: 700 .9375rem/1 var(--ui); cursor: pointer }
+.chip:hover, .lantern:hover, .burger:hover { border-color: var(--ink); background: var(--line) }
+
+/* the top bar stays with the reader */
+.top { position: sticky; top: 0; z-index: 20; background: var(--deep); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top, 0px) }
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .top { background: color-mix(in srgb, var(--deep) 84%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2) }
+}
+.top .in { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 24px; min-height: 64px }
+.brand { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: var(--ink); font: 400 1.25rem/1 var(--display); text-decoration: none; white-space: nowrap }
+.brand:hover { color: var(--ink) }
+.brand .mk { width: 28px; height: 28px; color: var(--brass) }
+.brand b { margin-left: .35em; font: 700 .75rem/1 var(--ui); letter-spacing: .18em; text-transform: uppercase; color: var(--brass) }
+.top nav { margin-left: auto }
+.top nav ul { display: flex; flex-wrap: wrap; gap: 0 4px }
+.top nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--soft); font-size: .9375rem; text-decoration: none; border-radius: 4px }
+.top nav a:hover { color: var(--ink); background: var(--line) }
+.tools { display: flex; align-items: center; gap: 8px }
+.lantern { padding: 0 10px }
+.lantern .mk { --m: url("icons/game-icons/old-lantern.svg"); width: 24px; height: 24px }
+.lantern[aria-pressed="true"] .mk { color: var(--brass) }
+.lantern .t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap }
+.burger { display: none }
+@media (max-width: 1039px) {
+  .top .in { column-gap: 12px }
+  .tools { margin-left: auto }
+  .top nav { order: 3; flex-basis: 100%; margin: 0 0 8px }
+  .top nav ul { margin-left: -12px }
+  /* with the script running, the links fold behind a Menu button */
+  .js .burger { display: inline-flex }
+  .js .top:not(.open) nav { display: none }
+  .js .top nav ul { flex-direction: column }
+  .js .top nav a { display: flex; min-height: 48px; font-size: 1.0625rem; border-top: 1px solid var(--line); border-radius: 0 }
+}
+@media (max-width: 479px) { .brand { font-size: 1.0625rem } .brand .mk, .brand b { display: none } .top .in { column-gap: 8px } .tools { gap: 6px } .burger { padding: 0 10px } .tools .btn { padding: 0 .9em } }
+
+/* the opening: the name, one sentence, one action, and a real game on the desk */
+.hero { position: relative; isolation: isolate; padding-block: clamp(40px, 6vw, 88px) clamp(48px, 6vw, 80px); text-align: center; overflow: clip }
+.hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(60rem 30rem at 50% 0, var(--glow), transparent 70%), repeating-linear-gradient(0deg, var(--chart) 0 1px, transparent 1px 72px), repeating-linear-gradient(90deg, var(--chart) 0 1px, transparent 1px 72px); -webkit-mask: linear-gradient(#000 40%, transparent); mask: linear-gradient(#000 40%, transparent) }
+.hero .in { display: grid; justify-items: center; gap: 22px }
+.pill a { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 16px 0 6px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--ink); font-size: .9375rem; text-decoration: none }
+.pill a:hover { border-color: var(--brass) }
+.pill span:first-child { padding: 5px 10px; border-radius: 999px; background: var(--brass); color: var(--brass-ink); font-weight: 700; font-size: .8125rem; letter-spacing: .04em }
+.pill span:last-child::after { content: " \2192" }
+h1 { max-width: 13em; font-size: clamp(2.6rem, 1.1rem + 6.4vw, 5.5rem); line-height: 1; letter-spacing: -.015em }
+.hero .lede { max-width: 31em }
+.hero .cta { justify-content: center; margin-top: 6px }
+.promise { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 0; color: var(--soft); font-size: .9375rem }
+.promise li:not(:last-child)::after { content: ""; display: inline-block; width: 4px; height: 4px; margin: 0 12px; rotate: 45deg; vertical-align: middle; background: var(--brass) }
+/* the desk: a walnut frame with a brass line, the board inside it */
+.desk { width: 100%; max-width: 72rem; margin-top: clamp(16px, 3vw, 36px) }
+.stage { position: relative; aspect-ratio: 20 / 9; overflow: hidden; border-radius: 6px; background: var(--sea); border: clamp(6px, 1vw, 12px) solid #3a2415; border-image: url("textures/walnut.webp") 40 / clamp(6px, 1vw, 12px) round; box-shadow: 0 0 0 1px var(--brass), 0 30px 80px -20px var(--shade), 0 0 120px -30px var(--glow) }
+.stage::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(236, 199, 126, .55), inset 0 0 60px rgba(4, 10, 18, .45) }
+.stage img { width: 100%; height: 100%; object-fit: cover; transition: opacity .6s }
+.stage .board-layer { position: absolute; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .6s }
+.stage.live .board-layer { opacity: 1 }
+.stage.live img { opacity: 0 }
+.desk figcaption { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 12px; min-height: 44px; margin-top: 14px; color: var(--soft); font-size: .9375rem }
+.say { display: inline-flex; align-items: baseline; gap: 10px; text-align: left }
+.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--line-2); translate: 0 -1px }
+.desk.on .dot { background: var(--brass); box-shadow: 0 0 0 4px var(--glow) }
+.chip[hidden] { display: none }
+@media (max-width: 699px) { .stage { aspect-ratio: 3 / 2 } .hero .btn { width: 100% } .hero .cta { width: 100% } }
+
+/* four figures, set like a ledger line */
+.figures { border-block: 1px solid var(--line); background: var(--deep) }
+.figures dl { display: grid; grid-template-columns: repeat(4, 1fr) }
+.figures div { display: flex; flex-direction: column; gap: 6px; padding: clamp(20px, 3vw, 36px) clamp(12px, 2vw, 28px); border-left: 1px solid var(--line) }
+.figures div:first-child { border-left: 0; padding-left: 0 }
+.figures dt { font: 400 clamp(2.1rem, 1.4rem + 2.4vw, 3.4rem)/1 var(--text); letter-spacing: -.01em; color: var(--brass) }
+.figures dd { color: var(--soft); font-size: .9375rem; line-height: 1.4; max-width: 15em }
+@media (max-width: 759px) {
+  .figures dl { grid-template-columns: 1fr 1fr }
+  .figures div:nth-child(odd) { border-left: 0; padding-left: 0 } .figures div:nth-child(n+3) { border-top: 1px solid var(--line) }
+}
+
+/* sections share one rhythm; a band is the deeper ground */
+main > section:not(.hero, .figures) { padding-block: var(--gap) }
+.band { background: var(--deep); border-block: 1px solid var(--line) }
+.head { display: grid; gap: 14px; max-width: 46rem; margin-bottom: clamp(32px, 5vw, 56px) }
+.head > p:not(.eyebrow) { color: var(--soft); font-size: 1.0625rem; max-width: 38em }
+.head.row { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 32px; max-width: none }
+.head.row > div { display: grid; gap: 14px }
+.split { display: grid; gap: clamp(32px, 6vw, 88px); align-items: center }
+@media (min-width: 900px) { .split { grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr) } }
+.words { display: grid; gap: 20px; justify-items: start }
+
+/* Capo: the world itself, with the coast as faint chart lines behind it */
+#capo { position: relative; isolation: isolate; overflow: clip }
+#capo::before { content: ""; position: absolute; z-index: -1; inset: -6% -12% -6% 30%; background: var(--ink); opacity: .07; -webkit-mask: url("icons/world/coast.svg") center / contain no-repeat; mask: url("icons/world/coast.svg") center / contain no-repeat }
+.steps { display: grid; gap: 14px; counter-reset: step; max-width: 36em }
+.steps li { position: relative; padding-left: 3.1em; color: var(--soft); counter-increment: step }
+.steps li::before { content: "0" counter(step); position: absolute; left: 0; top: .15em; font: 700 .8125rem/1.6 var(--ui); letter-spacing: .12em; color: var(--brass) }
+.steps li::after { content: ""; position: absolute; left: 1.75em; top: .78em; width: .9em; border-top: 1px solid var(--line-2) }
+.steps b { color: var(--ink) }
+.tags { display: flex; flex-wrap: wrap; gap: 8px }
+.tags li { padding: 5px 12px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--soft); font-size: .875rem }
+.shot img, .plate img { width: 100% }
+.shot img { border-radius: 6px; box-shadow: 0 0 0 1px var(--line-2), 0 30px 70px -24px var(--shade) }
+.shot figcaption, .plate figcaption { margin-top: 12px; color: var(--soft); font-size: .875rem }
+
+/* the games: each card is a real picture of its board, its name, and Play */
+.games { display: grid; gap: clamp(16px, 2vw, 28px) }
+.games > li { container-type: inline-size }
+@media (min-width: 700px) { .games { grid-template-columns: repeat(2, minmax(0, 1fr)) } .games > .lead, .games > li:last-child { grid-column: 1 / -1 } }
+@media (min-width: 1040px) { .games { grid-template-columns: repeat(3, minmax(0, 1fr)) } .games > li:last-child { grid-column: auto } }
+.game { position: relative; display: grid; grid-template-rows: auto 1fr; height: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); transition: border-color .25s, translate .25s, box-shadow .25s }
+.game:hover { border-color: var(--line-2); translate: 0 -3px; box-shadow: 0 24px 50px -24px var(--shade) }
+.pic { overflow: hidden; background: var(--sea); aspect-ratio: 16 / 10 }
+.pic img { width: 100%; height: 100%; object-fit: cover; transition: scale .6s cubic-bezier(.2, .7, .2, 1) }
+.game:hover .pic img { scale: 1.035 }
+.body { display: grid; gap: 12px; align-content: start; justify-items: start; padding: clamp(18px, 5cqi, 32px) }
+.body > p:not(.kind) { color: var(--soft) }
+.kind { display: flex; align-items: center; gap: 8px }
+.kind .mk { width: 22px; height: 22px; color: var(--g) }
+.g-banners { --g: var(--g-banners) } .g-banners .kind .mk { --m: url("icons/game-icons/rolling-dices.svg") }
+.g-fable { --g: var(--g-fable) } .g-fable .kind .mk { --m: url("icons/game-icons/village.svg") }
+.g-glass { --g: var(--g-glass) } .g-glass .kind .mk { --m: url("icons/game-icons/wheat.svg") }
+.g-inch { --g: var(--g-inch) } .g-inch .kind .mk { --m: url("icons/game-icons/ink-swirl.svg") }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 0; color: var(--soft); font-size: .875rem }
+.facts li:not(:last-child)::after { content: "/"; margin: 0 .6em; color: var(--line-2) }
+.game .btn { margin-top: 6px; min-width: 8.5em; translate: none }
+/* the whole card opens the game; the button is the link */
+.game .btn::after { content: ""; position: absolute; inset: 0 }
+@container (min-width: 640px) {
+  .game { grid-template-rows: none; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) }
+  .game .pic { aspect-ratio: auto; min-height: 100% }
+  .game .body { align-content: center; padding: clamp(24px, 4cqi, 48px) }
+  .game h3 { font-size: clamp(1.6rem, 3.4cqi, 2.4rem) }
+}
+
+/* six plain reasons, numbered; no boxes */
+.pillars { display: grid; gap: 0 clamp(24px, 4vw, 56px); counter-reset: pillar }
+@media (min-width: 640px) { .pillars { grid-template-columns: 1fr 1fr } }
+@media (min-width: 1000px) { .pillars { grid-template-columns: repeat(3, 1fr) } }
+.pillars li { display: grid; gap: 10px; align-content: start; padding-block: 24px 28px; border-top: 1px solid var(--line-2); counter-increment: pillar }
+.pillars li::before { content: "0" counter(pillar); font: 700 .8125rem/1 var(--ui); letter-spacing: .16em; color: var(--brass) }
+.pillars p, .news li > p:last-child, .soon p, .coda > p:not(.kind) { color: var(--soft) }
+
+.news { display: grid; gap: clamp(16px, 2vw, 28px) }
+@media (min-width: 800px) { .news { grid-template-columns: repeat(3, 1fr) } }
+.news li { display: grid; gap: 10px; align-content: start; padding: 24px; border: 1px solid var(--line); border-top: 2px solid var(--brass); border-radius: 0 0 6px 6px; background: var(--raised) }
+.when { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--soft); font-size: .875rem }
+.when b { color: var(--brass); letter-spacing: .04em }
+
+.road { display: grid; gap: clamp(20px, 3vw, 40px) }
+@media (min-width: 900px) { .road { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr) } }
+.coda { display: grid; gap: 14px; align-content: center; justify-items: start; padding: clamp(24px, 4vw, 48px); border: 1px solid var(--line-2); border-radius: 6px; background: linear-gradient(160deg, var(--raised-2), var(--raised)) }
+.coda h3 { font-size: clamp(1.7rem, 1.2rem + 1.6vw, 2.4rem) }
+.soon { display: grid; gap: 0 clamp(20px, 3vw, 40px) }
+@media (min-width: 560px) { .soon { grid-template-columns: 1fr 1fr } }
+.soon li { display: grid; gap: 8px; align-content: start; padding-block: 20px; border-top: 1px solid var(--line-2) }
+.soon h3 { font-size: 1.3rem }
+
+.ledger { display: grid; width: 100%; max-width: 40em }
+.ledger div { display: grid; gap: 2px 20px; padding-block: 14px; border-top: 1px solid var(--line) }
+.ledger dt { font: 700 .8125rem/1.6 var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--brass) }
+.ledger dd { color: var(--soft) }
+@media (min-width: 560px) { .ledger div { grid-template-columns: 7.5em 1fr } .ledger dt { padding-top: .2em } }
+/* Sandby's etching, printed light on the blue like a chart's cartouche */
+.plate { justify-self: center; width: 100%; max-width: 32rem; padding: clamp(16px, 3vw, 32px); border: 1px solid var(--line-2); outline: 1px solid var(--line); outline-offset: 5px; text-align: center }
+.plate img { filter: brightness(0) invert(.93) sepia(.3); opacity: .88 }
+.plate figcaption { font-family: var(--text); font-style: italic; font-size: 1rem }
+
+.foot { padding-block: clamp(40px, 6vw, 72px) calc(32px + env(safe-area-inset-bottom, 0px)); background: var(--deep); border-top: 1px solid var(--line); border-image: url("textures/walnut.webp") 30 / 6px 0 0 round; border-top-width: 6px; color: var(--soft); font-size: .9375rem }
+.foot .in { display: grid; gap: 28px }
+.cols { display: grid; gap: 32px clamp(24px, 5vw, 72px) }
+@media (min-width: 760px) { .cols { grid-template-columns: minmax(0, 1.5fr) 1fr 1fr } }
+.cols > div { display: grid; gap: 10px; align-content: start; max-width: 26em }
+.foot h2 { margin-bottom: 6px; font: 700 .8125rem/1.6 var(--ui); letter-spacing: .16em; text-transform: uppercase; color: var(--brass) }
+.foot li a, .credits summary { display: inline-flex; align-items: center; min-height: 44px }
+.foot li a { color: var(--ink); text-decoration: none }
+.foot li a:hover { color: var(--brass-2); text-decoration: underline }
+.credits { border-top: 1px solid var(--line); padding-top: 8px }
+.credits summary { cursor: pointer; font-weight: 700; color: var(--ink) }
+.credits p { max-width: 62em; margin-top: 4px; font-size: .875rem }
+.fine { font-size: .875rem }
+
+/* motion: one staged entrance per block, tied to the scroll; none for those who ask for less, and none where it cannot run */
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth }
+  @supports (animation-timeline: view()) {
+    .reveal { animation: rise linear both; animation-timeline: view(); animation-range: entry 0% entry 55% }
+    @keyframes rise { from { opacity: 0; translate: 0 28px } }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important }
+  .game:hover, .btn:hover { translate: none } .game:hover .pic img { scale: none }
+}

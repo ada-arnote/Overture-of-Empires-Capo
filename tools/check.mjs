@@ -12,11 +12,11 @@ const KB = 1000;
 export const LIMITS = {
   file: 250 * KB, // any one shipped file, as stored
   code: { "src/core": 12 * KB, "src/map": 45 * KB, "src/games": 90 * KB, "src/story": 40 * KB, site: 140 * KB }, // compressed. site: 140, the owner's ruling (rulings 121 and 125)
-  first: 500 * KB, // everything shipped, compressed
+  first: 600 * KB, // everything shipped, compressed (ruling 130)
   map: 300 * KB, // one map file in maps/, compressed: fetched by the page that needs it, never by the first page
   lines: { "src/map": 2400, "src/games": 6500, "src/core": 700, tools: 1000 },
-  // vendored assets, apart from code (lane 7's rule of thumb); still inside the 500 kB above. Each folder holds only its own kinds, plus .txt licence texts
-  assets: { "site/fonts": { max: 110 * KB, types: [".woff2", ".txt"] }, "site/icons": { max: 25 * KB, types: [".svg", ".png", ".webp", ".txt"] }, "site/sounds": { max: 60 * KB, types: [".ogg", ".mp3", ".txt"] }, "site/textures": { max: 32 * KB, types: [".webp", ".png", ".txt"] } }, // textures: ruling 128
+  // vendored assets, apart from code (lane 7's rule of thumb); still inside the 600 kB above. Each folder holds only its own kinds, plus .txt licence texts
+  assets: { "site/fonts": { max: 110 * KB, types: [".woff2", ".txt"] }, "site/icons": { max: 25 * KB, types: [".svg", ".png", ".webp", ".txt"] }, "site/sounds": { max: 60 * KB, types: [".ogg", ".mp3", ".txt"] }, "site/textures": { max: 32 * KB, types: [".webp", ".png", ".txt"] }, "site/shots": { max: 120 * KB, types: [".webp", ".txt"] } }, // textures: ruling 128; shots (our own in-game screenshots): ruling 130
 };
 export const LICENCES = ["CC0-1.0", "CC-BY-4.0", "CC-BY-3.0", "OFL-1.1", "MIT", "ISC", "public domain", "own work"];
 // the words that show a licence's own text is there: beside a font in a .txt, and in NOTICES.md for MIT and ISC

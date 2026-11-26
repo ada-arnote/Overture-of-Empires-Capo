@@ -112,6 +112,12 @@ test("textures have their own 32 kB budget, at full size, for WebP and PNG tiles
   stops({ "site/textures/a.svg": "<svg/>", "CREDITS.csv": HEAD + credit("site/textures/a.svg") }, /only \.webp \.png \.txt go in site\/textures/);
   stops({ "site/textures/a.png": "x" }, /no row in CREDITS/);
 });
+test("screenshots have their own 120 kB budget, at full size, for WebP only", () => {
+  const credit = (f) => `${f},A,Someone,own work,taken from this project's pages,2026-11-26,none
+`, t = "site/shots/a.webp", used = check(root).assets["site/shots"];
+  stops({ [t]: "x".repeat(120001 - used), "CREDITS.csv": HEAD + credit(t) }, /site\/shots: \d+ kB is over its 120 kB asset budget/);
+  stops({ "site/shots/a.png": "x", "CREDITS.csv": HEAD + credit("site/shots/a.png") }, /only \.webp \.txt go in site\/shots/);
+});
 test("site pages keep their rule: nothing by default, trusted types, fonts and sounds only from their own site", () => {
   const meta = (rule) => `<meta http-equiv="Content-Security-Policy" content="${rule}">`, ok = "default-src 'none'; script-src 'self'; font-src 'self'; media-src 'self'; require-trusted-types-for 'script'";
   clear({ "site/x.html": meta(ok) });
