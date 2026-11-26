@@ -25,3 +25,5 @@ jobs:
         run: |
           node tools/bundle.mjs
           git diff --exit-code -- play/
+      - name: Every page starts in a browser
+        run: node tools/smoke.mjs --browser "$(command -v google-chrome)"
