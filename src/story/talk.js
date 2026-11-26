@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Talking in Capo: chats with countries or people, and the council. Words only: nothing said here changes
 // land, wars or treaties. What was said goes into the next turn's prompt, and favour moves by rule.
-import { VERBS } from "./worldrules.js";
+import { VERBS, commandOf } from "./worldrules.js";
+import { chronicleLines } from "./chronicle.js";
+import { relOf, relWord } from "./relations.js";
 import { crosses } from "./line.js";
 
 export const WORDS = ["favourable", "unclear", "against"];
@@ -25,16 +27,17 @@ function who(g, world) {
 }
 
 function context(g, world, codes) {
-  const last = g.log[g.log.length - 1];
+  const story = chronicleLines(g, world.name);
   const rel = codes.flatMap((c) => [
+    ...(c !== g.player && relOf(g, g.player, c) ? [`relations with ${c} ${relWord(relOf(g, g.player, c))}`] : []),
     ...g.wars.filter((w) => w.pair.split("|").includes(c)).map((w) => `${w.pair.replace("|", "-")} at war`),
     ...g.treaties.filter((t) => t.pair.split("|").includes(c)).map((t) => `${t.pair.replace("|", "-")} ${t.kind} treaty`),
   ]);
   return [
     `- The date is ${g.date}. ${g.opening || ""}`.trim(),
     `- The player is ${who(g, world)}.`,
-    `- Last turn: ${last?.summary || "nothing yet"}`,
     `- Between them now: ${[...new Set(rel)].join(", ") || "no wars or treaties"}`,
+    `- The story so far, oldest first${story.length ? ":" : ": nothing yet"}`, ...story.map((l) => ` ${l}`),
   ];
 }
 
@@ -85,7 +88,7 @@ export function councilPrompt(g, world, seats, open = seats) {
     "", "FACTS", ...context(g, world, [g.player]),
     `- Seats to fill: ${open.map(([k, label]) => `${k} (${label})`).join(", ")}`,
     "", "Reply with only one line for each seat, and nothing else:",
-    "MEMBER: seat | full name | two traits | skill 1 to 5 | what they want | likes | hates",
+    "MEMBER: seat | full name | two traits | what they want | likes | hates",
   ].join("\n");
 }
 
@@ -94,11 +97,12 @@ export function readCouncil(text, seats) {
   for (const raw of String(text || "").split(/\r?\n/)) {
     const l = strip(raw);
     if (!/^MEMBER\s*:/i.test(l)) continue;
-    const [seat, nm, traits, skill, wants, likes, hates] = l.replace(/^MEMBER\s*:\s*/i, "").split("|").map((s) => clip(s, 160));
+    // a skill is no longer asked for: the rules deal it. A reply that still gives one (a lone number) has it left out
+    const [seat, nm, traits, wants, likes, hates] = l.replace(/^MEMBER\s*:\s*/i, "").split("|").map((s) => clip(s, 160)).filter((s, i) => !(i === 3 && /^(skill\s*)?\d(\s*(of|\/)\s*5)?$/i.test(s)));
     const key = seats.find(([k, label]) => k === (seat || "").toLowerCase() || label.toLowerCase() === (seat || "").toLowerCase())?.[0];
     if (!key || out[key] || !nm || crosses(l)) continue;
     const verbs = (s) => (s || "").toUpperCase().split(/[\s,;/]+/).filter((v) => VERBS[v]).slice(0, 3);
-    out[key] = { name: clip(nm, 60), traits: clip(traits, 60), skill: Math.max(1, Math.min(5, Number(skill) || 3)), wants: clip(wants, 120), likes: verbs(likes), hates: verbs(hates), favour: 0, since: "" };
+    out[key] = { name: clip(nm, 60), traits: clip(traits, 60), wants: clip(wants, 120), likes: verbs(likes), hates: verbs(hates), favour: 0, since: "" };
   }
   return out;
 }
@@ -111,7 +115,7 @@ export function askPrompt(g, world, members, question) {
     "- Each adviser answers in their own voice, from what someone in their place could know, leaning the way their traits and wants push them. Low favour makes them guarded. They may disagree.",
     `- Each begins with one word from ${WORDS.join(", ")}, then one or two sentences. Advisers give counsel; they never act.`,
     "", "FACTS", ...context(g, world, [g.player]),
-    "", "ADVISERS", ...members.map(([seat, m]) => `- ${seat}: ${m.name}, ${m.traits}; skill ${m.skill} of 5; wants ${m.wants}; favour ${m.favour} (from -3 to 3)`),
+    "", "ADVISERS", ...members.map(([seat, m]) => `- ${seat}: ${m.name}, ${m.traits}; skill ${commandOf(g, m)} of 5; wants ${m.wants}; favour ${m.favour} (from -3 to 3)`),
     "", "QUESTION (from the player)", clip(question, 600),
     "", "Reply with only one line for each adviser, and nothing else:",
     "SAYS: seat | word | what they say",
