@@ -37,8 +37,9 @@ test("a release needs the licence text and a source address", () => {
   stops({}, /LICENSE is missing/, { release: true });
   stops({ "site/config.js": MARK + 'export const SOURCE_URL = "";\nexport const VERSION = "1";\n' }, /no source address/, { release: true });
   // the AI services stay as they are: the Capo page's connect-src must match them (p5-ai)
-  const services = readFileSync(path.join(root, "site/config.js"), "utf8").match(/export const AI_BASES[\s\S]*?\};\n/)[0];
-  const ok = withFiles({ LICENSE: "GNU AFFERO GENERAL PUBLIC LICENSE", "site/config.js": MARK + 'export const SOURCE_URL = "https://example.org/capo";\nexport const VERSION = "1";\n' + services }, { release: true });
+  // and the front page's share card names the site's own address, SITE_URL
+  const config = readFileSync(path.join(root, "site/config.js"), "utf8"), services = config.match(/export const AI_BASES[\s\S]*?\};\n/)[0], site = config.match(/export const SITE_URL = .*\n/)[0];
+  const ok = withFiles({ LICENSE: "GNU AFFERO GENERAL PUBLIC LICENSE", "site/config.js": MARK + 'export const SOURCE_URL = "https://example.org/capo";\nexport const VERSION = "1";\n' + site + services }, { release: true });
   assert.deepEqual(ok.bad, []);
 });
 test("rules code may not use chance, the clock, the page, uneven maths or language settings", () => {
@@ -58,6 +59,7 @@ test("outside addresses, markup from text, and code from text are stopped", () =
   stops({ "site/x.js": `${MARK}document.body.innerHTML = location.hash;\n` }, /markup/);
   stops({ "site/x.js": `${MARK}eval("1");\n` }, /code/);
   stops({ "site/x.html": '<script src="https://example.com/a.js"></script>' }, /outside address/);
+  stops({ "site/x.html": '<meta property="og:image" content="https://example.com/a.png">' }, /outside address/); // a share card names only the site's own pages
   clear({ "site/x.html": '<a href="https://example.com/">A link to follow</a>' });
 });
 test("file types, sizes, marks and dashes", () => {
@@ -132,7 +134,7 @@ test("site pages keep their rule: nothing by default, trusted types, fonts and s
 test("bundled pages: served ones take fonts and sounds from their site, double-click ones carry them as data:", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "capo-assets-"));
   try {
-    for (const [f, b] of [["fonts/a.woff2", "wOF2"], ["sounds/a.ogg", "OggS"], ["icons/a.svg", "<svg/>"]]) { mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); writeFileSync(path.join(dir, f), b); }
+    for (const [f, b] of [["fonts/a.woff2", "wOF2"], ["sounds/a.ogg", "OggS"], ["icons/a.svg", "<svg/>"], ["icons/tent/mark.svg", "<svg/>"]]) { mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); writeFileSync(path.join(dir, f), b); }
     const html = readFileSync(path.join(root, "site/inch.html"), "utf8"), css = '@font-face { font-family: T; src: url("fonts/a.woff2"); } .x { background: url(icons/a.svg); }', js = 'const cue = new Audio("sounds/a.ogg");';
     const served = page(html, css, js, "../site/", false, dir), alone = page(html, css, js, "", false, dir), rule = (h) => h.match(/Content-Security-Policy" content="([^"]*)"/)[1];
     assert.match(rule(served), /^default-src 'none'; .*img-src 'self' data:; font-src 'self'; media-src 'self';.* require-trusted-types-for 'script'$/);

@@ -177,7 +177,13 @@ test("a server on this computer needs no key; the address must be this computer"
   serve(json({}));
   const far = await ask({ ...r, preset: "custom", base: "https://example.org/v1" }, "Hi").catch((e) => e);
   assert.equal(far.kind, "address");
+  assert.match(far.message, /example\.org is not this computer/);
+  assert.match((await ask({ ...r, preset: "custom", base: "htp:/localhost;8000" }, "Hi").catch((e) => e)).message, /is not a whole address/, "a typo is told apart from a far address");
   assert.equal(calls.length, 0, "nothing is sent to an address the page may not reach");
+  // "localhost:8000/v1" with no http:// in front is taken as this computer
+  serve(json({ choices: [{ message: { content: "near" }, finish_reason: "stop" }] }));
+  assert.equal(await ask({ ...r, preset: "custom", base: "localhost:8000/v1" }, "Hi", undefined, { kind: "chat" }), "near");
+  assert.equal(calls[0].url, "http://localhost:8000/v1/chat/completions");
   const nokey = await ask({ ...r, preset: "mistral" }, "Hi").catch((e) => e);
   assert.equal(nokey.kind, "key");
 });
@@ -334,6 +340,8 @@ test("a model that answers in plain lines anyway, or refuses tools, still works;
   await ask(off, prompt, undefined, { kind: "chat" });
   assert.equal(calls[0].body.tools, undefined, "structured replies can be turned off");
   assert.equal(formatOf("No format here."), null);
+  // the turn line is Capo's own whatever its seed holds, hyphens included (ruling 150)
+  assert.deepEqual(formatOf(["Reply with only these lines:", "TURN: t3-ab-9z", "EVENT: date | text", "END"].join("\n")).fixed, ["TURN: t3-ab-9z"]);
 });
 
 // ---- Check connection ----

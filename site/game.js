@@ -76,6 +76,14 @@ const checkSave = (s) => keepMissions(checkSave0(s), (c) => onMap.has(c) || home
 const keptPast = keptRecords;
 /** Move focus to a heading (or a control), so a keyboard or a screen reader is where the screen now is. */
 const land = (e) => { if (!e) return; if (e.tabIndex < 0) e.tabIndex = -1; e.focus({ preventScroll: true }); };
+/** A question in the page, never the browser's confirm box: `yes` names the act and runs then(); Not now, Escape or a tap outside leave things as they are. */
+function sure(text, yes, then) {
+  const d = el("dialog", undefined, "panel sure"), r = el("div", undefined, "row"), back = document.activeElement, no = button("Not now", () => d.close());
+  d.onclose = () => { d.remove(); if (back?.isConnected) back.focus({ preventScroll: true }); };
+  d.onclick = (e) => { if (e.target === d) d.close(); };
+  r.append(button(yes, () => { d.close(); then(); }, "go"), no);
+  d.append(el("p", text), r); document.body.append(d); d.showModal(); no.focus();
+}
 function toast(t) { const b = $("toast"); b.textContent = t; b.classList.add("on"); clearTimeout(hush); hush = setTimeout(() => b.classList.remove("on"), 3400); }
 // a country still being made goes by YOU (no country on the map uses it) until it has a code of its own
 const ownCode = () => (/^[A-Z]{3}$/.test(draft?.own.code || "") ? draft.own.code : "YOU");
@@ -235,7 +243,7 @@ function geo() {
 }
 
 // features hook: what site/realm.js borrows from this page
-const X = { order: (o) => order(o), ask: (p, take, where) => askAI(p, take, where), asking: () => asking, askBox: () => askBox(), colour: (c) => colourOf(c) || ownerColour(c), refresh: () => map.refresh(), bar: () => topBar(), g: () => state, geo, name, near: () => [...landNeighbours(state.player), ...seaNeighbours(state.player)], el, button, fmtDate, save: () => save(), toast, open, act: (t) => { state.actions = [...(state.actions || []), t]; save(); toast("Ordered: it is in your actions."); if (sheet === "actions") open("actions"); } };
+const X = { order: (o) => order(o), ask: (p, take, where) => askAI(p, take, where), asking: () => asking, askBox: () => askBox(), colour: (c) => colourOf(c) || ownerColour(c), refresh: () => map.refresh(), bar: () => topBar(), g: () => state, geo, name, near: () => [...landNeighbours(state.player), ...seaNeighbours(state.player)], el, button, fmtDate, save: () => save(), toast, sure, open, act: (t) => { state.actions = [...(state.actions || []), t]; save(); toast("Ordered: it is in your actions."); if (sheet === "actions") open("actions"); } };
 aiHost({ g: () => state, geo, route: () => route, most: () => turnAttacks(), order, toast }); // mcp hook: an order an AI app proposes is weighed by the rules and given only when the player accepts it
 // plugins hook: a scenario pack is several scenarios in one file; each is checked exactly as a single scenario file is
 async function openPack(raw) {
@@ -295,7 +303,7 @@ function startScreen() {
   STEPS.forEach(([k, t], i) => { const b = button(`${i + 1}. ${t}`, () => { if (i <= at || ready(i)) { draft.step = k; startScreen(); } }); b.setAttribute("aria-pressed", String(k === draft.step)); pills.append(b); });
   box.replaceChildren(el("p", "Overture of Empires", "eyebrow"), el("h1", "Capo"), pills);
   ({ scenario: stepScenario, country: stepCountry, you: stepYou, begin: stepBegin })[draft.step](box);
-  box.append(home(), el("p", "Fiction for adults. Not news and not a forecast. Real public figures may appear. Needs an AI to tell the story: connect a service with your own key (several have free tiers) or an AI on your own computer. With none, a turn can move by the rules alone, and the first turn can be played as a sample.", "note"));
+  box.append(home(), el("p", "Fiction for adults. Not news and not a forecast. Real public figures may appear. With no AI, play by the rules alone: orders from a province's card are carried out and the world moves by rule. To have each turn told as a story, connect an AI: a service with your own key (several have free tiers) or one on your own computer.", "note"));
   $("start").classList.add("open");
   if (stepShown !== draft.step) { stepShown = draft.step; land(box.querySelector("h2") || box.querySelector("h1")); }
 }
@@ -459,7 +467,8 @@ function takeCharacter(text) {
 function stepBegin(box) {
   const s = scen(), c = draft.character, who = draft.mode === "nation" ? "the nation" : `${c.name || "a person the AI will name"}, ${MODES[draft.mode][0].toLowerCase()}`;
   const list = el("ul", undefined, "list");
-  for (const t of [`Scenario: ${s.title}, from ${fmtDate(s.start)}.`, `Country: ${ownName()}${draft.kind === "own" ? ` (${draft.own.code}), your own, with ${draft.own.provinces.size} province${draft.own.provinces.size > 1 ? "s" : ""}` : ""}.`, `You play as ${who}.`]) { const li = el("li"); li.append(el("span", t)); list.append(li); }
+  for (const t of [`Scenario: ${s.title}, from ${fmtDate(s.start)}.`, `Country: ${ownName()}${draft.kind === "own" ? ` (${draft.own.code}), your own, with ${draft.own.provinces.size} province${draft.own.provinces.size > 1 ? "s" : ""}` : ""}.`, `You play as ${who}.`,
+    draft.mode === "citizen" ? "Your goal: an ambition you choose once in play, such as becoming a national figure or a house in order. The rules count it and say when it is met." : "Your goal: an ambition you choose once in play, such as a greater country, a ring of friends or five years of peace. The rules count it and say when it is met."]) { const li = el("li"); li.append(el("span", t)); list.append(li); }
   const r = el("div", undefined, "row");
   r.append(button("Begin", begin, "go"));
   box.append(el("h3", "Ready"), list, el("p", s.opening, "note"), r);
@@ -568,8 +577,9 @@ function actions(box) {
     return li;
   }));
   box.append(el("h2", "Actions"), ...(state.offers.length ? [el("h3", "Offers to you"), offers] : []), el("p", "Write what you do, in your own words, as many as you like. The AI reads them all and proposes moves; the rules decide what stands: wars, peace, treaties, attacks and handovers.", "note"), list, input, go, ...(hints.children.length ? [el("h3", "Suggested, with the rules' answer"), hints] : []), el("h3", "Ideas"), ideas);
-  if (pending) box.append(pending.review ? reviewBox() : turnBox());
-  if (pending && !pending.review && !calling) { const r = el("div", undefined, "row"); r.append(button("Advance by the rules alone", rulesOnly)); box.append(r); } // the rules-only turn (Phase 4): the way to move with no AI
+  if (pending) box.append(pending.review ? reviewBox() : pending.rulesAsk ? rulesAskBox() : turnBox());
+  // the rules-only turn (Phase 4): with no AI it heads the connect wall (turnBox); after an AI fails it waits here
+  if (pending && !pending.review && !pending.rulesAsk && !calling && connected(route)) { const r = el("div", undefined, "row"); r.append(button("Advance by the rules alone", rulesOnly)); box.append(r); }
 }
 
 /** The moves the AI read for the player's country, each with a tick, before the rules run. */
@@ -580,10 +590,36 @@ function reviewBox() {
   wrap.append(el("h3", "Your moves, before the rules run"), el("p", "The AI read these moves for your country out of your actions. Untick any you did not mean: it is left out, and the rules never see it.", "note"), ul, go);
   return wrap;
 }
-/** A turn with no AI: orders by card are carried out, other countries move by rule, and no story is told. */
+/** A turn with no AI: orders by card are carried out, other countries move by rule, and no story is told. Asked in the page once a browser, then at once. */
+const RULES_OK = "capo-rules-ok";
+const rulesSeen = () => { try { return localStorage.getItem(RULES_OK) === "1"; } catch { return false; } };
 function rulesOnly() {
-  if (!confirm("Advance by the rules alone? Orders you gave by card are carried out and other countries move by rule. Actions in your own words are not read, and no story is told.")) return;
-  settleTurn({ events: [], moves: [], news: [], summary: "No story was told this turn: the rules alone moved the world.", dropped: [], stop: pending.to });
+  if (!rulesSeen() && !pending.rulesAsk) { pending.rulesAsk = true; open("actions"); return; }
+  try { localStorage.setItem(RULES_OK, "1"); } catch { /* asked again next time */ }
+  // orders by card are read; actions in the player's own words wait for a turn told by an AI
+  const cards = new Set([...(state.orders || []), ...(state.sends || []), ...(state.plans || []), state.crisis].filter(Boolean).map((x) => x.text));
+  const own = pending.actions.filter((a) => !cards.has(a));
+  pending.actions = pending.actions.filter((a) => cards.has(a));
+  settleTurn({ events: [], moves: [], news: [], summary: "The rules alone moved the world this turn; no story was told.", dropped: [], stop: pending.to },
+    own.length ? ` ${own.length} action${own.length > 1 ? "s" : ""} in your own words kept for a turn told by an AI.` : "");
+  if (own.length) { state.actions = own; save(); }
+}
+/** The in-page word before the first rules-only turn. */
+function rulesAskBox() {
+  const wrap = el("div", undefined, "connectbox"), head = el("h3", "Play by the rules, no AI"), r = el("div", undefined, "row");
+  r.append(button("Advance by the rules", rulesOnly, "go"), button("Back", () => { pending.rulesAsk = false; open("actions"); }));
+  wrap.append(head, el("p", "Orders you gave by card are carried out: treaties, demands, attacks and missions from a province's card, and answers from your country's sheet. Other countries move by rule, and the Ledger shows what the rules decided. No story is told.", "note"),
+    el("p", "Actions in your own words are not read: they are kept for a turn told by an AI. This is asked once; after this the button moves the world at once.", "note"), r);
+  setTimeout(() => { if (wrap.isConnected) { wrap.scrollIntoView?.({ block: "start" }); land(head); } }, 0);
+  return wrap;
+}
+/** The keyless ways forward, first on the connect wall. */
+function rulesFirst() {
+  const wrap = el("div", undefined, "rulesfirst"), r = el("div", undefined, "row");
+  r.append(button("Play by the rules, no AI", rulesOnly, "go"),
+    ...(state.turn === 1 ? [button("Play a sample turn", () => finish(sampleReply(state, pending.to, pending.auto, name, landNeighbours(state.player))))] : []));
+  wrap.append(r, el("p", "No AI needed: orders from a province's card (treaties, demands, attacks, missions) are carried out and other countries move by rule. Or connect an AI below to have the turn told as a story.", "note"));
+  return wrap;
 }
 
 // ---- AI wiring (p5-ai): the connect box, the waiting box and the AI settings are built in site/ai.js ----
@@ -591,9 +627,9 @@ function waiting() { return waitBox(stopCall); }
 /** A turn waiting for its reply: the waiting box, the connect step when no AI is connected, or the error and Ask again. */
 function turnBox() {
   if (calling) return waiting();
-  // the first turn can be played as a demo: Capo's own sample reply, read and judged like any other, with no AI
-  const more = state.turn === 1 ? [button("Play a sample turn", () => finish(sampleReply(state, pending.to, pending.auto, name, landNeighbours(state.player))))] : [];
-  return connectBox({ route, title: connected(route) ? undefined : "Connect an AI to tell this turn", error: pending.error, again: viaAddress, connected: viaAddress, note: toast, more,
+  // with no AI, the rules-only turn and (on the first turn) Capo's own sample reply come first, above the connect form
+  const on = connected(route);
+  return connectBox({ route, title: on ? undefined : "Move the world, or connect an AI", error: pending.error, again: viaAddress, connected: viaAddress, note: toast, lead: on ? [] : [rulesFirst()],
     cancel: () => { pending = null; open("actions"); } });
 }
 
@@ -635,12 +671,13 @@ function finish(text) {
   if (list.length) { pending.review = { r, list }; pending.error = ""; open("actions"); return; }
   settleTurn(r);
 }
-function settleTurn(r) {
+function settleTurn(r, note = "") {
   remember(`turn ${state.turn}`);
   const { receipt } = closeTurn(state, r, geo(), pending.actions);
   pending = null; save(); topBar(); ledgerTab = "events"; open("ledger"); map.refresh();
+  if (picked && $("card").style.display === "block") card(world.provinces.get(picked)); // the card as the world now stands: no stale order
   const changed = receipt.filter((x) => x.ok && / takes it from | hands /.test(x.text)).length;
-  toast(`Now ${fmtDate(state.date)}.${changed ? ` ${changed} province${changed > 1 ? "s" : ""} changed hands.` : ""}`);
+  toast(`Now ${fmtDate(state.date)}.${changed ? ` ${changed} province${changed > 1 ? "s" : ""} changed hands.` : ""}${note}`);
 }
 
 function ledger(box) {
@@ -680,7 +717,9 @@ function ledger(box) {
   if (last.advice) box.append(el("h3", `Your trusted adviser, ${last.advice.name}`), el("p", `${last.advice.word}: ${last.advice.text}`));
   if (last.receipt?.length) {
     const list = el("ul", undefined, "list");
-    list.append(...last.receipt.map((x) => { const li = el("li", undefined, x.ok ? "yes" : "no"); li.append(el("span", x.ok ? "✓" : "✗", "mark"), ...(x.check ? [el("b", `${x.check.band}: `)] : []), el("span", `${x.text.replace(/[.!?]$/, "")}.`)); return li; }));
+    // a tick for what went your way, a cross for a move refused or a check failed, a dot for news of the world
+    const kind = (x) => (!x.ok ? "no" : x.check?.band === "failed" ? "lost" : x.country === state.player && (x.check || x.fact) ? "yes" : "news");
+    list.append(...last.receipt.map((x) => { const k = kind(x), li = el("li", undefined, k); li.append(el("span", { yes: "✓", no: "✗", lost: "✗", news: "•" }[k], "mark"), ...(x.check ? [el("b", `${x.check.band}: `)] : []), el("span", `${x.text.replace(/[.!?]$/, "")}.`)); return li; }));
     box.append(el("h3", "What the rules decided"), list, ...missionReports(last, X)); // phase 4 hook: missions step by step
   }
   if (last.dropped.length) box.append(el("p", `Left out of the reply: ${last.dropped.join("; ")}.`, "note"));
@@ -894,7 +933,7 @@ function advisors(box) {
       li.append(el("div", `${label}${trusted ? ", your trusted adviser" : ""}`, "note"), el("b", m.name), ...(m.favour <= -2 ? [el("p", "Turned against you: may stall orders they dislike, and leak your plans.", "warn")] : []), el("p", `${m.traits}. Wants ${m.wants}. Favour ${m.favour > 0 ? "+" : ""}${m.favour}.${state.mode === "citizen" ? "" : ` Skill ${commanders(state).find((x) => x.seat === seat)?.command} of 5, dealt by the rules: it leads attacks and weighs their counsel.`}${m.record?.n ? ` Right ${m.record.right} of ${m.record.n}.` : ""}${m.likes.length ? ` Likes you to ${m.likes.map((v) => v.toLowerCase()).join(", ")}.` : ""}${m.hates.length ? ` Dislikes ${m.hates.map((v) => v.toLowerCase()).join(", ")}.` : ""}`));
       const r = el("div", undefined, "row");
       if (!trusted) r.append(button("Trust most", () => { council.trusted = seat; save(); open("advisors"); }));
-      r.append(button("Ask", () => askCouncil([[seat, m]])), button("Dismiss", () => { if (!confirm(`Dismiss ${m.name}?`)) return; council.former.push({ ...m, seat, left: state.date, why: "dismissed", favour: m.favour - 2 }); council.seats[seat] = null; if (trusted) council.trusted = null; save(); open("advisors"); }));
+      r.append(button("Ask", () => askCouncil([[seat, m]])), button("Dismiss", () => sure(`Dismiss ${m.name} from your council?`, "Dismiss", () => { council.former.push({ ...m, seat, left: state.date, why: "dismissed", favour: m.favour - 2 }); council.seats[seat] = null; if (trusted) council.trusted = null; save(); open("advisors"); })));
       li.append(r);
     }
     card.append(li); box.append(card);
@@ -950,8 +989,8 @@ function gameSheet(box) {
   const saves = el("div", undefined, "row");
   saves.append(button(past.length ? `Take back ${past[past.length - 1].why}` : "Take back the last turn", () => { if (!past.length) return toast("Nothing to take back."); state = restore(past.pop()); save(); topBar(); open("game"); map.refresh(); }),
     button("Save to a file", () => { const a = el("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: "application/json" })); a.download = `capo-${state.player}-turn-${state.turn}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }),
-    button("Open a file", () => file.click()),
-    button("New game", () => { if (confirm("Leave this game? It stays saved until you begin another.")) { open(null); $("top").hidden = true; $("dock").hidden = true; state = null; draft = null; enter().then(() => { map.refresh(); startScreen(); }); } }));
+    button("Open a file", () => sure("Open a saved game? It takes the place of this one. Save this one to a file first to keep it.", "Choose a file", () => file.click())),
+    button("New game", () => sure("Leave this game? It stays saved until you begin another.", "Leave", () => { open(null); $("top").hidden = true; $("dock").hidden = true; state = null; draft = null; enter().then(() => { map.refresh(); startScreen(); }); })));
   const sTitle = Object.assign(el("input", undefined, "plain"), { type: "text", maxLength: 60, placeholder: "Title, for example: The Andean War of 2027" });
   const sBlurb = Object.assign(el("input", undefined, "plain"), { type: "text", maxLength: 200, placeholder: "One line on what it is" });
   const sOpen = Object.assign(el("textarea", undefined, "plain"), { rows: 3, maxLength: 1000, value: state.log[state.log.length - 1]?.summary || state.opening || "", placeholder: "How the story begins" });
@@ -979,10 +1018,12 @@ const GUIDED = "capo-guide-1";
 const dockButton = (i) => () => $("dock").children[i];
 const GUIDE = [
   [() => null, "Welcome to Capo", () => `You lead ${name(state.player)}. This shows one turn, start to finish: about a minute.`],
+  [() => $("top").querySelector(".who"), "Your goal", () => "Choose an ambition here, under your country's name: a greater country, a ring of friends, five years of peace, and more. The rules count it and say when it is met. Your country's state, crises and causes for war are here too."],
   [() => $("map"), "The world", () => "Drag to move and pinch or scroll to zoom. Tap any province to see who holds it, its neighbours, and anything disputed. Your land has a silver edge."],
-  [dockButton(0), "1. Decide", () => "Write what you do in Actions, in your own words, as many as you like. Ideas are there to start you off."],
+  [() => $("map"), "The province card", () => "Tap a foreign province to open its card. From there you propose treaties, make demands, attack when at war and send missions, and the card shows the rules' answer or the odds before you order. These orders work with no AI at all."],
+  [dockButton(0), "1. Decide", () => "Give orders from the cards, or write what you do in Actions, in your own words, as many as you like. Ideas are there to start you off."],
   [() => $("top").querySelector("select"), "2. Choose how far", () => "Jump a week, a month, a year, any length, or until something happens."],
-  [() => $("top").querySelector("button.go"), "3. Advance", () => "Capo asks the AI you connected to tell the turn: a service with your own key, some with free tiers, or an AI on your own computer. Connect one in the Game menu. With none, the rules alone can move the world."],
+  [() => $("top").querySelector("button.go"), "3. Advance", () => "With no AI, choose Play by the rules: your card orders are carried out and other countries move by rule. To have each turn told as a story, connect an AI in the Game menu: a service with your own key (some have free tiers) or an AI on your own computer."],
   [dockButton(2), "4. Read what happened", () => "The Ledger shows the events, the papers, and what the rules decided: which moves stood, which were refused, and why. The AI tells the story; the rules keep the facts."],
   [dockButton(3), "Your people", () => "Form a council in Advisors and choose whom you trust. In Chats, talk with any country. Words only: only actions change the world."],
   [dockButton(4), "Game Master", () => "Tell the story something true, or change the world by hand. Hand changes mark the game Sandbox, and every one can be undone."],
@@ -1036,11 +1077,13 @@ function card(p) {
   if (state && state.mode !== "citizen" && owner !== state.player) rows.push(warsOf(state, state.player).includes(owner) ? attackBox(p) : dimBox(owner, X) || treatyBox(owner)); // features hook: dimBox
   if (state) rows.push(...cardExtras(p, X)); // features hook: terrain, what you know, a demand, pacts
   { const m = state && missionBox(owner, X, () => card(p)); if (m) rows.push(m); } // phase 4 hook: send someone
-  box.replaceChildren(...rows);
+  const shut = button("", shutCard, "ic shut"); shut.append(icon("close")); shut.setAttribute("aria-label", "Close the card");
+  box.replaceChildren(shut, ...rows);
   box.style.display = "block";
   picked = p.id;
 }
 let picked = null;
+function shutCard() { card(null); picked = null; map.refresh(); }
 
 // ---- orders by card: an attack, a treaty proposed, an offer accepted. Each is an action the rules carry out themselves ----
 function order(o) {
@@ -1102,7 +1145,7 @@ async function start() {
   if (good) { state = good; past = keptPast(kept); play(); const note = convertNote(kept.state); if (note) { save(); toast(note); } }
   else { if (kept) toast("The saved game in this browser could not be read, so a new one starts. Any game saved to a file can still be opened."); startScreen(); }
 }
-addEventListener("keydown", (e) => { if (e.key === "Escape" && guideAt >= 0) guide(-1); });
+addEventListener("keydown", (e) => { if (e.key !== "Escape" || document.querySelector("dialog[open]")) return; if (guideAt >= 0) guide(-1); else if ($("card").style.display === "block") shutCard(); });
 guard();
 fictionCopy(); // phase 4 hook: what is copied out of the story says it is fiction
 start();

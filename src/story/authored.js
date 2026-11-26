@@ -1,8 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Three authored starts on the real map, as scenario files (the same shape a player saves and shares): a
 // believable present day, a regional brink, and an armed peace a few years on. Fiction, every one: not news and
-// not a forecast. Facts name offices, never people, so no line goes stale when an office changes hands and no
-// real person is given words or deeds. Text is a draft for the owner's review.
+// not a forecast. The two later starts name offices, never people. "Late 2026" names the real leaders in office as
+// it begins (rulings 48 and 149): fiction with real names, kept current, and marked so in its blurb, its opening and
+// its first fact. Text is a draft for the owner's review; it becomes the first choice only after that review.
+//
+// Real people named in "Late 2026", for the owner's review. Holders as of 26 November 2026, checked against news
+// reports that day; the ones marked * changed during 2026 and are the likeliest to need a second look:
+//   Donald Trump (President of the United States); Vladimir Putin (President of Russia); Volodymyr Zelenskyy
+//   (President of Ukraine); Xi Jinping (General Secretary, China); Friedrich Merz (Chancellor of Germany); Emmanuel
+//   Macron (President of France); *Andy Burnham (Prime Minister of the United Kingdom, since July 2026); *Keir
+//   Starmer (named as his predecessor); *Mojtaba Khamenei (Supreme Leader of Iran, since March 2026); *Ali Khamenei
+//   (his father and predecessor, named as killed in the strikes of 2026); Kim Jong Un (North Korea); *Benjamin
+//   Netanyahu (Prime Minister of Israel, caretaker after the October 2026 election); Narendra Modi (Prime Minister of
+//   India); Shehbaz Sharif (Prime Minister of Pakistan); Lai Ching-te (President of Taiwan); Sanae Takaichi (Prime
+//   Minister of Japan); *Delcy Rodriguez (acting President of Venezuela, since January 2026); *Nicolas Maduro (named
+//   as seized by the United States in January 2026).
 // How each is tuned for the rules: a war starts on the scenario's first day (so nobody begins worn out); a pair
 // at -2 or lower that shares a land border, with no treaty and a gap of 2 in might, is one the rules-only turn may
 // take to war, so those pairs are chosen on purpose and named in the notes beside each start.
@@ -30,8 +43,8 @@ export const AUTHORED = [
   // Thailand and Cambodia, Israel and Lebanon, Ethiopia and Eritrea; and, once its war ends, Russia and a neighbour.
   start({
     id: "late-2026", title: "Late 2026: the world as it stands", start: "2026-12-01",
-    blurb: "Fiction. The present day with its quarrels in place: a great war in Europe, a dozen cold borders, old alliances under strain. Leaders are offices, not names.",
-    opening: "The story begins on 1 December 2026, in a world drawn from the headlines and then let go. A war in eastern Europe is in its fifth year. The great powers trade tariffs, chips and warnings instead of shots. The old alliances still stand, and nobody is sure what they are worth. From here on everything is invented: the rules decide wars and borders, and the story tells the rest. This start names offices (a president, a chancellor, a supreme leader), never the people who hold them.",
+    blurb: "Fiction with real names. The present day with its quarrels in place: a great war in Europe, a dozen cold borders, strained alliances, and the leaders of late 2026.",
+    opening: "The story begins on 1 December 2026, in a world drawn from the headlines and then let go. A war in eastern Europe is in its fifth year. The great powers trade tariffs, chips and warnings instead of shots. The old alliances still stand, and nobody is sure what they are worth. This start names the real people who hold office as it begins; everything they say and do from the first turn is invented. The rules decide wars and borders, and the story tells the rest.",
     wars: ["RUS|UKR"],
     treaties: {
       alliance: ["RUS|BLR"],
@@ -39,27 +52,28 @@ export const AUTHORED = [
       trade: ["CHN|RUS", "CHN|PAK", "IND|RUS", "USA|MEX", "USA|ISR", "BRA|ARG", "BRA|URY", "BRA|PRY", "IRN|RUS", "SAU|ARE", "JPN|AUS", "IND|ARE", "CHN|BRA", "CHN|ZAF", "EGY|SAU"],
     },
     rel: {
-      "RUS|USA": -2, "CHN|USA": -1, "IRN|USA": -3, "PRK|USA": -2, "USA|VEN": -2, "CUB|USA": -2, "IRN|ISR": -3, "CHN|TWN": -2, "CHN|JPN": -1, "CHN|IND": -1, "CHN|PHL": -2,
+      "RUS|USA": -2, "CHN|USA": -1, "IRN|USA": -3, "PRK|USA": -2, "USA|VEN": -1, "CUB|USA": -2, "IRN|ISR": -3, "CHN|TWN": -2, "CHN|JPN": -1, "CHN|IND": -1, "CHN|PHL": -2,
       "IND|PAK": -2, "KOR|PRK": -2, "JPN|PRK": -2, "AFG|PAK": -2, "ISR|LBN": -2, "ISR|SYR": -1, "KHM|THA": -2, "ERI|ETH": -2, "EGY|ETH": -1, "DZA|MAR": -2, "KOS|SRB": -2,
       "GUY|VEN": -2, "COD|RWA": -2, "ARM|AZE": -1, "GRC|TUR": -1, "EST|RUS": -2, "LVA|RUS": -2, "LTU|RUS": -2, "POL|RUS": -2, "FIN|RUS": -2, "GEO|RUS": -1, "MDA|RUS": -1,
       "BLR|UKR": -2, "BLR|POL": -1, "DEU|RUS": -2, "GBR|RUS": -2, "FRA|RUS": -2, "IRN|SAU": -1,
       "TWN|USA": 2, "POL|UKR": 2, "DEU|UKR": 2, "GBR|UKR": 2, "FRA|UKR": 2, "JPN|KOR": 1, "CHN|RUS": 2, "CHN|PAK": 2,
     },
     facts: [
-      "This start names offices, not people: the President of the United States, the President of Russia, the General Secretary in Beijing, the Chancellor in Berlin, the Supreme Leader in Tehran.",
-      "Russia and Ukraine have been at war since February 2022. The front runs through Ukraine's east and south; Russia holds Crimea and much of four eastern regions. Talks have opened and stalled more than once.",
-      "The President of the United States governs by tariff and by deal, and presses allies to pay for their own defence. Washington's word still decides most alliances, and is trusted less than it was.",
-      "Europe is re-arming faster than at any time since the Cold War. The Chancellor in Berlin and the President in Paris agree that it must, and disagree on who leads it.",
+      "Fiction with real names: this start names the real people in office on 1 December 2026, and all they do from then on is invented. Donald Trump is President of the United States, Vladimir Putin of Russia and Volodymyr Zelenskyy of Ukraine; Xi Jinping leads China; Friedrich Merz is Chancellor of Germany, Emmanuel Macron President of France, and Andy Burnham Prime Minister of Britain.",
+      "Russia and Ukraine have been at war since February 2022. The front runs through Ukraine's east and south; Russia holds Crimea and much of four eastern regions. Talks in Abu Dhabi in November 2026, with American mediation, agreed an exchange of prisoners and nothing else.",
+      "Donald Trump governs by tariff and by deal, and presses allies to pay for their own defence. Washington's word still decides most alliances, and is trusted less than it was.",
+      "Europe is re-arming faster than at any time since the Cold War. Friedrich Merz and Emmanuel Macron agree that it must, and disagree on who leads it. Andy Burnham took office in London in July 2026, when Keir Starmer stepped down.",
       "The Atlantic alliance has thirty-two members and one promise: an attack on one is an attack on all. In this story it is written as defence treaties between the United States and each ally.",
-      "The General Secretary in Beijing calls Taiwan a province to be brought home, by pressure if it can be done. Chinese ships and aircraft circle the island most weeks. The island governs itself, and the United States arms it.",
+      "Xi Jinping calls Taiwan a province to be brought home, by pressure if it can be done. Chinese ships and aircraft circle the island most weeks. The island governs itself under Lai Ching-te, and the United States arms it. Sanae Takaichi, Prime Minister of Japan, says a war over Taiwan would be Japan's concern.",
       "The United States and China quarrel over tariffs, advanced chips and rare earths, and keep talking: each is the other's largest problem and one of its largest customers.",
-      "North Korea's Supreme Leader has a defence pact with Moscow, has sent soldiers and shells to Russia's war, and tests missiles when he chooses. The two Koreas have an armistice from 1953 and no peace.",
-      "Israel and Iran exchanged direct strikes in 2024 and 2025. Iran's nuclear sites were bombed; its programme is damaged, not ended. A ceasefire in Gaza holds badly. The Supreme Leader in Tehran is old, and who follows him is the quiet question.",
-      "India and Pakistan fought four days in the air in May 2025 and went back to a wary ceasefire. Both hold nuclear weapons. India keeps their river treaty suspended. Pakistan and the rulers in Kabul have fought along their border too.",
+      "Kim Jong Un has a defence pact with Moscow, has sent soldiers and shells to Russia's war, and tests missiles when he chooses. The two Koreas have an armistice from 1953 and no peace.",
+      "Israel and the United States went to war with Iran in 2026. Ali Khamenei was killed in the first strikes and his son Mojtaba Khamenei is Supreme Leader. A deal in June to end the war frayed within weeks; the nuclear question is open and ships in the Gulf sail nervously.",
+      "Israel voted in October 2026 and no bloc won a majority; Benjamin Netanyahu stays on as caretaker Prime Minister while the bargaining goes on. A ceasefire in Gaza holds badly.",
+      "India and Pakistan fought four days in the air in May 2025 and went back to a wary ceasefire. Both hold nuclear weapons. Narendra Modi keeps their river treaty suspended; Shehbaz Sharif's government leans on its army. Pakistan and the rulers in Kabul have fought along their border too.",
       "Sudan is in civil war between its army and a paramilitary force, with famine in the west. It is a war inside one country: no other state has declared itself in it, though several feed it.",
       "Soldiers govern Mali, Burkina Faso and Niger; they sent French troops home and took Russian help. In eastern Congo a rebel army holds cities, and Rwanda is accused of standing behind it.",
       "Armenia and Azerbaijan have initialled a peace after more than thirty years of war; it is not yet a settled one. Syria has had a new government since the old one fell in December 2024.",
-      "Venezuela claims the western two thirds of Guyana, where the oil is. Thailand and Cambodia fought along their border in 2025 and signed a truce neither trusts. Serbia does not recognise Kosovo. Algeria and Morocco have had no relations since 2021.",
+      "The United States seized Nicolas Maduro in January 2026; Delcy Rodriguez governs Venezuela as acting President and sells Washington oil. Venezuela still claims the western two thirds of Guyana. Thailand and Cambodia fought along their border in 2025. Serbia does not recognise Kosovo. Algeria and Morocco have had no relations since 2021.",
       "Money moves this world as much as armies do: sanctions on Russia and Iran, tariffs on almost everyone, and a race for the energy to run data centres. Artificial intelligence is the new measure of a great power.",
     ],
   }),

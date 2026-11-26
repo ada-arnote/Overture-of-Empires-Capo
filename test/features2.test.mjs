@@ -13,7 +13,7 @@ import { gaugeOf, settleState } from "../src/story/state.js";
 import { ambitionsFor, chooseAmbition, progress } from "../src/story/ambitions.js";
 import { WHEN, beatFor, beatLines, keepScript, noteBeat } from "../src/story/beats.js";
 import { CARES, caresOf, moodOf, quellPlan, settleHome, settleUnrest, termsFor } from "../src/story/home.js";
-import { TIERS, fogLines, knowledge, learn, seenGauge, seenWords, settleFog } from "../src/story/fog.js";
+import { TIERS, fogLines, keepFog, knowledge, learn, seenGauge, seenWords, setFog, settleFog } from "../src/story/fog.js";
 import { chooseScene, openScene, readScene, sceneLines, scenePlan, sceneProblem, scenePrompt, sceneWith, settleScene } from "../src/story/scenes.js";
 import { MEANS, meansOf, meansTarget, scaleProblem, settleSelf, switchScale } from "../src/story/scale.js";
 import { debatePrompt, debaters, readDebate } from "../src/story/debate.js";
@@ -169,6 +169,15 @@ test("fog: four tiers from borders, treaties, wars and talks; an Envoy lifts eac
   assert.deepEqual([knowledge(g, "BRA", near).tier, knowledge(g, "CHL", near).tier, knowledge(g, "PER", near).tier], [1, 3, 3]);
   assert.match(knowledge(g, "CHL", near).why, /a neighbour, and your Envoy/);
   assert.equal(knowledge({ ...g, mode: "citizen" }, "BRA", near).tier, 0, "a citizen has no envoy");
+  // fog of war is a setting, on by default (ruling 149): off, every country is known clear, and a save keeps it off
+  assert.equal(g.fog, undefined);
+  assert.match(setFog(g, false), /off/);
+  assert.deepEqual(knowledge(g, "BRA", near), { tier: 3, word: "clear", why: "fog of war is off" });
+  assert.equal(fogLines(g, ["BRA"], near)[0].includes("BRA clear"), true);
+  assert.equal(keepFog(g, () => true).fog, false);
+  assert.match(setFog(g, true), /on/);
+  assert.equal(knowledge(g, "BRA", near).tier, 1);
+  assert.equal(keepFog({ ...g, fog: "no" }, () => true).fog, undefined, "only false turns it off");
 });
 
 test("rumours: a rumoured gauge may be a step off, fixed for the year by the seed; chats and the council are told by tier", () => {

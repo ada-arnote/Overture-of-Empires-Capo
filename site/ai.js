@@ -40,6 +40,12 @@ export const WORKS = "Free to start: OpenRouter's free models, Groq and Google G
 const ORIGINS = [...new Set(Object.values(AI_BASES).map((b) => new URL(b).origin).filter((o) => o.startsWith("https:")))];
 /** The page rule's connect-src, exactly: its own site, each service above, and this computer. */
 export const CONNECT = ["'self'", ...ORIGINS, "http://localhost:*", "http://127.0.0.1:*"];
+/** Why an address cannot be used: not an address at all, or not this computer. */
+function addressWrong(base) {
+  let u; try { u = new URL(base); } catch { u = null; }
+  if (!u || !/^https?:$/.test(u.protocol)) return `${base ? `"${base}" is not a whole address` : "No address yet"}: write it like http://localhost:8000/v1.`;
+  return `${u.host} is not this computer. This page may reach only the services it lists and this computer: use localhost or 127.0.0.1, such as http://localhost:8000/v1 or http://127.0.0.1:8000/v1.`;
+}
 export function reachable(base) {
   let u; try { u = new URL(base); } catch { return false; }
   return (u.protocol === "http:" && ["localhost", "127.0.0.1"].includes(u.hostname)) || (u.protocol === "https:" && ORIGINS.includes(u.origin));
@@ -87,7 +93,8 @@ export function forgetKeys() { held = {}; put(S, KEYS, null); put(L, KEYS, null)
 export const scrub = (text, key = "") => (key.length > 3 ? String(text).split(key).join("[your key]") : String(text)).replace(/\b(?:sk|gsk|csk|xai|AIza)[-_A-Za-z0-9*.]{10,}/g, "[a key]");
 
 export const presetOf = (r) => PRESETS.find((p) => p.id === r.preset) || PRESETS.at(-1);
-export const baseOf = (r) => String((presetOf(r).custom ? r.base : presetOf(r).base) || "").trim().replace(/\/+$/, "");
+// "localhost:8000/v1" is taken as http://localhost:8000/v1: a server on this computer speaks plain http
+export const baseOf = (r) => String((presetOf(r).custom ? r.base : presetOf(r).base) || "").trim().replace(/\/+$/, "").replace(/^(?=(localhost|127\.0\.0\.1)(:\d+)?(\/|$))/i, "http://");
 
 // ---- errors in plain words, each with a kind the page and the retries act on ----
 const fail = (kind, message, more) => Object.assign(new Error(message), { kind, ...more });
@@ -107,8 +114,9 @@ export function explain(status, said, { p = PRESETS[0], key = "", model = "", wa
 }
 function unreachable(p, base) {
   if (globalThis.navigator?.onLine === false) return fail("offline", "This device is offline. Connect, then ask again.");
-  if (p.local || p.custom) return fail("blocked", `Nothing answered at ${base}, or it turned this page away. Is it running? ${p.about.split(". ").slice(1).join(". ") || "It must allow calls from web pages (CORS)."} Your browser may also ask whether this page may reach devices on your network: allow it.`);
-  return fail("blocked", `The call to ${p.name} was blocked or did not get through. Check your connection.${p.cors === "check" ? ` ${p.name} may not accept calls from a web page (CORS); then it needs a server in between, which Capo does not ship.` : " A browser extension or the network may be blocking it."}`);
+  const how = p.about.split(". ").slice(1).join(". ").replace("this site's address", `${globalThis.location?.origin?.startsWith("http") ? location.origin : "this site's address"} (a setting on your computer)`);
+  if (p.local || p.custom) return fail("blocked", `Nothing answered at ${base}, or it turned this page away. Is it running? ${how || "It must be set to let web pages call it (its settings may call this CORS)."} Your browser may also ask whether this page may reach devices on your network: allow it.`);
+  return fail("blocked", `The call to ${p.name} was blocked or did not get through. Check your connection.${p.cors === "check" ? ` ${p.name} may not accept calls from a web page (a rule called CORS); then it needs a server in between, which Capo does not ship.` : " A browser extension or the network may be blocking it."}`);
 }
 const stopped = (why) => (why === "time" ? fail("time", "The AI sent nothing for two minutes. Ask again, or choose another model or service.") : fail("stop", "Stopped."));
 const pause = (ms, signal) => new Promise((ok, no) => { const t = setTimeout(ok, ms); signal?.addEventListener("abort", () => { clearTimeout(t); no(stopped("stop")); }, { once: true }); });
@@ -169,7 +177,7 @@ export async function ask(r, prompt, signal, o = {}) {
   if (!connected(r)) throw fail("connect", "No AI is connected yet. Connect one in Game, How Capo reaches an AI.");
   const p = presetOf(r), base = baseOf(r), key = keyOf(r), kind = o.kind || "turn", model = r.model || p.models[0] || "";
   if (p.bridge) return bridgeAsk(r, key, prompt, signal, { kind, onStatus: o.onStatus }); // mcp hook: the player's own AI app answers, through the bridge they started
-  if (!reachable(base)) throw fail("address", "The address must be a server on this computer, such as http://localhost:8000/v1: this page may reach only the services it lists and this computer.");
+  if (!reachable(base)) throw fail("address", addressWrong(base));
   if (!key && !p.local && !p.custom) throw fail("key", `Give your ${p.name} key first: Game, How Capo reaches an AI.`);
   if (!model && p.shape !== "openai") throw fail("model", `Choose a model for ${p.name}.`);
   const fmt = p.tools && r.tools !== false && !r.plain?.[p.id] && kind !== "check" && formatOf(prompt), tool = fmt && toolOf(fmt);
@@ -264,7 +272,7 @@ let shown = "";
 /**
  * What stands in for a reply that has not come. With no AI connected: what works, and the settings to connect one
  * (o.connected() runs once a check succeeds). Connected: the error, and Ask again. o: title, route, error, again(),
- * cancel(), connected(), note(text), more (buttons of the caller's own).
+ * cancel(), connected(), note(text), more (buttons of the caller's own), lead (elements shown first, above the form).
  */
 export function connectBox(o) {
   const wrap = el("div", undefined, "connectbox"), on = connected(o.route), row = el("div", undefined, "row"), again = on && o.again ? button("Ask again", o.again, "go") : null;
@@ -274,7 +282,7 @@ export function connectBox(o) {
   const head = el("h3", o.title || (on ? "The AI did not answer" : "Connect an AI"));
   head.tabIndex = -1;
   if (on) wrap.append(head, ...(error ? [error] : []), row);
-  else wrap.append(head, ...(error ? [error] : []), el("p", `Capo needs an AI to tell the story, and asks it for you. ${WORKS}`, "note"), aiPanel(o.route, o.note, { onConnect: o.connected, title: "Your AI" }), row);
+  else wrap.append(head, ...(error ? [error] : []), ...(o.lead || []), el("p", `Capo needs an AI to tell the story, and asks it for you. ${WORKS}`, "note"), aiPanel(o.route, o.note, { onConnect: o.connected, title: "Your AI" }), row);
   // something new to show: scrolled into view, focus on the error, Ask again or the heading
   const fresh = `${on}:${o.title || ""}:${o.error || ""}`;
   if (fresh !== shown) {

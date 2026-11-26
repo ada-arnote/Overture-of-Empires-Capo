@@ -2,6 +2,32 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Capo without a key, and the front door: from the second cold review
+
+**Players**
+- **Play by the rules, no AI, comes first.** With no AI connected, Advance opens with "Play by the rules, no AI" (and, on the first turn, a sample turn) above the connect form, instead of 1,400 px below it. The first time, the page says in a few lines what a rules-only turn does; after that the button moves the world at once. The browser's own question box is gone from every Capo screen: leaving a game, dismissing an adviser and changing the scale of play now ask in the page.
+- **Your own words are kept.** A rules-only turn carries out your orders by card and keeps the actions you wrote yourself for a turn told by an AI, instead of dropping them.
+- **The guide teaches the keyless game and the goal.** Two new steps: your goal (an ambition, chosen under your country's name) and the province card (treaties, demands, attacks and missions, with the rules' answer or the odds, all without an AI). The Begin step of setup names the goal too.
+- **The province card** has a close button, closes on Escape, and is redrawn when a turn ends, so it never offers an order the world has overtaken.
+- **The ledger's marks mean what they say:** a tick for what went your way, a cross for a move refused or an attack thrown back, a dot for news of the world.
+- **Fog of war is a setting**, on by default, in the Game menu. Off, every country's state and answers are in view.
+- **Opening a saved game asks first**, since it takes the place of the one you are in.
+- **Connecting an AI on this computer:** `localhost:8000/v1` without `http://` is understood; a mistyped address and an address on another machine get different messages; Ollama's message names the exact value for OLLAMA_ORIGINS.
+- **"Late 2026" names real leaders**, as they stand on 1 December 2026, and says so first: fiction with real names. Its facts are brought up to date. It is not yet the first choice; that waits for the owner's review of its text.
+- **Front page:** a tab icon and a share card; the lantern says what it does (a brighter or a darker blue); the live board's caption says Paused when paused; the phone menu folds on a tap outside it; the Capo pitch says it can be played by the rules alone.
+- **A page for addresses that do not exist**, pointing to every game and home, in place of GitHub's own.
+- The source copies of the game pages under `/site/` now send a visitor to the built page in `/play/`, instead of showing a message about files.
+
+**Contributors**
+- `src/story/fog.js`: `g.fog === false` turns fog off (`setFog(g, on)`); saves keep it only when false.
+- `formatOf` takes a turn code whose seed holds a hyphen (`t\d+-[\w-]+`, ruling 150). The tools line guide is 1,300 (ruling 150; a guide, ruling 141).
+- `connectBox` takes `lead`: elements shown above the connect form. The page's in-page question is `sure(text, yes, then)`, lent to the features pages as `x.sure`.
+- `site/source.js` is loaded by each source page and left out of built pages by `tools/bundle.mjs`. `404.html` sits at the repository root with whole paths.
+- The gate lets a share card (`og:` and `twitter:` meta) name the site's own public address from `SITE_URL`.
+- `site/icons/tent/mark.svg`: the compass mark, own work, the tab icon of every page.
+
 ## v0.9.0 (2026-11-26): the boards go 3D
 
 ### Every board on a war table, and Capo's world in relief
