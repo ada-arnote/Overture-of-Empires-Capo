@@ -13,6 +13,7 @@ export const LIMITS = {
   file: 250 * KB, // any one shipped file, as stored
   code: { "src/core": 12 * KB, "src/map": 45 * KB, "src/games": 90 * KB, "src/story": 40 * KB, site: 72 * KB }, // compressed
   first: 500 * KB, // everything shipped, compressed
+  map: 300 * KB, // one map file in maps/, compressed: fetched by the page that needs it, never by the first page
   lines: { "src/map": 2400, "src/games": 6500, "src/core": 700, tools: 1000 },
 };
 const SHIPPED = ["src", "site"];
@@ -69,6 +70,11 @@ export function check(root, { release = false } = {}) {
         }
       }
     }
+  }
+  for (const f of walk(path.join(root, "maps"))) {
+    const zip = gzipSync(readFileSync(f)).length;
+    if (path.extname(f) !== ".json") bad.push(`${rel(f)}: only map data in JSON goes in maps/`);
+    else if (zip > LIMITS.map) bad.push(`${rel(f)}: ${Math.round(zip / KB)} kB compressed is over the ${LIMITS.map / KB} kB limit for one map`);
   }
   for (const [k, n] of Object.entries(code)) if (n > LIMITS.code[k]) bad.push(`${k}: ${Math.round(n / KB)} kB compressed is over ${LIMITS.code[k] / KB} kB`);
   if (total > LIMITS.first) bad.push(`everything shipped: ${Math.round(total / KB)} kB compressed is over ${LIMITS.first / KB} kB`);

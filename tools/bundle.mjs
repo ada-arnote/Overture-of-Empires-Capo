@@ -50,10 +50,10 @@ export function bundle(entry) {
   return `"use strict";\nconst $m = [];\n${parts.join("\n")}`;
 }
 
-export function page(html, css, js, home = "") {
+export function page(html, css, js, home = "", fetches = false) {
   const safe = js.replace(/<\/script/gi, "<\\/script"), hash = createHash("sha256").update(`\n${safe}\n`).digest("base64");
-  // a page that talks to an AI keeps the addresses it may reach; the games reach nothing
-  const reach = html.match(/connect-src ([^;"]*)/)?.[1]?.replace("'self'", "").trim() || "", talk = reach.includes("https:") ? ` connect-src ${reach};` : "";
+  // a page that fetches keeps the addresses it may reach (its own site for map data, an AI for the story); the games reach nothing
+  const reach = html.match(/connect-src ([^;"]*)/)?.[1]?.trim() || "", talk = fetches && reach ? ` connect-src ${reach};` : "";
   return html
     .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, () => `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src data:;${talk} base-uri 'none'; form-action 'none'">`)
     .replace(/<link rel="stylesheet"[^>]*>/, () => `<style>\n${css}</style>`)
@@ -64,10 +64,10 @@ export function page(html, css, js, home = "") {
 if (process.argv[1]?.endsWith("bundle.mjs")) {
   const at = (f) => readFileSync(path.join(root, "site", f), "utf8"), out = path.join(root, "dist");
   mkdirSync(out, { recursive: true });
-  for (const name of ["inch", "fable", "banners", "glass", "capo"]) {
-    const js = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`, text = page(at(`${name}.html`), at("table.css"), js);
+  for (const name of ["inch", "fable", "banners", "glass", "capo", "world"]) {
+    const fetches = ["capo", "world"].includes(name), js = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`, text = page(at(`${name}.html`), at("table.css"), js, "", fetches);
     mkdirSync(path.join(root, "play"), { recursive: true });
-    writeFileSync(path.join(root, "play", `${name}.html`), page(at(`${name}.html`), at("table.css"), js, "../site/"));
+    writeFileSync(path.join(root, "play", `${name}.html`), page(at(`${name}.html`), at("table.css"), js, "../site/", fetches));
     writeFileSync(path.join(out, `play-${name}.html`), text);
     console.log(`dist/play-${name}.html, ${Math.round(text.length / 1000)} kB. Open it by double-click.`);
   }
