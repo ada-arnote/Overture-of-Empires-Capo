@@ -2,13 +2,15 @@
 // Capo's game screen: the world map full-screen, a top bar, the dock and the province card, as in the original
 // Ancient Kingdom: choose any country and a mode, write actions, jump time, read what happened. The AI proposes
 // moves; the rules in src/story/worldrules.js decide which stand, and the map follows.
-import { JUMPS, MODES, UNITS, jumpFrom, monthsBetween, newWorldGame, readWorldReply, turnCode, worldPrompt } from "../src/story/turn.js";
-import { APPROACHES, applyMoves, attackPlan, commanders, leaks, mightOf, placesFor, treatiesOf, warsOf } from "../src/story/worldrules.js";
+import { JUMPS, MODES, UNITS, closeTurn, jumpFrom, monthsBetween, newWorldGame, readWorldReply, turnCode, worldPrompt } from "../src/story/turn.js";
+import { APPROACHES, attackPlan, commanders, mightOf, placesFor, treatiesOf, warsOf } from "../src/story/worldrules.js";
+import { NEED, relOf, relWord, treatyAnswer, treatyName } from "../src/story/relations.js";
+import { factWords, factsOf } from "../src/story/chronicle.js";
 import { oddsLine, partsLine } from "../src/story/check.js";
 import { crossesLine } from "../src/story/line.js";
-import { checkSave as checkSaveOf, convertNote, keptRecords, mendGame, restoreGame, snapGame } from "../src/story/saves.js";
+import { checkSave as checkSaveOf, convertNote, keptRecords, mendGame, snapGame, takeBack } from "../src/story/saves.js";
 import { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacter, scenarioFrom, scenarioText } from "../src/story/scenarios.js";
-import { askPrompt, changeStanding, chatPrompt, councilPrompt, moveFavour, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
+import { askPrompt, chatPrompt, councilPrompt, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
 import { loadWorld, ownerColour, worldMap } from "./worldmap.js";
 import { ask, forgetKey, loadRoute, saveRoute } from "./ai.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
@@ -41,7 +43,7 @@ const mend = mendGame;
 // A take-back record is the game without its log (the log only grows; the record keeps its length), so twenty
 // of them cost about what one full copy used to. Each says what it takes back.
 const snap = (why) => snapGame(state, why);
-const restore = (rec) => restoreGame(rec, state.log);
+const restore = (rec) => takeBack(state, rec);
 const remember = (why) => { past.push(snap(why)); past = past.slice(-20); };
 let saveFailed = false;
 const save = () => {
@@ -392,7 +394,7 @@ function topBar() {
 
 const DOCK = [["actions", "Actions"], ["chats", "Chats"], ["ledger", "Ledger"], ["advisors", "Advisors"], ["master", "Game Master"]];
 function dock() {
-  const unread = state && state.log.length > (state.seen || 0);
+  const unread = state && state.log.length && state.turn > (state.seen || 0);
   $("dock").replaceChildren(...DOCK.map(([k, t]) => {
     const label = k === "chats" && state?.mode === "citizen" ? "Contacts" : k === "advisors" && state?.mode === "citizen" ? "Circle" : t;
     const b = button("", () => open(sheet === k ? null : k), ""); b.append(icon(k), el("span", label)); b.setAttribute("aria-pressed", String(sheet === k));
@@ -406,7 +408,7 @@ function open(which) {
   const box = $("sheet");
   dock();
   if (!which) { box.classList.remove("open"); return; }
-  if (which === "ledger" && state.seen !== state.log.length) { state.seen = state.log.length; save(); dock(); }
+  if (which === "ledger" && state.seen !== state.turn) { state.seen = state.turn; save(); dock(); }
   box.replaceChildren();
   ({ actions, chats, ledger, advisors, master, game: gameSheet }[which])(box);
   const head = el("div", undefined, "head"), title = box.querySelector("h2"), shut = button("", () => open(null), "ic");
@@ -422,15 +424,25 @@ function actions(box) {
   const add = () => { const t = input.value.trim(); if (!t) return; state.actions = [...(state.actions || []), t]; save(); open("actions"); };
   input.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); add(); } };
   list.append(...(state.actions || []).map((a, i) => {
-    const li = el("li"), o = (state.orders || []).find((x) => x.text === a), plan = o && attackPlan(state, geo(), state.player, o.target, o, turnAttacks());
-    li.append(el("span", plan?.ok ? `${a} Odds: ${oddsLine(plan.chance)}.` : a), button("Remove", () => { state.actions.splice(i, 1); state.orders = (state.orders || []).filter((x) => x.text !== a); save(); open("actions"); }));
+    const li = el("li"), o = (state.orders || []).find((x) => x.text === a), plan = o?.verb === "ATTACK" && attackPlan(state, geo(), state.player, o.target, o, turnAttacks());
+    const ans = o?.verb === "TREATY" && !state.offers.some((x) => x.from === o.target && x.kind === o.detail) && answer(o.target, o.detail);
+    li.append(el("span", plan?.ok ? `${a} Odds: ${oddsLine(plan.chance)}.` : ans ? `${a} ${name(o.target)} would ${ans.ok ? "agree" : "refuse"} (${ans.why}).` : a), button("Remove", () => { state.actions.splice(i, 1); state.orders = (state.orders || []).filter((x) => x.text !== a); save(); open("actions"); }));
     return li;
   }));
   const near = landNeighbours(state.player).slice(0, 3), ideas = el("div", undefined, "row");
   for (const t of ["Strengthen the army.", "Spend on schools and hospitals.", ...near.map((c) => `Seek closer ties with ${name(c)}.`)]) ideas.append(button(t, () => { state.actions = [...(state.actions || []), t]; save(); open("actions"); }));
   const go = el("div", undefined, "row");
   go.append(button("Add", add), button(jump.key === "custom" ? `Advance ${jump.n} ${jump.unit}` : `Advance: ${JUMPS.find((j) => j[0] === jump.key)[1].toLowerCase()}`, advance, "go"));
-  box.append(el("h2", "Actions"), el("p", "Write what you do, in your own words, as many as you like. The AI reads them all and proposes moves; the rules decide what stands: wars, peace, treaties, attacks and handovers.", "note"), list, input, go, el("h3", "Ideas"), ideas);
+  // offers as cards: one tap accepts, and the rules carry it out whether or not the AI writes it down
+  const offers = el("ul", undefined, "list");
+  offers.append(...state.offers.map((o) => {
+    const li = el("li"), peace = o.kind === "peace", what = peace ? "peace" : treatyName(o.kind), verb = peace ? "PEACE" : "TREATY";
+    const taken = (state.orders || []).some((x) => x.verb === verb && x.target === o.from);
+    li.append(el("span", `${name(o.from)} offers ${what} (${fmtDate(o.date)}).`), ...(taken ? [el("b", "Accepted")] : [button("Accept", () => order({ text: `Accept ${name(o.from)}'s offer of ${what}.`, verb, target: o.from, detail: peace ? "" : o.kind }))]),
+      button("Decline", () => { state.offers = state.offers.filter((x) => x !== o); const old = (state.orders || []).find((x) => x.verb === verb && x.target === o.from); state.orders = (state.orders || []).filter((x) => x !== old); state.actions = (state.actions || []).filter((x) => x !== old?.text); save(); open("actions"); }));
+    return li;
+  }));
+  box.append(el("h2", "Actions"), ...(state.offers.length ? [el("h3", "Offers to you"), offers] : []), el("p", "Write what you do, in your own words, as many as you like. The AI reads them all and proposes moves; the rules decide what stands: wars, peace, treaties, attacks and handovers.", "note"), list, input, go, el("h3", "Ideas"), ideas);
   if (pending) box.append(pasteBox());
 }
 
@@ -490,15 +502,7 @@ function finish(text) {
   if (!r.matched) { pending.error = `That reply is not for this turn: it must start with TURN: ${turnCode(state)}.`; open("actions"); return; }
   if (!r.events.length) { pending.error = `No event could be read${r.dropped.length ? `: ${r.dropped.slice(0, 3).join("; ")}` : ""}.`; open("actions"); return; }
   remember(`turn ${state.turn}`);
-  const receipt = applyMoves(state, r.moves, geo(), pending.actions, monthsBetween(state.date, r.stop));
-  receipt.push(...moveFavour(state, receipt), ...changeStanding(state, r.standing));
-  // advisers who have turned against the player may leak; the AI hears of it next turn
-  const leaked = leaks(state);
-  state.leaks = [...(state.leaks || []), ...leaked.map((l) => ({ ...l, turn: state.turn + 1 }))].slice(-10);
-  receipt.push(...leaked.map((l) => ({ ok: true, text: `${l.name}: leaks your plans to the press` })));
-  state.log.push({ from: state.date, to: r.stop, actions: pending.actions, events: r.events, news: r.news, summary: r.summary, dropped: r.dropped, receipt, advice: r.advice });
-  state.log = state.log.slice(-60);
-  state.date = r.stop; state.turn++; state.actions = []; state.orders = [];
+  const { receipt } = closeTurn(state, r, geo(), pending.actions);
   pending = null; save(); topBar(); ledgerTab = "events"; open("ledger"); map.refresh();
   const changed = receipt.filter((x) => x.ok && / takes it from | hands /.test(x.text)).length;
   toast(`Now ${fmtDate(state.date)}.${changed ? ` ${changed} province${changed > 1 ? "s" : ""} changed hands.` : ""}`);
@@ -506,7 +510,7 @@ function finish(text) {
 
 function ledger(box) {
   const tabs = el("div", undefined, "row");
-  for (const [k, t] of [["events", "Events"], ["news", "News"], ["world", "World"], ["log", "Log"]]) { const b = button(t, () => { ledgerTab = k; open("ledger"); }); b.setAttribute("aria-pressed", String(ledgerTab === k)); tabs.append(b); }
+  for (const [k, t] of [["events", "Events"], ["news", "News"], ["world", "World"], ["log", "Chronicle"]]) { const b = button(t, () => { ledgerTab = k; open("ledger"); }); b.setAttribute("aria-pressed", String(ledgerTab === k)); tabs.append(b); }
   box.append(el("h2", "Ledger"), tabs);
   const last = state.log[state.log.length - 1];
   if (ledgerTab === "world") { worldTab(box); return; }
@@ -520,9 +524,12 @@ function ledger(box) {
   }
   if (ledgerTab === "log") {
     if (!state.log.length) { box.append(el("p", "Nothing yet.", "note")); return; }
-    const feed = el("ol", undefined, "feed");
-    feed.append(...state.log.slice().reverse().map((t) => { const li = el("li"); li.append(el("div", `${fmtDate(t.from)} to ${fmtDate(t.to)}`, "note"), el("p", t.summary || `${t.events.length} events.`)); return li; }));
-    box.append(feed); return;
+    // the chronicle: every turn the log still holds, then the eras older turns were folded into, newest first
+    const feed = el("ol", undefined, "feed"), first = state.turn - state.log.length;
+    const row = (when, did, told) => { const li = el("li"); li.append(el("div", when, "note"), ...(did ? [el("p", `${did}.`)] : []), ...(told ? [el("p", told, "note")] : [])); return li; };
+    feed.append(...state.log.slice().reverse().map((t, i) => row(`${fmtDate(t.from)} to ${fmtDate(t.to)}, turn ${t.turn || state.turn - 1 - i}${t.branch ? `, line ${t.branch + 1}` : ""}`, factWords(factsOf(t.receipt), name), t.summary || `${t.events.length} events.`)),
+      ...state.chron.eras.filter((e) => e.t0 < first).reverse().map((e) => row(`${fmtDate(e.from)} to ${fmtDate(e.to)}, turns ${e.t0} to ${e.t1}`, factWords(e.f, name), e.s.join(" ... "))));
+    box.append(el("p", `Kept by the game, not by the AI: what the rules decided each turn, then how the turn was told. The AI is sent the same chronicle every turn, at the same length however long the game runs.${state.branch ? ` Settled turns played again after a take-back: ${state.branch}.` : ""}`, "note"), feed); return;
   }
   if (!last) { box.append(el("p", state.opening || "", "note"), el("p", "Nothing has happened yet. Write your actions and advance.", "note")); return; }
   const feed = el("ol", undefined, "feed");
@@ -546,7 +553,8 @@ function worldTab(box) {
   const taken = Object.entries(state.owners).map(([id, c]) => `${world.provinces.get(id).name}: held by ${name(c)}, taken from ${name(world.provinces.get(id).country)}`);
   box.append(el("h3", "Wars"), list(wars.map(([a, b]) => `${name(a)} and ${name(b)}, since ${fmtDate(state.wars.find((w) => w.pair === [a, b].join("|")).since)}`), "No wars."),
     el("h3", "Treaties"), list(state.treaties.map((t) => { const [a, b] = t.pair.split("|"); return `${name(a)} and ${name(b)}: ${t.kind}`; }), "No treaties."),
-    el("h3", "Offers to you"), list(state.offers.map((o) => `${name(o.from)} offers ${o.kind === "peace" ? "peace" : `a ${o.kind} treaty`} (${fmtDate(o.date)}). To accept, write it in your actions.`), "None."),
+    el("h3", "Offers to you"), list(state.offers.map((o) => `${name(o.from)} offers ${o.kind === "peace" ? "peace" : treatyName(o.kind)} (${fmtDate(o.date)}). Answer it under Actions.`), "None."),
+    el("h3", "Where you stand"), list([...new Set([...Object.keys(state.rel).filter((k) => k.split("|").includes(me)).map((k) => k.split("|").find((c) => c !== me)), ...warsOf(state, me), ...treatiesOf(state, me).map((t) => t.with)])].filter((c) => relOf(state, me, c)).map((c) => `${name(c)}: ${stand(c)}`), "Neutral with everyone: nothing has yet moved a relation."),
     el("h3", "Land that has changed hands"), list(taken, "None yet."),
     ...(state.facts?.length ? [el("h3", "Story facts"), list(state.facts.map((f) => f.text), "")] : []),
     ...(state.edits?.length ? [el("h3", "Changed by hand (Sandbox)"), list(state.edits.map((e) => `${fmtDate(e.date)}: ${e.text}`), "")] : []),
@@ -734,7 +742,7 @@ function advisors(box) {
       li.append(r);
     } else {
       const trusted = council.trusted === seat;
-      li.append(el("div", `${label}${trusted ? ", your trusted adviser" : ""}`, "note"), el("b", m.name), ...(m.favour <= -2 ? [el("p", "Turned against you: may stall orders they dislike, and leak your plans.", "warn")] : []), el("p", `${m.traits}. Skill ${m.skill} of 5. Wants ${m.wants}. Favour ${m.favour > 0 ? "+" : ""}${m.favour}.${state.mode === "citizen" ? "" : ` Command ${commanders(state).find((x) => x.seat === seat)?.command} of 5.`}${m.record?.n ? ` Right ${m.record.right} of ${m.record.n}.` : ""}${m.likes.length ? ` Likes you to ${m.likes.map((v) => v.toLowerCase()).join(", ")}.` : ""}${m.hates.length ? ` Dislikes ${m.hates.map((v) => v.toLowerCase()).join(", ")}.` : ""}`));
+      li.append(el("div", `${label}${trusted ? ", your trusted adviser" : ""}`, "note"), el("b", m.name), ...(m.favour <= -2 ? [el("p", "Turned against you: may stall orders they dislike, and leak your plans.", "warn")] : []), el("p", `${m.traits}. Wants ${m.wants}. Favour ${m.favour > 0 ? "+" : ""}${m.favour}.${state.mode === "citizen" ? "" : ` Skill ${commanders(state).find((x) => x.seat === seat)?.command} of 5, dealt by the rules: it leads attacks and weighs their counsel.`}${m.record?.n ? ` Right ${m.record.right} of ${m.record.n}.` : ""}${m.likes.length ? ` Likes you to ${m.likes.map((v) => v.toLowerCase()).join(", ")}.` : ""}${m.hates.length ? ` Dislikes ${m.hates.map((v) => v.toLowerCase()).join(", ")}.` : ""}`));
       const r = el("div", undefined, "row");
       if (!trusted) r.append(button("Trust most", () => { council.trusted = seat; save(); open("advisors"); }));
       r.append(button("Ask", () => askCouncil([[seat, m]])), button("Dismiss", () => { if (!confirm(`Dismiss ${m.name}?`)) return; council.former.push({ ...m, seat, left: state.date, why: "dismissed", favour: m.favour - 2 }); council.seats[seat] = null; if (trusted) council.trusted = null; save(); open("advisors"); }));
@@ -817,7 +825,7 @@ function gameSheet(box) {
     toast("Saved. Open it from the first screen, or share the file.");
   }));
   const again = el("div", undefined, "row"); again.append(button("Show the guide", () => { open(null); guide(0); }));
-  box.append(el("h2", "Game"), home(), again, ...(saveFailed ? [el("p", "This browser would not keep the game (its storage may be full). Save to a file now so nothing is lost.", "warn")] : []), el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back.`, "note"), saves, file,
+  box.append(el("h2", "Game"), home(), again, ...(saveFailed ? [el("p", "This browser would not keep the game (its storage may be full). Save to a file now so nothing is lost.", "warn")] : []), el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back. A turn with a settled attack, played again, draws fresh numbers and is marked in the chronicle.`, "note"), saves, file,
     el("h3", "Save the world as a scenario"), el("p", `A starting point others can play: today's date, who holds what, wars, treaties, story facts and might${state.custom ? `, and ${state.custom.name}` : ""}. Not your actions, chats or council.`, "note"), sTitle, sBlurb, sOpen, sRow,
     el("h3", "How Capo reaches an AI"), line("Route", pick), line("Address", base), line("Model", model), line("Key", key), keepLine, aiRow,
     el("p", `Today: ${route.calls || 0} calls, about ${route.sent || 0} tokens sent and ${route.got || 0} received.`, "note"),
@@ -884,12 +892,29 @@ function card(p) {
   const wars = state ? warsOf(state, owner) : [], pacts = state ? treatiesOf(state, owner) : [];
   const rows = [el("h2", p.name), ...(p.disputes || []).map((a) => el("p", `${{ disputed: "Disputed", breakaway: "Breakaway", unsettled: "Unsettled" }[a.kind]}: ${a.name}. ${a.note}`, "warn")), el("p", `${name(owner)}${owner !== p.country ? `, taken from ${name(p.country)}` : ""}.${wars.length ? ` At war with ${wars.map(name).join(", ")}.` : ""}${pacts.length ? ` Treaties: ${pacts.map((x) => `${name(x.with)} (${x.kind})`).join(", ")}.` : ""}`, "note"), el("p", near.children.length ? "Borders by land:" : "No land borders.", "note"), near, ...(over.children.length ? [el("p", "Across a narrow sea:", "note"), over] : [])];
   if (state && owner !== state.player) rows.push(el("div", undefined, "row")), rows[rows.length - 1].append(button(`Talk to ${name(owner)}`, () => open("chats")));
-  if (state && state.mode !== "citizen" && owner !== state.player && warsOf(state, state.player).includes(owner)) rows.push(attackBox(p));
+  if (state && state.mode !== "citizen" && owner !== state.player) rows.push(warsOf(state, state.player).includes(owner) ? attackBox(p) : treatyBox(owner));
   box.replaceChildren(...rows);
   box.style.display = "block";
   picked = p.id;
 }
 let picked = null;
+
+// ---- orders by card: an attack, a treaty proposed, an offer accepted. Each is an action the rules carry out themselves ----
+function order(o) {
+  const old = (state.orders || []).find((x) => x.verb === o.verb && x.target === o.target);
+  state.actions = [...(state.actions || []).filter((x) => x !== old?.text), o.text];
+  state.orders = [...(state.orders || []).filter((x) => x !== old), o];
+  save(); toast("Ordered: it is in your actions."); if (sheet === "actions") open("actions");
+}
+const answer = (c, kind) => treatyAnswer(state, state.player, c, kind, (x) => mightOf(geo(), x));
+const stand = (c) => { const r = relOf(state, state.player, c); return `${relWord(r)} (${r > 0 ? "+" : ""}${r})`; };
+/** Where you stand with a country, and what it would answer to each kind of treaty, before you ask. */
+function treatyBox(c) {
+  const box = el("div"), row = el("div", undefined, "row"), has = treatiesOf(state, state.player).find((x) => x.with === c)?.kind;
+  for (const k of Object.keys(NEED)) if (k !== has) row.append(button(`${k[0].toUpperCase()}${k.slice(1)}: would ${answer(c, k).ok ? "agree" : "refuse"}`, () => order({ text: `Propose ${treatyName(k)} to ${name(c)} (${c}).`, verb: "TREATY", target: c, detail: k })));
+  box.append(el("h3", "Treaties"), el("p", `Relations: ${stand(c)}. Its answer, by the rules: ${answer(c, "alliance").why.replace(/, needing.*/, "")}. Trade needs 0, defence 2, an alliance 4.`, "note"), row);
+  return box;
+}
 
 // ---- the attack order: who leads, how, and the odds out of 100 before it is given (ruling 124) ----
 const turnAttacks = () => Math.max(1, Math.ceil(monthsBetween(state.date, jumpFrom(state.date, jump))));
@@ -897,7 +922,7 @@ let attackPick = { seat: "", approach: "steady" };
 function attackBox(p) {
   const box = el("div"), who = el("select", undefined, "plain"), how = el("select", undefined, "plain"), list = commanders(state);
   if (!list.some((c) => c.seat === attackPick.seat)) attackPick.seat = (list.find((c) => c.seat === "war") || list[list.length - 1]).seat;
-  who.append(...list.map((c) => new Option(`${c.seat === "generals" ? "Your generals" : c.name}: command ${c.command}${c.off ? ", out of role (-10)" : ""}`, c.seat)));
+  who.append(...list.map((c) => new Option(`${c.seat === "generals" ? "Your generals" : c.name}: skill ${c.command}${c.off ? ", out of role (-10)" : ""}`, c.seat)));
   how.append(...Object.entries(APPROACHES).map(([k, [, said]]) => new Option(`${k[0].toUpperCase()}${k.slice(1)}: ${said}`, k)));
   who.value = attackPick.seat; how.value = attackPick.approach; who.style.maxWidth = how.style.maxWidth = "100%"; who.setAttribute("aria-label", "Who leads the attack"); how.setAttribute("aria-label", "How to attack");
   who.onchange = () => { attackPick.seat = who.value; card(p); }; how.onchange = () => { attackPick.approach = how.value; card(p); };
@@ -906,11 +931,8 @@ function attackBox(p) {
   const odds = el("p", `Odds: ${oddsLine(a.chance)}. Clean: taken. Costly: taken, but your army is spent for the turn. Failed: thrown back.`), row = el("div", undefined, "row");
   odds.setAttribute("aria-live", "polite");
   row.append(button("Order the attack", () => {
-    const lead = list.find((c) => c.seat === a.boss.seat), text = `Attack ${p.name} (${p.id}), led by ${lead.seat === "generals" ? "our generals" : lead.name}, ${a.approach}.`;
-    const old = (state.orders || []).find((x) => x.target === p.id);
-    state.actions = [...(state.actions || []).filter((x) => x !== old?.text), text];
-    state.orders = [...(state.orders || []).filter((x) => x !== old), { text, target: p.id, seat: a.boss.seat, approach: a.approach }];
-    save(); toast("Ordered: it is in your actions."); if (sheet === "actions") open("actions");
+    const lead = list.find((c) => c.seat === a.boss.seat);
+    order({ text: `Attack ${p.name} (${p.id}), led by ${lead.seat === "generals" ? "our generals" : lead.name}, ${a.approach}.`, verb: "ATTACK", target: p.id, seat: a.boss.seat, approach: a.approach });
   }, "go"));
   const parts = partsLine({ approach: a.plan.approach, parts: a.plan.parts.filter(([, n]) => n) });
   box.append(el("h3", "Attack"), who, how, el("p", `Might ${a.plan.skill} against ${a.plan.difficulty}${parts ? `, ${parts}` : ""}: chance ${a.chance} of 100 (never above 75).${a.note}`, "note"), odds, row);

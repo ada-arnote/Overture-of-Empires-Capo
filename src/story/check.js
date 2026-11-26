@@ -10,7 +10,8 @@ import { draw100 } from "./line.js";
 export const LOW = 10, HIGH = 75, COSTLY = 20, MOST_PARTS = 4;
 export const BANDS = ["clean", "costly", "failed"];
 // Which rules a game is played under. 2: attacks on the check, with odds out of 100 and a commander (ruling 124).
-export const RULES = 2;
+// 3: relations and treaty answers by rule, a chronicle, one skill a person dealt by rule, take-backs on numbered lines.
+export const RULES = 3;
 
 /** A roll's name: the same name always draws the same number in the same game. */
 export const drawKey = ({ turn, mission, checkpoint = "main", person = "-" }) => `${turn}:${mission}:${checkpoint}:${person}`;
