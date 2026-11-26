@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // An Inch of Ink in real time, on the table: a clock, a share to send, a click on where it goes, and a leaderboard.
-import { NONE, PCTS, TICK_MS, bordersOf, cityPrice, gainOf, goalOf, landings, maxOf } from "../src/games/inch/live.js";
+import { NONE, PCTS, TICK_MS, bordersOf, cityPrice, gainOf, goalOf, landingPrice, landings, maxOf } from "../src/games/inch/live.js";
 import { liveBoardFor } from "../src/games/inch/rules.js";
-import { $, RGB, el, toast } from "./table.js";
+import { $, RGB, el, sheet, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
 import { areaPicture } from "../src/map/areas.js";
 
@@ -57,13 +57,18 @@ export function tap(T, i) {
   const p = T.match.position, b = liveBoardFor(p);
   if (i < 0 || !b.land[i]) return toast("That is sea.");
   if (p.phase === "spawn") { const m = T.match.legal().find((x) => x.at === i); return m ? T.play(m) : toast("Too close to someone. Choose empty land away from others."); }
+  if (!p.alive[p.human]) return toast("You are out. Watch to the end, or start again from the menu.");
   const o = p.owner[i];
   if (o === p.human) {
     if (building && p.building) { const m = { do: "city", at: i }; if (p.troops[p.human] < cityPrice(p)) return toast(`A city costs ${cityPrice(p)} strength.`); building = false; box?.city.setAttribute("aria-pressed", "false"); return T.play(m); }
     return toast("That land is yours. Tap a neighbour's, or empty land beside yours.");
   }
   if (bordersOf(p, b)[p.human].has(o)) return T.play({ do: "attack", to: o, pct });
-  if (p.boats && landings(p, b).has(i)) return T.play({ do: "boat", at: i, pct });
+  if (p.boats && landings(p, b).has(i)) {
+    const need = landingPrice(p, b, i) + 1;
+    if (Math.floor((p.troops[p.human] * pct) / 100) < need) return toast(`Landing there takes ${need} strength. Send a bigger share, or wait and grow.`);
+    return T.play({ do: "boat", at: i, pct });
+  }
   return toast(p.boats ? "Too far, even by boat." : "You can only attack land beside yours.");
 }
 
@@ -92,11 +97,12 @@ export function panel(T) {
   $("targets").hidden = $("shares").hidden = true;
   $("pour").parentElement.hidden = true;
   c.hidden = false;
-  c.city.hidden = !p.building;
+  c.city.hidden = !p.building || !p.alive[s];
+  c.querySelector(".live-row").hidden = !p.alive[s];
   if (p.phase === "spawn") { $("status").textContent = "Tap empty land to start your nation"; c.querySelector(".live-info").textContent = `${p.troops.length - 1} other nations are already on the map. Choose a place with room to grow.`; return; }
-  const going = p.attacks.filter((a) => a.by === s);
-  $("status").textContent = paused ? "Paused" : `Strength ${p.troops[s]} of ${maxOf(p, s)}`;
-  c.querySelector(".live-info").textContent = `+${gainOf(p, s)} every half second. ${going.length ? `${going.length} ${going.length === 1 ? "attack" : "attacks"} under way, ${going.reduce((n, a) => n + a.left, 0)} strength in them.` : "Tap a neighbour to attack with the share below."}`;
+  const going = p.attacks.filter((a) => a.by === s), out = !p.alive[s];
+  $("status").textContent = out ? (paused ? "You are out. Paused" : "You are out. Watching") : paused ? "Paused" : `Strength ${p.troops[s]} of ${maxOf(p, s)}`;
+  c.querySelector(".live-info").textContent = out ? "The other nations play on to the end. Speed up the clock, or start again from the menu." : `+${gainOf(p, s)} every half second. ${going.length ? `${going.length} ${going.length === 1 ? "attack" : "attacks"} under way, ${going.reduce((n, a) => n + a.left, 0)} strength in them.` : "Tap a neighbour to attack with the share below."}`;
   const top = p.land.map((n, k) => [n, k]).filter(([n]) => n).sort((x, y) => y[0] - x[0]).slice(0, 8), cs = colours(p);
   if (!top.some(([, k]) => k === s) && p.land[s]) top.push([p.land[s], s]);
   $("leaders").replaceChildren(...top.map(([n, k]) => { const li = el("li"), dot = el("i", undefined, "dot"); dot.style.background = `rgb(${cs[k]})`; li.append(dot, el("b", p.names[k]), el("span", `${Math.round((100 * n) / p.total)}%`)); if (k === s) li.className = "me"; return li; }));
@@ -105,9 +111,19 @@ export function panel(T) {
 
 export const ending = (T) => {
   const p = T.match.position, w = T.match.result.winners[0];
-  return w === p.human ? "The map is yours." : p.land[p.human] ? `${p.names[w]} wins.` : `${p.names[w]} overran you.`;
+  return w === p.human ? "The map is yours." : p.alive[p.human] ? `${p.names[w]} wins.` : `You were out. ${p.names[w]} wins.`;
 };
-export const lineOf = (e, p) => (e.kind === "out" ? `${p.names[e.seat]} is gone.` : e.kind === "city" ? "You build a city." : e.kind === "boat" ? (e.landed ? "Your boats land." : "Your boats are thrown back.") : "");
+export const lineOf = (e, p) => (e.kind === "out" ? (e.seat === p.human ? "You are out." : `${p.names[e.seat]} is gone.`) : e.kind === "city" ? "You build a city." : e.kind === "boat" ? (e.landed ? "Your boats land." : `Your boats are thrown back. They lose ${e.lost ?? 0}; the rest come home.`) : "");
+/** When you lose your last cell the game goes on without you: watch it to the end, or start again. The open sheet holds the clock. */
+export function seen(T, events) {
+  const p = T.match.position;
+  if (p.over || !events.some((e) => e.kind === "out" && e.seat === p.human)) return;
+  const box = el("div", undefined, "stack"), again = el("button", "Restart", "main");
+  again.type = "button";
+  again.onclick = () => { $("sheet").close(); $("again").click(); };
+  box.append(el("p", "Your last land has fallen. Watch the other nations play on to the end, or start a new game."), again);
+  sheet("You are out", box, "Watch");
+}
 export const leave = () => { if (box) box.hidden = true; for (const id of ["targets", "shares"]) $(id).hidden = false; $("pour").parentElement.hidden = false; };
 export const liveGoal = goalOf;
 /** Keys in real time: Space pauses, 1 to 0 choose the share. */

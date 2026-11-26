@@ -1,24 +1,26 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Grain and Glass on the table: roll, build in the hexes your routes reach, trade, and race to the points.
-import { COST, EXPANSIONS, GOODS, NONE, SWITCHES, WASTE, boardOf, glass, goalOf, pointsOf, priceOf, rateOf } from "../src/games/glass/rules.js";
+import { COST, EXPANSIONS, GOODS, NONE, SWITCHES, WASTE, boardOf, glass, goalOf, pointsOf, rateOf, sellPrice } from "../src/games/glass/rules.js";
 import { choose, thinking } from "../src/games/glass/bot.js";
 import { $, NAMES, RGB, createTable, el, radio, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
 
 const SEA = [70, 116, 140], TILE = [[226, 196, 96], [176, 206, 214], [196, 120, 82], [228, 226, 214]], WASTEG = [150, 140, 120];
-const KINDS = { route: "Route", depot: "Depot", town: "Town", harbour: "Harbour", plan: "Plan", trade: "Trade", use: "Play a plan" };
+const KINDS = { route: "Route", depot: "Depot", town: "Town", harbour: "Harbour", plan: "Plan", trade: "Trade", use: "Play a plan", answer: "Answer the offer" };
 const PLAN = { harvest: "Harvest: two goods you lack", works: "Works: two free routes", toll: "Toll: move the gate", seal: "Seal: a point" };
 let kind = "depot", where = null;
 
 const legal = (T) => (T.ready() ? T.match.legal() : []);
 const nameOf = (p, i) => { const [q, r] = boardOf(p).cells[i], R = boardOf(p).radius; return String.fromCharCode(65 + r + R) + (q + R + 1 + Math.min(0, r)); };
 const costText = (c) => c.flatMap((n, k) => (n ? [`${n} ${GOODS[k]}`] : [])).join(", ");
-const kindOf = (m) => (["swap", "sell", "buy", "offer", "charter"].includes(m.do) ? "trade" : m.do);
+const kindOf = (m) => (["swap", "sell", "buy", "offer", "charter"].includes(m.do) ? "trade" : ["accept", "refuse"].includes(m.do) ? "answer" : m.do);
 function label(p, m) {
   if (m.do === "swap") return `Give ${rateOf(p, p.seat, m.give)} ${GOODS[m.give]} for 1 ${GOODS[m.get]}`;
-  if (m.do === "sell") return `Sell 1 ${GOODS[m.good]} for ${priceOf(p, m.good)} coin`;
+  if (m.do === "sell") return `Sell 1 ${GOODS[m.good]} for ${sellPrice(p, p.seat, m.good)} coin`;
   if (m.do === "buy") return `Buy 1 ${GOODS[m.good]} for 4 coin`;
   if (m.do === "offer") return `Offer ${NAMES[m.to]} 1 ${GOODS[m.give]} for 1 ${GOODS[m.get]}`;
+  if (m.do === "accept") return `Take it: give 1 ${GOODS[p.ask.get]}, get 1 ${GOODS[p.ask.give]} from ${NAMES[p.ask.from]}`;
+  if (m.do === "refuse") return "Turn it down";
   if (m.do === "charter") return `Fill charter ${m.k + 1} for 2 points`;
   if (m.do === "use") return PLAN[m.plan];
   if (m.do === "plan") return `Draw a plan for ${costText(COST.plan)}`;
@@ -35,7 +37,7 @@ function tap(T, i) {
 }
 
 createTable({
-  game: glass, key: "glass", title: "Grain and Glass", won: "The island's trade is yours.", seats: [2, 3, 4, 5, 6], normal: 3, lengths: [], pace: () => 420,
+  game: glass, key: "glass", title: "Grain and Glass", won: "The island's trade is yours.", outOf: () => false, // nobody is knocked out of a trading game seats: [2, 3, 4, 5, 6], normal: 3, lengths: [], pace: () => 420,
   unit: "Points", cellsOf: pointsOf, goalOf, landOf: (p) => goalOf(p) + 3, choose, thinking,
   about: {
     classic: "Traditional: inspired by Catan.\nThe settle-and-trade rules as players know them: hexes yield goods when their number is rolled, you build routes, depots and towns, trade with the bank and the other players, buy cards, and race to 10 points. Ours: depots and towns stand in hexes and gather from the hexes beside them, a toll gate moved on doubles in place of a robber (nothing is stolen), our own goods, costs and plans, and the first player drawn by dice.\nNot affiliated with or endorsed by its makers. Our own island, names and art.",
@@ -52,10 +54,11 @@ createTable({
     { key: "gate", label: "Toll gate", normal: true, values: [[true, "On"], [false, "Off"]] },
     { key: "plans", label: "Plans", normal: true, values: [[true, "On"], [false, "Off"]] },
     { key: "offers", label: "Trade offers a turn", normal: SWITCHES.offers.normal, values: [[0, "None"], [1, "1"], [2, "2"], [3, "3"]] },
+    { key: "order", label: "Turn order", normal: SWITCHES.order.normal, values: [["fixed", "The same each round"], ["rotate", "First seat moves on each round"]] },
     { key: "actions", label: "Actions a turn", normal: SWITCHES.actions.normal, values: [[3, "3"], [99, "As many as you like"]] },
     { key: "limit", label: "Rounds", normal: SWITCHES.limit.normal, values: [[12, "12"], [16, "16"], [24, "24"], [40, "40"]] },
   ],
-  expansions: EXPANSIONS.map((key) => ({ key, label: { ships: "Ships", harbours: "Harbours", seasons: "Seasons" }[key], note: { ships: "Routes may cross the sea beside the coast, for 2 Glass and 2 Salt.", harbours: "Build a harbour on a coastal depot: swap 2 of anything for 1.", seasons: "Each round may bring plenty of one good, or a drought, or fair trade." }[key] })),
+  expansions: EXPANSIONS.map((key) => ({ key, label: { ships: "Ships", harbours: "Harbours", seasons: "Seasons" }[key], note: { ships: "Routes may cross the sea beside the coast, for 2 Glass and 2 Salt.", harbours: "Build a harbour on a coastal depot: swap 2 of anything for 1.", seasons: "Each round may bring plenty of one good (one each), a drought (each loses one of it), or fair trade (better rates and prices)." }[key] })),
   stats: (p, s) => [["Goods", p.hands[s].reduce((n, v) => n + v, 0)], p.rule.market === "falling" ? ["Coin", p.coin[s]] : ["Plans", p.held[s].length]],
   line(e, p) {
     const who = NAMES[e.seat], at = (i) => nameOf(p, i);
@@ -66,9 +69,10 @@ createTable({
     if (e.kind === "toll") return `${who} moves the toll gate to ${at(e.at)}.`;
     if (e.kind === "plan") return e.seal ? `${who} draws a seal: a point.` : `${who} draws a plan.`;
     if (e.kind === "use") return `${who} plays ${PLAN[e.plan].split(":")[0].toLowerCase()}.`;
-    if (e.kind === "offer") return `${who} offers ${NAMES[e.to]} ${GOODS[e.give]} for ${GOODS[e.get]}: ${e.yes ? "taken" : "refused"}.`;
+    if (e.kind === "ask") return `${who} offers ${NAMES[e.to]} ${GOODS[e.give]} for ${GOODS[e.get]}.`;
+    if (e.kind === "offer") return `${NAMES[e.to]} ${e.yes ? "takes" : "turns down"} ${who}'s offer.`;
     if (e.kind === "charter") return `${who} fills a charter.`;
-    if (e.kind === "season") return e.what === "plenty" ? `A season of plenty: 1 ${GOODS[e.good]} each.` : e.what === "drought" ? "A drought season." : "A season of fair trade.";
+    if (e.kind === "season") return e.what === "plenty" ? `A season of plenty: 1 ${GOODS[e.good]} each.` : e.what === "drought" ? `A drought: each loses 1 ${GOODS[e.good]}.` : "A season of fair trade: better rates at the market.";
     if (e.kind === "done") return `${who} ends the turn.`;
     return "";
   },
@@ -124,7 +128,7 @@ createTable({
     `Build: a route (${costText(COST.route)}) on a hex beside your routes or depots; a depot (${costText(COST.depot)}) on a hex your routes reach, with no depot on it or beside it; a town (${costText(COST.town)}) in place of a depot.`,
     "A depot is worth 1 point and a town 2.",
     p?.rule.market === "falling" ? "Sell goods for coin: 3, then 2, then 1 as more of a good is sold; prices recover each turn. Buy any good for 4 coin." : "Swap 4 of one good for 1 of any other at the bank, 3 at a port hex of yours, 2 at a port for that good.",
-    "Offer another player one good for one of theirs. Bots take an offer when they have more of what you ask for than of what you give.",
+    "Offer another player one good for one of theirs. They answer for themselves; a bot takes an offer when it has more of what you ask for than of what you give.",
     ...(p?.rule.plans !== false ? [`Draw a plan for ${costText(COST.plan)}: a harvest of two goods you lack, two free routes, a move of the toll gate, or a seal worth a point. Play one plan a turn.`] : []),
     ...(p?.rule.gate !== false ? ["Roll doubles and you move the toll gate. The hex under it yields nothing until it moves. Nothing is stolen."] : []),
     ...(p?.rule.charters ? ["Charters: three public orders for six goods. Fill one for 2 points. Joining two ports with your routes scores 2."] : []),

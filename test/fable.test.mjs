@@ -1,125 +1,170 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// The Island Fable, as its rules stand. These check what should survive coming tweaks to prices and turn order:
+// no win rates, wages, turn orders or whole-game fingerprints are written down here.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chance, createMatch, openSave, seedState } from "../src/core/index.js";
-import { joined } from "../src/games/hex.js";
-import { ACTIONS, NONE, UPKEEP, act, boardOf, cellsOf, defence, fable, goalOf, groupsOf, landOf, nameOf, plunder, raiseOf, territories } from "../src/games/fable/rules.js";
+import { chance, createMatch, seedState } from "../src/core/index.js";
+import { CAIRN, EXPANSIONS, NONE, SWITCHES, act, beats, boardOf, cellsOf, defence, fable, goalOf, groupsOf, raiseOf, territories, topOf, upkeepOf } from "../src/games/fable/rules.js";
 import { TIERS, choose } from "../src/games/fable/bot.js";
-import { playOne } from "../tools/play.mjs";
+import { SLOW, botGame, ended, passive, refused, replays, same, sameEachStep, slowOnly } from "./fixtures/bots.js";
 
-const G = { game: fable, choose, score: cellsOf };
-const b = boardOf(), start = (seats = 2, seed = "t") => createMatch(fable, { seed, options: { seats, style: "ours" } });
-const zero = () => b.cells.map(() => 0);
-/** A bare island: name whose cells, halls, purses and units. */
-function made({ land = [[], []], halls = [], units = [], seat = 0, left = ACTIONS, moved = [] }) {
-  const p = structuredClone(start(land.length).position);
-  Object.assign(p, { water: zero(), owner: b.cells.map(() => NONE), unit: zero(), moved: zero(), hall: zero(), purse: zero(), seat, left, step: 0, round: seat + 1 });
+const STYLES = ["classic", "custom", "ours"]; // Traditional, Custom with its normal switches, Capo
+const start = (seats = 2, style = "ours", seed = "f") => createMatch(fable, { seed, options: { seats, style } });
+
+/** A bare island with no water, after the first round: name whose cells, halls with their purses, and units. */
+function made({ land, halls = [], units = [], seat = 0, style = "ours", ...over }) {
+  const p = structuredClone(start(land.length, style).position), zero = () => p.owner.map(() => 0);
+  Object.assign(p, { water: zero(), owner: p.owner.map(() => NONE), unit: zero(), moved: zero(), hall: zero(), purse: zero(), tree: zero(), fort: zero(), farm: zero(), seat, step: seat, round: 2, left: p.rule.actions, over: null }, over);
   land.forEach((list, s) => list.forEach((c) => { p.owner[c] = s; }));
   for (const [c, n] of halls) { p.hall[c] = 1; p.purse[c] = n; }
   for (const [c, n] of units) p.unit[c] = n;
-  for (const c of moved) p.moved[c] = 1;
   return p;
 }
-const row = (r) => b.cells.map((c, i) => [c, i]).filter(([c]) => c[1] === r).sort((x, y) => x[0][0] - y[0][0]).map(([, i]) => i);
-const mid = row(0), up = row(-1); // 7 cells in a line, and the 6 above them
+/** One row of the island, west to east. */
+const rowOf = (p, r) => boardOf(p).cells.map((c, i) => [c, i]).filter(([c]) => c[1] === r).sort((x, y) => x[0][0] - y[0][0]).map(([, i]) => i);
+const rows = (style = "ours") => { const p = start(2, style).position; return { mid: rowOf(p, 0), up: rowOf(p, -1), top: rowOf(p, -3), low: rowOf(p, 3) }; };
+const tiny = start().position, { mid, up, top, low } = rows();
+/** End turns until `seat` has begun its turn. */
+function until(p, seat) {
+  const d = chance(seedState("until"));
+  let q = p, events = [];
+  for (let i = 0; i < 2 * p.seats; i++) { ({ position: q, events } = fable.apply(q, { do: "end" }, d)); if (q.seat === seat) return { position: q, events }; }
+  throw new Error("that seat never moved");
+}
 
-test("the island: 32 land cells in one piece, equal starts, every cell has its own name", () => {
-  for (const seats of [2, 3]) for (let s = 0; s < 40; s++) {
-    const p = start(seats, "i" + s).position, first = p.water.indexOf(0);
-    assert.equal(landOf(p), 32);
-    assert.equal(joined(b.near, first, (m) => !p.water[m]).length, 32);
-    for (let k = 0; k < seats; k++) { assert.equal(cellsOf(p, k), 3); assert.equal(groupsOf(p, k).length, 1); assert.equal(territories(p, k)[0].purse, k === 0 ? 9 : 6); }
+/** What must hold after every move of any game. Now and then, also that each take offered beats what guards it. */
+function sound(m) {
+  const p = m.position, most = topOf(p);
+  for (let s = 0; s < p.seats; s++) for (const g of groupsOf(p, s)) assert.equal(g.filter((c) => p.hall[c]).length, g.length > 1 ? 1 : 0, "one hall to a territory");
+  p.owner.forEach((o, c) => {
+    assert.ok(Number.isInteger(p.purse[c]) && p.purse[c] >= 0, "money is never below nothing");
+    assert.ok(p.unit[c] >= 0 && p.unit[c] <= most);
+    if (p.water[c]) assert.equal(o, NONE);
+    if (o === NONE) assert.equal(p.unit[c] + p.hall[c] + p.fort[c], 0);
+    assert.ok(!(p.hall[c] && p.unit[c]));
+    if (!p.hall[c]) assert.equal(p.purse[c], 0);
+  });
+  if (p.over || m.list.length % 9) return;
+  for (const x of fable.moves(p)) {
+    if (x.do === "end" || p.owner[x.to] === p.seat) continue;
+    assert.equal(p.water[x.to], 0, "nobody takes the sea");
+    if (x.do === "move") assert.ok(beats(p, p.unit[x.from], defence(p, x.to)), "a take beats its guard");
+    else assert.ok(x.do === "raise" && defence(p, x.to) < 1, "a new unit takes only what is unguarded");
   }
-  assert.equal(new Set(b.cells.map((_, i) => nameOf(null, i))).size, 37);
-  assert.equal(goalOf(start(2).position), 20); assert.equal(goalOf(start(3).position), 15);
+}
+
+test("every rule set and seat count: bots play to an end within the cap, every move legal, and the save replays", () => {
+  const seats = SLOW ? [2, 3, 4, 5, 6] : [2, 3, 4];
+  for (const style of STYLES) for (const n of seats) {
+    const m = botGame(fable, choose, { seed: `all ${style} ${n}`, options: { seats: n, style }, tiers: n === 2 ? ["normal", "easy"] : ["normal", "easy", "normal"], each: sound });
+    const r = ended(m, n);
+    for (const w of r.winners) assert.ok(cellsOf(m.position, w) > 0, "a winner holds land");
+    replays(m, [fable]);
+  }
 });
-test("a territory earns one a hex and pays 1, 3 or 6 for its units", () => {
-  assert.deepEqual(UPKEEP, [0, 1, 3, 6]);
-  const p = made({ land: [mid.slice(0, 5), [up[5], up[4]]], halls: [[mid[0], 4], [up[5], 0]], units: [[mid[2], 2]], seat: 1 });
-  const q = fable.apply(p, { do: "end" }).position;
-  assert.equal(q.seat, 0); assert.equal(q.purse[mid[0]], 4 + 5 - 3);
+test("expansions: a game with all of them on, in each rule set, plays to an end and replays", () => {
+  const all = Object.fromEntries(EXPANSIONS.map((x) => [x, true]));
+  for (const style of STYLES) {
+    const m = botGame(fable, choose, { seed: "x " + style, options: { seats: 3, style, ...all }, tiers: ["normal", "easy", "normal"], each: sound });
+    ended(m, 3);
+    replays(m, [fable]);
+  }
 });
-test("a territory that cannot pay loses all its units and has nothing left", () => {
-  const p = made({ land: [mid.slice(0, 3), [up[5], up[4]]], halls: [[mid[0], 1], [up[5], 0]], units: [[mid[1], 3], [mid[2], 1]], seat: 1 });
-  const { position: q, events } = fable.apply(p, { do: "end" });
-  assert.equal(q.unit.reduce((a, x) => a + x, 0), 0); assert.equal(q.purse[mid[0]], 0); assert.deepEqual(events.find((e) => e.kind === "starve").cells.sort(), [mid[1], mid[2]].sort());
+test("random play in each rule set stays sound and replays", { skip: slowOnly }, () => {
+  for (const style of STYLES) for (const n of [2, 3]) {
+    const m = botGame(fable, choose, { seed: "r " + style, options: { seats: n, style }, tiers: ["random"], each: sound });
+    ended(m, n);
+    replays(m, [fable]);
+  }
 });
-test("a lone unit disbands; a lone hex earns nothing and has no hall", () => {
-  const p = made({ land: [[mid[0], mid[1], mid[5]], [up[5], up[4]]], halls: [[mid[0], 3], [up[5], 0]], units: [[mid[5], 1]], seat: 1 });
-  const { position: q, events } = fable.apply(p, { do: "end" });
-  assert.equal(q.unit[mid[5]], 0); assert.ok(events.some((e) => e.kind === "stranded")); assert.equal(territories(q, 0).length, 1);
+test("the same seed and bots play the same game, and replaying the moves passes through the same positions", () => {
+  const run = (seed) => botGame(fable, choose, { seed, options: { seats: 3, style: "ours" }, tiers: TIERS });
+  const a = run("same"), c = run("same");
+  assert.ok(same(a.list, c.list));
+  assert.equal(a.fingerprint(), c.fingerprint());
+  assert.notEqual(run("other").fingerprint(), a.fingerprint());
+  sameEachStep(a);
 });
-test("raising costs 5 and can stand, strengthen, or take a bare neighbour", () => {
-  const p = made({ land: [mid.slice(0, 3), [up[5], up[4]]], halls: [[mid[0], 17], [up[5], 0]] });
-  const a = act(p, { do: "raise", hall: mid[0], to: mid[2] }).position; assert.equal(a.purse[mid[0]], 17 - raiseOf(p)); assert.equal(a.unit[mid[2]], 1); assert.equal(a.left, ACTIONS - 1);
-  const c = act(a, { do: "raise", hall: mid[0], to: mid[2] }).position; assert.equal(c.unit[mid[2]], 2);
-  const d = act(c, { do: "raise", hall: mid[0], to: mid[3] }).position; assert.equal(d.owner[mid[3]], 0); assert.equal(d.moved[mid[3]], 1);
-  const poor = made({ land: [mid.slice(0, 3), [up[5]]], halls: [[mid[0], 4]] }); assert.ok(!fable.moves(poor).some((m) => m.do === "raise"));
+test("rule sets: Custom takes each switch as given; Traditional only the island's shape and size; Capo none", () => {
+  const odd = Object.fromEntries(Object.entries(SWITCHES).map(([k, o]) => [k, o.values.find((v) => v !== o.normal)]));
+  const normal = Object.fromEntries(Object.entries(SWITCHES).map(([k, o]) => [k, o.normal]));
+  const rule = (o) => createMatch(fable, { seed: "s", options: { seats: 2, ...o } }).position.rule;
+  assert.deepEqual(rule({ style: "custom", ...odd }), odd);
+  assert.deepEqual(rule({ style: "custom" }), normal);
+  assert.deepEqual(rule({ style: "classic", ...odd }), { ...normal, isle: odd.isle, size: odd.size });
+  assert.deepEqual(rule({ style: "ours", ...odd }), rule({ style: "ours" }));
+  assert.equal(rule({ style: "ours", rounds: 10 }).limit, 10);
 });
-test("defence: a unit guards itself and its neighbours, a hall counts as one, and equal rank is not enough", () => {
-  const p = made({ land: [mid.slice(0, 3), mid.slice(3)], halls: [[mid[0], 0], [mid[6], 0]], units: [[mid[2], 2], [mid[4], 2]] });
-  assert.equal(defence(p, mid[3]), 2); assert.equal(defence(p, mid[5]), 2); assert.equal(defence(p, mid[6]), 1);
-  assert.ok(!fable.moves(p).some((m) => m.to === mid[3]));
-  p.unit[mid[2]] = 3; assert.ok(fable.moves(p).some((m) => m.do === "move" && m.to === mid[3]));
+test("illegal moves are refused and change nothing", () => {
+  const m = start(2, "ours"), p = m.position, before = m.fingerprint(), [mine] = territories(p, p.seat), [theirs] = territories(p, 1 - p.seat);
+  const sea = p.water.indexOf(1), empty = mine.cells.find((c) => !p.unit[c] && !p.hall[c]);
+  assert.ok(sea >= 0 && empty !== undefined);
+  for (const bad of [{ do: "raise", hall: theirs.hall, to: empty }, { do: "raise", hall: mine.hall, to: sea }, { do: "raise", hall: mine.hall, to: theirs.hall }, { do: "move", from: empty, to: mine.cells.find((c) => c !== empty && !p.hall[c]) }, { do: "fort", hall: mine.hall, to: empty }, { do: "end", now: 1 }, { do: "fly" }]) {
+    assert.throws(() => m.play(bad), refused("illegal"), JSON.stringify(bad));
+  }
+  for (const bad of [undefined, 0.5, () => 1]) assert.throws(() => m.play(bad), refused("shape"));
+  assert.equal(m.fingerprint(), before);
 });
-test("a unit moves once a turn, anywhere in its territory or over its edge, and never onto a hall", () => {
-  const p = made({ land: [mid.slice(0, 4), [up[5], up[4]]], halls: [[mid[0], 0], [up[5], 0]], units: [[mid[1], 1]] });
-  const to = fable.moves(p).filter((m) => m.do === "move").map((m) => m.to); assert.ok(to.includes(mid[3]) && to.includes(mid[4]) && !to.includes(mid[0]));
-  const q = act(p, { do: "move", from: mid[1], to: mid[3] }).position; assert.equal(q.unit[mid[3]], 1); assert.ok(!fable.moves(q).some((m) => m.from === mid[3]));
+test("upkeep a territory cannot pay: all its units go and it keeps nothing; a territory that can pay keeps its units", () => {
+  for (const style of ["ours", "classic"]) {
+    const { mid, top, low } = rows(style), p = made({ style, seat: 1, land: [[mid[0], mid[1], mid[2], low[0], low[1], top[3]], [top[0], top[1]]], halls: [[mid[0], 0], [low[0], 20], [top[0], 0]], units: [[mid[2], 3], [low[1], 1], [top[3], 1]] });
+    const poor = territories(p, 0).find((t) => t.hall === mid[0]), rich = territories(p, 0).find((t) => t.hall === low[0]);
+    assert.ok(poor.purse + poor.net < 0 && rich.purse + rich.net >= 0, "the board is set as meant");
+    const { position: q, events } = until(p, 0);
+    assert.equal(q.unit[mid[2]], 0); assert.equal(q.purse[mid[0]], 0);
+    assert.deepEqual(events.find((e) => e.kind === "starve" && e.seat === 0).cells, [mid[2]]);
+    assert.equal(q.tree[mid[2]], q.rule.woods === "none" ? 0 : CAIRN, "a starved unit leaves a cairn where woods grow");
+    assert.equal(q.unit[low[1]], 1); assert.equal(q.purse[low[0]], 20 + rich.net);
+    assert.equal(q.unit[top[3]], 0, "a lone unit with no territory disbands"); assert.ok(events.some((e) => e.kind === "stranded" && e.cells.includes(top[3])));
+    assert.ok(upkeepOf(q, 3) > upkeepOf(q, 1));
+  }
 });
-test("merging adds ranks, up to three", () => {
-  const p = made({ land: [mid.slice(0, 4), [up[5]]], halls: [[mid[0], 0]], units: [[mid[1], 1], [mid[2], 2], [mid[3], 2]] });
-  assert.equal(act(p, { do: "move", from: mid[1], to: mid[2] }).position.unit[mid[2]], 3);
-  assert.ok(!fable.moves(p).some((m) => m.from === mid[2] && m.to === mid[3]));
+test("a take needs a higher rank than what guards the place", () => {
+  const p = (rank) => made({ land: [[mid[0], mid[1], mid[2]], [mid[3], mid[4], mid[5]]], halls: [[mid[0], 0], [mid[5], 0]], units: [[mid[2], rank], [mid[4], 1]] });
+  assert.equal(defence(p(1), mid[3]), 1);
+  assert.ok(!fable.moves(p(1)).some((x) => x.to === mid[3]), "equal rank is not enough");
+  assert.ok(fable.moves(p(2)).some((x) => x.do === "move" && x.from === mid[2] && x.to === mid[3]));
+  const q = act(p(2), { do: "move", from: mid[2], to: mid[3] }).position;
+  assert.equal(q.owner[mid[3]], 0); assert.equal(q.unit[mid[3]], 2); assert.equal(q.left, p(2).left - 1);
+  assert.ok(!fable.moves(q).some((x) => x.from === mid[3]), "a unit moves once a turn");
 });
-test("cutting a territory: the part without the hall gets a new one and no money", () => {
-  const foe = up[2], p = made({ land: [[foe, up[1]], mid.slice(0, 6)], halls: [[up[1], 0], [mid[0], 12]], units: [[foe, 1]] });
-  const cut = mid[3]; assert.ok(b.near[foe].includes(cut) || b.near[up[1]].includes(cut), "the cut cell is beside the attacker");
-  const { position: q, events } = act(p, { do: "move", from: foe, to: cut });
-  const t = territories(q, 1); assert.equal(t.length, 2); assert.deepEqual(t.map((x) => x.purse).sort((x, y) => x - y), [0, 12]); assert.ok(events.some((e) => e.kind === "split"));
+test("cutting a territory in two: the part without the hall gets a new one with no money", () => {
+  const p = made({ land: [[up[1], up[2]], mid.slice(1, 6)], halls: [[up[1], 0], [mid[1], 12]], units: [[up[2], 2]] });
+  const { position: q, events } = act(p, { do: "move", from: up[2], to: mid[3] });
+  const t = territories(q, 1);
+  assert.equal(t.length, 2); assert.deepEqual(t.map((x) => x.purse).sort((x, y) => x - y), [0, 12]); assert.ok(t.every((x) => q.hall[x.hall]));
+  assert.ok(events.some((e) => e.kind === "split" && e.seat === 1));
 });
-test("joining two territories pools their purses under the richer hall", () => {
-  const p = made({ land: [[mid[0], mid[1], mid[3], mid[4]], [up[5]]], halls: [[mid[0], 7], [mid[4], 9]] });
+test("joining two territories keeps one hall and pools what is in both purses", () => {
+  const p = made({ land: [[mid[0], mid[1], mid[3], mid[4]], [low[0], low[1]]], halls: [[mid[0], 7], [mid[4], 9], [low[0], 0]] });
   const q = act(p, { do: "raise", hall: mid[4], to: mid[2] }).position, t = territories(q, 0);
-  assert.equal(t.length, 1); assert.equal(t[0].hall, mid[0]); assert.equal(t[0].purse, 7 + 9 - 5);
+  assert.equal(t.length, 1); assert.equal(t[0].purse, 7 + 9 - raiseOf(p));
 });
-test("taking a hall: its money is won or lost by the one rule; the land left gets a new empty hall", () => {
-  const p = made({ land: [[up[0], up[1]], mid.slice(0, 4)], halls: [[up[0], 0], [mid[1], 20]], units: [[up[1], 2]] });
-  const { position: q, events } = act(p, { do: "move", from: up[1], to: mid[1] });
-  const won = plunder(20); assert.equal(events[0].lost, 20 - won); assert.equal(territories(q, 0)[0].purse, won); assert.equal(territories(q, 1).reduce((n, t) => n + t.purse, 0), 0);
-});
-test("the turn passes after three actions or when ended, and the first seat rotates", () => {
-  const m = start(3), seats = []; for (let i = 0; i < 9; i++) { seats.push(m.turn); m.play({ do: "end" }); }
-  assert.deepEqual(seats, [0, 1, 2, 1, 2, 0, 2, 0, 1]);
-  const p = made({ land: [mid.slice(0, 4), [up[5], up[4]]], halls: [[mid[0], 30], [up[5], 0]] }); let q = p; for (const to of [mid[1], mid[2], mid[3]]) { assert.equal(q.seat, 0); q = fable.apply(q, { do: "raise", hall: mid[0], to }).position; } assert.equal(q.seat, 1);
+test("a turn passes when its actions are used, or when it is ended", () => {
+  const p = made({ land: [mid.slice(0, 5), [low[0], low[1]]], halls: [[mid[0], 99], [low[0], 0]] });
+  /** A new turn has begun: the place in the round moved on and the actions are full again. Who it is depends on the turn order. */
+  const passed = (q) => { assert.ok(q.step !== p.step || q.round !== p.round, "the turn passed"); assert.equal(q.left, q.rule.actions); };
+  let q = p;
+  for (let i = 0; i < p.rule.actions; i++) {
+    assert.equal(q.seat, 0); assert.equal(q.step, p.step); assert.equal(q.left, p.rule.actions - i);
+    q = fable.apply(q, fable.moves(q).find((x) => x.do === "raise"), chance(seedState("a" + i))).position;
+  }
+  passed(q);
+  passed(fable.apply(p, { do: "end" }, chance(seedState("e"))).position);
 });
 test("reaching the goal wins at once, in the middle of a turn", () => {
-  const all = b.cells.map((_, i) => i), p = made({ land: [all.slice(0, 22), [all[36], all[35]]], halls: [[0, 9], [36, 0]] });
-  const to = fable.moves(p).find((m) => m.do === "raise" && p.owner[m.to] === NONE); const { position: q } = fable.apply(p, to); assert.deepEqual(q.over.winners, [0]); assert.equal(q.left, 2);
+  const cells = tiny.owner.map((_, i) => i), need = goalOf(made({ land: [[], []] })) - 1;
+  const p = made({ land: [cells.slice(0, need), cells.slice(-2)], halls: [[0, 20], [cells.at(-1), 0]] });
+  assert.equal(groupsOf(p, 0).length, 1);
+  const raise = fable.moves(p).find((x) => x.do === "raise" && p.owner[x.to] === NONE), q = fable.apply(p, raise, chance(seedState("g"))).position;
+  assert.deepEqual(q.over.winners, [0]); assert.equal(q.seat, 0); assert.equal(fable.turn(q), null);
 });
-test("an idle game ends after its rounds in a tie", () => { const m = createMatch(fable, { seed: "w", options: { rounds: 10, style: "ours" } }); while (m.turn !== null) m.play({ do: "end" }); assert.deepEqual(m.result.winners, [0, 1]); });
-test("random play: one hall a territory, money never negative, ranks in range, saves replay", () => {
-  for (let s = 0; s < 40; s++) {
-    const seats = 2 + (s % 2), m = start(seats, "r" + s), d = chance(seedState("r" + s));
-    while (m.turn !== null) {
-      m.play(d.pick(m.legal())); const p = m.position;
-      for (let k = 0; k < seats; k++) for (const g of groupsOf(p, k)) assert.equal(g.filter((c) => p.hall[c]).length, g.length > 1 ? 1 : 0);
-      p.owner.forEach((o, c) => { assert.ok(p.purse[c] >= 0 && p.unit[c] >= 0 && p.unit[c] <= 3); if (p.water[c]) assert.equal(o, NONE); if (o === NONE) assert.equal(p.unit[c] + p.hall[c], 0); assert.ok(!(p.hall[c] && p.unit[c])); if (!p.hall[c]) assert.equal(p.purse[c], 0); });
-    }
-    assert.equal(openSave(m.save(), [fable]).match.fingerprint(), m.fingerprint());
+test("a game where nobody does anything ends after its rounds, and everyone with the most land wins", () => {
+  for (const seats of [2, 3]) {
+    const m = passive(createMatch(fable, { seed: "idle", options: { seats, style: "ours", rounds: 10 } })), p = m.position;
+    const most = Math.max(...Array.from({ length: seats }, (_, s) => cellsOf(p, s)));
+    assert.ok(p.over); assert.equal(p.round, p.rounds + 1);
+    assert.deepEqual(m.result.winners, Array.from({ length: seats }, (_, s) => s).filter((s) => cellsOf(p, s) === most));
+    replays(m, [fable]);
   }
-});
-test("bots only choose legal moves, and the same seed plays the same game", () => { for (const tier of TIERS) for (const seats of [2, 3]) { const run = () => playOne(G, { seed: "b", seats, tiers: Array(seats).fill(tier), check: true }); assert.deepEqual(run(), run()); } });
-const classic = (seats = 2, seed = "c") => createMatch(fable, { seed, options: { seats, style: "classic" } });
-test("classic: a bigger island, dealt evenly, every territory with a little money, and any number of actions", () => {
-  for (const seats of [2, 3]) for (let s = 0; s < 20; s++) {
-    const p = classic(seats, "d" + s).position; assert.equal(landOf(p), 48); const n = Array.from({ length: seats }, (_, k) => cellsOf(p, k)); assert.ok(n.every((x) => x === n[0])); assert.equal(n[0] * seats, 48 - (48 % seats));
-    for (let k = 0; k < seats; k++) for (const g of groupsOf(p, k)) assert.equal(g.filter((c) => p.hall[c]).length, g.length > 1 ? 1 : 0);
-    assert.ok(p.left > 50); assert.equal(p.rounds, 40);
-  }
-  assert.equal(new Set(boardOf({ classic: true }).cells.map((_, i) => nameOf({ classic: true }, i))).size, 61);
-});
-test("classic: bot games finish and replay, and the two styles never mix", () => {
-  for (let s = 0; s < 4; s++) playOne(G, { seed: "k" + s, seats: 2 + (s % 2), tiers: ["normal", "easy", "normal"], style: "classic", check: true });
-  const f = JSON.parse(classic(2, "z").save()); f.options.style = "ours"; assert.throws(() => openSave(JSON.stringify(f), [fable]));
 });

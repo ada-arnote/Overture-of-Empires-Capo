@@ -1,0 +1,27 @@
+# The tests, the gate, and the built pages, on every push and pull request.
+name: check
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tests
+        run: node --test test/*.test.mjs
+      - name: Gate
+        run: node tools/check.mjs
+      - name: Built pages match the source
+        run: |
+          node tools/bundle.mjs
+          git diff --exit-code -- play/

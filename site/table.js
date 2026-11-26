@@ -135,12 +135,12 @@ export function createTable(G) {
   }
   function score() {
     const p = T.match.position, goal = G.goalOf(p), n = G.landOf(p), seats = T.kinds.length, over = T.match.turn === null;
-    $("round").textContent = over ? "The end" : p.classic ? `Round ${p.round}` : `Round ${p.round} of ${p.rounds}`;
+    $("round").textContent = over ? "The end" : G.roundText?.(p) || (p.classic ? `Round ${p.round}` : `Round ${p.round} of ${p.rounds}`);
     $("fills").replaceChildren(...Array.from({ length: seats }, (_, s) => { const i = el("i"); i.style.width = `${(100 * G.cellsOf(p, s)) / n}%`; i.style.background = `rgb(${RGB[s]})`; return i; }));
     $("goal").style.left = `${(100 * goal) / n}%`;
     $("land").setAttribute("aria-label", `${Array.from({ length: seats }, (_, s) => `${NAMES[s]} ${G.cellsOf(p, s)}`).join(", ")}. The goal is ${goal} of ${n}.`);
     $("seats").replaceChildren(...Array.from({ length: seats }, (_, s) => {
-      const c = G.cellsOf(p, s), li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${c ? "" : " out"}`), dl = el("dl");
+      const c = G.cellsOf(p, s), out = G.outOf ? G.outOf(p, s) : !c, li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${out ? " out" : ""}`), dl = el("dl");
       for (const [k, v] of [[G.unit || "Land", innerWidth > 820 || seats < 3 ? `${c}/${goal}` : c], ...G.stats(p, s)]) { const d = el("div"); d.append(el("dt", k), el("dd", String(v))); dl.append(d); }
       li.append(sign(s), el("b", NAMES[s]), el("small", T.kinds[s] === "you" && T.solo() ? "You" : WORDS[T.kinds[s]]), dl);
       return li;
@@ -165,6 +165,8 @@ export function createTable(G) {
     const mine = run, seat = T.match.turn, person = T.human();
     T.busy = true;
     const events = T.match.play(move), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
+    // in a game by link, a move that rolled dice is final: nobody can look at the dice, take it back and choose again
+    if (T.link && T.match.rolled) T.link.floor = T.match.list.length;
     log.push(...words);
     land.push(tally(T.match.position));
     keep();
@@ -392,9 +394,11 @@ export function createTable(G) {
   function undo() {
     if (!canUndo()) return;
     const had = T.match.list;
-    do { if (T.match.list.length <= floor() || !T.match.undo()) break; } while (!T.human());
+    let rerolls = false; // did any move taken back roll dice? then playing it again gives the same result
+    do { if (T.match.list.length <= floor()) break; rerolls ||= T.match.rolled; if (!T.match.undo()) break; } while (!T.human());
     if (!T.human()) { for (const mv of had.slice(T.match.list.length)) T.match.play(mv); return; } // nothing of yours to take back
     begin(T.match, T.kinds, T.link);
+    if (rerolls) toast("Taken back. The dice are already rolled: playing the same move again gives the same result.");
   }
   function save() {
     const a = el("a");
@@ -424,8 +428,8 @@ export function createTable(G) {
     $("start").disabled = soon;
     $("start").textContent = soon ? "Coming soon" : "Begin";
     $("length-line").hidden = setup.style !== "ours" || !G.lengths.length;
-    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; attract(); }; line.append(el("span", c.label), k); return line; };
-    more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => !c.only || c.only.includes(setup.style)).map(pickOf)));
+    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.name = c.key; k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; titleCard(); more.querySelector(`select[name="${c.key}"]`)?.focus(); attract(); }; line.append(el("span", c.label), k); return line; };
+    more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => (!c.only || c.only.includes(setup.style)) && (!c.when || c.when(setup.style, setup.extra))).map(pickOf)));
     if (setup.style === "custom") more.append(...G.switches.map(pickOf));
     if (G.expansions && !soon && (!G.expansionsFor || G.expansionsFor(setup.style, setup.extra))) {
       const box = el("div", undefined, "pick small");

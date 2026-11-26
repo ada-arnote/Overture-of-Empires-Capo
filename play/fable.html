@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Gp8LJ1rdgxjK2MIfT5I3ZRe2skrGcWVCPi82fb3Jg1g='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-yh70dopP4C70YY7CaBfR6sWWWeCO6fkt7HV/yVeCT20='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>The Island Fable</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -58,10 +58,10 @@ button { cursor: pointer; touch-action: manipulation }
 #status { font: 600 18px/1.3 var(--serif); margin-bottom: 10px; min-height: 1.3em; text-wrap: balance }
 .pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px }
 .pick.even > * { flex: 1 }
-.pick button { min-height: 46px; padding: 6px 13px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 244, 214, .05); line-height: 1.15; text-align: center }
+.pick button { min-height: 46px; padding: 6px 13px; border-radius: 10px; border: 1px solid var(--line2); background: rgba(255, 244, 214, .05); line-height: 1.15; text-align: center }
 .pick button:hover { border-color: var(--line2) }
 .pick button[aria-checked=true] { border-color: var(--gold); background: rgba(226, 184, 102, .17); box-shadow: inset 0 0 0 1px var(--gold) }
-.pick button:disabled { opacity: .38; cursor: default }
+.pick button:disabled { cursor: default; color: var(--soft); border-style: dashed }
 .pick small { display: block; color: var(--soft); font-size: 13px }
 .pick.small { margin: 0 } .pick.small button { min-height: 44px; min-width: 44px }
 .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 7px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .5) }
@@ -338,11 +338,13 @@ const SWITCHES = {
   start: { values: ["dealt", "homes"], normal: "dealt" }, actions: { values: [3, 6, MANY], normal: MANY }, ranks: { values: [3, 4], normal: 4 },
   price: { values: [5, 8, 10], normal: 8 }, wages: { values: Object.keys(WAGES), normal: "fair" }, woods: { values: ["none", "slow", "fast"], normal: "slow" },
   fort: { values: [0, 12, 18], normal: 12 }, goal: { values: [60, 75, 90, 100], normal: 75 }, limit: { values: [15, 30, 50], normal: 50 },
+  order: { values: ["rotate", "fixed"], normal: "rotate" }, // rotate: the first seat moves on each round (measured fairer here, with the truce)
+  opening: { values: ["truce", "open"], normal: "truce" }, // truce: nobody takes land from a rival in the first round
 };
 const normal = (over) => ({ ...Object.fromEntries(Object.entries(SWITCHES).map(([k, v]) => [k, v.normal])), ...over });
 const SETS = {
   classic: (o) => normal({ isle: o.isle, size: o.size }),
-  ours: (o) => ({ isle: "small", size: "tiny", start: "homes", actions: 3, ranks: 3, price: 5, wages: "mild", woods: "none", fort: 0, goal: { 2: 60, 3: 45 }[o.seats] || 45, limit: o.rounds }),
+  ours: (o) => ({ isle: "small", size: "tiny", start: "homes", actions: 3, ranks: 3, price: 5, wages: "mild", woods: "none", fort: 0, goal: { 2: 60, 3: 45 }[o.seats] || 45, limit: o.rounds, order: "rotate", opening: "truce" }),
 };
 const EXPANSIONS = ["farms", "boats", "gales"];
 const off = { values: [false, true], normal: false };
@@ -389,18 +391,20 @@ function defence(p, c) {
 /** Can a unit of this rank take a place guarded like this? The highest rank takes anything. */
 const beats = (p, rank, guard) => rank > guard || rank === topOf(p) && rank === 4;
 
-const copy = (p) => ({ ...p, owner: [...p.owner], unit: [...p.unit], moved: [...p.moved], hall: [...p.hall], purse: [...p.purse], tree: [...p.tree], fort: [...p.fort], farm: [...p.farm] });
-const bare = (p, c) => { p.unit[c] = 0; p.moved[c] = 0; p.tree[c] = 0; p.fort[c] = 0; p.farm[c] = 0; };
+const copy = (p) => ({ ...p, owner: [...p.owner], unit: [...p.unit], moved: [...p.moved], hall: [...p.hall], purse: [...p.purse], tree: [...p.tree], fort: [...p.fort], farm: [...p.farm], landed: [...p.landed] });
+const bare = (p, c) => { p.unit[c] = 0; p.moved[c] = 0; p.tree[c] = 0; p.fort[c] = 0; p.farm[c] = 0; p.landed[c] = 0; };
 
-/** Give every territory of a seat exactly one hall. Changes p. */
-function settle(p, seat) {
+/** Give every territory of a seat exactly one hall. Changes p. A new hall goes on an empty hex if there is one;
+ * if every hex holds something, the weakest unit makes room, and the log says so. */
+function settle(p, seat, events = []) {
   if (seat === NONE) return;
   for (const g of groupsOf(p, seat)) {
     const halls = g.filter((c) => p.hall[c]);
     if (g.length === 1) { p.hall[g[0]] = 0; p.purse[g[0]] = 0; continue; }
     if (!halls.length) {
       const free = g.filter((c) => !p.unit[c] && !p.fort[c] && !p.farm[c]), open = free.filter((c) => !p.tree[c]), from = open.length ? open : free.length ? free : g;
-      const best = from.reduce((a, b) => (p.order[b] < p.order[a] ? b : a));
+      const loss = (c) => (from === g ? (p.unit[c] || 9) * 4 + p.fort[c] * 2 + p.farm[c] : 0), best = from.reduce((a, b) => (loss(b) < loss(a) || (loss(b) === loss(a) && p.order[b] < p.order[a]) ? b : a));
+      if (from === g) events.push({ kind: "room", seat, at: best, rank: p.unit[best], fort: p.fort[best], farm: p.farm[best] });
       bare(p, best);
       p.hall[best] = 1;
       p.purse[best] = 0;
@@ -426,12 +430,14 @@ function take(p, seat, c, rank, events) {
   p.farm[c] = farm; // fields are worth having
   p.hall[c] = 0;
   p.purse[c] = 0;
-  settle(p, seat);
-  settle(p, was);
+  const later = [];
+  settle(p, seat, later);
+  settle(p, was, later);
   const won = plunder(pot), mine = won ? territories(p, seat).find((t) => t.cells.includes(c)) : null;
   if (mine) p.purse[mine.hall] += won;
   events.push({ kind: "take", seat, at: c, was, rank, lost: pot - (mine ? won : 0), won: mine ? won : 0 });
   if (was !== NONE && groupsOf(p, was).length > before) events.push({ kind: "split", seat: was });
+  events.push(...later);
 }
 
 /** One action, without passing the turn. Returns the new position and what happened. */
@@ -455,10 +461,11 @@ function act(before, m) {
     const rank = p.unit[m.from];
     p.unit[m.from] = 0;
     p.moved[m.from] = 0;
+    p.landed[m.from] = 0;
     if (p.owner[m.to] !== s) take(p, s, m.to, rank, events);
     else if (p.unit[m.to]) { p.unit[m.to] += rank; p.moved[m.to] = 1; events.push({ kind: "merge", seat: s, at: m.to, rank: p.unit[m.to] }); }
     else { p.unit[m.to] = rank; p.moved[m.to] = 1; events.push({ kind: p.tree[m.to] ? "clear" : "move", seat: s, from: m.from, at: m.to, to: m.to }); p.tree[m.to] = 0; }
-    if (m.sea) settle(p, s);
+    if (m.sea) { p.landed[m.to] = 1; settle(p, s, events); } // fed once, at the next turn of its seat
   }
   return { position: p, events };
 }
@@ -468,7 +475,8 @@ function begin(p, events) {
   const s = p.seat;
   p.left = p.rule.actions;
   for (let i = 0; i < p.owner.length; i++) if (p.owner[i] === s) p.moved[i] = 0;
-  const alone = p.boats ? [] : groupsOf(p, s).filter((g) => g.length === 1 && p.unit[g[0]]).map((g) => g[0]); // a landing party feeds itself
+  const alone = groupsOf(p, s).filter((g) => g.length === 1 && p.unit[g[0]] && !p.landed[g[0]]).map((g) => g[0]); // a landing party feeds itself once
+  for (let i = 0; i < p.owner.length; i++) if (p.owner[i] === s) p.landed[i] = 0;
   for (const c of alone) { p.unit[c] = 0; if (p.rule.woods !== "none") p.tree[c] = CAIRN; }
   if (alone.length) events.push({ kind: "stranded", seat: s, cells: alone });
   for (const t of territories(p, s)) {
@@ -521,7 +529,7 @@ function after(p, stop, dice, events) {
       }
       nature(p, dice, events);
     }
-    p.seat = (p.step + p.round - 1) % p.seats;
+    p.seat = (p.step + (p.rule.order === "rotate" ? p.round - 1 : 0)) % p.seats;
   } while (!live.includes(p.seat));
   begin(p, events);
   return undefined;
@@ -533,12 +541,12 @@ function deal(p, b, dice) {
   land.slice(0, even).forEach((c, i) => { p.owner[c] = i % p.seats; });
   for (let s = 0; s < p.seats; s++) {
     settle(p, s);
-    for (const t of territories(p, s)) p.purse[t.hall] = Math.min(t.cells.length * 2, 10) + (p.seats === 2 ? 3 * s : 0); // the second of two moves later and starts a little richer
+    for (const t of territories(p, s)) p.purse[t.hall] = Math.min(t.cells.length * 2, 10) + (p.seats === 2 ? 1 * s : 0); // the second of two moves later and starts a little richer
   }
 }
 
 const fable = {
-  id: "fable", version: "3",
+  id: "fable", version: "5",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 }, rounds: { values: [10, 14, 18], normal: 14 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -548,7 +556,7 @@ const fable = {
     const rule = SETS[o.style] ? SETS[o.style](o) : Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]]));
     if (o.seats > 3 && rule.size === "tiny") rule.size = "small";
     const b = hexBoard(SIZES[rule.size].radius), zero = () => b.cells.map(() => 0), made = island(rule.isle, rule.size, o.seats, dice, rule.start === "homes");
-    const p = { classic: o.style !== "ours", style: o.style, rule, boats: o.boats, farms: o.farms, seats: o.seats, rounds: rule.limit, water: made.water, order: dice.shuffle(b.cells.map((_, i) => i)), owner: b.cells.map(() => NONE), unit: zero(), moved: zero(), hall: zero(), purse: zero(), tree: zero(), fort: zero(), farm: zero(), seat: 0, step: 0, round: 1, left: rule.actions, over: null };
+    const p = { classic: o.style !== "ours", style: o.style, rule, boats: o.boats, farms: o.farms, seats: o.seats, rounds: rule.limit, water: made.water, order: dice.shuffle(b.cells.map((_, i) => i)), owner: b.cells.map(() => NONE), unit: zero(), moved: zero(), hall: zero(), purse: zero(), tree: zero(), fort: zero(), farm: zero(), landed: zero(), seat: 0, step: 0, round: 1, left: rule.actions, over: null };
     if (o.gales) p.gale = false;
     if (rule.start === "homes") {
       made.homes.forEach((h, s) => {
@@ -603,6 +611,8 @@ const fable = {
         for (const c of near[from]) if (!p.water[c] && p.owner[c] !== s && beats(p, rank, guarded(c))) out.push({ do: "move", from, to: c });
       }
     }
+    // the truce of the first round: land may be bought or walked into, but none taken from a rival yet
+    if (p.rule.opening === "truce" && p.round === 1) return out.filter((m) => m.do === "end" || p.owner[m.to] === s || p.owner[m.to] === NONE);
     return out;
   },
 
@@ -945,6 +955,8 @@ function createMatch(game, { options = {}, seed = "" } = {}) {
       played.push(deepFreeze(copy));
       return now().events;
     },
+    /** Whether the last move rolled any dice. In a game between people such a move is not taken back. */
+    get rolled() { const n = steps.length; return n > 1 && steps[n - 1].dice.join() !== steps[n - 2].dice.join(); },
     /** Take back the last move. Playing it again rolls the same dice. */
     undo() {
       if (!played.length) return false;
@@ -1513,9 +1525,11 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       if (!k.seen) return;
       cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit());
       emblem(ctx, icons[k.seat], cam.px, cam.py, size * 0.42 * cam.pk, flat);
-      ctx.fillStyle = `rgba(252,247,234,${0.5 * k.seen})`;
+      // ink by the ground's brightness: dark marks on light colours, light marks on dark ones, so both read
+      const [r, g, b] = show[i].rgb, bright = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.5;
+      ctx.fillStyle = bright ? `rgba(24,18,14,${0.62 * k.seen})` : `rgba(252,247,234,${0.62 * k.seen})`;
       ctx.fill("evenodd");
-      ctx.lineWidth = 1; ctx.strokeStyle = `rgba(20,16,14,${0.35 * k.seen})`; ctx.stroke();
+      ctx.lineWidth = 1; ctx.strokeStyle = bright ? `rgba(252,247,234,${0.4 * k.seen})` : `rgba(20,16,14,${0.4 * k.seen})`; ctx.stroke();
     });
     for (const l of labels) { // names printed on the map
       cam.projectTo(l.at[0], l.at[1], unit());
@@ -1705,9 +1719,9 @@ $m[17] = (($x) => {
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-const VERSION = "0.4.0";
+const VERSION = "0.4.2";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "4faecc99";
+const BUILD = "518a8568";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
 return $x; })({});
@@ -1950,12 +1964,12 @@ function createTable(G) {
   }
   function score() {
     const p = T.match.position, goal = G.goalOf(p), n = G.landOf(p), seats = T.kinds.length, over = T.match.turn === null;
-    $("round").textContent = over ? "The end" : p.classic ? `Round ${p.round}` : `Round ${p.round} of ${p.rounds}`;
+    $("round").textContent = over ? "The end" : G.roundText?.(p) || (p.classic ? `Round ${p.round}` : `Round ${p.round} of ${p.rounds}`);
     $("fills").replaceChildren(...Array.from({ length: seats }, (_, s) => { const i = el("i"); i.style.width = `${(100 * G.cellsOf(p, s)) / n}%`; i.style.background = `rgb(${RGB[s]})`; return i; }));
     $("goal").style.left = `${(100 * goal) / n}%`;
     $("land").setAttribute("aria-label", `${Array.from({ length: seats }, (_, s) => `${NAMES[s]} ${G.cellsOf(p, s)}`).join(", ")}. The goal is ${goal} of ${n}.`);
     $("seats").replaceChildren(...Array.from({ length: seats }, (_, s) => {
-      const c = G.cellsOf(p, s), li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${c ? "" : " out"}`), dl = el("dl");
+      const c = G.cellsOf(p, s), out = G.outOf ? G.outOf(p, s) : !c, li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${out ? " out" : ""}`), dl = el("dl");
       for (const [k, v] of [[G.unit || "Land", innerWidth > 820 || seats < 3 ? `${c}/${goal}` : c], ...G.stats(p, s)]) { const d = el("div"); d.append(el("dt", k), el("dd", String(v))); dl.append(d); }
       li.append(sign(s), el("b", NAMES[s]), el("small", T.kinds[s] === "you" && T.solo() ? "You" : WORDS[T.kinds[s]]), dl);
       return li;
@@ -1980,6 +1994,8 @@ function createTable(G) {
     const mine = run, seat = T.match.turn, person = T.human();
     T.busy = true;
     const events = T.match.play(move), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
+    // in a game by link, a move that rolled dice is final: nobody can look at the dice, take it back and choose again
+    if (T.link && T.match.rolled) T.link.floor = T.match.list.length;
     log.push(...words);
     land.push(tally(T.match.position));
     keep();
@@ -2207,9 +2223,11 @@ function createTable(G) {
   function undo() {
     if (!canUndo()) return;
     const had = T.match.list;
-    do { if (T.match.list.length <= floor() || !T.match.undo()) break; } while (!T.human());
+    let rerolls = false; // did any move taken back roll dice? then playing it again gives the same result
+    do { if (T.match.list.length <= floor()) break; rerolls ||= T.match.rolled; if (!T.match.undo()) break; } while (!T.human());
     if (!T.human()) { for (const mv of had.slice(T.match.list.length)) T.match.play(mv); return; } // nothing of yours to take back
     begin(T.match, T.kinds, T.link);
+    if (rerolls) toast("Taken back. The dice are already rolled: playing the same move again gives the same result.");
   }
   function save() {
     const a = el("a");
@@ -2239,8 +2257,8 @@ function createTable(G) {
     $("start").disabled = soon;
     $("start").textContent = soon ? "Coming soon" : "Begin";
     $("length-line").hidden = setup.style !== "ours" || !G.lengths.length;
-    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; attract(); }; line.append(el("span", c.label), k); return line; };
-    more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => !c.only || c.only.includes(setup.style)).map(pickOf)));
+    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.name = c.key; k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; titleCard(); more.querySelector(`select[name="${c.key}"]`)?.focus(); attract(); }; line.append(el("span", c.label), k); return line; };
+    more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => (!c.only || c.only.includes(setup.style)) && (!c.when || c.when(setup.style, setup.extra))).map(pickOf)));
     if (setup.style === "custom") more.append(...G.switches.map(pickOf));
     if (G.expansions && !soon && (!G.expansionsFor || G.expansionsFor(setup.style, setup.extra))) {
       const box = el("div", undefined, "pick small");
@@ -2372,7 +2390,8 @@ function hexBoard(T, stage, o) {
   const still = () => {
     const list = o.fine ? o.fine.cells : o.cells, big = Math.max(...list.map(([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)))) + 2;
     const ns = "http://www.w3.org/2000/svg", S = 30, W = Math.sqrt(3) * S, owner = o.owner(), make = (t, at) => { const e = document.createElementNS(ns, t); for (const [k, v] of Object.entries(at)) e.setAttribute(k, v); return e; };
-    svg = make("svg", { viewBox: o.fine ? `${-W * big} ${-S * 1.6 * big} ${W * 2 * big} ${S * 3.2 * big}` : `${-W * 8} ${-S * 10} ${W * 16} ${S * 20}` });
+    const xs = list.map(([q, r]) => W * (q + r / 2)), ys = list.map(([, r]) => S * 1.5 * r), x0 = Math.min(...xs) - W, y0 = Math.min(...ys) - S * 1.5; // the board's own extent, with a margin
+    svg = make("svg", { viewBox: o.fine ? `${-W * big} ${-S * 1.6 * big} ${W * 2 * big} ${S * 3.2 * big}` : `${x0} ${y0} ${Math.max(...xs) + W - x0} ${Math.max(...ys) + S * 1.5 - y0}` });
     const where = new Map(o.pieces().map((p) => [p.at, p]));
     const words = [];
     list.forEach(([q, r], k) => {
@@ -2449,7 +2468,7 @@ const SHAPES = [["round", "Round"], ["lakes", "With lakes"], ["crescent", "A cre
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
 createTable({
-  game: fable, key: "fable", title: "The Island Fable", won: "The island is yours.", seats: [2, 3, 4, 5, 6], normal: 3, lengths: [[10, "Short"], [14, "Normal"], [18, "Long"]], pace: (p) => (p.classic ? 240 : 480),
+  game: fable, key: "fable", title: "The Island Fable", won: "The island is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 3, lengths: [[10, "Short"], [14, "Normal"], [18, "Long"]], pace: (p) => (p.classic ? 240 : 480),
   cellsOf, goalOf, landOf, choose, thinking,
   about: {
     classic: "Traditional: inspired by Slay.\nThe hex island rules as players know them: the island is dealt out, villages keep purses, soldiers cost wages and merge into higher ranks, woods spread over idle land, and you act as often as you like. Ours: four ranks of our own, our prices and wages, forts of our own, and the more players there are, the less of the island you need to win.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
@@ -2473,14 +2492,17 @@ createTable({
     { key: "fort", label: "Forts", normal: SWITCHES.fort.normal, values: [[0, "None"], [12, "Cost 12"], [18, "Cost 18"]] },
     { key: "goal", label: "To win", normal: SWITCHES.goal.normal, values: [[60, "60%"], [75, "75%"], [90, "90%"], [100, "All of it"]] },
     { key: "limit", label: "Rounds", normal: SWITCHES.limit.normal, values: [[15, "15"], [30, "30"], [50, "50"]] },
+    { key: "order", label: "Turn order", normal: SWITCHES.order.normal, values: [["rotate", "First player moves on each round"], ["fixed", "Same first player every round"]] },
+    { key: "opening", label: "First round", normal: SWITCHES.opening.normal, values: [["truce", "Truce: no taking a rival's land"], ["open", "Open from the start"]] },
   ],
-  expansions: EXPANSIONS.map((key) => ({ key, label: { farms: "Farms", boats: "Boats", gales: "Gales" }[key], note: { farms: "Build a farm beside a hall or another farm. It pays 3 a turn, and each costs more than the last.", boats: "A unit on the coast can cross up to three hexes of sea. A landing party on one hex feeds itself.", gales: "Some rounds a gale keeps boats ashore and fells some woods." }[key] })),
+  expansions: EXPANSIONS.map((key) => ({ key, label: { farms: "Farms", boats: "Boats", gales: "Gales" }[key], note: { farms: "Build a farm beside a hall or another farm. It pays 3 a turn, and each costs more than the last.", boats: "A unit on the coast can cross up to three hexes of sea. A landing party on one hex feeds itself for its first turn ashore; still alone after that, it disbands.", gales: "Some rounds a gale keeps boats ashore and fells some woods." }[key] })),
   stats(p, s) { const t = territories(p, s); return [["Coin", t.reduce((n, x) => n + x.purse, 0)], ["A turn", `${t.reduce((n, x) => n + x.net, 0) >= 0 ? "+" : ""}${t.reduce((n, x) => n + x.net, 0)}`]]; },
   line(e, p) {
     const who = NAMES[e.seat], name = (i) => nameOf(p, i);
     if (e.kind === "take") return e.was === NONE ? `${who} claims ${name(e.at)}.` : `${who} takes ${name(e.at)} from ${NAMES[e.was]}${e.won ? `, with ${e.won} coin` : e.lost ? `, whose purse of ${e.lost} is lost` : ""}.`;
     if (e.kind === "split") return `${who}'s land is cut in two.`;
     if (e.kind === "starve") return `${who} cannot pay: ${e.cells.length === 1 ? "a unit disbands" : `${e.cells.length} units disband`}.`;
+    if (e.kind === "room") return `${who} needs a new village at ${name(e.at)}: ${[e.rank && `a ${RANK[e.rank].toLowerCase()}`, e.fort && "a fort", e.farm && "a farm"].filter(Boolean).join(" and ")} there is lost to make room.`;
     if (e.kind === "stranded") return `${who}'s stranded ${e.cells.length === 1 ? "unit disbands" : "units disband"}.`;
     if (e.kind === "raise") return `${who} raises a scout at ${name(e.at)}.`;
     if (e.kind === "clear") return `${who} clears the wood at ${name(e.at)}.`;

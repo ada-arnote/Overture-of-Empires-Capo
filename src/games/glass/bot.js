@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Bots for Grain and Glass: pick the next thing worth building, then trade towards it.
 import { steps } from "../areas.js";
-import { COST, NONE, WASTE, boardOf, canPay, depotSpots, glass, pointsOf, rateOf, routeSpots } from "./rules.js";
+import { COST, NONE, WASTE, answer, boardOf, canPay, depotSpots, glass, pointsOf, rateOf, routeSpots } from "./rules.js";
 
 export const TIERS = ["random", "easy", "normal"];
 const WAYS = { sum: [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1], high: [0, 1, 3, 5, 7, 9, 11] };
@@ -79,7 +79,11 @@ function* plan(p, dice, tier) {
   return { do: "end" };
 }
 
-export function* thinking(p, dice, tier = "normal") { return yield* plan(p, dice, tier); }
+export function* thinking(p, dice, tier = "normal") {
+  // a bot answers an offer plainly, by the rule's own test
+  if (p.phase === "answer") return answer(p, p.seat, p.ask.give, p.ask.get) ? { do: "accept" } : { do: "refuse" };
+  return yield* plan(p, dice, tier);
+}
 export function choose(p, dice, tier) {
   const t = thinking(p, dice, tier);
   for (;;) { const s = t.next(); if (s.done) return s.value; }

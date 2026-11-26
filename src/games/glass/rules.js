@@ -14,15 +14,18 @@ export const SWITCHES = {
   size: { values: Object.keys(SIZES), normal: "medium" }, roll: { values: ["sum", "high"], normal: "sum" }, goal: { values: [8, 9, 10, 11, 12, 14], normal: 10 },
   market: { values: ["fixed", "falling"], normal: "fixed" }, charters: { values: [false, true], normal: false }, gate: { values: [false, true], normal: true },
   plans: { values: [false, true], normal: true }, offers: { values: [0, 1, 2, 3], normal: 2 }, limit: { values: [12, 16, 24, 40], normal: 40 }, actions: { values: [3, 99], normal: 99 },
+  order: { values: ["fixed", "rotate"], normal: "fixed" }, // rotate: the first seat moves on each round
 };
 const SETS = {
-  classic: () => ({ size: "medium", roll: "sum", goal: 10, market: "fixed", charters: false, gate: true, plans: true, offers: 2, limit: 40, actions: 99 }),
-  ours: () => ({ size: "small", roll: "high", goal: 14, market: "falling", charters: true, gate: false, plans: false, offers: 1, limit: 16, actions: 3 }),
+  classic: () => ({ size: "medium", roll: "sum", goal: 10, market: "fixed", charters: false, gate: true, plans: true, offers: 2, limit: 40, actions: 99, order: "fixed" }),
+  ours: () => ({ size: "small", roll: "high", goal: 14, market: "falling", charters: true, gate: false, plans: false, offers: 1, limit: 16, actions: 3, order: "fixed" }),
 };
 export const EXPANSIONS = ["ships", "harbours", "seasons"];
 const off = { values: [false, true], normal: false };
 
-export const boardOf = (p) => hexBoard(SIZES[p.rule.size].radius);
+// a small island grows by one ring at six seats, or its land would not fit inside the rim
+const radiusOf = (size, seats) => SIZES[size].radius + (size === "small" && seats > 5 ? 1 : 0);
+export const boardOf = (p) => hexBoard(radiusOf(p.rule.size, p.seats));
 export const goalOf = (p) => p.rule.goal;
 const add = (a, b, k = 1) => a.map((v, i) => v + k * b[i]);
 export const canPay = (hand, cost) => hand.every((v, i) => v >= cost[i]);
@@ -65,14 +68,21 @@ export function depotSpots(p, s, opening = false) {
 }
 /** How many of a good a seat gives at the market for one of any other. */
 export function rateOf(p, s, good) {
-  let r = p.rule.market === "fixed" ? 4 : 99;
+  let r = p.rule.market === "fixed" ? (p.event === "fair trade" ? 3 : 4) : 99;
   p.depot.forEach((o, i) => { if (o === s && p.port[i] !== NONE) r = Math.min(r, p.port[i] === good ? 2 : 3); if (o === s && p.harbour[i]) r = Math.min(r, 2); });
   return r;
 }
 /** What one good sells for at a falling market, in coin. */
 export const priceOf = (p, good) => Math.max(1, 3 - p.sold[good]);
+/** What a seat gets for selling one good: the market price, one more at a port or harbour it holds (two at a port for
+ * that good), and one more in a season of fair trade. */
+export function sellPrice(p, s, good) {
+  let extra = 0;
+  p.depot.forEach((o, i) => { if (o === s && p.port[i] !== NONE) extra = Math.max(extra, p.port[i] === good ? 2 : 1); if (o === s && p.harbour[i]) extra = Math.max(extra, 1); });
+  return priceOf(p, good) + extra + (p.event === "fair trade" ? 1 : 0);
+}
 
-const copy = (p) => ({ ...p, hands: p.hands.map((h) => [...h]), coin: [...p.coin], route: p.route.map((r) => [...r]), depot: [...p.depot], town: [...p.town], harbour: [...p.harbour], deck: [...p.deck], held: p.held.map((h) => [...h]), seals: [...p.seals], charted: [...p.charted], sold: [...p.sold], charter: p.charter.map((c) => [...c]), offers: p.offers, roll: p.roll && [...p.roll] });
+const copy = (p) => ({ ...p, hands: p.hands.map((h) => [...h]), coin: [...p.coin], route: p.route.map((r) => [...r]), depot: [...p.depot], town: [...p.town], harbour: [...p.harbour], deck: [...p.deck], held: p.held.map((h) => [...h]), seals: [...p.seals], charted: [...p.charted], sold: [...p.sold], charter: p.charter.map((c) => [...c]), offers: p.offers, roll: p.roll && [...p.roll], ask: p.ask ? { ...p.ask } : null });
 
 /** The harvest. Every hex with the number gives one good to each depot on it or beside it, two to a town. */
 function harvest(p, n, double, events) {
@@ -102,6 +112,7 @@ function season(p, dice, events) {
   if (p.step !== 0) return;
   p.event = dice.pick(["fair", "fair", "fair", "plenty", "drought", "fair trade"]);
   if (p.event === "plenty") p.hands = p.hands.map((h) => h.map((v, k) => v + (k === p.round % 4 ? 1 : 0)));
+  if (p.event === "drought") p.hands = p.hands.map((h) => h.map((v, k) => (k === p.round % 4 ? Math.max(0, v - 1) : v)));
   if (p.event !== "fair") events.push({ kind: "season", what: p.event, good: p.round % 4 });
 }
 function finish(p, winners, why, events) {
@@ -122,7 +133,7 @@ function pass(p, dice, events) {
       return finish(p, pts.flatMap((v, s) => (v === most ? [s] : [])), "had the most points at the end", events);
     }
   }
-  p.seat = (p.first + p.step + p.round - 1) % p.seats;
+  p.seat = (p.first + p.step + (p.rule.order === "rotate" ? p.round - 1 : 0)) % p.seats;
   return begin(p, dice, events);
 }
 
@@ -130,7 +141,7 @@ function pass(p, dice, events) {
 /** Land grows with the number of players, so that everyone has room. */
 export const landFor = (size, seats) => (size === "small" ? 20 + 8 * seats : 24 + 12 * seats + SIZES[size].land);
 function island(rule, dice, seats) {
-  const { radius } = SIZES[rule.size], land = landFor(rule.size, seats), b = hexBoard(radius), far = ([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
+  const radius = radiusOf(rule.size, seats), land = landFor(rule.size, seats), b = hexBoard(radius), far = ([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
   const dry = new Set([b.cells.findIndex((c) => far(c) === 0)]);
   while (dry.size < land) {
     const edge = [...new Set([...dry].flatMap((i) => b.near[i]))].filter((i) => !dry.has(i) && far(b.cells[i]) < radius);
@@ -154,7 +165,7 @@ function island(rule, dice, seats) {
 }
 
 export const glass = {
-  id: "glass", version: "1",
+  id: "glass", version: "2",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -164,8 +175,8 @@ export const glass = {
         const isle = island(rule, dice, o.seats), first = dice.below(o.seats), n = isle.land.length, zero = () => Array(n).fill(0);
     const p = { style: o.style, classic: o.style !== "ours", rule, seats: o.seats, ...isle, gate: rule.gate ? isle.gate : NONE, ships: o.ships, harbours: o.harbours,
       hands: Array.from({ length: o.seats }, () => [0, 0, 0, 0]), coin: Array(o.seats).fill(rule.market === "falling" ? 2 : 0), route: Array.from({ length: n }, () => []), depot: Array(n).fill(NONE), town: zero(), harbour: zero(),
-      deck: rule.plans ? dice.shuffle([...Array(6).fill("harvest"), ...Array(5).fill("works"), ...Array(5).fill("toll"), ...Array(5).fill("seal")]) : [], held: Array.from({ length: o.seats }, () => []), seals: Array(o.seats).fill(0), charted: Array(o.seats).fill(0),
-      sold: [0, 0, 0, 0], charter: rule.charters ? [0, 1, 2].map(() => dice.shuffle([0, 0, 1, 1, 2, 2, 3, 3]).slice(0, 6)) : [], first, seat: first, step: 0, round: 1, rounds: rule.limit, phase: "open", opened: 0, left: 0, offers: 0, played: 0, free: 0, roll: null, over: null };
+      deck: rule.plans ? dice.shuffle([...Array(6).fill("harvest"), ...Array(5).fill("works"), ...(rule.gate ? Array(5).fill("toll") : []), ...Array(5).fill("seal")]) : [], held: Array.from({ length: o.seats }, () => []), seals: Array(o.seats).fill(0), charted: Array(o.seats).fill(0),
+      sold: [0, 0, 0, 0], charter: rule.charters ? [0, 1, 2].map(() => dice.shuffle([0, 0, 1, 1, 2, 2, 3, 3]).slice(0, 6)) : [], first, seat: first, step: 0, round: 1, rounds: rule.limit, phase: "open", opened: 0, left: 0, offers: 0, played: 0, free: 0, roll: null, ask: null, over: null };
     if (o.seasons) p.event = "fair";
     return p;
   },
@@ -173,6 +184,7 @@ export const glass = {
 
   moves(p) {
     const s = p.seat, h = p.hands[s], out = [];
+    if (p.phase === "answer") return [{ do: "accept" }, { do: "refuse" }]; // the asked player answers for themselves
     if (p.phase === "open") {
       const spots = p.opened % 2 ? routeSpots(p, s).filter((i) => p.land[i]) : depotSpots(p, s, true), any = p.land.flatMap((l, i) => (l && p.depot[i] === NONE && !p.route[i].includes(s) ? [i] : [])); // a crowded island: anywhere free
       return (spots.length ? spots : any).map((at) => ({ do: p.opened % 2 ? "route" : "depot", at }));
@@ -181,7 +193,7 @@ export const glass = {
     if (p.phase === "works") return routeSpots(p, s).map((at) => ({ do: "route", at, free: true }));
     out.push({ do: "end" });
     if (p.left <= 0) return out;
-    if (canPay(h, COST.route)) for (const at of routeSpots(p, s)) if (p.land[at] || canPay(h, COST.ship)) out.push({ do: "route", at });
+    for (const at of routeSpots(p, s)) if (canPay(h, p.land[at] ? COST.route : COST.ship)) out.push({ do: "route", at });
     if (canPay(h, COST.depot)) for (const at of depotSpots(p, s)) out.push({ do: "depot", at });
     if (canPay(h, COST.town)) p.depot.forEach((o, at) => { if (o === s && !p.town[at]) out.push({ do: "town", at }); });
     if (p.harbours && canPay(h, COST.harbour)) p.depot.forEach((o, at) => { if (o === s && !p.harbour[at] && boardOf(p).near[at].some((m) => !p.land[m]) ) out.push({ do: "harbour", at }); });
@@ -226,13 +238,21 @@ export const glass = {
       if (m.plan === "toll" && p.gate !== NONE) p.phase = "toll";
       events.push({ kind: "use", seat: s, plan: m.plan });
     } else if (m.do === "swap") { p.hands[s][m.give] -= rateOf(p, s, m.give); p.hands[s][m.get]++; events.push({ kind: "swap", seat: s, give: m.give, get: m.get, n: rateOf(before, s, m.give) }); }
-    else if (m.do === "sell") { p.coin[s] += priceOf(p, m.good); p.hands[s][m.good]--; p.sold[m.good]++; events.push({ kind: "sell", seat: s, good: m.good }); }
+    else if (m.do === "sell") { p.coin[s] += sellPrice(p, s, m.good); p.hands[s][m.good]--; p.sold[m.good]++; events.push({ kind: "sell", seat: s, good: m.good }); }
     else if (m.do === "buy") { p.coin[s] -= 4; p.hands[s][m.good]++; events.push({ kind: "buy", seat: s, good: m.good }); }
     else if (m.do === "offer") {
+      // an offer is a question: the turn goes to the asked player, who takes it or turns it down, then comes back
       p.offers--;
-      const yes = answer(p, m.to, m.give, m.get);
-      if (yes) { p.hands[s][m.give]--; p.hands[s][m.get]++; p.hands[m.to][m.give]++; p.hands[m.to][m.get]--; }
-      events.push({ kind: "offer", seat: s, to: m.to, give: m.give, get: m.get, yes });
+      p.ask = { from: s, to: m.to, give: m.give, get: m.get, phase: p.phase };
+      p.phase = "answer"; p.seat = m.to;
+      events.push({ kind: "ask", seat: s, to: m.to, give: m.give, get: m.get });
+      return { position: p, events };
+    } else if (m.do === "accept" || m.do === "refuse") {
+      const a = p.ask, yes = m.do === "accept" && p.hands[a.from][a.give] > 0 && p.hands[a.to][a.get] > 0;
+      if (yes) { p.hands[a.from][a.give]--; p.hands[a.from][a.get]++; p.hands[a.to][a.give]++; p.hands[a.to][a.get]--; }
+      events.push({ kind: "offer", seat: a.from, to: a.to, give: a.give, get: a.get, yes });
+      p.seat = a.from; p.phase = a.phase; p.ask = null;
+      return { position: p, events };
     } else if (m.do === "charter") {
       const c = p.charter[m.k];
       spend([0, 1, 2, 3].map((g) => c.filter((x) => x === g).length));

@@ -36,7 +36,7 @@ const SHAPES = [["round", "Round"], ["lakes", "With lakes"], ["crescent", "A cre
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
 createTable({
-  game: fable, key: "fable", title: "The Island Fable", won: "The island is yours.", seats: [2, 3, 4, 5, 6], normal: 3, lengths: [[10, "Short"], [14, "Normal"], [18, "Long"]], pace: (p) => (p.classic ? 240 : 480),
+  game: fable, key: "fable", title: "The Island Fable", won: "The island is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 3, lengths: [[10, "Short"], [14, "Normal"], [18, "Long"]], pace: (p) => (p.classic ? 240 : 480),
   cellsOf, goalOf, landOf, choose, thinking,
   about: {
     classic: "Traditional: inspired by Slay.\nThe hex island rules as players know them: the island is dealt out, villages keep purses, soldiers cost wages and merge into higher ranks, woods spread over idle land, and you act as often as you like. Ours: four ranks of our own, our prices and wages, forts of our own, and the more players there are, the less of the island you need to win.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
@@ -60,14 +60,17 @@ createTable({
     { key: "fort", label: "Forts", normal: SWITCHES.fort.normal, values: [[0, "None"], [12, "Cost 12"], [18, "Cost 18"]] },
     { key: "goal", label: "To win", normal: SWITCHES.goal.normal, values: [[60, "60%"], [75, "75%"], [90, "90%"], [100, "All of it"]] },
     { key: "limit", label: "Rounds", normal: SWITCHES.limit.normal, values: [[15, "15"], [30, "30"], [50, "50"]] },
+    { key: "order", label: "Turn order", normal: SWITCHES.order.normal, values: [["rotate", "First player moves on each round"], ["fixed", "Same first player every round"]] },
+    { key: "opening", label: "First round", normal: SWITCHES.opening.normal, values: [["truce", "Truce: no taking a rival's land"], ["open", "Open from the start"]] },
   ],
-  expansions: EXPANSIONS.map((key) => ({ key, label: { farms: "Farms", boats: "Boats", gales: "Gales" }[key], note: { farms: "Build a farm beside a hall or another farm. It pays 3 a turn, and each costs more than the last.", boats: "A unit on the coast can cross up to three hexes of sea. A landing party on one hex feeds itself.", gales: "Some rounds a gale keeps boats ashore and fells some woods." }[key] })),
+  expansions: EXPANSIONS.map((key) => ({ key, label: { farms: "Farms", boats: "Boats", gales: "Gales" }[key], note: { farms: "Build a farm beside a hall or another farm. It pays 3 a turn, and each costs more than the last.", boats: "A unit on the coast can cross up to three hexes of sea. A landing party on one hex feeds itself for its first turn ashore; still alone after that, it disbands.", gales: "Some rounds a gale keeps boats ashore and fells some woods." }[key] })),
   stats(p, s) { const t = territories(p, s); return [["Coin", t.reduce((n, x) => n + x.purse, 0)], ["A turn", `${t.reduce((n, x) => n + x.net, 0) >= 0 ? "+" : ""}${t.reduce((n, x) => n + x.net, 0)}`]]; },
   line(e, p) {
     const who = NAMES[e.seat], name = (i) => nameOf(p, i);
     if (e.kind === "take") return e.was === NONE ? `${who} claims ${name(e.at)}.` : `${who} takes ${name(e.at)} from ${NAMES[e.was]}${e.won ? `, with ${e.won} coin` : e.lost ? `, whose purse of ${e.lost} is lost` : ""}.`;
     if (e.kind === "split") return `${who}'s land is cut in two.`;
     if (e.kind === "starve") return `${who} cannot pay: ${e.cells.length === 1 ? "a unit disbands" : `${e.cells.length} units disband`}.`;
+    if (e.kind === "room") return `${who} needs a new village at ${name(e.at)}: ${[e.rank && `a ${RANK[e.rank].toLowerCase()}`, e.fort && "a fort", e.farm && "a farm"].filter(Boolean).join(" and ")} there is lost to make room.`;
     if (e.kind === "stranded") return `${who}'s stranded ${e.cells.length === 1 ? "unit disbands" : "units disband"}.`;
     if (e.kind === "raise") return `${who} raises a scout at ${name(e.at)}.`;
     if (e.kind === "clear") return `${who} clears the wood at ${name(e.at)}.`;

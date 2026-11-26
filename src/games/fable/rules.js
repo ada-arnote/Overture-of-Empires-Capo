@@ -15,11 +15,13 @@ export const SWITCHES = {
   start: { values: ["dealt", "homes"], normal: "dealt" }, actions: { values: [3, 6, MANY], normal: MANY }, ranks: { values: [3, 4], normal: 4 },
   price: { values: [5, 8, 10], normal: 8 }, wages: { values: Object.keys(WAGES), normal: "fair" }, woods: { values: ["none", "slow", "fast"], normal: "slow" },
   fort: { values: [0, 12, 18], normal: 12 }, goal: { values: [60, 75, 90, 100], normal: 75 }, limit: { values: [15, 30, 50], normal: 50 },
+  order: { values: ["rotate", "fixed"], normal: "rotate" }, // rotate: the first seat moves on each round (measured fairer here, with the truce)
+  opening: { values: ["truce", "open"], normal: "truce" }, // truce: nobody takes land from a rival in the first round
 };
 const normal = (over) => ({ ...Object.fromEntries(Object.entries(SWITCHES).map(([k, v]) => [k, v.normal])), ...over });
 const SETS = {
   classic: (o) => normal({ isle: o.isle, size: o.size }),
-  ours: (o) => ({ isle: "small", size: "tiny", start: "homes", actions: 3, ranks: 3, price: 5, wages: "mild", woods: "none", fort: 0, goal: { 2: 60, 3: 45 }[o.seats] || 45, limit: o.rounds }),
+  ours: (o) => ({ isle: "small", size: "tiny", start: "homes", actions: 3, ranks: 3, price: 5, wages: "mild", woods: "none", fort: 0, goal: { 2: 60, 3: 45 }[o.seats] || 45, limit: o.rounds, order: "rotate", opening: "truce" }),
 };
 export const EXPANSIONS = ["farms", "boats", "gales"];
 const off = { values: [false, true], normal: false };
@@ -66,18 +68,20 @@ export function defence(p, c) {
 /** Can a unit of this rank take a place guarded like this? The highest rank takes anything. */
 export const beats = (p, rank, guard) => rank > guard || rank === topOf(p) && rank === 4;
 
-const copy = (p) => ({ ...p, owner: [...p.owner], unit: [...p.unit], moved: [...p.moved], hall: [...p.hall], purse: [...p.purse], tree: [...p.tree], fort: [...p.fort], farm: [...p.farm] });
-const bare = (p, c) => { p.unit[c] = 0; p.moved[c] = 0; p.tree[c] = 0; p.fort[c] = 0; p.farm[c] = 0; };
+const copy = (p) => ({ ...p, owner: [...p.owner], unit: [...p.unit], moved: [...p.moved], hall: [...p.hall], purse: [...p.purse], tree: [...p.tree], fort: [...p.fort], farm: [...p.farm], landed: [...p.landed] });
+const bare = (p, c) => { p.unit[c] = 0; p.moved[c] = 0; p.tree[c] = 0; p.fort[c] = 0; p.farm[c] = 0; p.landed[c] = 0; };
 
-/** Give every territory of a seat exactly one hall. Changes p. */
-function settle(p, seat) {
+/** Give every territory of a seat exactly one hall. Changes p. A new hall goes on an empty hex if there is one;
+ * if every hex holds something, the weakest unit makes room, and the log says so. */
+function settle(p, seat, events = []) {
   if (seat === NONE) return;
   for (const g of groupsOf(p, seat)) {
     const halls = g.filter((c) => p.hall[c]);
     if (g.length === 1) { p.hall[g[0]] = 0; p.purse[g[0]] = 0; continue; }
     if (!halls.length) {
       const free = g.filter((c) => !p.unit[c] && !p.fort[c] && !p.farm[c]), open = free.filter((c) => !p.tree[c]), from = open.length ? open : free.length ? free : g;
-      const best = from.reduce((a, b) => (p.order[b] < p.order[a] ? b : a));
+      const loss = (c) => (from === g ? (p.unit[c] || 9) * 4 + p.fort[c] * 2 + p.farm[c] : 0), best = from.reduce((a, b) => (loss(b) < loss(a) || (loss(b) === loss(a) && p.order[b] < p.order[a]) ? b : a));
+      if (from === g) events.push({ kind: "room", seat, at: best, rank: p.unit[best], fort: p.fort[best], farm: p.farm[best] });
       bare(p, best);
       p.hall[best] = 1;
       p.purse[best] = 0;
@@ -103,12 +107,14 @@ function take(p, seat, c, rank, events) {
   p.farm[c] = farm; // fields are worth having
   p.hall[c] = 0;
   p.purse[c] = 0;
-  settle(p, seat);
-  settle(p, was);
+  const later = [];
+  settle(p, seat, later);
+  settle(p, was, later);
   const won = plunder(pot), mine = won ? territories(p, seat).find((t) => t.cells.includes(c)) : null;
   if (mine) p.purse[mine.hall] += won;
   events.push({ kind: "take", seat, at: c, was, rank, lost: pot - (mine ? won : 0), won: mine ? won : 0 });
   if (was !== NONE && groupsOf(p, was).length > before) events.push({ kind: "split", seat: was });
+  events.push(...later);
 }
 
 /** One action, without passing the turn. Returns the new position and what happened. */
@@ -132,10 +138,11 @@ export function act(before, m) {
     const rank = p.unit[m.from];
     p.unit[m.from] = 0;
     p.moved[m.from] = 0;
+    p.landed[m.from] = 0;
     if (p.owner[m.to] !== s) take(p, s, m.to, rank, events);
     else if (p.unit[m.to]) { p.unit[m.to] += rank; p.moved[m.to] = 1; events.push({ kind: "merge", seat: s, at: m.to, rank: p.unit[m.to] }); }
     else { p.unit[m.to] = rank; p.moved[m.to] = 1; events.push({ kind: p.tree[m.to] ? "clear" : "move", seat: s, from: m.from, at: m.to, to: m.to }); p.tree[m.to] = 0; }
-    if (m.sea) settle(p, s);
+    if (m.sea) { p.landed[m.to] = 1; settle(p, s, events); } // fed once, at the next turn of its seat
   }
   return { position: p, events };
 }
@@ -145,7 +152,8 @@ function begin(p, events) {
   const s = p.seat;
   p.left = p.rule.actions;
   for (let i = 0; i < p.owner.length; i++) if (p.owner[i] === s) p.moved[i] = 0;
-  const alone = p.boats ? [] : groupsOf(p, s).filter((g) => g.length === 1 && p.unit[g[0]]).map((g) => g[0]); // a landing party feeds itself
+  const alone = groupsOf(p, s).filter((g) => g.length === 1 && p.unit[g[0]] && !p.landed[g[0]]).map((g) => g[0]); // a landing party feeds itself once
+  for (let i = 0; i < p.owner.length; i++) if (p.owner[i] === s) p.landed[i] = 0;
   for (const c of alone) { p.unit[c] = 0; if (p.rule.woods !== "none") p.tree[c] = CAIRN; }
   if (alone.length) events.push({ kind: "stranded", seat: s, cells: alone });
   for (const t of territories(p, s)) {
@@ -198,7 +206,7 @@ function after(p, stop, dice, events) {
       }
       nature(p, dice, events);
     }
-    p.seat = (p.step + p.round - 1) % p.seats;
+    p.seat = (p.step + (p.rule.order === "rotate" ? p.round - 1 : 0)) % p.seats;
   } while (!live.includes(p.seat));
   begin(p, events);
   return undefined;
@@ -210,12 +218,12 @@ function deal(p, b, dice) {
   land.slice(0, even).forEach((c, i) => { p.owner[c] = i % p.seats; });
   for (let s = 0; s < p.seats; s++) {
     settle(p, s);
-    for (const t of territories(p, s)) p.purse[t.hall] = Math.min(t.cells.length * 2, 10) + (p.seats === 2 ? 3 * s : 0); // the second of two moves later and starts a little richer
+    for (const t of territories(p, s)) p.purse[t.hall] = Math.min(t.cells.length * 2, 10) + (p.seats === 2 ? 1 * s : 0); // the second of two moves later and starts a little richer
   }
 }
 
 export const fable = {
-  id: "fable", version: "3",
+  id: "fable", version: "5",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 }, rounds: { values: [10, 14, 18], normal: 14 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -225,7 +233,7 @@ export const fable = {
     const rule = SETS[o.style] ? SETS[o.style](o) : Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]]));
     if (o.seats > 3 && rule.size === "tiny") rule.size = "small";
     const b = hexBoard(SIZES[rule.size].radius), zero = () => b.cells.map(() => 0), made = island(rule.isle, rule.size, o.seats, dice, rule.start === "homes");
-    const p = { classic: o.style !== "ours", style: o.style, rule, boats: o.boats, farms: o.farms, seats: o.seats, rounds: rule.limit, water: made.water, order: dice.shuffle(b.cells.map((_, i) => i)), owner: b.cells.map(() => NONE), unit: zero(), moved: zero(), hall: zero(), purse: zero(), tree: zero(), fort: zero(), farm: zero(), seat: 0, step: 0, round: 1, left: rule.actions, over: null };
+    const p = { classic: o.style !== "ours", style: o.style, rule, boats: o.boats, farms: o.farms, seats: o.seats, rounds: rule.limit, water: made.water, order: dice.shuffle(b.cells.map((_, i) => i)), owner: b.cells.map(() => NONE), unit: zero(), moved: zero(), hall: zero(), purse: zero(), tree: zero(), fort: zero(), farm: zero(), landed: zero(), seat: 0, step: 0, round: 1, left: rule.actions, over: null };
     if (o.gales) p.gale = false;
     if (rule.start === "homes") {
       made.homes.forEach((h, s) => {
@@ -280,6 +288,8 @@ export const fable = {
         for (const c of near[from]) if (!p.water[c] && p.owner[c] !== s && beats(p, rank, guarded(c))) out.push({ do: "move", from, to: c });
       }
     }
+    // the truce of the first round: land may be bought or walked into, but none taken from a rival yet
+    if (p.rule.opening === "truce" && p.round === 1) return out.filter((m) => m.do === "end" || p.owner[m.to] === s || p.owner[m.to] === NONE);
     return out;
   },
 

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+8aszXzGzgk02X45PVl0eO2JqQQtgZc217I50fmToIw='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xw6l9weuuzvj10cvCSOrr8bcSyGhcvNZDyFN6wLAM8o='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Grain and Glass</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -58,10 +58,10 @@ button { cursor: pointer; touch-action: manipulation }
 #status { font: 600 18px/1.3 var(--serif); margin-bottom: 10px; min-height: 1.3em; text-wrap: balance }
 .pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px }
 .pick.even > * { flex: 1 }
-.pick button { min-height: 46px; padding: 6px 13px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 244, 214, .05); line-height: 1.15; text-align: center }
+.pick button { min-height: 46px; padding: 6px 13px; border-radius: 10px; border: 1px solid var(--line2); background: rgba(255, 244, 214, .05); line-height: 1.15; text-align: center }
 .pick button:hover { border-color: var(--line2) }
 .pick button[aria-checked=true] { border-color: var(--gold); background: rgba(226, 184, 102, .17); box-shadow: inset 0 0 0 1px var(--gold) }
-.pick button:disabled { opacity: .38; cursor: default }
+.pick button:disabled { cursor: default; color: var(--soft); border-style: dashed }
 .pick small { display: block; color: var(--soft); font-size: 13px }
 .pick.small { margin: 0 } .pick.small button { min-height: 44px; min-width: 44px }
 .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 7px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .5) }
@@ -245,15 +245,18 @@ const SWITCHES = {
   size: { values: Object.keys(SIZES), normal: "medium" }, roll: { values: ["sum", "high"], normal: "sum" }, goal: { values: [8, 9, 10, 11, 12, 14], normal: 10 },
   market: { values: ["fixed", "falling"], normal: "fixed" }, charters: { values: [false, true], normal: false }, gate: { values: [false, true], normal: true },
   plans: { values: [false, true], normal: true }, offers: { values: [0, 1, 2, 3], normal: 2 }, limit: { values: [12, 16, 24, 40], normal: 40 }, actions: { values: [3, 99], normal: 99 },
+  order: { values: ["fixed", "rotate"], normal: "fixed" }, // rotate: the first seat moves on each round
 };
 const SETS = {
-  classic: () => ({ size: "medium", roll: "sum", goal: 10, market: "fixed", charters: false, gate: true, plans: true, offers: 2, limit: 40, actions: 99 }),
-  ours: () => ({ size: "small", roll: "high", goal: 14, market: "falling", charters: true, gate: false, plans: false, offers: 1, limit: 16, actions: 3 }),
+  classic: () => ({ size: "medium", roll: "sum", goal: 10, market: "fixed", charters: false, gate: true, plans: true, offers: 2, limit: 40, actions: 99, order: "fixed" }),
+  ours: () => ({ size: "small", roll: "high", goal: 14, market: "falling", charters: true, gate: false, plans: false, offers: 1, limit: 16, actions: 3, order: "fixed" }),
 };
 const EXPANSIONS = ["ships", "harbours", "seasons"];
 const off = { values: [false, true], normal: false };
 
-const boardOf = (p) => hexBoard(SIZES[p.rule.size].radius);
+// a small island grows by one ring at six seats, or its land would not fit inside the rim
+const radiusOf = (size, seats) => SIZES[size].radius + (size === "small" && seats > 5 ? 1 : 0);
+const boardOf = (p) => hexBoard(radiusOf(p.rule.size, p.seats));
 const goalOf = (p) => p.rule.goal;
 const add = (a, b, k = 1) => a.map((v, i) => v + k * b[i]);
 const canPay = (hand, cost) => hand.every((v, i) => v >= cost[i]);
@@ -296,14 +299,21 @@ function depotSpots(p, s, opening = false) {
 }
 /** How many of a good a seat gives at the market for one of any other. */
 function rateOf(p, s, good) {
-  let r = p.rule.market === "fixed" ? 4 : 99;
+  let r = p.rule.market === "fixed" ? (p.event === "fair trade" ? 3 : 4) : 99;
   p.depot.forEach((o, i) => { if (o === s && p.port[i] !== NONE) r = Math.min(r, p.port[i] === good ? 2 : 3); if (o === s && p.harbour[i]) r = Math.min(r, 2); });
   return r;
 }
 /** What one good sells for at a falling market, in coin. */
 const priceOf = (p, good) => Math.max(1, 3 - p.sold[good]);
+/** What a seat gets for selling one good: the market price, one more at a port or harbour it holds (two at a port for
+ * that good), and one more in a season of fair trade. */
+function sellPrice(p, s, good) {
+  let extra = 0;
+  p.depot.forEach((o, i) => { if (o === s && p.port[i] !== NONE) extra = Math.max(extra, p.port[i] === good ? 2 : 1); if (o === s && p.harbour[i]) extra = Math.max(extra, 1); });
+  return priceOf(p, good) + extra + (p.event === "fair trade" ? 1 : 0);
+}
 
-const copy = (p) => ({ ...p, hands: p.hands.map((h) => [...h]), coin: [...p.coin], route: p.route.map((r) => [...r]), depot: [...p.depot], town: [...p.town], harbour: [...p.harbour], deck: [...p.deck], held: p.held.map((h) => [...h]), seals: [...p.seals], charted: [...p.charted], sold: [...p.sold], charter: p.charter.map((c) => [...c]), offers: p.offers, roll: p.roll && [...p.roll] });
+const copy = (p) => ({ ...p, hands: p.hands.map((h) => [...h]), coin: [...p.coin], route: p.route.map((r) => [...r]), depot: [...p.depot], town: [...p.town], harbour: [...p.harbour], deck: [...p.deck], held: p.held.map((h) => [...h]), seals: [...p.seals], charted: [...p.charted], sold: [...p.sold], charter: p.charter.map((c) => [...c]), offers: p.offers, roll: p.roll && [...p.roll], ask: p.ask ? { ...p.ask } : null });
 
 /** The harvest. Every hex with the number gives one good to each depot on it or beside it, two to a town. */
 function harvest(p, n, double, events) {
@@ -333,6 +343,7 @@ function season(p, dice, events) {
   if (p.step !== 0) return;
   p.event = dice.pick(["fair", "fair", "fair", "plenty", "drought", "fair trade"]);
   if (p.event === "plenty") p.hands = p.hands.map((h) => h.map((v, k) => v + (k === p.round % 4 ? 1 : 0)));
+  if (p.event === "drought") p.hands = p.hands.map((h) => h.map((v, k) => (k === p.round % 4 ? Math.max(0, v - 1) : v)));
   if (p.event !== "fair") events.push({ kind: "season", what: p.event, good: p.round % 4 });
 }
 function finish(p, winners, why, events) {
@@ -353,7 +364,7 @@ function pass(p, dice, events) {
       return finish(p, pts.flatMap((v, s) => (v === most ? [s] : [])), "had the most points at the end", events);
     }
   }
-  p.seat = (p.first + p.step + p.round - 1) % p.seats;
+  p.seat = (p.first + p.step + (p.rule.order === "rotate" ? p.round - 1 : 0)) % p.seats;
   return begin(p, dice, events);
 }
 
@@ -361,7 +372,7 @@ function pass(p, dice, events) {
 /** Land grows with the number of players, so that everyone has room. */
 const landFor = (size, seats) => (size === "small" ? 20 + 8 * seats : 24 + 12 * seats + SIZES[size].land);
 function island(rule, dice, seats) {
-  const { radius } = SIZES[rule.size], land = landFor(rule.size, seats), b = hexBoard(radius), far = ([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
+  const radius = radiusOf(rule.size, seats), land = landFor(rule.size, seats), b = hexBoard(radius), far = ([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
   const dry = new Set([b.cells.findIndex((c) => far(c) === 0)]);
   while (dry.size < land) {
     const edge = [...new Set([...dry].flatMap((i) => b.near[i]))].filter((i) => !dry.has(i) && far(b.cells[i]) < radius);
@@ -385,7 +396,7 @@ function island(rule, dice, seats) {
 }
 
 const glass = {
-  id: "glass", version: "1",
+  id: "glass", version: "2",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -395,8 +406,8 @@ const glass = {
         const isle = island(rule, dice, o.seats), first = dice.below(o.seats), n = isle.land.length, zero = () => Array(n).fill(0);
     const p = { style: o.style, classic: o.style !== "ours", rule, seats: o.seats, ...isle, gate: rule.gate ? isle.gate : NONE, ships: o.ships, harbours: o.harbours,
       hands: Array.from({ length: o.seats }, () => [0, 0, 0, 0]), coin: Array(o.seats).fill(rule.market === "falling" ? 2 : 0), route: Array.from({ length: n }, () => []), depot: Array(n).fill(NONE), town: zero(), harbour: zero(),
-      deck: rule.plans ? dice.shuffle([...Array(6).fill("harvest"), ...Array(5).fill("works"), ...Array(5).fill("toll"), ...Array(5).fill("seal")]) : [], held: Array.from({ length: o.seats }, () => []), seals: Array(o.seats).fill(0), charted: Array(o.seats).fill(0),
-      sold: [0, 0, 0, 0], charter: rule.charters ? [0, 1, 2].map(() => dice.shuffle([0, 0, 1, 1, 2, 2, 3, 3]).slice(0, 6)) : [], first, seat: first, step: 0, round: 1, rounds: rule.limit, phase: "open", opened: 0, left: 0, offers: 0, played: 0, free: 0, roll: null, over: null };
+      deck: rule.plans ? dice.shuffle([...Array(6).fill("harvest"), ...Array(5).fill("works"), ...(rule.gate ? Array(5).fill("toll") : []), ...Array(5).fill("seal")]) : [], held: Array.from({ length: o.seats }, () => []), seals: Array(o.seats).fill(0), charted: Array(o.seats).fill(0),
+      sold: [0, 0, 0, 0], charter: rule.charters ? [0, 1, 2].map(() => dice.shuffle([0, 0, 1, 1, 2, 2, 3, 3]).slice(0, 6)) : [], first, seat: first, step: 0, round: 1, rounds: rule.limit, phase: "open", opened: 0, left: 0, offers: 0, played: 0, free: 0, roll: null, ask: null, over: null };
     if (o.seasons) p.event = "fair";
     return p;
   },
@@ -404,6 +415,7 @@ const glass = {
 
   moves(p) {
     const s = p.seat, h = p.hands[s], out = [];
+    if (p.phase === "answer") return [{ do: "accept" }, { do: "refuse" }]; // the asked player answers for themselves
     if (p.phase === "open") {
       const spots = p.opened % 2 ? routeSpots(p, s).filter((i) => p.land[i]) : depotSpots(p, s, true), any = p.land.flatMap((l, i) => (l && p.depot[i] === NONE && !p.route[i].includes(s) ? [i] : [])); // a crowded island: anywhere free
       return (spots.length ? spots : any).map((at) => ({ do: p.opened % 2 ? "route" : "depot", at }));
@@ -412,7 +424,7 @@ const glass = {
     if (p.phase === "works") return routeSpots(p, s).map((at) => ({ do: "route", at, free: true }));
     out.push({ do: "end" });
     if (p.left <= 0) return out;
-    if (canPay(h, COST.route)) for (const at of routeSpots(p, s)) if (p.land[at] || canPay(h, COST.ship)) out.push({ do: "route", at });
+    for (const at of routeSpots(p, s)) if (canPay(h, p.land[at] ? COST.route : COST.ship)) out.push({ do: "route", at });
     if (canPay(h, COST.depot)) for (const at of depotSpots(p, s)) out.push({ do: "depot", at });
     if (canPay(h, COST.town)) p.depot.forEach((o, at) => { if (o === s && !p.town[at]) out.push({ do: "town", at }); });
     if (p.harbours && canPay(h, COST.harbour)) p.depot.forEach((o, at) => { if (o === s && !p.harbour[at] && boardOf(p).near[at].some((m) => !p.land[m]) ) out.push({ do: "harbour", at }); });
@@ -457,13 +469,21 @@ const glass = {
       if (m.plan === "toll" && p.gate !== NONE) p.phase = "toll";
       events.push({ kind: "use", seat: s, plan: m.plan });
     } else if (m.do === "swap") { p.hands[s][m.give] -= rateOf(p, s, m.give); p.hands[s][m.get]++; events.push({ kind: "swap", seat: s, give: m.give, get: m.get, n: rateOf(before, s, m.give) }); }
-    else if (m.do === "sell") { p.coin[s] += priceOf(p, m.good); p.hands[s][m.good]--; p.sold[m.good]++; events.push({ kind: "sell", seat: s, good: m.good }); }
+    else if (m.do === "sell") { p.coin[s] += sellPrice(p, s, m.good); p.hands[s][m.good]--; p.sold[m.good]++; events.push({ kind: "sell", seat: s, good: m.good }); }
     else if (m.do === "buy") { p.coin[s] -= 4; p.hands[s][m.good]++; events.push({ kind: "buy", seat: s, good: m.good }); }
     else if (m.do === "offer") {
+      // an offer is a question: the turn goes to the asked player, who takes it or turns it down, then comes back
       p.offers--;
-      const yes = answer(p, m.to, m.give, m.get);
-      if (yes) { p.hands[s][m.give]--; p.hands[s][m.get]++; p.hands[m.to][m.give]++; p.hands[m.to][m.get]--; }
-      events.push({ kind: "offer", seat: s, to: m.to, give: m.give, get: m.get, yes });
+      p.ask = { from: s, to: m.to, give: m.give, get: m.get, phase: p.phase };
+      p.phase = "answer"; p.seat = m.to;
+      events.push({ kind: "ask", seat: s, to: m.to, give: m.give, get: m.get });
+      return { position: p, events };
+    } else if (m.do === "accept" || m.do === "refuse") {
+      const a = p.ask, yes = m.do === "accept" && p.hands[a.from][a.give] > 0 && p.hands[a.to][a.get] > 0;
+      if (yes) { p.hands[a.from][a.give]--; p.hands[a.from][a.get]++; p.hands[a.to][a.give]++; p.hands[a.to][a.get]--; }
+      events.push({ kind: "offer", seat: a.from, to: a.to, give: a.give, get: a.get, yes });
+      p.seat = a.from; p.phase = a.phase; p.ask = null;
+      return { position: p, events };
     } else if (m.do === "charter") {
       const c = p.charter[m.k];
       spend([0, 1, 2, 3].map((g) => c.filter((x) => x === g).length));
@@ -492,7 +512,7 @@ function answer(p, seat, give, get) {
   return h[get] >= 2 && h[give] <= h[get] - 1;
 }
 
-$x.NONE = NONE; $x.GOODS = GOODS; $x.WASTE = WASTE; $x.COST = COST; $x.PLANS = PLANS; $x.SWITCHES = SWITCHES; $x.EXPANSIONS = EXPANSIONS; $x.boardOf = boardOf; $x.goalOf = goalOf; $x.canPay = canPay; $x.pointsOf = pointsOf; $x.joinedPorts = joinedPorts; $x.reachOf = reachOf; $x.routeSpots = routeSpots; $x.depotSpots = depotSpots; $x.rateOf = rateOf; $x.priceOf = priceOf; $x.landFor = landFor; $x.glass = glass; $x.answer = answer;
+$x.NONE = NONE; $x.GOODS = GOODS; $x.WASTE = WASTE; $x.COST = COST; $x.PLANS = PLANS; $x.SWITCHES = SWITCHES; $x.EXPANSIONS = EXPANSIONS; $x.boardOf = boardOf; $x.goalOf = goalOf; $x.canPay = canPay; $x.pointsOf = pointsOf; $x.joinedPorts = joinedPorts; $x.reachOf = reachOf; $x.routeSpots = routeSpots; $x.depotSpots = depotSpots; $x.rateOf = rateOf; $x.priceOf = priceOf; $x.sellPrice = sellPrice; $x.landFor = landFor; $x.glass = glass; $x.answer = answer;
 return $x; })({});
 $m[6] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -753,6 +773,8 @@ function createMatch(game, { options = {}, seed = "" } = {}) {
       played.push(deepFreeze(copy));
       return now().events;
     },
+    /** Whether the last move rolled any dice. In a game between people such a move is not taken back. */
+    get rolled() { const n = steps.length; return n > 1 && steps[n - 1].dice.join() !== steps[n - 2].dice.join(); },
     /** Take back the last move. Playing it again rolls the same dice. */
     undo() {
       if (!played.length) return false;
@@ -1247,7 +1269,7 @@ $m[3] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Bots for Grain and Glass: pick the next thing worth building, then trade towards it.
 const { steps } = $m[4];
-const { COST, NONE, WASTE, boardOf, canPay, depotSpots, glass, pointsOf, rateOf, routeSpots } = $m[1];
+const { COST, NONE, WASTE, answer, boardOf, canPay, depotSpots, glass, pointsOf, rateOf, routeSpots } = $m[1];
 
 const TIERS = ["random", "easy", "normal"];
 const WAYS = { sum: [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1], high: [0, 1, 3, 5, 7, 9, 11] };
@@ -1325,7 +1347,11 @@ function* plan(p, dice, tier) {
   return { do: "end" };
 }
 
-function* thinking(p, dice, tier = "normal") { return yield* plan(p, dice, tier); }
+function* thinking(p, dice, tier = "normal") {
+  // a bot answers an offer plainly, by the rule's own test
+  if (p.phase === "answer") return answer(p, p.seat, p.ask.give, p.ask.get) ? { do: "accept" } : { do: "refuse" };
+  return yield* plan(p, dice, tier);
+}
 function choose(p, dice, tier) {
   const t = thinking(p, dice, tier);
   for (;;) { const s = t.next(); if (s.done) return s.value; }
@@ -1737,9 +1763,11 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       if (!k.seen) return;
       cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit());
       emblem(ctx, icons[k.seat], cam.px, cam.py, size * 0.42 * cam.pk, flat);
-      ctx.fillStyle = `rgba(252,247,234,${0.5 * k.seen})`;
+      // ink by the ground's brightness: dark marks on light colours, light marks on dark ones, so both read
+      const [r, g, b] = show[i].rgb, bright = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.5;
+      ctx.fillStyle = bright ? `rgba(24,18,14,${0.62 * k.seen})` : `rgba(252,247,234,${0.62 * k.seen})`;
       ctx.fill("evenodd");
-      ctx.lineWidth = 1; ctx.strokeStyle = `rgba(20,16,14,${0.35 * k.seen})`; ctx.stroke();
+      ctx.lineWidth = 1; ctx.strokeStyle = bright ? `rgba(252,247,234,${0.4 * k.seen})` : `rgba(20,16,14,${0.4 * k.seen})`; ctx.stroke();
     });
     for (const l of labels) { // names printed on the map
       cam.projectTo(l.at[0], l.at[1], unit());
@@ -1929,9 +1957,9 @@ $m[18] = (($x) => {
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-const VERSION = "0.4.0";
+const VERSION = "0.4.2";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "ed84cd5b";
+const BUILD = "f9d109ff";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
 return $x; })({});
@@ -2174,12 +2202,12 @@ function createTable(G) {
   }
   function score() {
     const p = T.match.position, goal = G.goalOf(p), n = G.landOf(p), seats = T.kinds.length, over = T.match.turn === null;
-    $("round").textContent = over ? "The end" : p.classic ? `Round ${p.round}` : `Round ${p.round} of ${p.rounds}`;
+    $("round").textContent = over ? "The end" : G.roundText?.(p) || (p.classic ? `Round ${p.round}` : `Round ${p.round} of ${p.rounds}`);
     $("fills").replaceChildren(...Array.from({ length: seats }, (_, s) => { const i = el("i"); i.style.width = `${(100 * G.cellsOf(p, s)) / n}%`; i.style.background = `rgb(${RGB[s]})`; return i; }));
     $("goal").style.left = `${(100 * goal) / n}%`;
     $("land").setAttribute("aria-label", `${Array.from({ length: seats }, (_, s) => `${NAMES[s]} ${G.cellsOf(p, s)}`).join(", ")}. The goal is ${goal} of ${n}.`);
     $("seats").replaceChildren(...Array.from({ length: seats }, (_, s) => {
-      const c = G.cellsOf(p, s), li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${c ? "" : " out"}`), dl = el("dl");
+      const c = G.cellsOf(p, s), out = G.outOf ? G.outOf(p, s) : !c, li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${out ? " out" : ""}`), dl = el("dl");
       for (const [k, v] of [[G.unit || "Land", innerWidth > 820 || seats < 3 ? `${c}/${goal}` : c], ...G.stats(p, s)]) { const d = el("div"); d.append(el("dt", k), el("dd", String(v))); dl.append(d); }
       li.append(sign(s), el("b", NAMES[s]), el("small", T.kinds[s] === "you" && T.solo() ? "You" : WORDS[T.kinds[s]]), dl);
       return li;
@@ -2204,6 +2232,8 @@ function createTable(G) {
     const mine = run, seat = T.match.turn, person = T.human();
     T.busy = true;
     const events = T.match.play(move), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
+    // in a game by link, a move that rolled dice is final: nobody can look at the dice, take it back and choose again
+    if (T.link && T.match.rolled) T.link.floor = T.match.list.length;
     log.push(...words);
     land.push(tally(T.match.position));
     keep();
@@ -2431,9 +2461,11 @@ function createTable(G) {
   function undo() {
     if (!canUndo()) return;
     const had = T.match.list;
-    do { if (T.match.list.length <= floor() || !T.match.undo()) break; } while (!T.human());
+    let rerolls = false; // did any move taken back roll dice? then playing it again gives the same result
+    do { if (T.match.list.length <= floor()) break; rerolls ||= T.match.rolled; if (!T.match.undo()) break; } while (!T.human());
     if (!T.human()) { for (const mv of had.slice(T.match.list.length)) T.match.play(mv); return; } // nothing of yours to take back
     begin(T.match, T.kinds, T.link);
+    if (rerolls) toast("Taken back. The dice are already rolled: playing the same move again gives the same result.");
   }
   function save() {
     const a = el("a");
@@ -2463,8 +2495,8 @@ function createTable(G) {
     $("start").disabled = soon;
     $("start").textContent = soon ? "Coming soon" : "Begin";
     $("length-line").hidden = setup.style !== "ours" || !G.lengths.length;
-    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; attract(); }; line.append(el("span", c.label), k); return line; };
-    more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => !c.only || c.only.includes(setup.style)).map(pickOf)));
+    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.name = c.key; k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; titleCard(); more.querySelector(`select[name="${c.key}"]`)?.focus(); attract(); }; line.append(el("span", c.label), k); return line; };
+    more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => (!c.only || c.only.includes(setup.style)) && (!c.when || c.when(setup.style, setup.extra))).map(pickOf)));
     if (setup.style === "custom") more.append(...G.switches.map(pickOf));
     if (G.expansions && !soon && (!G.expansionsFor || G.expansionsFor(setup.style, setup.extra))) {
       const box = el("div", undefined, "pick small");
@@ -2596,7 +2628,8 @@ function hexBoard(T, stage, o) {
   const still = () => {
     const list = o.fine ? o.fine.cells : o.cells, big = Math.max(...list.map(([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)))) + 2;
     const ns = "http://www.w3.org/2000/svg", S = 30, W = Math.sqrt(3) * S, owner = o.owner(), make = (t, at) => { const e = document.createElementNS(ns, t); for (const [k, v] of Object.entries(at)) e.setAttribute(k, v); return e; };
-    svg = make("svg", { viewBox: o.fine ? `${-W * big} ${-S * 1.6 * big} ${W * 2 * big} ${S * 3.2 * big}` : `${-W * 8} ${-S * 10} ${W * 16} ${S * 20}` });
+    const xs = list.map(([q, r]) => W * (q + r / 2)), ys = list.map(([, r]) => S * 1.5 * r), x0 = Math.min(...xs) - W, y0 = Math.min(...ys) - S * 1.5; // the board's own extent, with a margin
+    svg = make("svg", { viewBox: o.fine ? `${-W * big} ${-S * 1.6 * big} ${W * 2 * big} ${S * 3.2 * big}` : `${x0} ${y0} ${Math.max(...xs) + W - x0} ${Math.max(...ys) + S * 1.5 - y0}` });
     const where = new Map(o.pieces().map((p) => [p.at, p]));
     const words = [];
     list.forEach(([q, r], k) => {
@@ -2637,25 +2670,27 @@ return $x; })({});
 $m[0] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Grain and Glass on the table: roll, build in the hexes your routes reach, trade, and race to the points.
-const { COST, EXPANSIONS, GOODS, NONE, SWITCHES, WASTE, boardOf, glass, goalOf, pointsOf, priceOf, rateOf } = $m[1];
+const { COST, EXPANSIONS, GOODS, NONE, SWITCHES, WASTE, boardOf, glass, goalOf, pointsOf, rateOf, sellPrice } = $m[1];
 const { choose, thinking } = $m[3];
 const { $, NAMES, RGB, createTable, el, radio, toast } = $m[12];
 const { hexBoard } = $m[21];
 
 const SEA = [70, 116, 140], TILE = [[226, 196, 96], [176, 206, 214], [196, 120, 82], [228, 226, 214]], WASTEG = [150, 140, 120];
-const KINDS = { route: "Route", depot: "Depot", town: "Town", harbour: "Harbour", plan: "Plan", trade: "Trade", use: "Play a plan" };
+const KINDS = { route: "Route", depot: "Depot", town: "Town", harbour: "Harbour", plan: "Plan", trade: "Trade", use: "Play a plan", answer: "Answer the offer" };
 const PLAN = { harvest: "Harvest: two goods you lack", works: "Works: two free routes", toll: "Toll: move the gate", seal: "Seal: a point" };
 let kind = "depot", where = null;
 
 const legal = (T) => (T.ready() ? T.match.legal() : []);
 const nameOf = (p, i) => { const [q, r] = boardOf(p).cells[i], R = boardOf(p).radius; return String.fromCharCode(65 + r + R) + (q + R + 1 + Math.min(0, r)); };
 const costText = (c) => c.flatMap((n, k) => (n ? [`${n} ${GOODS[k]}`] : [])).join(", ");
-const kindOf = (m) => (["swap", "sell", "buy", "offer", "charter"].includes(m.do) ? "trade" : m.do);
+const kindOf = (m) => (["swap", "sell", "buy", "offer", "charter"].includes(m.do) ? "trade" : ["accept", "refuse"].includes(m.do) ? "answer" : m.do);
 function label(p, m) {
   if (m.do === "swap") return `Give ${rateOf(p, p.seat, m.give)} ${GOODS[m.give]} for 1 ${GOODS[m.get]}`;
-  if (m.do === "sell") return `Sell 1 ${GOODS[m.good]} for ${priceOf(p, m.good)} coin`;
+  if (m.do === "sell") return `Sell 1 ${GOODS[m.good]} for ${sellPrice(p, p.seat, m.good)} coin`;
   if (m.do === "buy") return `Buy 1 ${GOODS[m.good]} for 4 coin`;
   if (m.do === "offer") return `Offer ${NAMES[m.to]} 1 ${GOODS[m.give]} for 1 ${GOODS[m.get]}`;
+  if (m.do === "accept") return `Take it: give 1 ${GOODS[p.ask.get]}, get 1 ${GOODS[p.ask.give]} from ${NAMES[p.ask.from]}`;
+  if (m.do === "refuse") return "Turn it down";
   if (m.do === "charter") return `Fill charter ${m.k + 1} for 2 points`;
   if (m.do === "use") return PLAN[m.plan];
   if (m.do === "plan") return `Draw a plan for ${costText(COST.plan)}`;
@@ -2672,7 +2707,7 @@ function tap(T, i) {
 }
 
 createTable({
-  game: glass, key: "glass", title: "Grain and Glass", won: "The island's trade is yours.", seats: [2, 3, 4, 5, 6], normal: 3, lengths: [], pace: () => 420,
+  game: glass, key: "glass", title: "Grain and Glass", won: "The island's trade is yours.", outOf: () => false, // nobody is knocked out of a trading game seats: [2, 3, 4, 5, 6], normal: 3, lengths: [], pace: () => 420,
   unit: "Points", cellsOf: pointsOf, goalOf, landOf: (p) => goalOf(p) + 3, choose, thinking,
   about: {
     classic: "Traditional: inspired by Catan.\nThe settle-and-trade rules as players know them: hexes yield goods when their number is rolled, you build routes, depots and towns, trade with the bank and the other players, buy cards, and race to 10 points. Ours: depots and towns stand in hexes and gather from the hexes beside them, a toll gate moved on doubles in place of a robber (nothing is stolen), our own goods, costs and plans, and the first player drawn by dice.\nNot affiliated with or endorsed by its makers. Our own island, names and art.",
@@ -2689,10 +2724,11 @@ createTable({
     { key: "gate", label: "Toll gate", normal: true, values: [[true, "On"], [false, "Off"]] },
     { key: "plans", label: "Plans", normal: true, values: [[true, "On"], [false, "Off"]] },
     { key: "offers", label: "Trade offers a turn", normal: SWITCHES.offers.normal, values: [[0, "None"], [1, "1"], [2, "2"], [3, "3"]] },
+    { key: "order", label: "Turn order", normal: SWITCHES.order.normal, values: [["fixed", "The same each round"], ["rotate", "First seat moves on each round"]] },
     { key: "actions", label: "Actions a turn", normal: SWITCHES.actions.normal, values: [[3, "3"], [99, "As many as you like"]] },
     { key: "limit", label: "Rounds", normal: SWITCHES.limit.normal, values: [[12, "12"], [16, "16"], [24, "24"], [40, "40"]] },
   ],
-  expansions: EXPANSIONS.map((key) => ({ key, label: { ships: "Ships", harbours: "Harbours", seasons: "Seasons" }[key], note: { ships: "Routes may cross the sea beside the coast, for 2 Glass and 2 Salt.", harbours: "Build a harbour on a coastal depot: swap 2 of anything for 1.", seasons: "Each round may bring plenty of one good, or a drought, or fair trade." }[key] })),
+  expansions: EXPANSIONS.map((key) => ({ key, label: { ships: "Ships", harbours: "Harbours", seasons: "Seasons" }[key], note: { ships: "Routes may cross the sea beside the coast, for 2 Glass and 2 Salt.", harbours: "Build a harbour on a coastal depot: swap 2 of anything for 1.", seasons: "Each round may bring plenty of one good (one each), a drought (each loses one of it), or fair trade (better rates and prices)." }[key] })),
   stats: (p, s) => [["Goods", p.hands[s].reduce((n, v) => n + v, 0)], p.rule.market === "falling" ? ["Coin", p.coin[s]] : ["Plans", p.held[s].length]],
   line(e, p) {
     const who = NAMES[e.seat], at = (i) => nameOf(p, i);
@@ -2703,9 +2739,10 @@ createTable({
     if (e.kind === "toll") return `${who} moves the toll gate to ${at(e.at)}.`;
     if (e.kind === "plan") return e.seal ? `${who} draws a seal: a point.` : `${who} draws a plan.`;
     if (e.kind === "use") return `${who} plays ${PLAN[e.plan].split(":")[0].toLowerCase()}.`;
-    if (e.kind === "offer") return `${who} offers ${NAMES[e.to]} ${GOODS[e.give]} for ${GOODS[e.get]}: ${e.yes ? "taken" : "refused"}.`;
+    if (e.kind === "ask") return `${who} offers ${NAMES[e.to]} ${GOODS[e.give]} for ${GOODS[e.get]}.`;
+    if (e.kind === "offer") return `${NAMES[e.to]} ${e.yes ? "takes" : "turns down"} ${who}'s offer.`;
     if (e.kind === "charter") return `${who} fills a charter.`;
-    if (e.kind === "season") return e.what === "plenty" ? `A season of plenty: 1 ${GOODS[e.good]} each.` : e.what === "drought" ? "A drought season." : "A season of fair trade.";
+    if (e.kind === "season") return e.what === "plenty" ? `A season of plenty: 1 ${GOODS[e.good]} each.` : e.what === "drought" ? `A drought: each loses 1 ${GOODS[e.good]}.` : "A season of fair trade: better rates at the market.";
     if (e.kind === "done") return `${who} ends the turn.`;
     return "";
   },
@@ -2761,7 +2798,7 @@ createTable({
     `Build: a route (${costText(COST.route)}) on a hex beside your routes or depots; a depot (${costText(COST.depot)}) on a hex your routes reach, with no depot on it or beside it; a town (${costText(COST.town)}) in place of a depot.`,
     "A depot is worth 1 point and a town 2.",
     p?.rule.market === "falling" ? "Sell goods for coin: 3, then 2, then 1 as more of a good is sold; prices recover each turn. Buy any good for 4 coin." : "Swap 4 of one good for 1 of any other at the bank, 3 at a port hex of yours, 2 at a port for that good.",
-    "Offer another player one good for one of theirs. Bots take an offer when they have more of what you ask for than of what you give.",
+    "Offer another player one good for one of theirs. They answer for themselves; a bot takes an offer when it has more of what you ask for than of what you give.",
     ...(p?.rule.plans !== false ? [`Draw a plan for ${costText(COST.plan)}: a harvest of two goods you lack, two free routes, a move of the toll gate, or a seal worth a point. Play one plan a turn.`] : []),
     ...(p?.rule.gate !== false ? ["Roll doubles and you move the toll gate. The hex under it yields nothing until it moves. Nothing is stolen."] : []),
     ...(p?.rule.charters ? ["Charters: three public orders for six goods. Fill one for 2 points. Joining two ports with your routes scores 2."] : []),

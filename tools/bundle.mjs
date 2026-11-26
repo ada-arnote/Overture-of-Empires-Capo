@@ -16,6 +16,9 @@ function declared(text, from) {
   for (let i = from; i < text.length; i++) {
     const c = text[i];
     if (quote) { if (c === "\\") i++; else if (c === quote) quote = ""; continue; }
+    // comments are skipped whole, so an apostrophe in one is not taken for a quote
+    if (c === "/" && text[i + 1] === "/") { const e = text.indexOf("\n", i); i = e < 0 ? text.length : e - 1; continue; }
+    if (c === "/" && text[i + 1] === "*") { const e = text.indexOf("*/", i + 2); i = e < 0 ? text.length : e + 1; continue; }
     if (c === '"' || c === "'" || c === "`") { quote = c; continue; }
     if ("([{".includes(c)) depth++;
     else if (")]}".includes(c)) depth--;

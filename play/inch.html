@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6JzLFZ5ckIl2AqvNdd21fE455gXGVa5SerkXe8nl3q4='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-s+vldy4NwXrFtoLenx5HXezkoZ926hdU97kl+d21Wh0='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>An Inch of Ink</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -58,10 +58,10 @@ button { cursor: pointer; touch-action: manipulation }
 #status { font: 600 18px/1.3 var(--serif); margin-bottom: 10px; min-height: 1.3em; text-wrap: balance }
 .pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px }
 .pick.even > * { flex: 1 }
-.pick button { min-height: 46px; padding: 6px 13px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 244, 214, .05); line-height: 1.15; text-align: center }
+.pick button { min-height: 46px; padding: 6px 13px; border-radius: 10px; border: 1px solid var(--line2); background: rgba(255, 244, 214, .05); line-height: 1.15; text-align: center }
 .pick button:hover { border-color: var(--line2) }
 .pick button[aria-checked=true] { border-color: var(--gold); background: rgba(226, 184, 102, .17); box-shadow: inset 0 0 0 1px var(--gold) }
-.pick button:disabled { opacity: .38; cursor: default }
+.pick button:disabled { cursor: default; color: var(--soft); border-style: dashed }
 .pick small { display: block; color: var(--soft); font-size: 13px }
 .pick.small { margin: 0 } .pick.small button { min-height: 44px; min-width: 44px }
 .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 7px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .5) }
@@ -486,6 +486,8 @@ function createMatch(game, { options = {}, seed = "" } = {}) {
       played.push(deepFreeze(copy));
       return now().events;
     },
+    /** Whether the last move rolled any dice. In a game between people such a move is not taken back. */
+    get rolled() { const n = steps.length; return n > 1 && steps[n - 1].dice.join() !== steps[n - 2].dice.join(); },
     /** Take back the last move. Playing it again rolls the same dice. */
     undo() {
       if (!played.length) return false;
@@ -730,7 +732,15 @@ const { CELLS, COLS, ROWS } = $m[10];
 
 const NONE = -1, PCTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100], TICK_MS = 500;
 const LIVE_MAPS = ["world", "continents", "islands"];
-const START = 30, GOAL = 80, LIMIT = 1600, RANGE = 9;
+const START = 30, GOAL = 80, TIME = 800, RANGE = 9;
+/** How hard the bots play. grow: their growth in tenths of yours; every: they act on one tick in this many; dare and bold: how much
+ *  stronger (in tenths) a calm or a fierce bot must be to attack; you: how strong you look to them, in tenths; truce: ticks before
+ *  they attack you; spare: whether a full bot leaves you alone unless you are worth attacking. */
+const RIVALS = {
+  gentle: { grow: 7, every: 5, dare: 16, bold: 10, you: 20, truce: 360, spare: true },
+  even: { grow: 10, every: 4, dare: 13, bold: 8, you: 10, truce: 0, spare: false },
+  hard: { grow: 13, every: 3, dare: 11, bold: 7, you: 8, truce: 0, spare: false },
+};
 const NATIONS = ["Aster", "Bryn", "Caldo", "Dorran", "Elm", "Fenn", "Gale", "Harrow", "Isle", "Jarl", "Kest", "Lume", "Morrow", "Nesh", "Orra", "Pell", "Quill", "Rook", "Sable", "Tarn", "Ulm", "Vael", "Wren", "Yarrow", "Zeal", "Arden", "Brisk", "Corve", "Drey", "Ebon", "Fallow", "Grist", "Holm", "Ivo", "Juno", "Kell", "Lorn", "Mire", "Nox", "Oaken", "Pryor", "Rune", "Sorrel", "Thane", "Umber", "Vesk", "Wold", "Ysolde", "Zinn", "Amber"];
 const STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
 const made = new Map();
@@ -772,10 +782,45 @@ function liveBoard(map, key, chance) {
     let at = dice.pick(dry);
     for (let s = 0; s < 12; s++) { hill[at] = 1; const next = g.near[at].filter((m) => land[m]); if (!next.length) break; at = dice.pick(next); }
   }
-  const b = Object.freeze({ ...g, land, hill, dry, total: dry.length });
+  const b = Object.freeze({ ...g, land, hill, dry, total: dry.length, ...seas(g, land, dry) });
   if (made.size > 12) made.clear();
   made.set(id, b);
   return b;
+}
+
+/** How many landmasses a map has, and how far boats must reach so that every one can be reached: at least RANGE sea cells. */
+function seas(g, land, dry) {
+  const mass = Array(g.n).fill(-1);
+  let k = 0;
+  for (const i of dry) {
+    if (mass[i] >= 0) continue;
+    const list = [i];
+    mass[i] = k;
+    for (let j = 0; j < list.length; j++) for (const m of g.near[list[j]]) if (land[m] && mass[m] < 0) { mass[m] = k; list.push(m); }
+    k++;
+  }
+  // the shortest crossing from each landmass to each other, then the longest crossing a chain joining them all must make
+  const gap = Array.from({ length: k }, () => Array(k).fill(g.n));
+  for (let c = 0; c < k; c++) {
+    const far = new Map(), list = [];
+    for (let i = 0; i < g.n; i++) if (mass[i] === c) for (const m of g.near[i]) if (!land[m] && !far.has(m)) { far.set(m, 1); list.push(m); }
+    for (let j = 0; j < list.length; j++) {
+      const w = list[j], d = far.get(w);
+      for (const m of g.near[w]) {
+        if (land[m]) { if (mass[m] !== c && d < gap[c][mass[m]]) gap[c][mass[m]] = d; } else if (!far.has(m)) { far.set(m, d + 1); list.push(m); }
+      }
+    }
+  }
+  let range = RANGE;
+  const joined = new Set([0]);
+  while (joined.size < k) { // join the nearest landmass not yet joined, as a tree grows
+    let best = g.n, to = -1;
+    for (const a of joined) for (let c = 0; c < k; c++) if (!joined.has(c) && gap[a][c] < best) { best = gap[a][c]; to = c; }
+    if (to < 0) break;
+    joined.add(to);
+    range = Math.max(range, best);
+  }
+  return { masses: k, range };
 }
 
 // ---- the clock ----
@@ -808,32 +853,47 @@ function send(p, by, to, troops) {
   if (a) a.left += troops; else p.attacks.push({ by, to, left: troops });
 }
 
+const tier = (p) => RIVALS[p.rivals] || RIVALS.even;
+
 /** The bots: each has a temper drawn at the start. They act now and then, never on every tick. */
 function think(p, b, dice, borders) {
+  const t = tier(p);
   for (let s = 0; s < p.troops.length; s++) {
-    if (s === p.human || !p.land[s] || dice.below(4)) continue;
+    if (s === p.human || !p.land[s] || dice.below(t.every)) continue;
     const busy = p.attacks.some((a) => a.by === s), full = p.troops[s] * 10 >= maxOf(p, s) * 7;
     if (busy && !full) continue;
-    const near = [...borders[s]], share = 30 + p.temper[s] * 10;
-    if (near.includes(NONE) && (!near.some((o) => o !== NONE) || dice.below(3))) { send(p, s, NONE, Math.floor((p.troops[s] * share) / 100)); continue; }
-    const rivals = near.filter((o) => o !== NONE);
-    if (!rivals.length) { if (p.boats && full && dice.below(3) === 0) sail(p, b, s, dice); continue; }
-    const weak = rivals.reduce((x, y) => (p.troops[y] * Math.max(1, p.land[x]) < p.troops[x] * Math.max(1, p.land[y]) ? y : x));
-    if (p.troops[s] > p.troops[weak] * (p.temper[s] > 2 ? 0.8 : 1.3) || full) send(p, s, weak, Math.floor((p.troops[s] * share) / 100));
+    const near = [...borders[s]], amount = Math.floor((p.troops[s] * (30 + p.temper[s] * 10)) / 100);
+    // how strong a rival looks: you may look stronger than you are, and during the truce you are left alone
+    const rivals = near.filter((o) => o !== NONE && !(o === p.human && p.tick < t.truce)), looks = (o) => (o === p.human ? Math.floor((p.troops[o] * t.you) / 10) : p.troops[o]);
+    if (near.includes(NONE) && (!rivals.length || dice.below(3))) { send(p, s, NONE, amount); continue; }
+    const weak = rivals.length ? rivals.reduce((x, y) => (looks(y) * Math.max(1, p.land[x]) < looks(x) * Math.max(1, p.land[y]) ? y : x)) : null;
+    if (weak !== null && p.troops[s] * 10 > looks(weak) * (p.temper[s] > 2 ? t.bold : t.dare)) { send(p, s, weak, amount); continue; }
+    // nothing on foot worth taking: once full, take to the boats, or else push at the weakest anyway
+    if (!full) continue;
+    if (p.boats && !near.includes(NONE) && sail(p, b, s)) continue;
+    if (weak !== null && !(t.spare && weak === p.human)) send(p, s, weak, amount);
   }
 }
 
-/** A bot with nowhere to go on foot sends a boat to the nearest shore it can reach. Changes p. */
-function sail(p, b, s, dice) {
-  const spots = [...landings(p, b, s)];
-  if (!spots.length) return;
-  land(p, b, s, dice.pick(spots), Math.floor(p.troops[s] / 2));
+/** A bot sends half its strength by boat to the nearest coast it can take. Changes p. Returns whether it sailed. */
+function sail(p, b, s) {
+  const troops = Math.floor(p.troops[s] / 2), t = tier(p), spare = t.spare || p.tick < t.truce;
+  let best = -1, key = 0;
+  for (const [at, d] of shores(p, b, s)) {
+    if (troops <= costOf(p, b, at) * 2 || (spare && p.owner[at] === p.human)) continue;
+    const k = d * b.n + p.order[at]; // the nearest, and among those the game's own order
+    if (best < 0 || k < key) { best = at; key = k; }
+  }
+  if (best < 0) return false;
+  land(p, b, s, best, troops);
+  return true;
 }
-/** Put troops ashore. A landing costs double; what is left goes on attacking. Changes p. */
+/** Put troops ashore. A landing costs double; what is left goes on attacking. A failed landing loses one cell's price,
+ *  and the rest comes home. Changes p. Returns whether it landed. */
 function land(p, b, s, at, troops) {
   const was = p.owner[at], cost = costOf(p, b, at) * 2;
+  if (troops <= cost) { p.troops[s] -= Math.min(troops, costOf(p, b, at)); return false; }
   p.troops[s] -= troops;
-  if (troops <= cost) return false;
   if (was !== NONE) { p.land[was]--; p.troops[was] = Math.max(0, p.troops[was] - 1); }
   p.owner[at] = s;
   p.land[s]++;
@@ -847,11 +907,19 @@ function tick(p, b, dice, events) {
   p.tick++;
   for (let s = 0; s < p.troops.length; s++) {
     if (!p.land[s]) continue;
-    const top = maxOf(p, s);
-    p.troops[s] = p.troops[s] > top ? p.troops[s] - Math.ceil((p.troops[s] - top) / 10) : Math.min(top, p.troops[s] + gainOf(p, s));
+    const top = maxOf(p, s), g = gainOf(p, s), r = s === p.human ? 10 : tier(p).grow;
+    // a bot's growth is scaled by its tier, spread over the ticks in whole numbers
+    const add = r === 10 ? g : Math.floor((g * r * p.tick) / 10) - Math.floor((g * r * (p.tick - 1)) / 10);
+    p.troops[s] = p.troops[s] > top ? p.troops[s] - Math.ceil((p.troops[s] - top) / 10) : Math.min(top, p.troops[s] + add);
   }
   const borders = bordersOf(p, b);
   think(p, b, dice, borders);
+  // two nations attacking each other meet first: the smaller force is spent against the larger
+  for (const a of p.attacks) {
+    const o = a.to === NONE ? null : p.attacks.find((x) => x.by === a.to && x.to === a.by);
+    if (o) { const m = Math.min(a.left, o.left); a.left -= m; o.left -= m; }
+  }
+  p.attacks = p.attacks.filter((a) => a.left > 0);
   // the cells each attack could take now, gathered in one pass over the map
   const front = p.attacks.map(() => []), which = new Map(p.attacks.map((a, k) => [a.by * 1000 + (a.to + 1), k]));
   for (let i = 0; i < b.n; i++) {
@@ -881,11 +949,11 @@ function tick(p, b, dice, events) {
   });
   p.attacks = p.attacks.filter((_, k) => !done.includes(k));
   for (let s = 0; s < p.troops.length; s++) if (!p.land[s] && p.alive[s]) { p.alive[s] = 0; p.attacks = p.attacks.filter((a) => a.by !== s); events.push({ kind: "out", seat: s }); }
+  // losing all your land does not end the game: you are out, and the others play on
   const top = p.land.reduce((x, v, s) => (v > p.land[x] ? s : x), 0);
-  if (!p.land[p.human]) return finish(p, [top], "overran you", events);
   if (p.land[top] >= goalOf(p)) return finish(p, [top], "held most of the map", events);
   if (p.alive.filter(Boolean).length === 1) return finish(p, [top], "the only one left", events);
-  if (p.tick >= p.limit) return finish(p, [top], "held the most land when time ran out", events);
+  if (p.limit && p.tick >= p.limit) return finish(p, [top], "held the most land when time ran out", events);
   return undefined;
 }
 function finish(p, winners, why, events) {
@@ -893,27 +961,30 @@ function finish(p, winners, why, events) {
   events.push({ kind: "end", winners, why });
 }
 
-/** Where a boat from a seat's coast can land: coastal cells of others within reach over water. */
-function landings(p, b, s = p.human) {
-  const seen = new Map(), list = [];
+/** Where a boat from a seat's coast can land, and how many sea cells away: coastal cells of others within the map's reach. */
+function shores(p, b, s = p.human) {
+  const seen = new Map(), list = [], out = new Map();
   for (let i = 0; i < b.n; i++) if (p.owner[i] === s && b.near[i].some((m) => !b.land[m])) for (const m of b.near[i]) if (!b.land[m] && !seen.has(m)) { seen.set(m, 1); list.push(m); }
-  const out = new Set();
   for (let k = 0; k < list.length; k++) {
     const w = list[k], d = seen.get(w);
     for (const m of b.near[w]) {
-      if (b.land[m]) { if (p.owner[m] !== s) out.add(m); continue; }
-      if (!seen.has(m) && d < RANGE) { seen.set(m, d + 1); list.push(m); }
+      if (b.land[m]) { if (p.owner[m] !== s && !out.has(m)) out.set(m, d); continue; }
+      if (!seen.has(m) && d < b.range) { seen.set(m, d + 1); list.push(m); }
     }
   }
   return out;
 }
+const landings = (p, b, s = p.human) => new Set(shores(p, b, s).keys());
+/** A boat must carry more than this to land on a cell. */
+const landingPrice = (p, b, at) => costOf(p, b, at) * 2;
 
 /** The board a live position is played on. */
 const liveBoardOf = (p, chance) => liveBoard(p.map, p.key, chance);
 
 function liveSetup(o, dice, chance) {
-  const key = dice.below(0x40000000), b = liveBoard(o.map, key, chance), n = o.nations;
-  const p = { live: true, classic: true, style: o.style, map: o.map, key: 0, human: 0, total: b.total, owner: Array(b.n).fill(NONE), order: dice.shuffle(b.cells.map((_, i) => i)), troops: Array(n).fill(START), land: Array(n).fill(0), alive: Array(n).fill(1), temper: Array.from({ length: n }, () => dice.below(4)), names: ["You", ...dice.shuffle(NATIONS).slice(0, n - 1)], attacks: [], cities: [], boats: !!o.boats || o.map === "islands", building: !!o.cities, tick: 0, limit: LIMIT, phase: "spawn", seat: 0, round: 1, rounds: LIMIT, over: null };
+  const key = dice.below(0x40000000), b = liveBoard(o.map, key, chance), n = o.nations, limit = 2 * (o.time ?? TIME);
+  // boats are always on where the map has more than one landmass, so that every map can be won
+  const p = { live: true, classic: true, style: o.style, map: o.map, key: 0, human: 0, total: b.total, owner: Array(b.n).fill(NONE), order: dice.shuffle(b.cells.map((_, i) => i)), troops: Array(n).fill(START), land: Array(n).fill(0), alive: Array(n).fill(1), temper: Array.from({ length: n }, () => dice.below(4)), names: ["You", ...dice.shuffle(NATIONS).slice(0, n - 1)], attacks: [], cities: [], boats: !!o.boats || b.masses > 1, building: !!o.cities, rivals: RIVALS[o.rivals] ? o.rivals : "gentle", tick: 0, limit, phase: "spawn", seat: 0, round: 1, rounds: limit, over: null };
   p.key = o.map === "world" ? 0 : key;
   // bots start far apart
   const spots = [], far = (i) => spots.every((j) => Math.abs(b.cells[i][0] - b.cells[j][0]) + Math.abs(b.cells[i][1] - b.cells[j][1]) > 7);
@@ -929,14 +1000,17 @@ function liveMoves(p, b) {
   if (p.phase === "spawn") return b.dry.filter((i) => p.owner[i] === NONE && b.near[i].every((m) => p.owner[m] === NONE)).map((at) => ({ do: "spawn", at }));
   const out = [{ do: "tick", n: 1 }, { do: "tick", n: 2 }, { do: "tick", n: 4 }], near = [...bordersOf(p, b)[p.human]];
   for (const to of near) for (const pct of PCTS) out.push({ do: "attack", to, pct });
+  if (p.boats) for (const at of landings(p, b)) for (const pct of PCTS) out.push({ do: "boat", at, pct });
   if (p.building) for (let i = 0; i < b.n; i++) if (p.owner[i] === p.human && !p.cities.includes(i) && p.troops[p.human] >= cityPrice(p)) out.push({ do: "city", at: i });
   return out;
 }
 const cityPrice = (p) => 60 * (1 + p.cities.filter((c) => p.owner[c] === p.human).length);
 
-/** A quick check, so that a tick does not have to list every move to be allowed. */
+/** Whether a move has exactly these keys and no others. */
+const shaped = (m, ...keys) => !!m && typeof m === "object" && !Array.isArray(m) && Object.keys(m).length === keys.length && keys.every((k) => Object.hasOwn(m, k));
+/** A quick check, so that a tick does not have to list every move to be allowed. It allows exactly what liveMoves lists. */
 function liveAllows(p, b, m) {
-  if (p.over) return false;
+  if (p.over || !shaped(m, "do", m?.do === "tick" ? "n" : m?.do === "attack" ? "to" : "at", ...(m?.do === "attack" || m?.do === "boat" ? ["pct"] : []))) return false;
   if (p.phase === "spawn") return m.do === "spawn" && Number.isInteger(m.at) && b.land[m.at] === 1 && p.owner[m.at] === NONE && b.near[m.at].every((x) => p.owner[x] === NONE);
   if (m.do === "tick") return [1, 2, 4].includes(m.n);
   if (m.do === "attack") return PCTS.includes(m.pct) && (m.to === NONE || (Number.isInteger(m.to) && m.to > 0 && m.to < p.troops.length)) && bordersOf(p, b)[p.human].has(m.to);
@@ -952,14 +1026,14 @@ function liveApply(before, b, m, dice) {
   if (m.do === "spawn") { claim(p, b, s, m.at); p.phase = "play"; events.push({ kind: "spawn", at: m.at }); }
   else if (m.do === "attack") { send(p, s, m.to, Math.floor((p.troops[s] * m.pct) / 100)); events.push({ kind: "attack", seat: s, to: m.to, pct: m.pct }); }
   else if (m.do === "boat") {
-    const landed = land(p, b, s, m.at, Math.floor((p.troops[s] * m.pct) / 100));
-    events.push({ kind: "boat", seat: s, at: m.at, landed });
+    const had = p.troops[s], landed = land(p, b, s, m.at, Math.floor((had * m.pct) / 100));
+    events.push({ kind: "boat", seat: s, at: m.at, landed, lost: landed ? 0 : had - p.troops[s] });
   } else if (m.do === "city") { p.troops[s] -= cityPrice(before); p.cities.push(m.at); events.push({ kind: "city", seat: s, at: m.at }); }
   else for (let k = 0; k < m.n && !p.over; k++) tick(p, b, dice, events);
   return { position: p, events };
 }
 
-$x.NONE = NONE; $x.PCTS = PCTS; $x.TICK_MS = TICK_MS; $x.LIVE_MAPS = LIVE_MAPS; $x.liveBoard = liveBoard; $x.landOf = landOf; $x.maxOf = maxOf; $x.gainOf = gainOf; $x.costOf = costOf; $x.goalOf = goalOf; $x.bordersOf = bordersOf; $x.landings = landings; $x.liveBoardOf = liveBoardOf; $x.liveSetup = liveSetup; $x.liveMoves = liveMoves; $x.cityPrice = cityPrice; $x.liveAllows = liveAllows; $x.liveApply = liveApply;
+$x.NONE = NONE; $x.PCTS = PCTS; $x.TICK_MS = TICK_MS; $x.LIVE_MAPS = LIVE_MAPS; $x.RIVALS = RIVALS; $x.liveBoard = liveBoard; $x.landOf = landOf; $x.maxOf = maxOf; $x.gainOf = gainOf; $x.costOf = costOf; $x.goalOf = goalOf; $x.bordersOf = bordersOf; $x.tier = tier; $x.shores = shores; $x.landings = landings; $x.landingPrice = landingPrice; $x.liveBoardOf = liveBoardOf; $x.liveSetup = liveSetup; $x.liveMoves = liveMoves; $x.cityPrice = cityPrice; $x.liveAllows = liveAllows; $x.liveApply = liveApply;
 return $x; })({});
 $m[1] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -967,7 +1041,7 @@ $m[1] = (($x) => {
 // your home falls, your pool grows, and you pour part of it over a border, or wait.
 // Classic is the genre as it is remembered: a wider map, no cut-off rule, no homes to storm, and play until one holds most of it.
 const { hexBoard, joined } = $m[2];
-const { chance, seedState } = $m[3];
+const { canon, chance, seedState } = $m[3];
 const { LIVE_MAPS, liveAllows, liveApply, liveBoardOf, liveMoves, liveSetup } = $m[9];
 
 const roller = (text) => chance(seedState(text));
@@ -1098,8 +1172,8 @@ function advance(p, events, dice) {
 }
 
 const inch = {
-  id: "inch", version: "5",
-  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, ...SWITCHES },
+  id: "inch", version: "6",
+  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, rivals: { values: ["gentle", "even", "hard"], normal: "gentle" }, time: { values: [600, 800, 1800, 0], normal: 800 }, ...SWITCHES },
 
   setup(o, dice) {
     if (o.style === "classic" || (o.style === "custom" && o.live)) return liveSetup(o, dice, roller);
@@ -1111,7 +1185,7 @@ const inch = {
     return p;
   },
   turn: (p) => (p.over ? null : p.live ? p.human : p.seat),
-  allows: (p, m) => (p.live ? liveAllows(p, liveBoardFor(p), m) : inch.moves(p).some((x) => JSON.stringify(x) === JSON.stringify(m))),
+  allows: (p, m) => { if (p.live) return liveAllows(p, liveBoardFor(p), m); const want = canon(m); return inch.moves(p).some((x) => canon(x) === want); }, // the order of keys does not matter
 
   /** Wait, or pour a share at neutral land or at one rival. Only pours that take something are offered. */
   moves(p) {
@@ -1610,9 +1684,11 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       if (!k.seen) return;
       cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit());
       emblem(ctx, icons[k.seat], cam.px, cam.py, size * 0.42 * cam.pk, flat);
-      ctx.fillStyle = `rgba(252,247,234,${0.5 * k.seen})`;
+      // ink by the ground's brightness: dark marks on light colours, light marks on dark ones, so both read
+      const [r, g, b] = show[i].rgb, bright = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.5;
+      ctx.fillStyle = bright ? `rgba(24,18,14,${0.62 * k.seen})` : `rgba(252,247,234,${0.62 * k.seen})`;
       ctx.fill("evenodd");
-      ctx.lineWidth = 1; ctx.strokeStyle = `rgba(20,16,14,${0.35 * k.seen})`; ctx.stroke();
+      ctx.lineWidth = 1; ctx.strokeStyle = bright ? `rgba(252,247,234,${0.4 * k.seen})` : `rgba(20,16,14,${0.4 * k.seen})`; ctx.stroke();
     });
     for (const l of labels) { // names printed on the map
       cam.projectTo(l.at[0], l.at[1], unit());
@@ -1802,9 +1878,9 @@ $m[18] = (($x) => {
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-const VERSION = "0.4.0";
+const VERSION = "0.4.2";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "0d60389b";
+const BUILD = "5fe289c3";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
 return $x; })({});
@@ -2047,12 +2123,12 @@ function createTable(G) {
   }
   function score() {
     const p = T.match.position, goal = G.goalOf(p), n = G.landOf(p), seats = T.kinds.length, over = T.match.turn === null;
-    $("round").textContent = over ? "The end" : p.classic ? `Round ${p.round}` : `Round ${p.round} of ${p.rounds}`;
+    $("round").textContent = over ? "The end" : G.roundText?.(p) || (p.classic ? `Round ${p.round}` : `Round ${p.round} of ${p.rounds}`);
     $("fills").replaceChildren(...Array.from({ length: seats }, (_, s) => { const i = el("i"); i.style.width = `${(100 * G.cellsOf(p, s)) / n}%`; i.style.background = `rgb(${RGB[s]})`; return i; }));
     $("goal").style.left = `${(100 * goal) / n}%`;
     $("land").setAttribute("aria-label", `${Array.from({ length: seats }, (_, s) => `${NAMES[s]} ${G.cellsOf(p, s)}`).join(", ")}. The goal is ${goal} of ${n}.`);
     $("seats").replaceChildren(...Array.from({ length: seats }, (_, s) => {
-      const c = G.cellsOf(p, s), li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${c ? "" : " out"}`), dl = el("dl");
+      const c = G.cellsOf(p, s), out = G.outOf ? G.outOf(p, s) : !c, li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${out ? " out" : ""}`), dl = el("dl");
       for (const [k, v] of [[G.unit || "Land", innerWidth > 820 || seats < 3 ? `${c}/${goal}` : c], ...G.stats(p, s)]) { const d = el("div"); d.append(el("dt", k), el("dd", String(v))); dl.append(d); }
       li.append(sign(s), el("b", NAMES[s]), el("small", T.kinds[s] === "you" && T.solo() ? "You" : WORDS[T.kinds[s]]), dl);
       return li;
@@ -2077,6 +2153,8 @@ function createTable(G) {
     const mine = run, seat = T.match.turn, person = T.human();
     T.busy = true;
     const events = T.match.play(move), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
+    // in a game by link, a move that rolled dice is final: nobody can look at the dice, take it back and choose again
+    if (T.link && T.match.rolled) T.link.floor = T.match.list.length;
     log.push(...words);
     land.push(tally(T.match.position));
     keep();
@@ -2304,9 +2382,11 @@ function createTable(G) {
   function undo() {
     if (!canUndo()) return;
     const had = T.match.list;
-    do { if (T.match.list.length <= floor() || !T.match.undo()) break; } while (!T.human());
+    let rerolls = false; // did any move taken back roll dice? then playing it again gives the same result
+    do { if (T.match.list.length <= floor()) break; rerolls ||= T.match.rolled; if (!T.match.undo()) break; } while (!T.human());
     if (!T.human()) { for (const mv of had.slice(T.match.list.length)) T.match.play(mv); return; } // nothing of yours to take back
     begin(T.match, T.kinds, T.link);
+    if (rerolls) toast("Taken back. The dice are already rolled: playing the same move again gives the same result.");
   }
   function save() {
     const a = el("a");
@@ -2336,8 +2416,8 @@ function createTable(G) {
     $("start").disabled = soon;
     $("start").textContent = soon ? "Coming soon" : "Begin";
     $("length-line").hidden = setup.style !== "ours" || !G.lengths.length;
-    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; attract(); }; line.append(el("span", c.label), k); return line; };
-    more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => !c.only || c.only.includes(setup.style)).map(pickOf)));
+    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.name = c.key; k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; titleCard(); more.querySelector(`select[name="${c.key}"]`)?.focus(); attract(); }; line.append(el("span", c.label), k); return line; };
+    more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => (!c.only || c.only.includes(setup.style)) && (!c.when || c.when(setup.style, setup.extra))).map(pickOf)));
     if (setup.style === "custom") more.append(...G.switches.map(pickOf));
     if (G.expansions && !soon && (!G.expansionsFor || G.expansionsFor(setup.style, setup.extra))) {
       const box = el("div", undefined, "pick small");
@@ -2469,7 +2549,8 @@ function hexBoard(T, stage, o) {
   const still = () => {
     const list = o.fine ? o.fine.cells : o.cells, big = Math.max(...list.map(([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)))) + 2;
     const ns = "http://www.w3.org/2000/svg", S = 30, W = Math.sqrt(3) * S, owner = o.owner(), make = (t, at) => { const e = document.createElementNS(ns, t); for (const [k, v] of Object.entries(at)) e.setAttribute(k, v); return e; };
-    svg = make("svg", { viewBox: o.fine ? `${-W * big} ${-S * 1.6 * big} ${W * 2 * big} ${S * 3.2 * big}` : `${-W * 8} ${-S * 10} ${W * 16} ${S * 20}` });
+    const xs = list.map(([q, r]) => W * (q + r / 2)), ys = list.map(([, r]) => S * 1.5 * r), x0 = Math.min(...xs) - W, y0 = Math.min(...ys) - S * 1.5; // the board's own extent, with a margin
+    svg = make("svg", { viewBox: o.fine ? `${-W * big} ${-S * 1.6 * big} ${W * 2 * big} ${S * 3.2 * big}` : `${x0} ${y0} ${Math.max(...xs) + W - x0} ${Math.max(...ys) + S * 1.5 - y0}` });
     const where = new Map(o.pieces().map((p) => [p.at, p]));
     const words = [];
     list.forEach(([q, r], k) => {
@@ -2562,9 +2643,9 @@ return $x; })({});
 $m[22] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // An Inch of Ink in real time, on the table: a clock, a share to send, a click on where it goes, and a leaderboard.
-const { NONE, PCTS, TICK_MS, bordersOf, cityPrice, gainOf, goalOf, landings, maxOf } = $m[9];
+const { NONE, PCTS, TICK_MS, bordersOf, cityPrice, gainOf, goalOf, landingPrice, landings, maxOf } = $m[9];
 const { liveBoardFor } = $m[1];
-const { $, RGB, el, toast } = $m[12];
+const { $, RGB, el, sheet, toast } = $m[12];
 const { hexBoard } = $m[21];
 const { areaPicture } = $m[23];
 
@@ -2619,13 +2700,18 @@ function tap(T, i) {
   const p = T.match.position, b = liveBoardFor(p);
   if (i < 0 || !b.land[i]) return toast("That is sea.");
   if (p.phase === "spawn") { const m = T.match.legal().find((x) => x.at === i); return m ? T.play(m) : toast("Too close to someone. Choose empty land away from others."); }
+  if (!p.alive[p.human]) return toast("You are out. Watch to the end, or start again from the menu.");
   const o = p.owner[i];
   if (o === p.human) {
     if (building && p.building) { const m = { do: "city", at: i }; if (p.troops[p.human] < cityPrice(p)) return toast(`A city costs ${cityPrice(p)} strength.`); building = false; box?.city.setAttribute("aria-pressed", "false"); return T.play(m); }
     return toast("That land is yours. Tap a neighbour's, or empty land beside yours.");
   }
   if (bordersOf(p, b)[p.human].has(o)) return T.play({ do: "attack", to: o, pct });
-  if (p.boats && landings(p, b).has(i)) return T.play({ do: "boat", at: i, pct });
+  if (p.boats && landings(p, b).has(i)) {
+    const need = landingPrice(p, b, i) + 1;
+    if (Math.floor((p.troops[p.human] * pct) / 100) < need) return toast(`Landing there takes ${need} strength. Send a bigger share, or wait and grow.`);
+    return T.play({ do: "boat", at: i, pct });
+  }
   return toast(p.boats ? "Too far, even by boat." : "You can only attack land beside yours.");
 }
 
@@ -2654,11 +2740,12 @@ function panel(T) {
   $("targets").hidden = $("shares").hidden = true;
   $("pour").parentElement.hidden = true;
   c.hidden = false;
-  c.city.hidden = !p.building;
+  c.city.hidden = !p.building || !p.alive[s];
+  c.querySelector(".live-row").hidden = !p.alive[s];
   if (p.phase === "spawn") { $("status").textContent = "Tap empty land to start your nation"; c.querySelector(".live-info").textContent = `${p.troops.length - 1} other nations are already on the map. Choose a place with room to grow.`; return; }
-  const going = p.attacks.filter((a) => a.by === s);
-  $("status").textContent = paused ? "Paused" : `Strength ${p.troops[s]} of ${maxOf(p, s)}`;
-  c.querySelector(".live-info").textContent = `+${gainOf(p, s)} every half second. ${going.length ? `${going.length} ${going.length === 1 ? "attack" : "attacks"} under way, ${going.reduce((n, a) => n + a.left, 0)} strength in them.` : "Tap a neighbour to attack with the share below."}`;
+  const going = p.attacks.filter((a) => a.by === s), out = !p.alive[s];
+  $("status").textContent = out ? (paused ? "You are out. Paused" : "You are out. Watching") : paused ? "Paused" : `Strength ${p.troops[s]} of ${maxOf(p, s)}`;
+  c.querySelector(".live-info").textContent = out ? "The other nations play on to the end. Speed up the clock, or start again from the menu." : `+${gainOf(p, s)} every half second. ${going.length ? `${going.length} ${going.length === 1 ? "attack" : "attacks"} under way, ${going.reduce((n, a) => n + a.left, 0)} strength in them.` : "Tap a neighbour to attack with the share below."}`;
   const top = p.land.map((n, k) => [n, k]).filter(([n]) => n).sort((x, y) => y[0] - x[0]).slice(0, 8), cs = colours(p);
   if (!top.some(([, k]) => k === s) && p.land[s]) top.push([p.land[s], s]);
   $("leaders").replaceChildren(...top.map(([n, k]) => { const li = el("li"), dot = el("i", undefined, "dot"); dot.style.background = `rgb(${cs[k]})`; li.append(dot, el("b", p.names[k]), el("span", `${Math.round((100 * n) / p.total)}%`)); if (k === s) li.className = "me"; return li; }));
@@ -2667,9 +2754,19 @@ function panel(T) {
 
 const ending = (T) => {
   const p = T.match.position, w = T.match.result.winners[0];
-  return w === p.human ? "The map is yours." : p.land[p.human] ? `${p.names[w]} wins.` : `${p.names[w]} overran you.`;
+  return w === p.human ? "The map is yours." : p.alive[p.human] ? `${p.names[w]} wins.` : `You were out. ${p.names[w]} wins.`;
 };
-const lineOf = (e, p) => (e.kind === "out" ? `${p.names[e.seat]} is gone.` : e.kind === "city" ? "You build a city." : e.kind === "boat" ? (e.landed ? "Your boats land." : "Your boats are thrown back.") : "");
+const lineOf = (e, p) => (e.kind === "out" ? (e.seat === p.human ? "You are out." : `${p.names[e.seat]} is gone.`) : e.kind === "city" ? "You build a city." : e.kind === "boat" ? (e.landed ? "Your boats land." : `Your boats are thrown back. They lose ${e.lost ?? 0}; the rest come home.`) : "");
+/** When you lose your last cell the game goes on without you: watch it to the end, or start again. The open sheet holds the clock. */
+function seen(T, events) {
+  const p = T.match.position;
+  if (p.over || !events.some((e) => e.kind === "out" && e.seat === p.human)) return;
+  const box = el("div", undefined, "stack"), again = el("button", "Restart", "main");
+  again.type = "button";
+  again.onclick = () => { $("sheet").close(); $("again").click(); };
+  box.append(el("p", "Your last land has fallen. Watch the other nations play on to the end, or start a new game."), again);
+  sheet("You are out", box, "Watch");
+}
 const leave = () => { if (box) box.hidden = true; for (const id of ["targets", "shares"]) $(id).hidden = false; $("pour").parentElement.hidden = false; };
 const liveGoal = goalOf;
 /** Keys in real time: Space pauses, 1 to 0 choose the share. */
@@ -2682,16 +2779,16 @@ function key(T, k) {
   return true;
 }
 
-$x.colours = colours; $x.start = start; $x.tap = tap; $x.board = board; $x.panel = panel; $x.ending = ending; $x.lineOf = lineOf; $x.leave = leave; $x.liveGoal = liveGoal; $x.key = key;
+$x.colours = colours; $x.start = start; $x.tap = tap; $x.board = board; $x.panel = panel; $x.ending = ending; $x.lineOf = lineOf; $x.seen = seen; $x.leave = leave; $x.liveGoal = liveGoal; $x.key = key;
 return $x; })({});
 $m[0] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // An Inch of Ink on the table: where to pour and how much.
-const { NONE, boardOf, cellsOf, goalOf, growth, inch, poolLimit, sharesOf } = $m[1];
+const { NONE, boardOf, cellsOf, goalOf, growth, inch, liveBoardFor, poolLimit, sharesOf } = $m[1];
 const { choose, thinking } = $m[11];
 const { $, NAMES, PAPER, RGB, createTable, radio, toast } = $m[12];
 const { hexBoard } = $m[21];
-const { board: liveBoard, ending: liveEnding, key: liveKey, leave: liveLeave, lineOf: liveLine, liveGoal, panel: livePanel } = $m[22];
+const { board: liveBoard, ending: liveEnding, key: liveKey, leave: liveLeave, lineOf: liveLine, liveGoal, panel: livePanel, seen: liveSeen } = $m[22];
 
 const SHARE = { quarter: "Quarter", third: "A third", half: "Half", most: "Most", all: "All" }, HILL = [201, 178, 140];
 const cells = (n) => `${n} ${n === 1 ? "cell" : "cells"}`, place = (to) => (to === NONE ? "empty land" : NAMES[to]);
@@ -2715,14 +2812,31 @@ createTable({
   cellsOf: (p, s) => (p.live ? p.land[s] : cellsOf(p, s)), goalOf: (p) => (p.live ? liveGoal(p) : goalOf(p)), landOf: (p) => (p.live ? p.total : p.owner.length), choose, thinking,
   summary: (T) => { const p = T.match.position; if (!p.live) return null; const m = Math.round((p.tick * 0.5) / 60); return `${p.names[T.match.result.winners[0]]} ${T.match.result.why}, after ${m < 1 ? "less than a minute" : `${m} ${m === 1 ? "minute" : "minutes"}`} of game time.`; },
   ending: (T) => (T.match.position.live ? liveEnding(T) : null),
+  // real time shows game time, not a round; a nation is out only once it has lost the land it had
+  roundText: (p) => (p.live ? `${Math.floor(p.tick / 120)}:${String(Math.floor((p.tick / 2) % 60)).padStart(2, "0")} of game time` : null),
+  outOf: (p, s) => (p.live ? p.tick > 4 && !p.alive[s] : cellsOf(p, s) === 0),
   kindsOf: (o) => (o.style === "classic" || (o.style === "custom" && o.live) ? ["you"] : null),
   alone: (style, extra) => style === "classic" || (style === "custom" && extra.live),
   expansionsFor: (style, extra) => style === "classic" || (style === "custom" && extra.live),
+  seen: (T, events) => { if (T.match.position.live) liveSeen(T, events); },
+  // Custom first chooses the clock: real time shows its own choices, turns show the turn game's switches
   choices: [
-    { key: "map", label: "Map", normal: "world", only: ["classic", "custom"], values: [["world", "The world"], ["continents", "Continents"], ["islands", "Islands"]] },
-    { key: "nations", label: "Nations", normal: 20, only: ["classic", "custom"], values: [[8, "8"], [12, "12"], [20, "20"], [30, "30"], [50, "50"]] },
+    { key: "live", label: "Clock", normal: false, only: ["custom"], values: [[false, "Turns"], [true, "Real time"]] },
+    { key: "map", label: "Map", normal: "world", only: ["classic", "custom"], when: (style, extra) => style === "classic" || extra.live, values: [["world", "The world"], ["continents", "Continents"], ["islands", "Islands"]] },
+    { key: "nations", label: "Nations", normal: 20, only: ["classic", "custom"], when: (style, extra) => style === "classic" || extra.live, values: [[8, "8"], [12, "12"], [20, "20"], [30, "30"], [50, "50"]] },
+    { key: "rivals", label: "Rivals", normal: "gentle", only: ["classic", "custom"], when: (style, extra) => style === "classic" || extra.live, values: [["gentle", "Gentle"], ["even", "Even"], ["hard", "Hard"]] },
+    { key: "time", label: "Time limit", normal: 800, only: ["custom"], when: (style, extra) => !!extra.live, values: [[600, "10 minutes"], [800, "13 minutes 20 seconds"], [1800, "30 minutes"], [0, "None"]] },
+    // the turn game's switches
+    { key: "size", label: "Map", normal: 5, only: ["custom"], when: (style, extra) => !extra.live, values: [[4, "61 cells"], [5, "91 cells"]] },
+    { key: "cut", label: "Cut-off land", normal: false, only: ["custom"], when: (style, extra) => !extra.live, values: [[false, "Stays yours"], [true, "Falls away"]] },
+    { key: "walls", label: "Homes", normal: false, only: ["custom"], when: (style, extra) => !extra.live, values: [[false, "Plain"], [true, "Walled"]] },
+    { key: "shares", label: "Pour", normal: "four", only: ["custom"], when: (style, extra) => !extra.live, values: [["four", "A quarter, half, most or all"], ["three", "A third, half or all"]] },
+    { key: "growth", label: "Growth", normal: "rising", only: ["custom"], when: (style, extra) => !extra.live, values: [["rising", "Land, and more each round"], ["saving", "Land, and more for saving"]] },
+    { key: "goal", label: "To win", normal: 60, only: ["custom"], when: (style, extra) => !extra.live, values: [[45, "45%"], [55, "55%"], [60, "60%"], [70, "70%"]] },
+    { key: "drawn", label: "Order with three", normal: true, only: ["custom"], when: (style, extra) => !extra.live, values: [[true, "Drawn each round"], [false, "Rotates"]] },
+    { key: "limit", label: "Rounds", normal: 40, only: ["custom"], when: (style, extra) => !extra.live, values: [[10, "10"], [16, "16"], [20, "20"], [40, "40"]] },
   ],
-  expansions: [{ key: "cities", label: "Cities", note: "Spend strength on a city: it holds more and grows faster." }, { key: "boats", label: "Boats", note: "Send a share across the sea to land on a far coast. Always on with islands." }],
+  expansions: [{ key: "cities", label: "Cities", note: "Spend strength on a city: it holds more and grows faster." }, { key: "boats", label: "Boats", note: "Send a share across the sea to land on a far coast. Always on where the map has more than one landmass." }],
   stats: (p, s) => p.live ? [["Strength", p.troops[s]], ["Nations left", p.alive.filter(Boolean).length]] : (() => { const c = cellsOf(p, s), x = p.pool[s]; return [["Strength", x], ["Grows", p.home[s] === NONE ? "out" : `+${Math.max(0, Math.min(growth(p, s), poolLimit(c) - x))}`]]; })(),
   line(e, p) {
     if (p?.live) return liveLine(e, p);
@@ -2776,22 +2890,13 @@ createTable({
   },
   about: {
     classic: "Traditional: inspired by Territorial.io and OpenFront.io.\nThe browser land-grab as players know it, in real time: start anywhere on the world map or a made one, among up to 50 nations. Your strength grows with your land; send a share of it with the slider and watch the border creep. Ours: small hexes in place of pixels, our own numbers and maps, a pause button, and the clock in half-second ticks so a game can be saved.\nNot affiliated with or endorsed by their makers. Our own map, names and art.",
-    custom: "Custom: your own rules.\nSet every rule yourself: map size, whether cut-off land falls, walled homes, the shares you pour, how strength grows, the goal, the turn order and the number of rounds.",
+    custom: "Custom: your own rules.\nChoose the clock first. In real time: the map, the nations, how hard your rivals play and the time limit. In turns: map size, whether cut-off land falls, walled homes, the shares you pour, how strength grows, the goal, the turn order and the number of rounds.",
     ours: "Capo: our own variation.\nA smaller map where land cut off from your tower falls away, homes are walled, and saving strength pays. Hold 55% with two players, 45% with three.",
     coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
   },
-  switches: [
-    { key: "size", label: "Map", normal: 5, values: [[4, "61 cells"], [5, "91 cells"]] },
-    { key: "cut", label: "Cut-off land", normal: false, values: [[false, "Stays yours"], [true, "Falls away"]] },
-    { key: "walls", label: "Homes", normal: false, values: [[false, "Plain"], [true, "Walled"]] },
-    { key: "shares", label: "Pour", normal: "four", values: [["four", "A quarter, half, most or all"], ["three", "A third, half or all"]] },
-    { key: "growth", label: "Growth", normal: "rising", values: [["rising", "Land, and more each round"], ["saving", "Land, and more for saving"]] },
-    { key: "goal", label: "To win", normal: 60, values: [[45, "45%"], [55, "55%"], [60, "60%"], [70, "70%"]] },
-    { key: "drawn", label: "Order with three", normal: true, values: [[true, "Drawn each round"], [false, "Rotates"]] },
-    { key: "limit", label: "Rounds", normal: 40, values: [[10, "10"], [16, "16"], [20, "20"], [40, "40"]] },
-  ],
+  switches: [], // all of Custom's switches are choices above, so each shows only with the clock it belongs to
   fresh: () => { liveLeave(); },
-  rules: (classic, p) => p?.live ? ["Real time: the clock runs on its own. Pause it, or run it faster, with the buttons.", "Tap empty land to start your nation. Your strength grows every half second: more for more land, a little more for saving, up to a limit set by your land.", "Choose a share with the slider, then tap a neighbour, or empty land beside yours. That share of your strength goes, and the border creeps forward until it is spent.", "Each cell costs 2, 3 more on hills, and more where the owner holds much strength on little land. Taking a cell costs its owner some strength too.", "Win by holding 80% of the land, or by being the last one left. If time runs out, the biggest nation wins. If you lose all your land, the game is over.", ...(p.building ? ["Cities: tap Build a city, then one of your cells. A city holds more and grows faster; each costs more than the last."] : []), ...(p.boats ? ["Boats: tap a coast across the water, up to nine cells of sea away. Landing costs double."] : []), "Keys: 1 to 0 choose the share, Space pauses."] : ((p ? p.rule.growth === "rising" : classic) ? ["Your strength is one pool. The number on your tower shows it. It grows every turn: 3, and 1 for every 3 cells you hold, and a little more each round for everyone.", "Tap empty land or a rival, choose how much to pour, and the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A rival's land costs more when they hold a lot of strength on little land.", "The tower only shows whose land it is. If it is taken it moves.", "Reach the gold mark on the bar to win. If nobody has after 40 rounds, the most land wins.", "Whoever moves first changes every round. With three, the order of each round is drawn.", "Keys: 1 to 4 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."] : ["Your strength is one pool. The number on your tower shows it. It grows every turn: land grows it, and saving a little more.", "Tap empty land or a rival, choose how much to pour, and the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A cell with four of yours around it costs half.", "A rival's land costs more when they hold a lot of strength on little land. A home costs 3 more.", "Land cut off from your tower falls at the start of your turn. If your tower is taken, it moves to your largest piece of land.", "Reach the gold mark on the bar to win, or hold the most land after the last round. Whoever moves first changes every round.", "Keys: 1, 2, 3 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."]),
+  rules: (classic, p) => p?.live ? ["Real time: the clock runs on its own. Pause it, or run it faster, with the buttons.", "Tap empty land to start your nation. Your strength grows every half second: more for more land, a little more for saving, up to a limit set by your land.", "Choose a share with the slider, then tap a neighbour, or empty land beside yours. That share of your strength goes, and the border creeps forward until it is spent.", "Each cell costs 2, 3 more on hills, and more where the owner holds much strength on little land. Taking a cell costs its owner some strength too.", "Win by holding 80% of the land, or by being the last one left.", p.limit ? `If nobody has after ${Math.floor(p.limit / 120)} minutes${p.limit % 120 ? ` ${(p.limit % 120) / 2} seconds` : ""}, the biggest nation wins.` : "There is no time limit.", "If you lose all your land you are out: watch the others play on to the end, or start again.", ...[({ gentle: "Rivals are gentle: they grow slower than you and leave you alone for the first three minutes.", even: "Rivals are even: they grow as fast as you.", hard: "Rivals are hard: they grow faster than you and attack sooner." })[p.rivals]].filter(Boolean), ...(p.building ? ["Cities: tap Build a city, then one of your cells. A city holds more and grows faster; each costs more than the last."] : []), ...(p.boats ? [`Boats: tap a coast across the water, up to ${liveBoardFor(p).range} cells of sea away. Landing costs double the cell; boats that cannot pay it lose one cell's price, and the rest come home.`] : []), "Keys: 1 to 0 choose the share, Space pauses."] : ((p ? p.rule.growth === "rising" : classic) ? ["Your strength is one pool. The number on your tower shows it. It grows every turn: 3, and 1 for every 3 cells you hold, and a little more each round for everyone.", "Tap empty land or a rival, choose how much to pour, and the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A rival's land costs more when they hold a lot of strength on little land.", "The tower only shows whose land it is. If it is taken it moves.", "Reach the gold mark on the bar to win. If nobody has after 40 rounds, the most land wins.", "Whoever moves first changes every round. With three, the order of each round is drawn.", "Keys: 1 to 4 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."] : ["Your strength is one pool. The number on your tower shows it. It grows every turn: land grows it, and saving a little more.", "Tap empty land or a rival, choose how much to pour, and the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A cell with four of yours around it costs half.", "A rival's land costs more when they hold a lot of strength on little land. A home costs 3 more.", "Land cut off from your tower falls at the start of your turn. If your tower is taken, it moves to your largest piece of land.", "Reach the gold mark on the bar to win, or hold the most land after the last round. Whoever moves first changes every round.", "Keys: 1, 2, 3 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."]),
 });
 
 

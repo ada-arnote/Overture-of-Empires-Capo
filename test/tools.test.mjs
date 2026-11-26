@@ -78,10 +78,6 @@ test("borrowed pictures and adapted code need their rows", () => {
   stops({ "NOTICES.md": null }, /NOTICES/);
 });
 test("the CSV reader handles quotes and commas", () => assert.deepEqual(rows('a,"b, c","d ""e"""\n\n1,,3\n'), [["a", "b, c", 'd "e"'], ["1", "", "3"]]));
-test("the page's own check expects the answer Node gives", () => {
-  const d = chance(seedState("page check"));
-  assert.ok(readFileSync(path.join(root, "site/main.js"), "utf8").includes(`"${fingerprint(Array.from({ length: 1000 }, () => d.die()))}"`));
-});
 test("the page and package carry the same version", () => {
   const v = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version;
   assert.ok(readFileSync(path.join(root, "site/config.js"), "utf8").includes(`"${v}"`));

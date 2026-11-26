@@ -3,7 +3,7 @@
 // your home falls, your pool grows, and you pour part of it over a border, or wait.
 // Classic is the genre as it is remembered: a wider map, no cut-off rule, no homes to storm, and play until one holds most of it.
 import { hexBoard, joined } from "../hex.js";
-import { chance, seedState } from "../../core/index.js";
+import { canon, chance, seedState } from "../../core/index.js";
 import { LIVE_MAPS, liveAllows, liveApply, liveBoardOf, liveMoves, liveSetup } from "./live.js";
 
 const roller = (text) => chance(seedState(text));
@@ -134,8 +134,8 @@ function advance(p, events, dice) {
 }
 
 export const inch = {
-  id: "inch", version: "5",
-  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, ...SWITCHES },
+  id: "inch", version: "6",
+  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, rivals: { values: ["gentle", "even", "hard"], normal: "gentle" }, time: { values: [600, 800, 1800, 0], normal: 800 }, ...SWITCHES },
 
   setup(o, dice) {
     if (o.style === "classic" || (o.style === "custom" && o.live)) return liveSetup(o, dice, roller);
@@ -147,7 +147,7 @@ export const inch = {
     return p;
   },
   turn: (p) => (p.over ? null : p.live ? p.human : p.seat),
-  allows: (p, m) => (p.live ? liveAllows(p, liveBoardFor(p), m) : inch.moves(p).some((x) => JSON.stringify(x) === JSON.stringify(m))),
+  allows: (p, m) => { if (p.live) return liveAllows(p, liveBoardFor(p), m); const want = canon(m); return inch.moves(p).some((x) => canon(x) === want); }, // the order of keys does not matter
 
   /** Wait, or pour a share at neutral land or at one rival. Only pours that take something are offered. */
   moves(p) {

@@ -13,12 +13,14 @@ export const SWITCHES = {
   dice: { values: Object.keys(DICE), normal: "guard" },
   cards: { values: ["rising", "flat", "none"], normal: "rising" },
   goal: { values: [65, 80, 100], normal: 80 },
-  rounds: { values: [12, 20, 40], normal: 40 },
+  rounds: { values: [12, 20, 40, 0], normal: 40 }, // 0: no limit, play until one side wins (a safety stop at 250)
+  order: { values: ["fixed", "rotate"], normal: "fixed" }, // rotate: the first seat moves on each round
+  opening: { values: ["open", "lean", "truce"], normal: "open" }, // lean: the first seat gets no muster on its first turn; truce: nobody attacks in the first round
   neutral: { values: [1, 2, 3], normal: 2 },
 };
 const SETS = {
-  classic: { start: "dealt", dice: "guard", cards: "rising", goal: 100, rounds: 40, neutral: 2 },
-  ours: { start: "far", dice: "even", cards: "flat", goal: 65, rounds: 40, neutral: 3 },
+  classic: { start: "dealt", dice: "guard", cards: "rising", goal: 100, rounds: 0, neutral: 2, order: "fixed", opening: "lean" },
+  ours: { start: "far", dice: "even", cards: "flat", goal: 65, rounds: 40, neutral: 3, order: "fixed", opening: "open" },
 };
 export const EXPANSIONS = ["forts", "leaders", "capitals", "secrets", "events"];
 const off = { values: [false, true], normal: false };
@@ -86,10 +88,11 @@ const copy = (p) => ({ ...p, owner: [...p.owner], str: [...p.str], hands: p.hand
 
 /** The start of a seat's turn. Changes p. */
 function begin(p, events) {
-  const s = p.seat, m = muster(p, s);
-  p.left = m.all;
+  // a lean first turn, at two seats: the first seat moves first, with half its fresh armies
+  const s = p.seat, m = muster(p, s), lean = p.rule.opening === "lean" && p.seats === 2 && p.round === 1 && p.step === 0;
+  p.left = lean ? Math.floor(m.all / 2) : m.all;
   p.took = 0;
-  p.phase = "place";
+  p.phase = p.left ? "place" : "attack";
   if (p.leaders && p.leaders[s] === NONE && p.round >= p.back[s]) { // a lost leader comes back where the seat is strongest
     const mine = mineOf(p, s);
     p.leaders[s] = mine.reduce((a, b) => (p.str[b] > p.str[a] ? b : a));
@@ -145,7 +148,8 @@ function weather(p, dice, events) {
   if (p.event !== "calm") events.push({ kind: "event", what: p.event });
 }
 
-/** Pass the turn. The first seat of a round rotates. Changes p. */
+/** Pass the turn: seats in a fixed order, or with the first seat moving on each round when the rules say so. Changes p. */
+const SAFETY = 100; // a game with no round limit still ends, for bots that will never break a stalemate
 function pass(p, dice, events) {
   const live = living(p);
   if (p.took && p.rule.cards !== "none") {
@@ -156,13 +160,13 @@ function pass(p, dice, events) {
     if (++p.step === p.seats) {
       p.step = 0;
       p.round++;
-      if (p.round > p.rounds) {
+      if (p.round > (p.rounds || SAFETY)) {
         const most = Math.max(...live.map((s) => cellsOf(p, s)));
-        return finish(p, live.filter((s) => cellsOf(p, s) === most), "held the most land at the end", events);
+        return finish(p, live.filter((s) => cellsOf(p, s) === most), p.rounds ? "held the most land at the end" : "held the most land when the long war was called off", events);
       }
       weather(p, dice, events);
     }
-    p.seat = (p.step + p.round - 1) % p.seats;
+    p.seat = (p.step + (p.rule.order === "rotate" ? p.round - 1 : 0)) % p.seats;
   } while (!p.owner.includes(p.seat));
   begin(p, events);
   return undefined;
@@ -236,7 +240,7 @@ export function amounts(n) {
 }
 
 export const banners = {
-  id: "banners", version: "2",
+  id: "banners", version: "3",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 4 }, map: { values: MAPS, normal: "world" },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -285,7 +289,8 @@ export const banners = {
       if (p.hands[s].length >= HAND && sets.length) return sets;
       return [...place(), ...sets, ...(p.forts && p.left >= FORT ? mine.filter((at) => !p.forts[at]).map((at) => ({ do: "fort", at })) : [])];
     }
-    for (const from of mine) if (p.str[from] > 1) for (const to of nearOf(p, from)) if (p.owner[to] !== s) out.push({ do: "attack", from, to, roll: "once" }, { do: "attack", from, to, roll: "all" });
+    const truce = p.rule.opening === "truce" && p.round === 1; // the first round is for placing, not striking
+    if (!truce) for (const from of mine) if (p.str[from] > 1) for (const to of nearOf(p, from)) if (p.owner[to] !== s) out.push({ do: "attack", from, to, roll: "once" }, { do: "attack", from, to, roll: "all" });
     for (const from of mine) {
       if (p.str[from] < 2) continue;
       const seen = new Set([from]), list = [from];

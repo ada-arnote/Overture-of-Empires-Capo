@@ -84,6 +84,8 @@ export function createMatch(game, { options = {}, seed = "" } = {}) {
       played.push(deepFreeze(copy));
       return now().events;
     },
+    /** Whether the last move rolled any dice. In a game between people such a move is not taken back. */
+    get rolled() { const n = steps.length; return n > 1 && steps[n - 1].dice.join() !== steps[n - 2].dice.join(); },
     /** Take back the last move. Playing it again rolls the same dice. */
     undo() {
       if (!played.length) return false;

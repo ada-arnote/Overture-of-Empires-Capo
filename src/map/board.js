@@ -156,9 +156,11 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       if (!k.seen) return;
       cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit());
       emblem(ctx, icons[k.seat], cam.px, cam.py, size * 0.42 * cam.pk, flat);
-      ctx.fillStyle = `rgba(252,247,234,${0.5 * k.seen})`;
+      // ink by the ground's brightness: dark marks on light colours, light marks on dark ones, so both read
+      const [r, g, b] = show[i].rgb, bright = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.5;
+      ctx.fillStyle = bright ? `rgba(24,18,14,${0.62 * k.seen})` : `rgba(252,247,234,${0.62 * k.seen})`;
       ctx.fill("evenodd");
-      ctx.lineWidth = 1; ctx.strokeStyle = `rgba(20,16,14,${0.35 * k.seen})`; ctx.stroke();
+      ctx.lineWidth = 1; ctx.strokeStyle = bright ? `rgba(252,247,234,${0.4 * k.seen})` : `rgba(20,16,14,${0.4 * k.seen})`; ctx.stroke();
     });
     for (const l of labels) { // names printed on the map
       cam.projectTo(l.at[0], l.at[1], unit());

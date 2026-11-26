@@ -72,6 +72,7 @@ function claim(p, dice) {
 }
 
 function attack(p, dice, noise, floor) {
+  if (p.rule.opening === "truce" && p.round === 1) return null; // nobody strikes in the first round
   const s = p.seat, goal = goalOf(p) - cellsOf(p, s);
   let pick = null, score = 0;
   for (let i = 0; i < p.owner.length; i++) {
