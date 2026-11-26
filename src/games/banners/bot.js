@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Bots for Brass and Banners. They see only what a player sees, and work out the same odds the player is shown.
-import { FORT, NONE, banners, boardOf, bonusOf, cellsOf, goalOf, nearOf, odds, setsOf, setWorth } from "./rules.js";
+import { FORT, HAND, NONE, banners, boardOf, bonusOf, cellsOf, goalOf, nearOf, odds, setsOf, setWorth } from "./rules.js";
 import { steps } from "../areas.js";
 
 export const TIERS = ["random", "easy", "normal"];
@@ -19,7 +19,7 @@ export function worth(p, seat, at) {
     v += 60;
     if (whole) v += 120 * bonus;
     const n = cellsOf(p, o);
-    if (n <= 3) v += 400 - 100 * n + 60 * p.hands[o].length; // about to be put out
+    if (n <= 3) v += 400 - 100 * n + 60 * p.hands[o].length + (p.rule.spoils === "trade" && p.hands[seat].length + p.hands[o].length >= HAND ? 150 : 0); // about to be put out, and their cards handed in at once
     if (g?.kind === "rival" && g.seat === o) v += 70;
     if (p.leaders && p.leaders[o] === at) v += 70;
     v += Math.max(0, n * 3 - cellsOf(p, seat)); // hold back whoever is ahead

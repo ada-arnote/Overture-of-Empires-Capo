@@ -8,7 +8,7 @@ import { networkInterfaces } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".csv": "text/csv; charset=utf-8", ".md": "text/plain; charset=utf-8", ".bin": "application/octet-stream", ".rl": "application/octet-stream" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp", ".woff2": "font/woff2", ".ogg": "audio/ogg", ".mp3": "audio/mpeg", ".csv": "text/csv; charset=utf-8", ".md": "text/plain; charset=utf-8", ".bin": "application/octet-stream", ".rl": "application/octet-stream" };
 const OPEN = ["src", "site", "play", "maps", "test", "lab", "story-test"]; // never docs, never the records of other projects
 
 export async function find(root, url) {

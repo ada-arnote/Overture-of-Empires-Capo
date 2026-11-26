@@ -4,8 +4,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chance, createMatch, seedState } from "../src/core/index.js";
-import { CAIRN, EXPANSIONS, NONE, SWITCHES, act, beats, boardOf, cellsOf, defence, fable, goalOf, groupsOf, raiseOf, territories, topOf, upkeepOf } from "../src/games/fable/rules.js";
-import { TIERS, choose } from "../src/games/fable/bot.js";
+import { CAIRN, EXPANSIONS, NONE, SAFETY, SWITCHES, WOOD, act, beats, boardOf, cellsOf, defence, fable, goalOf, groupsOf, raiseOf, territories, topOf, upkeepOf } from "../src/games/fable/rules.js";
+import { TIERS, choose, hopeless } from "../src/games/fable/bot.js";
 import { SLOW, botGame, ended, passive, refused, replays, same, sameEachStep, slowOnly } from "./fixtures/bots.js";
 
 const STYLES = ["classic", "custom", "ours"]; // Traditional, Custom with its normal switches, Capo
@@ -46,7 +46,7 @@ function sound(m) {
   });
   if (p.over || m.list.length % 9) return;
   for (const x of fable.moves(p)) {
-    if (x.do === "end" || p.owner[x.to] === p.seat) continue;
+    if (x.to === undefined || p.owner[x.to] === p.seat) continue;
     assert.equal(p.water[x.to], 0, "nobody takes the sea");
     if (x.do === "move") assert.ok(beats(p, p.unit[x.from], defence(p, x.to)), "a take beats its guard");
     else assert.ok(x.do === "raise" && defence(p, x.to) < 1, "a new unit takes only what is unguarded");
@@ -99,7 +99,7 @@ test("illegal moves are refused and change nothing", () => {
   const m = start(2, "ours"), p = m.position, before = m.fingerprint(), [mine] = territories(p, p.seat), [theirs] = territories(p, 1 - p.seat);
   const sea = p.water.indexOf(1), empty = mine.cells.find((c) => !p.unit[c] && !p.hall[c]);
   assert.ok(sea >= 0 && empty !== undefined);
-  for (const bad of [{ do: "raise", hall: theirs.hall, to: empty }, { do: "raise", hall: mine.hall, to: sea }, { do: "raise", hall: mine.hall, to: theirs.hall }, { do: "move", from: empty, to: mine.cells.find((c) => c !== empty && !p.hall[c]) }, { do: "fort", hall: mine.hall, to: empty }, { do: "end", now: 1 }, { do: "fly" }]) {
+  for (const bad of [{ do: "concede" }, { do: "raise", hall: theirs.hall, to: empty }, { do: "raise", hall: mine.hall, to: sea }, { do: "raise", hall: mine.hall, to: theirs.hall }, { do: "move", from: empty, to: mine.cells.find((c) => c !== empty && !p.hall[c]) }, { do: "fort", hall: mine.hall, to: empty }, { do: "end", now: 1 }, { do: "fly" }]) {
     assert.throws(() => m.play(bad), refused("illegal"), JSON.stringify(bad));
   }
   for (const bad of [undefined, 0.5, () => 1]) assert.throws(() => m.play(bad), refused("shape"));
@@ -167,4 +167,82 @@ test("a game where nobody does anything ends after its rounds, and everyone with
     assert.deepEqual(m.result.winners, Array.from({ length: seats }, (_, s) => s).filter((s) => cellsOf(p, s) === most));
     replays(m, [fable]);
   }
+});
+
+// Traditional's genre rules: free steps at home, joining and striking, the last one standing, conceding.
+const cl = rows("classic"), play = (p, m) => fable.apply(p, m, chance(seedState("t"))).position;
+/** A strip of land in the middle row of the Traditional island, with the sea all round: seat 0 holds the west, seat 1 the east. */
+function strip({ mine = 4, theirs = 3, purse = 7, units = [], style = "classic", ...over }) {
+  const land = cl.mid.slice(0, mine + theirs), p = made({ style, land: [land.slice(0, mine), land.slice(mine)], halls: [[land[0], purse], [land.at(-1), 0]], units, ...over });
+  p.water = p.water.map((_, c) => (land.includes(c) ? 0 : 1));
+  return p;
+}
+test("free movement: a step inside your own land leaves the unit ready, in Traditional only; taking land or clearing a wood ends its turn", () => {
+  const { mid } = cl, p = strip({ units: [[mid[1], 2]] });
+  const q = act(p, { do: "move", from: mid[1], to: mid[2] }).position;
+  assert.equal(q.moved[mid[2]], 0);
+  assert.ok(fable.moves(q).some((x) => x.do === "move" && x.from === mid[2] && x.to === mid[4]), "it can still take");
+  const r = act(q, { do: "move", from: mid[2], to: mid[4] }).position;
+  assert.equal(r.owner[mid[4]], 0); assert.equal(r.moved[mid[4]], 1);
+  assert.ok(!fable.moves(r).some((x) => x.from === mid[4]), "a unit that took land is done");
+  const wood = strip({ units: [[mid[1], 2]] }); wood.tree[mid[3]] = WOOD;
+  assert.equal(act(wood, { do: "move", from: mid[1], to: mid[3] }).position.moved[mid[3]], 1, "clearing a wood ends its turn");
+  const once = { ...p, rule: { ...p.rule, walk: "once" } };
+  assert.equal(act(once, { do: "move", from: mid[1], to: mid[2] }).position.moved[mid[2]], 1, "with the switch off, any move uses the unit");
+  const capo = createMatch(fable, { seed: "c", options: { seats: 2, style: "ours" } }).position;
+  assert.equal(capo.rule.walk, "once", "Capo keeps its own rule");
+});
+test("merging: two ready units join into one that can still strike; joining a unit that has acted gives one that has acted", () => {
+  const { mid } = cl, p = strip({ units: [[mid[1], 1], [mid[2], 1], [mid[5], 1]] });
+  assert.ok(!fable.moves(p).some((x) => x.to === mid[4] && x.do === "move"), "no scout alone takes a guarded hex");
+  const q = act(p, { do: "move", from: mid[1], to: mid[2] }).position;
+  assert.equal(q.unit[mid[2]], 2); assert.equal(q.moved[mid[2]], 0);
+  assert.ok(fable.moves(q).some((x) => x.do === "move" && x.from === mid[2] && x.to === mid[4]));
+  const tired = strip({ units: [[mid[1], 1], [mid[2], 1]] }); tired.moved[mid[2]] = 1;
+  assert.equal(act(tired, { do: "move", from: mid[1], to: mid[2] }).position.moved[mid[2]], 1);
+  const raised = act(strip({ purse: 20 }), { do: "raise", hall: mid[0], to: mid[2] }).position;
+  assert.equal(raised.moved[mid[2]], 0, "a new scout at home can act at once");
+});
+test("the bot joins two scouts, then strikes with the result", () => {
+  const { mid } = cl;
+  let p = strip({ units: [[mid[1], 1], [mid[2], 1], [mid[5], 1]] });
+  const dice = chance(seedState("join")), seen = [];
+  for (let i = 0; i < 20 && p.seat === 0 && !p.over; i++) { const made = fable.apply(p, choose(p, dice, "normal"), dice); seen.push(...made.events); p = made.position; }
+  assert.ok(seen.some((e) => e.kind === "merge" && !e.raised), "it joined at home");
+  assert.equal(p.owner[mid[4]], 0, "and took the guarded hex");
+});
+test("Traditional is played to the last one standing: a big lead does not end it; taking the last rival hex does", () => {
+  const { mid } = cl, all = made({ style: "classic", land: [[], []] }).owner.map((_, c) => c), theirs = [mid[5], mid[6]];
+  const p = made({ style: "classic", land: [all.filter((c) => !theirs.includes(c)), theirs], halls: [[mid[0], 0], [mid[6], 0]], units: [[mid[4], 2], [mid[7], 2]] });
+  assert.ok(cellsOf(p, 0) * 100 > 90 * all.length && goalOf(p) === all.length);
+  const q = play(p, { do: "move", from: mid[4], to: mid[5] });
+  assert.equal(q.over, null, "one rival hex left: play goes on");
+  const r = play(q, { do: "move", from: mid[7], to: mid[6] });
+  assert.deepEqual(r.over.winners, [0]); assert.equal(r.over.why, "the only one left");
+});
+test("conceding: offered in Traditional, not in Capo; the land is left to claim and the turn passes; the last rival to concede ends the game", () => {
+  const m = start(3, "classic", "give"), s = m.position.seat;
+  assert.ok(m.legal().some((x) => x.do === "concede"));
+  assert.ok(!start(3, "ours").legal().some((x) => x.do === "concede"));
+  const events = m.play({ do: "concede" }), p = m.position;
+  assert.ok(events.some((e) => e.kind === "concede" && e.seat === s));
+  assert.equal(cellsOf(p, s), 0); assert.notEqual(p.seat, s); assert.equal(m.result, null);
+  for (const c of events.find((e) => e.kind === "concede").cells) assert.equal(p.owner[c] + 1 + p.unit[c] + p.hall[c] + p.fort[c] + p.purse[c], 0);
+  const left = p.seat;
+  m.play({ do: "concede" });
+  assert.deepEqual(m.result.winners, [0, 1, 2].filter((x) => x !== s && x !== left)); assert.equal(m.result.why, "the only one left");
+  replays(m, [fable]);
+});
+test("bots concede by their plain rule: one rival holds half the island and three times their land", () => {
+  const big = made({ style: "classic", land: [[], []] }).owner.map((_, c) => c);
+  const p = made({ style: "classic", seat: 1, land: [big.slice(0, Math.ceil(big.length / 2)), big.slice(-5)], halls: [[0, 10], [big.at(-1), 10]] });
+  assert.ok(hopeless(p, 1) && !hopeless(p, 0));
+  assert.deepEqual(choose(p, chance(seedState("h")), "normal"), { do: "concede" });
+  const close = made({ style: "classic", seat: 1, land: [big.slice(0, 30), big.slice(-20)], halls: [[0, 10], [big.at(-1), 10]] });
+  assert.ok(!hopeless(close, 1));
+});
+test("with no round limit a game still ends: after the safety rounds the most land wins", () => {
+  const m = passive(createMatch(fable, { seed: "idle", options: { seats: 2, style: "classic" } })), p = m.position;
+  assert.equal(p.rule.limit, 0); assert.equal(p.round, SAFETY + 1); assert.ok(m.result.why.includes(String(SAFETY)));
+  replays(m, [fable]);
 });

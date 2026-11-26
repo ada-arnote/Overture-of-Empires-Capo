@@ -5,15 +5,17 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-GUIeid+I6ivpNM4ViV42UAK9v+XJiKBFKAoVFvdsxxc='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4IwxJxEp8AajqIQkEsmhmM3sK/PrCnFUoRdSGx46M4A='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>The Island Fable</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
 :root {
   --table: #12171a; --table2: #1f2a2c; --panel: rgba(19, 24, 26, .84); --line: rgba(236, 222, 186, .16); --line2: rgba(236, 222, 186, .34);
   --text: #f1e9d6; --soft: #b9b29f; --gold: #e2b866; --gold2: #f4d795; --on: #1b1510;
-  --s0: #5b8fc4; --s1: #d06a4b; --s2: #8aa851; color-scheme: dark;
+  color-scheme: dark;
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif; --sans: system-ui, "Segoe UI", Roboto, sans-serif;
+  /* the shell's own: text size (set from Settings), the turn banner, the end sheet, danger, seat patterns */
+  --ui-scale: 1; --seat: var(--gold); --banner-time: .9s; --win: var(--gold2); --lose: #a9bccd; --danger: #e08a72; --pattern: rgba(16, 12, 10, .42);
 }
 * { box-sizing: border-box; margin: 0 }
 [hidden] { display: none !important }
@@ -113,13 +115,13 @@ dialog .stack button { min-height: 48px } dialog .go { position: sticky; bottom:
   .title { padding: 26px 18px 60px; max-width: none } h1 { font-size: clamp(52px, 17vw, 84px) }
 }
 @media (max-height: 560px) and (min-width: 821px) { #seats { width: 176px } #act { width: 300px } h1 { font-size: 56px } .seat small { display: none } }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+.still * { transition: none !important } /* reduced motion: the system's wish, or the player's in Settings */
 .about { margin: -6px 0 12px; font-size: 13px; color: var(--soft) } .about span { display: block } .about span + span { margin-top: 5px } .about span:first-child { color: var(--text) }
 #info { color: #d8cfba; font-size: 14px; min-height: 2.9em; margin-bottom: 8px }
 #amount { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; min-height: 44px } #much { flex: 1; height: 44px; accent-color: var(--gold) } #many { min-width: 3.2em; text-align: right; font: 600 18px/1 var(--serif); font-variant-numeric: tabular-nums }
 #dice { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 10px } #dice div { display: flex; gap: 4px } #dice svg { width: 30px; height: 30px; display: block }
 @keyframes tumble { from { transform: rotate(-140deg) scale(.5); opacity: 0 } } #dice svg { animation: tumble .28s ease-out backwards }
-@media (prefers-reduced-motion: reduce) { #dice svg { animation: none } }
+.still #dice svg { animation: none }
 @media (max-width: 820px) { #info { min-height: 1.4em; font-size: 13px } #dice svg { width: 26px; height: 26px } }
 @media (max-width: 820px) { .seat dl { margin: 7px 0 0 -24px } .seat { overflow: hidden } }
 #send p { color: #d8cfba; margin-bottom: 10px } #send + .quiet, #act > .quiet { width: 100%; margin-top: 8px }
@@ -143,6 +145,72 @@ dialog > .go { background: #161c1e; margin: 0 -22px -22px; padding: 10px 22px 18
 #live .live-info { color: #d8cfba; font-size: 14px; margin-bottom: 8px } .live-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px } .live-row input { flex: 1; height: 44px; accent-color: var(--gold) } .live-row output { min-width: 3em; text-align: right; font: 600 18px/1 var(--serif) }
 #leaders { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 3px; font-size: 14px } #leaders li { display: flex; align-items: center; gap: 4px } #leaders b { flex: 1; font-weight: 600 } #leaders li.me b { color: var(--gold2) } #live .go button[aria-pressed=true] { border-color: var(--gold) }
 @media (max-width: 820px) { #leaders { grid-template-columns: 1fr 1fr; font-size: 13px } }
+#quick { min-height: 58px; font-size: 20px } #preset { margin: 10px 0 4px } #own > summary { min-height: 44px; display: flex; align-items: center; color: var(--soft); cursor: pointer } #own[open] > summary { margin-bottom: 8px } #own .go > * { flex: 1 }
+#news { position: relative; margin-bottom: 10px; padding: 8px 40px 8px 12px; border-radius: 10px; background: rgba(255, 244, 214, .08); font-size: 14px; color: #d8cfba } #news:empty { display: none } #news b { font: 600 15px var(--serif); color: var(--text) } #news ul { padding-left: 18px } #news small { color: var(--soft) }
+#news button, #dock .head { border: 0; background: none } #news button { position: absolute; top: 0; right: 0; width: 44px; height: 44px; font-size: 22px; color: var(--soft) }
+#dock { position: fixed; z-index: 2; right: max(16px, env(safe-area-inset-right)); top: 86px; width: 340px; max-height: calc(100vh - var(--ah, 300px) - 116px); display: flex; flex-direction: column; padding: 2px 4px 8px } .atlas #dock { top: 180px }
+#dock .head { min-height: 40px; padding: 0 12px; text-align: left; font: 600 15px var(--serif); color: var(--soft) } #dock .head::after { content: " \25B4" } #dock [aria-expanded=false]::after { content: " \25BE" }
+#dock ol { overflow-y: auto; padding: 0 12px 0 34px; font-size: 14px; color: #d8cfba } #dock li + li { margin-top: 3px }
+@media (min-width: 1181px) { #logs { display: none } }
+
+/* text size: the floating parts grow together, and widths are divided back so nothing leaves the screen */
+#bar, #seats, #act, #dock, #toast, #sheet, #turn, .title .card, .title .links { zoom: var(--ui-scale) }
+#bar { width: min(620px, calc((100vw - 24px) / var(--ui-scale))) }
+dialog { width: min(480px, calc((100vw - 32px) / var(--ui-scale))); max-height: min(calc(84vh / var(--ui-scale)), 640px) }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap }
+
+/* the turn banner: in, held, gone in under a second; a fade when motion is reduced */
+#turn { position: fixed; z-index: 6; top: max(12px, env(safe-area-inset-top)); left: 0; right: 0; margin: auto; width: max-content; max-width: calc((100vw - 24px) / var(--ui-scale)); display: grid; grid-template-columns: auto auto; column-gap: 16px; align-items: center; padding: 10px 30px 10px 14px; border-radius: 14px; background: var(--panel); border: 2px solid var(--seat); border-left-width: 12px; box-shadow: 0 14px 40px rgba(0, 0, 0, .5); backdrop-filter: blur(14px); pointer-events: none }
+#turn canvas { grid-row: 1 / span 3; width: 60px; height: 60px }
+#turn small { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--soft) }
+#turn b { font: 600 30px/1.05 var(--serif) } #turn span { font: 500 17px/1.3 var(--serif); color: var(--gold2) }
+#turn.go { animation: turn-in var(--banner-time) cubic-bezier(.2, .8, .2, 1) both } .still #turn.go { animation-name: turn-fade }
+@keyframes turn-in { from { transform: translateY(-140%) } 20%, 80% { transform: none; opacity: 1 } to { transform: none; opacity: 0 } }
+@keyframes turn-fade { from { opacity: 0 } 15%, 80% { opacity: 1 } to { opacity: 0 } }
+
+/* the menu: tabs, settings, a line between keeping and losing the game */
+#sheet.wide { width: min(560px, calc((100vw - 24px) / var(--ui-scale))) }
+.pick.tabs { flex-wrap: nowrap; margin-bottom: 16px } .tabs button { flex: 1; padding: 6px } .quiet:disabled { opacity: .45; cursor: default }
+.set .line { margin-bottom: 10px } .set .pick { margin: 0 } .set input { flex: 1; max-width: 260px; height: 44px; accent-color: var(--gold) } .set .about { margin: -4px 0 10px }
+dialog hr { border: 0; border-top: 1px solid var(--line2); margin: 6px 0 } #sheet-body a { color: var(--gold2) }
+.quiet.danger { border-color: var(--danger); color: #f3c9bb } .danger[data-armed] { background: rgba(224, 138, 114, .2) }
+
+/* the end: the winner large, places, land over time; win and loss share the layout and differ in tone */
+#sheet.end { width: min(860px, calc((100vw - 16px) / var(--ui-scale))); max-height: calc(96vh / var(--ui-scale)) }
+.end.win { --tone: var(--win) } .end.lose { --tone: var(--lose) }
+.end h2 { font: 600 14px/1.2 var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--tone) }
+.hero { display: flex; align-items: center; gap: 18px; margin-bottom: 16px; padding: 14px 16px; border-left: 6px solid var(--tone); border-radius: 10px; background: rgba(255, 244, 214, .05) }
+.hero .arms { display: flex; flex: none } .hero canvas { width: 84px; height: 84px } .hero canvas + canvas { margin-left: -22px }
+.hero b { display: block; font: 600 clamp(30px, 5vw, 46px)/1.05 var(--serif); margin-bottom: 6px } .hero p { margin: 0 0 3px; color: #d8cfba }
+.ranks { overflow-x: auto; margin-bottom: 14px } .ranks table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; white-space: nowrap }
+.ranks th, .ranks td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--line) } .ranks tr:first-child th { font: 500 13px var(--sans); color: var(--soft) }
+.ranks th[scope=row] { font: 600 16px var(--serif) } .ranks canvas { width: 24px; height: 24px; vertical-align: -6px; margin-right: 8px } .ranks .won { color: var(--tone) } .ranks small { color: var(--soft); font: 400 13px var(--sans) }
+.end #chart { height: auto; aspect-ratio: 880 / 280 }
+.end .ends { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 8px; padding: 10px 0; background: #161c1e } .end .minor { position: static; justify-content: center; gap: 28px }
+a.quiet { display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; color: inherit }
+
+/* seat patterns on the score bar, for telling seats apart without colour */
+.patterns #land { height: 14px }
+.patterns #fills i:nth-child(6n+2) { background-image: repeating-linear-gradient(45deg, var(--pattern) 0 2px, transparent 2px 6px) }
+.patterns #fills i:nth-child(6n+3) { background-image: radial-gradient(var(--pattern) 1.3px, transparent 1.7px); background-size: 5px 5px }
+.patterns #fills i:nth-child(6n+4) { background-image: repeating-linear-gradient(90deg, var(--pattern) 0 2px, transparent 2px 5px) }
+.patterns #fills i:nth-child(6n+5) { background-image: repeating-linear-gradient(-45deg, var(--pattern) 0 2px, transparent 2px 6px), repeating-linear-gradient(45deg, var(--pattern) 0 2px, transparent 2px 6px) }
+.patterns #fills i:nth-child(6n) { background-image: repeating-linear-gradient(0deg, var(--pattern) 0 2px, transparent 2px 5px) }
+
+/* a phone: the tray folds to a handle with the main action still showing, the seats are one line, the board has the rest */
+.tray { display: none }
+@media (max-width: 820px) {
+  .tray { display: block; width: calc(100% + 24px); height: 34px; margin: -12px -12px 0; border: 0; background: none }
+  .tray::before { content: ""; display: block; width: 48px; height: 5px; margin: auto; border-radius: 3px; background: var(--line2) } .shut .tray::before { background: var(--gold) }
+  .shut #act :is(#news, #dice, #info, #hand, #trades, .pick, #amount, #leaders, .live-info, #send > p) { display: none }
+  .shut #status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 8px }
+  #seats { display: flex; top: calc(max(12px, env(safe-area-inset-top)) + 62px); overflow-x: auto; scrollbar-width: none }
+  .seat { flex: 1 1 0; min-width: 58px; display: flex; align-items: center; gap: 6px; padding: 4px 9px 4px 4px; border-radius: 999px }
+  .seat canvas { position: static; flex: none; width: 24px; height: 24px }
+  .seat b { flex: 1 1 auto; min-width: 0; font-size: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
+  .seat dl { flex: none; margin: 0 } .seat dl div + div, .seat dt { display: none } .seat.now { box-shadow: inset 0 0 0 1px var(--gold) }
+  .end .ends { grid-template-columns: 1fr 1fr } .end .ends .main { grid-column: 1 / -1; grid-row: 1 } .hero canvas { width: 60px; height: 60px }
+}
 </style>
 <link rel="icon" href="data:,">
 </head>
@@ -178,12 +246,16 @@ dialog > .go { background: #161c1e; margin: 0 -22px -22px; padding: 10px 22px 18
   <h1>The Island<br>Fable</h1>
   <p class="tag">A hex island war of villages and upkeep. Cut a rival's land in two.</p>
   <div class="panel card">
+    <div class="go"><button id="resume" type="button" class="quiet" hidden>Continue</button><button id="quick" type="button" class="main">Play</button></div>
+    <p id="preset" class="about"></p>
+    <details id="own"><summary>Choose your own</summary>
     <div class="line"><span>Rules</span><div class="pick small" id="style" role="radiogroup" aria-label="Rules"></div></div>
     <p id="about" class="about"></p>
     <div class="line"><span>Players</span><div class="pick small" id="count" role="radiogroup" aria-label="Players"></div></div>
     <ul id="who"></ul>
     <div class="line" id="length-line"><span>Length</span><div class="pick small" id="length" role="radiogroup" aria-label="Length"></div></div>
-    <div class="go"><button id="resume" type="button" class="quiet" hidden>Continue</button><button id="start" type="button" class="main">Begin</button></div>
+    <div class="go"><button id="start" type="button" class="quiet">Begin</button></div>
+    </details>
   </div>
   <p class="links"><button type="button" class="text" id="how">How to play</button><button type="button" class="text" id="open">Open a saved game</button><a href="../site/" class="text">All games</a></p>
 </main>
@@ -324,27 +396,33 @@ $m[1] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Island Fable (working name). Joined land is a territory with one hall and its own purse. Units cost
 // upkeep, guard their neighbours and take land. Cut a territory in two and the part without money starves.
-// Traditional is the genre as it is remembered: a dealt island, woods that spread, forts, and as many actions as you like.
-// Capo is our own small, quick game. Coda is every switch by hand. Expansions are added to any of them.
+// Traditional is the genre as it is remembered: a dealt island, woods that spread, forts, as many actions as you like,
+// free movement inside your own land, and play to the last one standing. Capo is our own small, quick game.
+// Custom is every switch by hand. Expansions are added to any of them.
 const { ISLES, SIZES, island, seaRoads } = $m[2];
 const { hexBoard, joined } = $m[3];
 
 const NONE = -1, WOOD = 1, CAIRN = 2, FORT_GUARD = 2, FARM_PAYS = 3;
+/** With no round limit a game still ends: after this many rounds, the most land wins. */
+const SAFETY = 100;
 const PURSE = 6, MANY = 99, ROADS = 3;
-const WAGES = { mild: [0, 1, 3, 6, 10], fair: [0, 2, 5, 11, 22], harsh: [0, 2, 6, 15, 34] };
-/** What the rule sets set. Coda takes each of these as it is given. */
+const WAGES = { mild: [0, 1, 3, 6, 10], fair: [0, 2, 5, 11, 22], harsh: [0, 2, 6, 15, 34], steep: [0, 2, 6, 18, 54] };
+/** What the rule sets set. Custom takes each of these as it is given. */
 const SWITCHES = {
   isle: { values: ISLES, normal: "round" }, size: { values: Object.keys(SIZES), normal: "medium" },
   start: { values: ["dealt", "homes"], normal: "dealt" }, actions: { values: [3, 6, MANY], normal: MANY }, ranks: { values: [3, 4], normal: 4 },
-  price: { values: [5, 8, 10], normal: 8 }, wages: { values: Object.keys(WAGES), normal: "fair" }, woods: { values: ["none", "slow", "fast"], normal: "slow" },
-  fort: { values: [0, 12, 18], normal: 12 }, goal: { values: [60, 75, 90, 100], normal: 75 }, limit: { values: [15, 30, 50], normal: 50 },
+  price: { values: [5, 8, 10], normal: 8 }, wages: { values: Object.keys(WAGES), normal: "harsh" }, woods: { values: ["none", "slow", "fast"], normal: "slow" },
+  fort: { values: [0, 12, 18], normal: 12 },
+  goal: { values: ["last", 60, 75, 90, 100], normal: "last" }, // last: play until one is left; the others may concede
+  limit: { values: [0, 15, 30, 50], normal: 0 }, // 0: no round limit, only the safety end
   order: { values: ["rotate", "fixed"], normal: "rotate" }, // rotate: the first seat moves on each round (measured fairer here, with the truce)
   opening: { values: ["truce", "open"], normal: "truce" }, // truce: nobody takes land from a rival in the first round
+  walk: { values: ["free", "once"], normal: "free" }, // free: moving inside your own land does not use the unit up
 };
 const normal = (over) => ({ ...Object.fromEntries(Object.entries(SWITCHES).map(([k, v]) => [k, v.normal])), ...over });
 const SETS = {
   classic: (o) => normal({ isle: o.isle, size: o.size }),
-  ours: (o) => ({ isle: "small", size: "tiny", start: "homes", actions: 3, ranks: 3, price: 5, wages: "mild", woods: "none", fort: 0, goal: { 2: 60, 3: 45 }[o.seats] || 45, limit: o.rounds, order: "rotate", opening: "truce" }),
+  ours: (o) => ({ isle: "small", size: "tiny", start: "homes", actions: 3, ranks: 3, price: 5, wages: "mild", woods: "none", fort: 0, goal: { 2: 60, 3: 45 }[o.seats] || 45, limit: o.rounds, order: "rotate", opening: "truce", walk: "once" }),
 };
 const EXPANSIONS = ["farms", "boats", "gales"];
 const off = { values: [false, true], normal: false };
@@ -353,8 +431,10 @@ const radius = (p) => SIZES[p.rule.size].radius;
 const boardOf = (p) => hexBoard(radius(p));
 const cellsOf = (p, seat) => p.owner.reduce((n, o) => n + (o === seat ? 1 : 0), 0);
 const landOf = (p) => p.water.reduce((n, w) => n + (w ? 0 : 1), 0);
-/** Traditional asks less of each player the more there are. */
-const goalOf = (p) => Math.ceil((landOf(p) * (p.style === "classic" ? { 2: 75, 3: 60, 4: 50, 5: 45, 6: 40 }[p.seats] : p.rule.goal)) / 100);
+/** The land that wins at once. Played to the last one standing, that is the whole island (the bar's end). */
+const goalOf = (p) => (p.rule.goal === "last" ? landOf(p) : Math.ceil((landOf(p) * p.rule.goal) / 100));
+/** Whether a seat may concede: only where the game is played to the last one standing. */
+const mayConcede = (p) => p.rule.goal === "last";
 const nameOf = (p, i) => { const [q, r] = boardOf(p).cells[i], R = radius(p); return String.fromCharCode(65 + r + R) + (q + R + 1 + Math.min(0, r)); };
 const raiseOf = (p) => p.rule.price;
 const upkeepOf = (p, rank) => WAGES[p.rule.wages][rank];
@@ -458,16 +538,29 @@ function act(before, m) {
     else if (p.unit[m.to]) { p.unit[m.to] += 1; events.push({ kind: "merge", seat: s, at: m.to, rank: p.unit[m.to], raised: true }); }
     else { p.unit[m.to] = 1; p.moved[m.to] = p.tree[m.to] ? 1 : 0; events.push({ kind: p.tree[m.to] ? "clear" : "raise", seat: s, at: m.to }); p.tree[m.to] = 0; }
   } else {
-    const rank = p.unit[m.from];
+    const rank = p.unit[m.from], rest = p.rule.walk === "free" && !m.sea; // free: a step inside your own land leaves the unit ready
     p.unit[m.from] = 0;
     p.moved[m.from] = 0;
     p.landed[m.from] = 0;
     if (p.owner[m.to] !== s) take(p, s, m.to, rank, events);
-    else if (p.unit[m.to]) { p.unit[m.to] += rank; p.moved[m.to] = 1; events.push({ kind: "merge", seat: s, at: m.to, rank: p.unit[m.to] }); }
-    else { p.unit[m.to] = rank; p.moved[m.to] = 1; events.push({ kind: p.tree[m.to] ? "clear" : "move", seat: s, from: m.from, at: m.to, to: m.to }); p.tree[m.to] = 0; }
+    else if (p.unit[m.to]) { p.unit[m.to] += rank; p.moved[m.to] = rest ? p.moved[m.to] : 1; events.push({ kind: "merge", seat: s, at: m.to, rank: p.unit[m.to] }); } // ready if both parts were
+    else { p.unit[m.to] = rank; p.moved[m.to] = rest && !p.tree[m.to] ? 0 : 1; events.push({ kind: p.tree[m.to] ? "clear" : "move", seat: s, from: m.from, at: m.to, to: m.to }); p.tree[m.to] = 0; }
     if (m.sea) { p.landed[m.to] = 1; settle(p, s, events); } // fed once, at the next turn of its seat
   }
   return { position: p, events };
+}
+
+/** A seat gives up: its units go home, its villages and forts are abandoned, and its land is anyone's to claim. */
+function concede(before) {
+  const p = copy(before), s = p.seat, cells = [];
+  for (let c = 0; c < p.owner.length; c++) {
+    if (p.owner[c] !== s) continue;
+    const farm = p.farm[c], tree = p.tree[c];
+    bare(p, c);
+    p.farm[c] = farm; p.tree[c] = tree; p.hall[c] = 0; p.purse[c] = 0; p.owner[c] = NONE;
+    cells.push(c);
+  }
+  return { position: p, events: [{ kind: "concede", seat: s, cells }] };
 }
 
 /** The start of a seat's turn: units rest, territories earn and pay. Changes p. */
@@ -517,7 +610,7 @@ function finish(p, winners, why, events) {
 function after(p, stop, dice, events) {
   const live = Array.from({ length: p.seats }, (_, s) => s).filter((s) => cellsOf(p, s) > 0);
   if (live.length === 1) return finish(p, live, "the only one left", events);
-  if (cellsOf(p, p.seat) >= goalOf(p)) return finish(p, [p.seat], "held enough of the island", events);
+  if (p.rule.goal !== "last" && cellsOf(p, p.seat) >= goalOf(p)) return finish(p, [p.seat], "held enough of the island", events);
   if (!stop && p.left > 0) return undefined;
   do {
     if (++p.step === p.seats) {
@@ -525,7 +618,7 @@ function after(p, stop, dice, events) {
       p.round++;
       if (p.round > p.rounds) {
         const most = Math.max(...live.map((s) => cellsOf(p, s)));
-        return finish(p, live.filter((s) => cellsOf(p, s) === most), "held the most land at the end", events);
+        return finish(p, live.filter((s) => cellsOf(p, s) === most), p.rule.limit ? "held the most land at the end" : `held the most land after ${SAFETY} rounds`, events);
       }
       nature(p, dice, events);
     }
@@ -541,12 +634,12 @@ function deal(p, b, dice) {
   land.slice(0, even).forEach((c, i) => { p.owner[c] = i % p.seats; });
   for (let s = 0; s < p.seats; s++) {
     settle(p, s);
-    for (const t of territories(p, s)) p.purse[t.hall] = Math.min(t.cells.length * 2, 10) + (p.seats === 2 && s === 0 ? 1 : 0); // of two, the first starts a coin richer a village: the second strikes first after the truce (measured 49.6/50.4)
+    for (const t of territories(p, s)) p.purse[t.hall] = Math.min(t.cells.length * 2, 10) + (p.seats < 4 && s !== 1 ? 2 : 0); // the second seat strikes first after the truce: of two or three, the others start 2 coins richer a village (rules 7, 1,000 games: 46.8/53.2 and 30.7/35.6/33.7)
   }
 }
 
 const fable = {
-  id: "fable", version: "6",
+  id: "fable", version: "7",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 }, rounds: { values: [10, 14, 18], normal: 14 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -556,7 +649,7 @@ const fable = {
     const rule = SETS[o.style] ? SETS[o.style](o) : Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]]));
     if (o.seats > 3 && rule.size === "tiny") rule.size = "small";
     const b = hexBoard(SIZES[rule.size].radius), zero = () => b.cells.map(() => 0), made = island(rule.isle, rule.size, o.seats, dice, rule.start === "homes");
-    const p = { classic: o.style !== "ours", style: o.style, rule, boats: o.boats, farms: o.farms, seats: o.seats, rounds: rule.limit, water: made.water, order: dice.shuffle(b.cells.map((_, i) => i)), owner: b.cells.map(() => NONE), unit: zero(), moved: zero(), hall: zero(), purse: zero(), tree: zero(), fort: zero(), farm: zero(), landed: zero(), seat: 0, step: 0, round: 1, left: rule.actions, over: null };
+    const p = { classic: o.style !== "ours", style: o.style, rule, boats: o.boats, farms: o.farms, seats: o.seats, rounds: rule.limit || SAFETY, water: made.water, order: dice.shuffle(b.cells.map((_, i) => i)), owner: b.cells.map(() => NONE), unit: zero(), moved: zero(), hall: zero(), purse: zero(), tree: zero(), fort: zero(), farm: zero(), landed: zero(), seat: 0, step: 0, round: 1, left: rule.actions, over: null };
     if (o.gales) p.gale = false;
     if (rule.start === "homes") {
       made.homes.forEach((h, s) => {
@@ -572,9 +665,9 @@ const fable = {
   },
   turn: (p) => (p.over ? null : p.seat),
 
-  /** Raise a unit, build, move a unit, or end the turn. */
+  /** Raise a unit, build, move a unit, end the turn, or concede. */
   moves(p) {
-    const { near } = boardOf(p), s = p.seat, out = [{ do: "end" }], roads = p.boats && !p.gale ? seaRoads(boardOf(p), p.water, ROADS) : null;
+    const { near } = boardOf(p), s = p.seat, out = mayConcede(p) ? [{ do: "end" }, { do: "concede" }] : [{ do: "end" }], roads = p.boats && !p.gale ? seaRoads(boardOf(p), p.water, ROADS) : null;
     const guard = new Map(), guarded = (c) => { if (!guard.has(c)) guard.set(c, defence(p, c)); return guard.get(c); };
     for (const t of territories(p, s)) {
       const inside = new Set(t.cells), edge = new Set();
@@ -612,34 +705,42 @@ const fable = {
       }
     }
     // the truce of the first round: land may be bought or walked into, but none taken from a rival yet
-    if (p.rule.opening === "truce" && p.round === 1) return out.filter((m) => m.do === "end" || p.owner[m.to] === s || p.owner[m.to] === NONE);
+    if (p.rule.opening === "truce" && p.round === 1) return out.filter((m) => m.to === undefined || p.owner[m.to] === s || p.owner[m.to] === NONE);
     return out;
   },
 
   apply(before, m, dice) {
-    const made = m.do === "end" ? { position: copy(before), events: [{ kind: "done", seat: before.seat }] } : act(before, m);
-    after(made.position, m.do === "end", dice, made.events);
+    const made = m.do === "end" ? { position: copy(before), events: [{ kind: "done", seat: before.seat }] } : m.do === "concede" ? concede(before) : act(before, m);
+    after(made.position, m.do === "end" || m.do === "concede", dice, made.events);
     return made;
   },
   result: (p) => p.over,
 };
 
-$x.NONE = NONE; $x.WOOD = WOOD; $x.CAIRN = CAIRN; $x.FORT_GUARD = FORT_GUARD; $x.FARM_PAYS = FARM_PAYS; $x.SWITCHES = SWITCHES; $x.EXPANSIONS = EXPANSIONS; $x.boardOf = boardOf; $x.cellsOf = cellsOf; $x.landOf = landOf; $x.goalOf = goalOf; $x.nameOf = nameOf; $x.raiseOf = raiseOf; $x.upkeepOf = upkeepOf; $x.topOf = topOf; $x.farmPrice = farmPrice; $x.groupsOf = groupsOf; $x.territories = territories; $x.defence = defence; $x.beats = beats; $x.plunder = plunder; $x.act = act; $x.fable = fable;
+$x.NONE = NONE; $x.WOOD = WOOD; $x.CAIRN = CAIRN; $x.FORT_GUARD = FORT_GUARD; $x.FARM_PAYS = FARM_PAYS; $x.SAFETY = SAFETY; $x.SWITCHES = SWITCHES; $x.EXPANSIONS = EXPANSIONS; $x.boardOf = boardOf; $x.cellsOf = cellsOf; $x.landOf = landOf; $x.goalOf = goalOf; $x.mayConcede = mayConcede; $x.nameOf = nameOf; $x.raiseOf = raiseOf; $x.upkeepOf = upkeepOf; $x.topOf = topOf; $x.farmPrice = farmPrice; $x.groupsOf = groupsOf; $x.territories = territories; $x.defence = defence; $x.beats = beats; $x.plunder = plunder; $x.act = act; $x.fable = fable;
 return $x; })({});
 $m[4] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Bots for The Island Fable. One action at a time: try each on a copy and keep the best, or stop.
-const { NONE, WOOD, act, boardOf, cellsOf, defence, fable, goalOf, groupsOf, territories, topOf, upkeepOf } = $m[1];
+// It also looks a few steps ahead for one strike: raise scouts onto a unit, or join two where steps at home are free, then take.
+const { NONE, WOOD, act, beats, boardOf, cellsOf, defence, fable, goalOf, groupsOf, landOf, raiseOf, territories, topOf, upkeepOf } = $m[1];
 
 const TIERS = ["random", "easy", "normal"];
 
+/** The bots' plain rule for giving up: one rival holds at least half the island and at least three times their land. */
+function hopeless(p, seat) {
+  const mine = cellsOf(p, seat), land = landOf(p);
+  for (let s = 0; s < p.seats; s++) if (s !== seat && 2 * cellsOf(p, s) >= land && cellsOf(p, s) >= 3 * mine) return true;
+  return false;
+}
+
 /** How good a position is for one seat, in whole numbers. */
 function value(p, seat) {
-  const { near } = boardOf(p), mine = cellsOf(p, seat);
-  let best = 0, v = 0;
-  for (let s = 0; s < p.seats; s++) if (s !== seat) best = Math.max(best, cellsOf(p, s));
+  const { near } = boardOf(p), mine = cellsOf(p, seat), last = p.rule.goal === "last";
+  let best = 0, least = 0, v = 0;
+  for (let s = 0; s < p.seats; s++) if (s !== seat) { const c = cellsOf(p, s); best = Math.max(best, c); if (c && (!least || c < least)) least = c; }
   if (mine >= goalOf(p)) v += 50000;
-  v += 100 * (mine - best) + 50 * mine;
+  v += 100 * (mine - (last ? least : best)) + 50 * mine; // racing to a goal, watch the leader; playing to the last, finish off the weakest
   for (const g of groupsOf(p, seat)) if (g.length < 2) v -= 60;
   for (const t of territories(p, seat)) {
     const ranks = t.cells.reduce((n, c) => n + p.unit[c], 0), deep = t.purse + 2 * t.net;
@@ -656,13 +757,16 @@ function value(p, seat) {
   return v;
 }
 
+/** A step inside your own land that leaves the unit ready: free where the rules say so. */
+const free = (p, m) => m.do === "move" && !m.sea && p.rule.walk === "free" && p.owner[m.to] === p.seat && !p.tree[m.to];
+
 /** The moves worth a look: takes, clearing, joining, guarding a border, building beside one. */
-function sensible(p) {
-  const { near } = boardOf(p), me = p.seat, all = fable.moves(p), border = (c) => near[c].some((m) => p.owner[m] !== me && !p.water[m]), rich = new Map();
+function sensible(p, all) {
+  const { near } = boardOf(p), me = p.seat, border = (c) => near[c].some((m) => p.owner[m] !== me && !p.water[m]), rich = new Map();
   for (const t of territories(p, me)) for (const c of t.cells) rich.set(c, t);
-  const takes = all.filter((m) => m.do !== "end" && p.owner[m.to] !== me), strong = new Set(takes.filter((m) => m.do === "move").map((m) => m.from));
+  const takes = all.filter((m) => m.to !== undefined && p.owner[m.to] !== me), strong = new Set(takes.filter((m) => m.do === "move").map((m) => m.from));
   return all.filter((m) => {
-    if (m.do === "end") return false;
+    if (m.to === undefined) return false;
     if (p.owner[m.to] !== me) return true;
     if (m.do === "farm") return !border(m.to);
     if (m.do === "fort") return border(m.to) && defence(p, m.to) < 2;
@@ -676,15 +780,54 @@ function sensible(p) {
   });
 }
 
+/**
+ * Strikes a single action cannot make: build a unit up (raise scouts onto it, or, where steps at home are free, join two),
+ * then take a hex nothing ready could. One cheapest way for each target and territory; each is a list of moves.
+ */
+function plans(p) {
+  const { near } = boardOf(p), me = p.seat, price = raiseOf(p), top = topOf(p), out = [], walk = p.rule.walk === "free";
+  for (const t of territories(p, me)) {
+    const inside = new Set(t.cells), ready = t.cells.filter((c) => p.unit[c] && !p.moved[c]), best = Math.max(0, ...ready.map((c) => p.unit[c]));
+    const empty = t.cells.find((c) => !p.unit[c] && !p.hall[c] && !p.fort[c] && !p.farm[c] && !p.tree[c]), edge = new Set();
+    for (const c of t.cells) for (const x of near[c]) if (!inside.has(x) && !p.water[x] && p.owner[x] !== me && (p.round > 1 || p.rule.opening !== "truce" || p.owner[x] === NONE)) edge.add(x);
+    for (const c of edge) {
+      const g = defence(p, c);
+      let need = 1;
+      while (need <= top && !beats(p, need, g)) need++;
+      if (need > top || need === 1 || best >= need) continue; // out of reach, or a single move does it
+      let way = null;
+      const consider = (steps, at, raises) => {
+        const list = [...steps, ...Array.from({ length: raises }, () => ({ do: "raise", hall: t.hall, to: at })), { do: "move", from: at, to: c }];
+        if (list.filter((m) => m.do === "raise").length * price <= t.purse && (!way || list.length < way.length)) way = list;
+      };
+      for (const a of ready) {
+        consider([], a, need - p.unit[a]);
+        if (walk) for (const b of ready) if (b !== a && p.unit[a] + p.unit[b] <= top) consider([{ do: "move", from: a, to: b }], b, Math.max(0, need - p.unit[a] - p.unit[b]));
+      }
+      if (empty !== undefined) consider([{ do: "raise", hall: t.hall, to: empty }], empty, need - 1);
+      if (way) out.push(way);
+    }
+  }
+  return out;
+}
+
 /** Choose one action a little at a time. `dice` breaks ties and drives random. */
 function* thinking(p, dice, tier = "normal") {
-  if (tier === "random") return dice.pick(fable.moves(p));
-  const me = p.seat, noise = tier === "easy" ? 420 : 20;
-  let best = { do: "end" }, score = value(p, me) + 5, n = 0;
-  for (const m of p.classic ? sensible(p) : fable.moves(p).filter((x) => x.do !== "end")) { // a small island can be read in full
-    const v = value(act(p, m).position, me) + dice.below(noise);
+  if (tier === "random") return dice.pick(fable.moves(p).filter((m) => m.do !== "concede"));
+  const me = p.seat, noise = tier === "easy" ? 420 : 20, all = fable.moves(p), base = value(p, me) + 5;
+  if (all.some((m) => m.do === "concede") && hopeless(p, me)) return { do: "concede" };
+  let best = { do: "end" }, score = base, n = 0;
+  for (const m of p.classic ? sensible(p, all) : all.filter((x) => x.to !== undefined)) { // a small island can be read in full
+    const raw = value(act(p, m).position, me), v = free(p, m) ? (raw > base ? raw : -Infinity) : raw + dice.below(noise); // a free step must gain, or a bot could walk all day
     if (v > score) { score = v; best = m; }
     if (++n % 4 === 0) yield;
+  }
+  if (p.classic) {
+    for (const list of plans(p)) { // the first step now; the rest come on the next looks
+      const v = value(list.reduce((q, m) => act(q, m).position, p), me) + dice.below(noise);
+      if (v > score) { score = v; best = list[0]; }
+      if (++n % 4 === 0) yield;
+    }
   }
   return best;
 }
@@ -694,7 +837,7 @@ function choose(p, dice, tier) {
   for (;;) { const s = t.next(); if (s.done) return s.value; }
 }
 
-$x.TIERS = TIERS; $x.value = value; $x.thinking = thinking; $x.choose = choose;
+$x.TIERS = TIERS; $x.hopeless = hopeless; $x.value = value; $x.thinking = thinking; $x.choose = choose;
 return $x; })({});
 $m[7] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -1549,7 +1692,9 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       ctx.lineJoin = "round"; ctx.lineWidth = 2; ctx.strokeStyle = "#1a1411";
       if (s.kind === "token") { // the hex's number, red when it comes up often
         const r = Math.max(10, h * 0.46);
-        ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = "#f3e7c6"; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = "#f3e7c6"; ctx.fill();
+        if (s.lit) { ctx.lineWidth = Math.max(4, r * 0.35); ctx.strokeStyle = "#ffd24a"; ctx.stroke(); ctx.strokeStyle = "#1a1411"; } // it yielded on the last roll
+        ctx.lineWidth = 1.5; ctx.stroke();
         ctx.fillStyle = s.hot ? "#b0302a" : "#1a1411"; ctx.font = `700 ${Math.round(r * 1.05)}px Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(s.n), x, y + 1);
         continue;
       }
@@ -1719,9 +1864,9 @@ $m[17] = (($x) => {
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-const VERSION = "0.4.4";
+const VERSION = "0.5.0";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "82b82933";
+const BUILD = "60121dd0";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
 return $x; })({});
@@ -1826,6 +1971,91 @@ const linkGames = {
 
 $x.canLock = canLock; $x.newId = newId; $x.makeLink = makeLink; $x.readLink = readLink; $x.linkGames = linkGames;
 return $x; })({});
+$m[20] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// What the table games' screen keeps for the player: settings, sounds made in code, and the order of places at the end.
+// No page is touched when this is loaded, so its plain parts are tested in Node (test/shell.test.mjs).
+
+const SETTINGS_KEY = "capo-settings";
+const CHOICES = {
+  sound: [["on", "On"], ["off", "Off"]],
+  speed: [["normal", "Normal"], ["fast", "Fast"], ["instant", "Instant"]],
+  motion: [["system", "Follow the system"], ["reduced", "Reduced"], ["full", "Full"]],
+  patterns: [["off", "Off"], ["on", "On"]],
+  text: [["normal", "Normal"], ["large", "Large"], ["larger", "Larger"]],
+};
+const DEFAULTS = { sound: "on", volume: 60, speed: "normal", motion: "system", patterns: "off", text: "normal" };
+/** How long bots wait, as a share of their usual pace; and how much bigger the words are. */
+const PACE = { normal: 1, fast: 0.3, instant: 0 }, SCALE = { normal: 1, large: 1.15, larger: 1.3 };
+
+/** Settings from what was kept: anything missing or strange falls back to its default. */
+function parseSettings(text) {
+  let o;
+  try { o = JSON.parse(text || "{}"); } catch { o = null; }
+  const s = { ...DEFAULTS }, v = Number(o?.volume);
+  for (const [k, list] of Object.entries(CHOICES)) if (list.some(([x]) => x === o?.[k])) s[k] = o[k];
+  if (o?.volume !== undefined && Number.isFinite(v)) s.volume = Math.max(0, Math.min(100, Math.round(v)));
+  return s;
+}
+const settings = parseSettings((() => { try { return localStorage.getItem(SETTINGS_KEY); } catch { return null; } })());
+function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* kept for this visit only */ } }
+
+/** The turn a banner was shown for: once a round when one person plays, once a seat when several share the screen. */
+const turnKey = (seed, round, seat, solo) => (solo ? `${seed}/${round}` : `${seed}/${round}/${seat}`);
+
+/** Places at the end: winners first, then those still standing by score, then the fallen, the last to fall first. Rows: { seat, won, score, fell }. */
+function ranked(rows) {
+  const up = (r) => (r.fell === undefined || r.fell === null ? 1 : 0), key = (r) => (r.won ? "w" : `${up(r)}/${r.score}/${r.fell ?? ""}`);
+  const all = [...rows].sort((a, b) => (b.won ? 1 : 0) - (a.won ? 1 : 0) || up(b) - up(a) || b.score - a.score || (b.fell ?? 0) - (a.fell ?? 0) || a.seat - b.seat);
+  let place = 0;
+  return all.map((r, i) => ({ ...r, place: i && key(all[i - 1]) === key(r) ? place : (place = i + 1) }));
+}
+/** The result as one line of plain text, to paste anywhere. */
+const resultText = (title, rows) => `${title}: ${rows.map((r) => `${r.place}. ${r.name}${r.figures.length ? ` (${r.figures.map(([k, v]) => `${k} ${v}`).join(", ")})` : ""}`).join("; ")}.`;
+
+// Sounds, made here with the Web Audio API: no files. Silent until a press has woken them (browsers ask for that).
+let ctx = null;
+function wake() {
+  try { ctx ||= new AudioContext(); if (ctx.state === "suspended") ctx.resume(); } catch { ctx = null; }
+}
+// [hertz, start, length, loudness, wave]
+const TUNES = {
+  tick: [[1900, 0, 0.03, 0.12, "square"]],
+  turn: [[784, 0, 0.45, 0.5], [1175, 0.11, 0.6, 0.4]],
+  capture: [[147, 0, 0.22, 0.9, "triangle"], [294, 0.05, 0.3, 0.45, "triangle"]],
+  win: [[523, 0, 0.3, 0.5], [659, 0.13, 0.3, 0.5], [784, 0.26, 0.3, 0.5], [1047, 0.39, 0.9, 0.55]],
+  lose: [[392, 0, 0.4, 0.5], [311, 0.2, 0.4, 0.5], [262, 0.4, 1, 0.5]],
+};
+function sfx(name, later = 0) {
+  if (!ctx || ctx.state !== "running" || settings.sound !== "on" || !settings.volume) return;
+  try {
+    const t0 = ctx.currentTime + 0.01 + later, out = ctx.createGain();
+    out.gain.value = 0.6 * (settings.volume / 100) ** 2;
+    out.connect(ctx.destination);
+    if (name === "roll") for (let i = 0; i < 4; i++) rattle(out, t0 + i * 0.06 + Math.random() * 0.025);
+    for (const [hz, at, len, peak, wave = "sine"] of TUNES[name] || []) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = wave; o.frequency.value = hz;
+      g.gain.setValueAtTime(0.0001, t0 + at); g.gain.exponentialRampToValueAtTime(peak, t0 + at + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + len);
+      o.connect(g).connect(out); o.start(t0 + at); o.stop(t0 + at + len + 0.05);
+    }
+  } catch { /* a sound is never needed to play */ }
+}
+/** A die on wood: a short burst of noise through a narrow filter. */
+function rattle(out, at) {
+  const n = Math.floor(ctx.sampleRate * 0.045), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0), src = ctx.createBufferSource(), f = ctx.createBiquadFilter();
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) ** 3;
+  f.type = "bandpass"; f.frequency.value = 1200 + Math.random() * 1800; f.Q.value = 3;
+  src.buffer = buf; src.connect(f).connect(out); src.start(at);
+}
+/** The sound a move makes, by what happened in it. */
+function cue(events) {
+  if (events.some((e) => ["fight", "roll", "pour", "attack"].includes(e.kind))) sfx("roll");
+  if (events.some((e) => e.kind === "take" || (e.kind === "pour" && e.taken?.length))) sfx("capture", 0.2);
+}
+
+$x.SETTINGS_KEY = SETTINGS_KEY; $x.CHOICES = CHOICES; $x.DEFAULTS = DEFAULTS; $x.PACE = PACE; $x.SCALE = SCALE; $x.parseSettings = parseSettings; $x.settings = settings; $x.saveSettings = saveSettings; $x.turnKey = turnKey; $x.ranked = ranked; $x.resultText = resultText; $x.wake = wake; $x.sfx = sfx; $x.cue = cue;
+return $x; })({});
 $m[5] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What every table game's screen shares: title, seats, score bar, words, taking back, saving, bots' turns and the end.
@@ -1834,9 +2064,13 @@ const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedStat
 const { EMBLEMS, emblem } = $m[12];
 const { footer } = $m[16];
 const { canLock, linkGames, makeLink, newId, readLink } = $m[19];
+const { BUILD, SOURCE_URL, VERSION } = $m[17];
+const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, turnKey, wake } = $m[20];
 
-const COLOURS = [["Azure", [91, 143, 196]], ["Rust", [208, 106, 75]], ["Moss", [138, 168, 81]], ["Plum", [160, 108, 182]], ["Saffron", [222, 176, 62]], ["Teal", [64, 160, 150]], ["Rose", [220, 124, 154]], ["Slate", [112, 124, 138]], ["Umber", [146, 100, 64]], ["Indigo", [88, 92, 190]], ["Lime", [186, 208, 72]], ["Crimson", [176, 48, 62]], ["Ivory", [236, 226, 200]], ["Night", [52, 58, 78]]];
-const LOOK0 = [[0, 0], [1, 1], [2, 2], [3, 3], [4, 8], [5, 4]];
+// The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
+// a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
+const COLOURS = [["Azure", [0, 114, 178]], ["Rust", [200, 88, 0]], ["Moss", [138, 168, 81]], ["Plum", [163, 97, 134]], ["Saffron", [212, 146, 0]], ["Teal", [0, 158, 115]], ["Rose", [220, 124, 154]], ["Slate", [112, 124, 138]], ["Umber", [146, 100, 64]], ["Indigo", [88, 92, 190]], ["Lime", [186, 208, 72]], ["Crimson", [176, 48, 62]], ["Ivory", [236, 226, 200]], ["Night", [52, 58, 78]], ["Sky", [83, 173, 224]]];
+const LOOK0 = [[0, 0], [4, 1], [5, 2], [3, 3], [1, 8], [14, 4]];
 /** What each seat wears now: its name, colour and icon. Changed in place, so a board keeps what it was given. */
 const NAMES = [], RGB = LOOK0.map(() => [0, 0, 0]), ICONS = [], PAPER = [[231, 217, 185], [228, 213, 180], [234, 221, 191]];
 function dress(look) {
@@ -1847,17 +2081,20 @@ const $ = (id) => document.getElementById(id);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["away", "A friend, by link"]];
-const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", away: "By link" };
+const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
 const store = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* files still work */ } };
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 
 function sign(seat, rgb = RGB[seat], icon = ICONS[seat]) {
   const c = el("canvas"), x = c.getContext("2d");
   c.width = c.height = 64;
+  c.setAttribute("aria-hidden", "true"); // the name beside it says who
   x.beginPath(); x.arc(32, 32, 30, 0, 7); x.fillStyle = `rgb(${rgb})`; x.fill(); x.lineWidth = 3; x.strokeStyle = "rgba(20,15,12,.75)"; x.stroke();
-  emblem(x, icon, 32, 32, 36); x.fillStyle = rgb[0] + rgb[1] + rgb[2] > 560 ? "#1a1411" : "#fdf6e4"; x.fill("evenodd");
+  emblem(x, icon, 32, 32, 36); x.fillStyle = inkOf(rgb); x.fill("evenodd");
   return c;
 }
+/** The ink that stands out more on a colour. */
+const inkOf = (rgb) => (rgb.reduce((s, v, i) => s + [0.21, 0.72, 0.07][i] * (v / 255) ** 2.2, 0) > 0.19 ? "#1a1411" : "#fdf6e4");
 /** A row of choices that acts as one control: arrows move, the chosen one is marked. */
 function radio(host, items, chosen, pick) {
   const had = host.contains(document.activeElement), left = host.scrollLeft;
@@ -1886,11 +2123,14 @@ function radio(host, items, chosen, pick) {
 }
 let hush = 0;
 function toast(t) { const b = $("toast"); b.textContent = t; b.classList.add("on"); clearTimeout(hush); hush = setTimeout(() => b.classList.remove("on"), 2800); }
-function sheet(title, body, close = "Close") {
+/** One sheet at a time. `kind` widens it (the menu, the end); no `close` leaves the closing to the sheet's own buttons and Escape. */
+function sheet(title, body, close = "Close", kind = "") {
+  $("sheet").className = `panel ${kind}`;
   $("sheet-title").textContent = title;
   $("sheet-body").replaceChildren(body);
+  $("sheet-close").parentNode.hidden = !close;
   $("sheet-close").textContent = close;
-  $("sheet-close").className = close === "Close" ? "main" : "quiet";
+  $("sheet-close").className = close === "Close" || close === "Resume" ? "main" : "quiet";
   if (!$("sheet").open) $("sheet").showModal();
 }
 const closeSheet = () => { if ($("sheet").open) $("sheet").close(); };
@@ -1912,14 +2152,35 @@ function createTable(G) {
   Object.assign(passField, { type: "text", className: "field", placeholder: "None", autocomplete: "off", maxLength: 100 });
   passField.setAttribute("aria-label", "Password for the link, if you want one");
   pass.append(el("span", "Password"), passField);
-  $("title").querySelector(".card").lastElementChild.before(pass);
+  $("start").parentNode.before(pass);
   const more = el("div", undefined, "more"), note = el("p", "", "about"), ahead = el("button", "Skip ahead", "quiet");
   ahead.type = "button"; ahead.hidden = true;
   ahead.onclick = () => { T.hurry = true; ahead.hidden = true; };
+  // what happened while you waited (said once, politely), and the log: docked beside the board on wide screens, one tap away on narrow ones
+  const news = el("div"), hide = el("button", "×"), dock = el("aside", undefined, "panel"), fold = el("button", "What happened", "head"), list = el("ol"), logs = $("menu").cloneNode(true);
+  news.id = "news"; news.setAttribute("role", "status");
+  hide.type = fold.type = "button"; hide.setAttribute("aria-label", "Hide");
+  hide.onclick = () => { news.replaceChildren(); place(); };
+  dock.id = "dock"; dock.hidden = true; list.reversed = true;
+  dock.append(fold, list); document.body.append(dock);
+  logs.id = "logs"; logs.setAttribute("aria-label", "What happened");
+  logs.querySelector("path").setAttribute("d", "M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1");
+  $("look").before(logs);
+  $("act").prepend(news);
   $("act").append(ahead);
   $("about").after(more);
+  // the turn banner, one line said once to a screen reader when a person's turn starts, the tray's handle on a phone, the menu's tabs
+  const banner = el("div"), say = el("p", "", "sr"), tray = el("button", undefined, "tray"), setButton = el("button", "Settings", "text"), menuBox = el("div"), tabs = el("div", undefined, "pick small tabs"), pane = el("div");
+  banner.id = "turn"; banner.hidden = true; banner.setAttribute("aria-hidden", "true");
+  say.setAttribute("aria-live", "polite");
+  tray.type = setButton.type = "button"; tray.setAttribute("aria-label", "Show the whole move panel");
+  tabs.setAttribute("role", "radiogroup"); tabs.setAttribute("aria-label", "Menu");
+  menuBox.append(tabs, pane);
+  $("act").prepend(tray);
+  document.body.append(banner, say);
+  $("title").querySelector(".links").append(setButton);
   const KEY = `capo-${G.key}-2`, LOOK = `capo-${G.key}-look`, many = G.seats || [2, 3], setup = { seats: G.normal || 2, style: "classic", rounds: G.lengths[1]?.[0], who: ["you", "normal", "normal", "normal", "normal", "normal"], look: LOOK0.map((x) => [...x]), extra: Object.fromEntries([...(G.choices || []), ...(G.switches || [])].map((c) => [c.key, c.normal])), on: {} };
-  let log = [], land = [], board = null, run = 0;
+  let log = [], land = [], board = null, run = 0, mark = 0, drawn = -1, fell = [], heralded = "", tab = "game";
   const T = {
     match: null, kinds: [], look: LOOK0, hurry: false, link: null, demo: true, busy: false, RGB, NAMES, read: () => read(LOOK),
     get board() { return board; },
@@ -1929,12 +2190,18 @@ function createTable(G) {
     solo: () => T.kinds.filter((k) => k === "you" || k === "away").length === 1 || (!!T.link && T.kinds.filter((k) => k === "you").length === 1),
     play, refresh: panel,
   };
+  function docked() {
+    dock.hidden = T.demo || T.catching || innerWidth <= 1180;
+    fold.setAttribute("aria-expanded", String(!list.hidden));
+    if (!dock.hidden && !list.hidden && drawn !== log.length) { drawn = log.length; list.replaceChildren(...log.slice(-80).reverse().map((t) => el("li", t))); }
+  }
   const place = () => {
+    docked();
     if (!board) return;
-    const wide = innerWidth > 820, r = (id) => $(id).getBoundingClientRect();
+    const wide = innerWidth > 820, r = (id) => $(id).getBoundingClientRect(), z = SCALE[settings.text];
     if (T.demo) board.layout(wide ? { left: Math.min(innerWidth / 2, $("title").querySelector(".card").getBoundingClientRect().right), right: 0, top: 20, bottom: 20 } : { left: 0, right: 0, top: 10, bottom: innerHeight * 0.5 });
-    else if (wide && document.body.classList.contains("atlas")) board.layout({ left: 0, right: 0, top: r("seats").bottom + 2, bottom: 4 });
-    else if (wide) board.layout({ left: 232, right: innerWidth > 1180 ? 262 : 30, top: 86, bottom: innerWidth > 1180 ? 6 : 150 });
+    else if (wide && document.body.classList.contains("atlas")) board.layout({ left: 0, right: dock.hidden || list.hidden ? 0 : 360 * z, top: r("seats").bottom + 2, bottom: 4 });
+    else if (wide) board.layout({ left: 232 * z, right: innerWidth > 1180 ? (list.hidden ? 262 : 372) * z : 30, top: 12 + 74 * z, bottom: innerWidth > 1180 ? 6 : 150 * z });
     else { document.body.style.setProperty("--act", `${innerHeight - r("act").top}px`); board.layout({ left: 0, right: 0, top: r("seats").bottom + 2, bottom: innerHeight - r("act").top + 34 }); }
   };
   function makeBoard() {
@@ -1955,6 +2222,7 @@ function createTable(G) {
     sendBox();
     ahead.hidden = T.demo || T.hurry || T.catching || T.match.turn === null || T.human() || T.away();
     const over = T.match.turn === null, me = T.human() && !T.busy;
+    if (!T.human() && news.firstChild) { news.replaceChildren(); place(); }
     $("choice").hidden = !me;
     $("after").hidden = !over;
     if (over) { $("status").textContent = ending(); board.clear(); } else if (!me) {
@@ -1972,8 +2240,50 @@ function createTable(G) {
       const c = G.cellsOf(p, s), out = G.outOf ? G.outOf(p, s) : !c, li = el("li", undefined, `seat${s === T.match.turn ? " now" : ""}${out ? " out" : ""}`), dl = el("dl");
       for (const [k, v] of [[G.unit || "Land", innerWidth > 820 || seats < 3 ? `${c}/${goal}` : c], ...G.stats(p, s)]) { const d = el("div"); d.append(el("dt", k), el("dd", String(v))); dl.append(d); }
       li.append(sign(s), el("b", NAMES[s]), el("small", T.kinds[s] === "you" && T.solo() ? "You" : WORDS[T.kinds[s]]), dl);
+      if (s === T.match.turn) li.setAttribute("aria-current", "true");
       return li;
     }));
+    docked();
+  }
+  /** Back to a person after others have moved: what happened since, the moves that touched them first. */
+  function brief() {
+    if (T.demo || !T.human()) return;
+    const all = log.slice(mark).filter((t) => !t.endsWith(" ends the turn.")), you = all.filter((t) => t.includes(NAMES[T.match.turn])), show = (all.length > 5 && you.length ? you : all).slice(-5), u = el("ul");
+    mark = log.length;
+    if (!show.length) return;
+    u.append(...show.map((t) => el("li", t)));
+    news.replaceChildren(hide, el("b", "Since your last turn"), u, ...(all.length > show.length ? [el("small", `${all.length - show.length} more in the log.`)] : []));
+    place();
+  }
+  /** A person's turn starts: said once, a bell, and at normal speed a banner for under a second. Real time has no turns. */
+  let gone = 0;
+  const unherald = () => { clearTimeout(gone); banner.hidden = true; };
+  function herald() {
+    const p = T.match.position, s = T.match.turn, k = T.demo || T.catching || !T.human() || p.live ? "" : turnKey(T.match.seed, p.round, s, T.solo());
+    if (!k || k === heralded) return;
+    heralded = k;
+    say.textContent = `${T.solo() ? "Your turn" : `${NAMES[s]}, your turn`}. Round ${p.round}.`;
+    sfx("turn");
+    if (settings.speed !== "normal") return;
+    banner.replaceChildren(sign(s), el("small", "Your turn"), el("b", NAMES[s]), el("span", `Round ${p.round}`));
+    banner.style.setProperty("--seat", `rgb(${RGB[s]})`);
+    banner.classList.remove("go");
+    banner.hidden = false;
+    void banner.offsetWidth; // start the animation again
+    banner.classList.add("go");
+    clearTimeout(gone); gone = setTimeout(unherald, 950);
+  }
+  const down = (p, s) => (G.outOf ? G.outOf(p, s) : !G.cellsOf(p, s));
+  const watch = (p) => { for (let s = 0; s < T.kinds.length; s++) if (fell[s] === undefined && down(p, s)) fell[s] = p.round; };
+  const still = () => settings.motion === "reduced" || (settings.motion === "system" && matchMedia("(prefers-reduced-motion: reduce)").matches);
+  /** Settings take effect at once. The board's own animations follow the system unless asked to skip them. */
+  function apply() {
+    const h = document.documentElement;
+    h.classList.toggle("still", still());
+    h.classList.toggle("patterns", settings.patterns === "on");
+    h.style.setProperty("--ui-scale", String(SCALE[settings.text]));
+    board?.patterns?.(settings.patterns === "on"); // the hook for a board that can draw seat patterns; none can yet
+    place();
   }
   const tally = (p) => Array.from({ length: T.kinds.length }, (_, s) => G.cellsOf(p, s));
   const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, look: T.look, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds, look: T.look })); };
@@ -1991,24 +2301,27 @@ function createTable(G) {
   }
   T.flow = flow;
   async function play(move) {
-    const mine = run, seat = T.match.turn, person = T.human();
+    const mine = run, seat = T.match.turn, person = T.human(), speed = T.demo || person ? "normal" : settings.speed;
     T.busy = true;
     const events = T.match.play(move), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
     // in a game by link, a move that rolled dice is final: nobody can look at the dice, take it back and choose again
     if (T.link && T.match.rolled) T.link.floor = T.match.list.length;
     log.push(...words);
+    if (person) mark = log.length;
     land.push(tally(T.match.position));
+    watch(T.match.position);
     keep();
     if (!T.demo) { score(); panel(); }
     G.seen?.(T, events);
-    const took = board.show(G.order(events), T.hurry);
-    if (!T.demo && !T.hurry && words.length && (!person || T.match.turn !== seat)) toast(words.slice(0, 2).join(" "));
+    if (!T.demo && !T.hurry && speed === "normal") cue(events);
+    const rush = T.hurry || speed === "instant", took = board.show(G.order(events), rush || settings.motion === "reduced");
+    if (!T.demo && !rush && words.length && (!person || T.match.turn !== seat)) toast(words.slice(0, 2).join(" "));
     if (T.human()) T.hurry = false;
-    await sleep(T.hurry ? 0 : T.demo ? Math.max(G.pace(T.match.position), took + 120) : Math.max(160, took + 60));
+    await sleep(T.hurry || speed === "instant" ? 0 : T.demo ? Math.max(G.pace(T.match.position), took + 120) : speed === "fast" ? Math.max(90, took / 2) : Math.max(160, took + 60));
     if (mine !== run) return;
     T.busy = false;
     G.changed?.(T);
-    if (!T.demo) { score(); panel(); if (T.match.turn === null) finish(); }
+    if (!T.demo) { score(); panel(); brief(); herald(); if (T.match.turn === null) finish(); }
     next();
   }
   async function next() {
@@ -2028,7 +2341,7 @@ function createTable(G) {
         if (s.done) { move = s.value; break; }
         if (performance.now() - slice > 7) { await sleep(0); if (mine !== run) return; slice = performance.now(); }
       }
-      if (!T.hurry) await sleep(Math.max(0, G.pace(T.match.position) - (performance.now() - from)));
+      if (!T.hurry) await sleep(Math.max(0, G.pace(T.match.position) * PACE[settings.speed] - (performance.now() - from)));
     }
     if (mine === run) play(move);
   }
@@ -2099,10 +2412,12 @@ function createTable(G) {
     box.append(w);
     sheet(G.title, box, "Not now");
   }
-  function linkSheet() {
+  /** Link play: this game's link, a pasted one, and the games kept here. Shown alone from the title and as a tab of the menu. */
+  function linkBox() {
     const box = el("div", undefined, "stack"), t = el("textarea"), go = el("button", "Open the link", "main"), all = linkGames.list(G.key);
     t.rows = 3; t.className = "paste"; t.placeholder = "Paste a link here"; t.setAttribute("aria-label", "Paste a link here");
     go.type = "button"; go.onclick = () => { const v = t.value; closeSheet(); openLink(v); };
+    if (T.link && !T.demo) box.append(el("p", ready?.url ? "This game is played by link. Its newest link is ready in the move panel." : "This game is played by link. The move panel offers the link when it is a friend's turn."));
     box.append(el("p", "To start one, choose \"A friend, by link\" for a player. Links hold the whole game. Without a password, anyone who has the link can read it. A friend set on cheating could try a turn more than once, so play with people you trust."), t, go);
     for (const r of all) {
       let m;
@@ -2113,8 +2428,9 @@ function createTable(G) {
       x.onclick = () => { if (x.textContent === "Remove") { x.textContent = "Sure?"; return; } linkGames.drop(r.id); row.remove(); };
       row.append(b, x); box.append(row);
     }
-    sheet("Link games", box, "Back");
+    return box;
   }
+  const linkSheet = () => sheet("Link games", linkBox(), "Back");
   /** Play out what happened since `from`, then go on. */
   async function catchUp(m, from) {
     const mine = run, all = m.list, show = createMatch(G.game, { seed: m.seed, options: m.options });
@@ -2142,7 +2458,7 @@ function createTable(G) {
     Object.assign(T, { match: m, busy: false, catching: false });
     G.changed?.(T);
     board.show([], true);
-    score(); panel();
+    score(); panel(); brief(); herald();
     if (T.match.turn === null) finish();
     next();
   }
@@ -2155,10 +2471,12 @@ function createTable(G) {
     skip.hidden = true;
     Object.assign(T, { demo: false, busy: false, catching: false, match: m, kinds: k, link });
     G.fresh?.(T);
-    log = []; land = [];
+    log = []; land = []; mark = -1; drawn = -1; fell = [];
+    news.replaceChildren();
     const again = createMatch(G.game, { seed: m.seed, options: m.options });
     land.push(tally(again.position));
-    for (const mv of m.list) { log.push(...again.play(mv).map((e) => G.line(e, again.position)).filter(Boolean)); land.push(tally(again.position)); }
+    m.list.forEach((mv, i) => { if (i === from) mark = log.length; log.push(...again.play(mv).map((e) => G.line(e, again.position)).filter(Boolean)); land.push(tally(again.position)); watch(again.position); });
+    if (mark < 0) mark = log.length;
     document.body.classList.remove("menu");
     $("title").hidden = true;
     for (const id of ["bar", "seats", "act"]) $(id).hidden = false;
@@ -2169,6 +2487,7 @@ function createTable(G) {
     score(); panel(); place();
     board.show([], true);
     keep();
+    herald();
     next();
   }
   /** The options the title screen stands at. */
@@ -2198,23 +2517,62 @@ function createTable(G) {
     resumeButton();
     attract();
   }
+  /** The end: the winner large, every player's place and figures, land over time, and the next step in fixed places. Win and loss share one layout. */
   function finish() {
-    const body = el("div"), c = el("canvas"), n = G.landOf(T.match.position), r = T.match.result, p = T.match.position;
-    c.id = "chart"; c.width = 880; c.height = 240;
+    const body = el("div"), c = el("canvas"), p = T.match.position, n = G.landOf(p), r = T.match.result, names = p.names; // a real-time map names its own nations
+    const mine = (s) => (p.human !== undefined ? s === p.human : T.kinds[s] === "you"), people = T.kinds.includes("you"), lost = people && !r.winners.some(mine);
+    const nameOf = (s) => (names ? names[s] : NAMES[s]), signed = (s) => !names || mine(s), last = p.rounds ? Math.min(p.round, p.rounds) : p.round, rounds = !G.roundText?.(p);
+    sfx(lost ? "lose" : "win");
+    // land over time, each band marked with its emblem and name where it is widest, so the colours are not needed to read it
+    c.id = "chart"; c.width = 880; c.height = 280;
     const x = c.getContext("2d"), px = (i) => (land.length < 2 ? 0 : (i / (land.length - 1)) * c.width), py = (v) => c.height - (v / n) * c.height;
     let base = land.map(() => 0);
-    land[0].forEach((_, s) => {
-      const up = land.map((l, i) => base[i] + l[s]);
+    const marks = land[0].map((_, s) => {
+      const up = land.map((l, i) => base[i] + l[s]), wide = up.reduce((b, v, i) => (v - base[i] > up[b] - base[b] ? i : b), 0);
       x.beginPath(); up.forEach((v, i) => (i ? x.lineTo(px(i), py(v)) : x.moveTo(px(i), py(v)))); for (let i = land.length - 1; i >= 0; i--) x.lineTo(px(i), py(base[i])); x.closePath();
       x.fillStyle = `rgb(${RGB[s]})`; x.fill(); x.strokeStyle = "#12171a"; x.lineWidth = 2; x.stroke();
+      const mark = { s, at: Math.min(c.width - 150, Math.max(8, px(wide) - 40)), y: (py(up[wide]) + py(base[wide])) / 2, room: py(base[wide]) - py(up[wide]) };
       base = up;
+      return mark;
     });
-    c.setAttribute("role", "img"); c.setAttribute("aria-label", "Land held over the game");
-    body.append(el("p", G.summary?.(T) || (r.winners.length > 1 ? `They ${r.why}.` : `${NAMES[r.winners[0]]}: ${r.why}, in ${Math.min(p.round, p.rounds)} rounds.`)), c, el("p", G.summary?.(T) ? `You held ${tally(p)[0]} of ${n} cells.` : `${tally(p).map((v, s) => `${NAMES[s]} ${v}`).join(", ")}${G.unit ? ` ${G.unit.toLowerCase()}.` : ` of ${n} cells.`}`));
-    const row = el("div", undefined, "stack"), again = el("button", "Play again", "main");
-    again.type = "button"; again.onclick = () => { closeSheet(); restart(); };
-    row.append(again); body.append(row);
-    sheet(ending(), body, "See the board");
+    x.font = "600 22px Palatino, Georgia, serif"; x.textBaseline = "middle";
+    for (const m of marks) if (m.room > 26) { x.drawImage(sign(m.s), m.at, m.y - 13, 26, 26); x.fillStyle = inkOf(RGB[m.s]); x.fillText(nameOf(m.s), m.at + 32, m.y + 1); }
+    c.setAttribute("role", "img"); c.setAttribute("aria-label", `Land held over the game. At the end: ${tally(p).map((v, s) => `${nameOf(s)} ${v}`).join(", ")}.`);
+    // places
+    let rows = ranked(Array.from({ length: names ? names.length : T.kinds.length }, (_, s) => ({ seat: s, won: r.winners.includes(s), score: G.cellsOf(p, s), fell: fell[s] })));
+    if (names) rows = rows.filter((w, i) => i < 8 || mine(w.seat));
+    rows = rows.map((w) => ({ ...w, name: nameOf(w.seat), figures: [[G.unit || "Land", w.score], ...G.stats(p, w.seat), ...(rounds ? [["Rounds", w.fell ?? last]] : [])] }));
+    const scroll = el("div", undefined, "ranks"), table = el("table"), head = el("tr");
+    head.append(...["Place", "Player", ...rows[0].figures.map(([k]) => k)].map((t) => { const th = el("th", t); th.scope = "col"; return th; }));
+    table.append(head, ...rows.map((w) => {
+      const tr = el("tr", undefined, w.won ? "won" : ""), who = el("th");
+      who.scope = "row";
+      if (signed(w.seat)) who.append(sign(w.seat));
+      who.append(w.name, ...(mine(w.seat) && T.solo() && !names ? [el("small", " (you)")] : []));
+      tr.append(el("td", String(w.place)), who, ...w.figures.map(([, v]) => el("td", String(v))));
+      return tr;
+    }));
+    table.setAttribute("aria-label", "Places");
+    scroll.append(table);
+    // the winner, large
+    const hero = el("div", undefined, "hero"), arms = el("div", undefined, "arms"), words = el("div");
+    arms.append(...r.winners.filter(signed).slice(0, 3).map((s) => sign(s)));
+    const why = String(r.why || "played to the end");
+    words.append(el("b", r.winners.map(nameOf).join(" and ")), el("p", ending()), el("p", G.summary?.(T) || (r.winners.length > 1 ? `They ${why}.` : `${why[0].toUpperCase()}${why.slice(1)}, in ${last} rounds.`)));
+    hero.append(arms, words);
+    // what next: the same three in the same places every time, then two smaller ones
+    const go = el("div", undefined, "go ends"), all = el("a", "All games", "quiet"), change = el("button", "Change setup", "quiet"), again = el("button", "Rematch", "main");
+    const minor = el("div", undefined, "go minor"), look = el("button", "See the board", "text"), copyIt = el("button", "Copy result", "text"), text = resultText(G.title, rows);
+    all.href = "./";
+    change.type = again.type = look.type = copyIt.type = "button";
+    again.onclick = () => { closeSheet(); restart(); };
+    change.onclick = () => { home(); $("own").open = true; };
+    look.onclick = closeSheet;
+    copyIt.onclick = async () => { try { await navigator.clipboard.writeText(text); copyIt.textContent = "Copied"; } catch { toast(text); } };
+    go.append(all, change, again); minor.append(look, copyIt);
+    body.append(hero, scroll, c, go, minor);
+    sheet(lost ? "Defeat" : people ? "Victory" : "The end", body, null, `end ${lost ? "lose" : "win"}`);
+    again.focus();
   }
   const seed = () => [...crypto.getRandomValues(new Uint32Array(2))].map((v) => v.toString(36)).join("");
   const restart = () => begin(createMatch(G.game, { seed: seed(), options: T.match.options }), [...T.kinds], T.link ? { id: newId(), roles: T.kinds.map((x) => (x === "you" ? "host" : x === "away" ? "friend" : x)), pass: T.link.pass, floor: 0 } : null);
@@ -2236,21 +2594,72 @@ function createTable(G) {
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
+  function showLog() { const o = el("ol"); o.id = "log"; o.reversed = true; o.append(...log.slice().reverse().map((t) => el("li", t))); sheet("What happened", log.length ? o : el("p", "Nothing yet.")); }
   function rules() { const u = el("ul"); u.append(...G.rules(T.demo ? setup.style === "classic" : T.match.position.classic, T.demo ? null : T.match.position).map((t) => el("li", t))); sheet("How to play", u); }
-  function menu() {
-    const box = el("div", undefined, "stack"), add = (t, f) => { const b = el("button", t, "quiet"); b.type = "button"; b.onclick = () => { closeSheet(); f(); }; box.append(b); return b; };
+  /** One menu, the same in every table game: Game, Settings, Link play, About. */
+  function menu(at = tab) {
+    tab = at;
+    if (!$("sheet").open || !$("sheet-body").contains(menuBox)) sheet(G.title, menuBox, T.demo ? "Close" : "Resume", "wide");
+    radio(tabs, [["game", "Game"], ["settings", "Settings"], ["link", "Link play"], ["about", "About"]].map(([value, label]) => ({ value, label })), tab, menu);
+    pane.replaceChildren({ game: gameTab, settings: settingsTab, link: linkBox, about: aboutTab }[tab]());
+  }
+  function gameTab() {
+    const box = el("div", undefined, "stack"), add = (t, f, cls = "quiet") => { const b = el("button", t, cls); b.type = "button"; b.onclick = () => { closeSheet(); f(); }; box.append(b); return b; };
+    // starting again or leaving loses the game in play: the first press asks, the second does it
+    const sure = (t, f) => { const b = add(t, f, "quiet danger"), go = b.onclick; b.onclick = () => { if (b.dataset.armed) go(); else { b.dataset.armed = "1"; b.textContent = `${t}: press again to be sure`; } }; };
     add("How to play", rules);
-    add("What happened so far", () => { const o = el("ol"); o.id = "log"; o.reversed = true; o.append(...log.slice().reverse().map((t) => el("li", t))); sheet("What happened", log.length ? o : el("p", "Nothing yet.")); });
+    if (T.demo) return box;
+    add("What happened so far", showLog);
     if (G.more) add(G.more.label, () => sheet(G.more.label, G.more.body(T)));
     add("Take back your last move", undo).disabled = !canUndo();
     add("Save to a file", save);
-    add("Start again with the same players", restart);
-    add("Leave to the title", home);
-    sheet(G.title, box);
+    box.append(el("hr"));
+    sure("Start again with the same players", restart);
+    sure("Leave to the title", home);
+    return box;
+  }
+  /** Each setting is kept in this browser and takes effect at once. */
+  function settingsTab() {
+    const box = el("div", undefined, "set"), vol = el("input"), volLine = el("label", undefined, "line");
+    const row = (label, get, set, items) => {
+      const line = el("div", undefined, "line"), host = el("div", undefined, "pick small");
+      host.setAttribute("role", "radiogroup"); host.setAttribute("aria-label", label);
+      const draw = () => radio(host, items.map(([value, text]) => ({ value, label: text })), get(), (v) => { set(v); draw(); });
+      draw();
+      line.append(el("span", label), host);
+      box.append(line);
+    };
+    const bind = (k) => [() => settings[k], (v) => { settings[k] = v; saveSettings(); apply(); }];
+    const [soundGet, soundSet] = bind("sound");
+    row("Sound", soundGet, (v) => { soundSet(v); vol.disabled = v !== "on"; if (v === "on") { wake(); setTimeout(() => sfx("turn"), 60); } }, CHOICES.sound);
+    Object.assign(vol, { type: "range", min: "0", max: "100", step: "5", value: String(settings.volume), disabled: settings.sound !== "on" });
+    vol.oninput = () => { settings.volume = Number(vol.value); vol.setAttribute("aria-valuetext", `${vol.value} in 100`); saveSettings(); };
+    vol.onchange = () => { wake(); sfx("tick"); };
+    volLine.append(el("span", "Volume"), vol);
+    box.append(volLine);
+    row("Bot speed", ...bind("speed"), CHOICES.speed);
+    row("Motion", ...bind("motion"), CHOICES.motion);
+    if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
+    row("Seat patterns", ...bind("patterns"), CHOICES.patterns);
+    box.append(el("p", "Patterns show on the score bar. The board does not draw them yet.", "about"));
+    row("Text size", ...bind("text"), CHOICES.text);
+    return box;
+  }
+  function aboutTab() {
+    const box = el("div", undefined, "stack"), src = el("a", "Read the source code");
+    src.href = SOURCE_URL;
+    box.append(
+      el("p", `${G.title}, one of the table games of Overture of Empires: Capo. Version ${VERSION}, build ${BUILD}.`),
+      /^https:\/\//.test(SOURCE_URL) ? el("p") : el("p", "The source address is not set in this copy yet."),
+      el("p", "Free software under the GNU Affero General Public License, version 3 or later (AGPL-3.0-or-later): you may read, change and share it, and a changed copy that others use over a network must offer them its source."),
+      el("p", "Credits: the rules, maps, pieces, emblems and sounds are the project's own work; the sounds are made in code as the game runs. The coastlines are drawn from Natural Earth, which is in the public domain. Anything borrowed is listed with its licence in CREDITS.csv, ADAPTED.csv and NOTICES.md beside the source."),
+    );
+    if (/^https:\/\//.test(SOURCE_URL)) box.children[1].append(src);
+    return box;
   }
   function titleCard() {
     radio($("count"), many.map((n) => ({ value: n, label: String(n) })), setup.seats, (v) => { setup.seats = v; titleCard(); });
-    radio($("style"), [["classic", "Traditional"], ["custom", "Custom"], ["ours", "Capo"], ["coda", "Coda"]].filter(([k]) => G.about[k]).map(([value, label]) => ({ value, label, note: value === "coda" ? "coming soon" : undefined })), setup.style, (v) => { if (v === setup.style) return; setup.style = v; titleCard(); if (v !== "coda") attract(); });
+    radio($("style"), Object.entries(STYLES).filter(([k]) => G.about[k]).map(([value, label]) => ({ value, label, note: value === "coda" ? "coming soon" : undefined })), setup.style, (v) => { if (v === setup.style) return; setup.style = v; titleCard(); if (v !== "coda") attract(); });
     const soon = setup.style === "coda";
     $("about").replaceChildren(...G.about[setup.style].split("\n").map((x) => el("span", x)));
     for (const id of ["count", "who"]) $(id).closest(".line, ul").hidden = soon || !!G.alone?.(setup.style, setup.extra);
@@ -2320,29 +2729,39 @@ function createTable(G) {
   }
   const resumeButton = () => { const k = kept(); $("resume").hidden = !k; if (k) $("resume").textContent = `Continue, round ${k.m.position.round}`; };
 
-  $("start").onclick = () => {
-    const who = G.kindsOf?.(chosen()) || setup.who.slice(0, setup.seats), far = who.includes("away"), words = passField.value.trim();
-    begin(createMatch(G.game, { seed: G.seedOf?.(chosen(true)) || seed(), options: chosen() }), who, far ? { id: newId(), roles: who.map((k) => (k === "you" ? "host" : k === "away" ? "friend" : k)), pass: canLock() ? words : "", floor: 0 } : null, -1, setup.look.map((x) => [...x]));
-  };
+  const launch = (o, all, who, words = "") => begin(createMatch(G.game, { seed: G.seedOf?.(all) || seed(), options: o }), who, who.includes("away") ? { id: newId(), roles: who.map((k) => (k === "you" ? "host" : k === "away" ? "friend" : k)), pass: canLock() ? words : "", floor: 0 } : null, -1, setup.look.map((x) => [...x]));
+  $("start").onclick = () => launch(chosen(), chosen(true), G.kindsOf?.(chosen()) || setup.who.slice(0, setup.seats), passField.value.trim());
+  // Play: one press starts a short game, you against bots, on the game's own preset (G.quick) or Traditional at the fewest seats and the shortest length
+  const quick = { style: "classic", seats: Math.min(...many), ...(G.lengths[0] ? { rounds: G.lengths[0][0] } : {}), ...G.quick }, them = (G.kindsOf?.(quick) || Array(quick.seats)).length - 1;
+  $("quick").onclick = () => launch(quick, quick, G.kindsOf?.(quick) || ["you", ...Array(them).fill("normal")]);
+  $("preset").replaceChildren(...[`${STYLES[quick.style]} rules, you against ${them || "the"} bot${them === 1 ? "" : "s"}.`, ...G.about[quick.style].split("\n").filter((x) => x.startsWith("Not "))].map((x) => el("span", x)));
   linkButton.onclick = linkSheet;
   sendCopy.onclick = copy;
   sendShare.onclick = async () => { if (ready?.url) try { await navigator.share({ url: ready.url }); sent(); } catch { /* they changed their mind */ } };
   skip.onclick = () => { T.catching = false; };
   $("resume").onclick = () => { const k = kept(); if (k) begin(k.m, k.kinds, null, -1, k.look); };
-  $("menu").onclick = menu;
+  $("menu").onclick = () => menu();
+  setButton.onclick = () => menu("settings");
+  // sound wakes on a press that starts a game, or when it is turned on; every button then ticks
+  for (const id of ["quick", "start", "resume"]) $(id).addEventListener("click", wake);
+  addEventListener("click", (e) => { if (e.target.closest?.("button, a")) sfx("tick"); }, true);
+  // the banner goes at any tap or key, which still does what it does
+  for (const k of ["pointerdown", "keydown"]) addEventListener(k, () => { if (!banner.hidden) unherald(); }, true);
+  const shut = () => document.body.classList.contains("shut");
+  tray.onclick = () => { document.body.classList.toggle("shut"); store("capo-tray", shut() ? "shut" : null); tray.setAttribute("aria-expanded", String(!shut())); place(); };
+  document.body.classList.toggle("shut", read("capo-tray") === "shut");
+  tray.setAttribute("aria-expanded", String(!shut()));
+  matchMedia("(prefers-reduced-motion: reduce)").addEventListener?.("change", apply);
+  logs.onclick = showLog;
+  list.hidden = read("capo-log") === "shut";
+  fold.onclick = () => { list.hidden = !list.hidden; store("capo-log", list.hidden ? "shut" : null); drawn = -1; place(); };
+  new ResizeObserver(() => document.body.style.setProperty("--ah", `${$("act").offsetHeight}px`)).observe($("act"));
   $("how").onclick = rules;
   $("review").onclick = () => { $("act").hidden = true; toast("Open the menu to start again."); };
   $("again").onclick = restart;
   $("sheet-close").onclick = closeSheet;
   $("sheet").onclick = (e) => { if (e.target === $("sheet")) closeSheet(); };
-  $("look").onclick = () => {
-    const all = board.looks;
-    if (!all.length) return;
-    const [id, name] = all[(all.findIndex(([k]) => k === board.look) + 1) % all.length];
-    store(LOOK, id);
-    board.setLook(id);
-    toast(name);
-  };
+  $("look").onclick = () => menu("settings"); // the looks, all in view, with the other settings
   $("open").onclick = () => $("file").click();
   $("file").onchange = async () => {
     const f = $("file").files[0];
@@ -2364,6 +2783,7 @@ function createTable(G) {
   });
   addEventListener("resize", place);
   footer();
+  apply();
   titleCard();
   resumeButton();
   const arrive = () => { if (!location.hash.startsWith("#t=")) return; const text = location.hash; history.replaceState(null, "", location.pathname + location.search); openLink(text); };
@@ -2375,7 +2795,7 @@ function createTable(G) {
 
 $x.COLOURS = COLOURS; $x.NAMES = NAMES; $x.RGB = RGB; $x.ICONS = ICONS; $x.PAPER = PAPER; $x.dress = dress; $x.$ = $; $x.el = el; $x.sleep = sleep; $x.sign = sign; $x.radio = radio; $x.toast = toast; $x.sheet = sheet; $x.createTable = createTable;
 return $x; })({});
-$m[20] = (($x) => {
+$m[21] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The hex board for a game's screen: the moving one when the device can draw it, else a still picture that can be tapped.
 const { LOOKS, canDraw, createBoard } = $m[12];
@@ -2432,16 +2852,16 @@ return $x; })({});
 $m[0] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Island Fable on the table: choose a hall or a unit, then what to build or where it goes.
-const { EXPANSIONS, NONE, SWITCHES, WOOD, boardOf, cellsOf, fable, farmPrice, goalOf, landOf, nameOf, raiseOf, territories, upkeepOf } = $m[1];
+const { EXPANSIONS, NONE, SAFETY, SWITCHES, WOOD, boardOf, cellsOf, fable, farmPrice, goalOf, landOf, nameOf, raiseOf, territories, upkeepOf } = $m[1];
 const { choose, thinking } = $m[4];
 const { $, NAMES, PAPER, RGB, createTable, el, radio, toast } = $m[5];
-const { hexBoard } = $m[20];
+const { hexBoard } = $m[21];
 
 const SEA = [72, 110, 122], SHALLOW = [98, 138, 146], GRASS = [[150, 186, 104], [142, 180, 98], [158, 190, 112]], RANK = ["", "Scout", "Guard", "Captain", "Marshal"];
-let source = null, where = null, build = "raise"; // source: "h12" a hall, "u7" a unit
+let source = null, where = null, build = "raise", give = null, sure = false; // source: "h12" a hall, "u7" a unit; give: the concede button, sure: tapped once
 
 const legal = (T) => (T.ready() ? T.match.legal() : []);
-const from = (m) => (m.do === "move" ? `u${m.from}` : m.do === "end" ? "end" : `h${m.hall}`);
+const from = (m) => (m.do === "move" ? `u${m.from}` : m.hall === undefined ? m.do : `h${m.hall}`);
 const options = (T) => legal(T).filter((m) => from(m) === source && (source[0] === "u" || m.do === build));
 const verb = (p, m) => (m.do === "fort" ? "Fort at" : m.do === "farm" ? "Farm at" : p.owner[m.to] !== p.seat ? (p.owner[m.to] === NONE ? "Claim" : "Take") : p.unit[m.to] ? "Join" : p.tree[m.to] ? "Clear" : "Stand");
 const weight = { Take: 0, Claim: 1, Clear: 2, Join: 3, Stand: 4, "Fort at": 5, "Farm at": 5 };
@@ -2471,8 +2891,8 @@ createTable({
   game: fable, key: "fable", title: "The Island Fable", won: "The island is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 3, lengths: [[10, "Short"], [14, "Normal"], [18, "Long"]], pace: (p) => (p.classic ? 240 : 480),
   cellsOf, goalOf, landOf, choose, thinking,
   about: {
-    classic: "Traditional: inspired by Slay.\nThe hex island rules as players know them: the island is dealt out, villages keep purses, soldiers cost wages and merge into higher ranks, woods spread over idle land, and you act as often as you like. Ours: four ranks of our own, our prices and wages, forts of our own, and the more players there are, the less of the island you need to win.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
-    custom: "Custom: your own rules.\nSet every rule yourself: island shape and size, the start, actions a turn, ranks, prices, wages, woods, forts, the goal and the number of rounds. Add any expansions on top.",
+    classic: "Traditional: inspired by Slay.\nThe hex island rules as players know them: the island is dealt out, villages keep purses, soldiers cost wages and merge into higher ranks, woods spread over idle land, you act as often as you like and move freely inside your own land, and you play until one is left or the rest concede. Ours: four ranks of our own, our prices and wages, forts of our own, and a first round of truce.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
+    custom: "Custom: your own rules.\nSet every rule yourself: island shape and size, the start, actions a turn, ranks, prices, wages, woods, forts, the goal, the number of rounds, turn order, the first round and moving at home. Add any expansions on top.",
     ours: "Capo: our own variation.\nA small island settled from one village each, three actions a turn, no woods and no forts. A quick game of about ten rounds.",
     coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
   },
@@ -2487,13 +2907,14 @@ createTable({
     { key: "actions", label: "Actions a turn", normal: SWITCHES.actions.normal, values: [[3, "3"], [6, "6"], [99, "As many as you like"]] },
     { key: "ranks", label: "Ranks", normal: SWITCHES.ranks.normal, values: [[3, "Up to captain"], [4, "Up to marshal"]] },
     { key: "price", label: "A scout costs", normal: SWITCHES.price.normal, values: [[5, "5"], [8, "8"], [10, "10"]] },
-    { key: "wages", label: "Wages", normal: SWITCHES.wages.normal, values: [["mild", "Mild"], ["fair", "Fair"], ["harsh", "Harsh"]] },
+    { key: "wages", label: "Wages", normal: SWITCHES.wages.normal, values: [["mild", "Mild"], ["fair", "Fair"], ["harsh", "Harsh"], ["steep", "Steep"]] },
     { key: "woods", label: "Woods", normal: SWITCHES.woods.normal, values: [["none", "None"], ["slow", "Spread slowly"], ["fast", "Spread fast"]] },
     { key: "fort", label: "Forts", normal: SWITCHES.fort.normal, values: [[0, "None"], [12, "Cost 12"], [18, "Cost 18"]] },
-    { key: "goal", label: "To win", normal: SWITCHES.goal.normal, values: [[60, "60%"], [75, "75%"], [90, "90%"], [100, "All of it"]] },
-    { key: "limit", label: "Rounds", normal: SWITCHES.limit.normal, values: [[15, "15"], [30, "30"], [50, "50"]] },
+    { key: "goal", label: "To win", normal: SWITCHES.goal.normal, values: [["last", "Last one standing"], [60, "60%"], [75, "75%"], [90, "90%"], [100, "All of it"]] },
+    { key: "limit", label: "Rounds", normal: SWITCHES.limit.normal, values: [[0, "No limit"], [15, "15"], [30, "30"], [50, "50"]] },
     { key: "order", label: "Turn order", normal: SWITCHES.order.normal, values: [["rotate", "First player moves on each round"], ["fixed", "Same first player every round"]] },
     { key: "opening", label: "First round", normal: SWITCHES.opening.normal, values: [["truce", "Truce: no taking a rival's land"], ["open", "Open from the start"]] },
+    { key: "walk", label: "Moving at home", normal: SWITCHES.walk.normal, values: [["free", "Free: the unit can still act"], ["once", "Uses the unit's move"]] },
   ],
   expansions: EXPANSIONS.map((key) => ({ key, label: { farms: "Farms", boats: "Boats", gales: "Gales" }[key], note: { farms: "Build a farm beside a hall or another farm. It pays 3 a turn, and each costs more than the last.", boats: "A unit on the coast can cross up to three hexes of sea. A landing party on one hex feeds itself for its first turn ashore; still alone after that, it disbands.", gales: "Some rounds a gale keeps boats ashore and fells some woods." }[key] })),
   stats(p, s) { const t = territories(p, s); return [["Coin", t.reduce((n, x) => n + x.purse, 0)], ["A turn", `${t.reduce((n, x) => n + x.net, 0) >= 0 ? "+" : ""}${t.reduce((n, x) => n + x.net, 0)}`]]; },
@@ -2511,6 +2932,7 @@ createTable({
     if (e.kind === "farm") return `${who} plants a farm at ${name(e.at)}.`;
     if (e.kind === "gale") return "A gale: no boats this round.";
     if (e.kind === "done") return `${who} ends the turn.`;
+    if (e.kind === "concede") return `${who} concedes. Their land is anyone's to claim.`;
     return "";
   },
   order: (events) => events.flatMap((e) => (e.kind === "take" ? [e.at] : [])),
@@ -2536,7 +2958,7 @@ createTable({
     });
   },
   panel(T) {
-    const p = T.match.position, all = legal(T), sources = [...new Set(all.map(from))].filter((s) => s !== "end"), ts = territories(p, p.seat);
+    const p = T.match.position, all = legal(T), sources = [...new Set(all.map(from))].filter((s) => s[0] === "u" || s[0] === "h"), ts = territories(p, p.seat);
     if (source && !sources.includes(source)) source = null;
     const t = source && source[0] === "h" ? ts.find((x) => x.hall === Number(source.slice(1))) : null, kinds = t ? ["raise", "fort", "farm"].filter((k) => all.some((m) => from(m) === source && m.do === k)) : [];
     if (t && !kinds.includes(build)) build = kinds[0] || "raise";
@@ -2559,23 +2981,28 @@ createTable({
     if (m && m.do !== "move") $("do").append(el("small", ` for ${costOf(p, m, t)}`));
     $("do").onclick = () => { const now = options(T).find((x) => x.to === where); if (now) T.play(now); };
     $("end").onclick = () => { if (T.ready()) T.play({ do: "end" }); };
+    if (!give) { give = el("button", "", "quiet"); give.type = "button"; $("end").before(give); }
+    give.hidden = !all.some((x) => x.do === "concede");
+    give.textContent = sure ? "Concede: tap again" : "Concede";
+    give.onclick = () => { if (!T.ready()) return; if (sure) T.play({ do: "concede" }); else { sure = true; T.refresh(); } };
     T.board.light(list.filter((x) => ["Take", "Claim"].includes(verb(p, x))).map((x) => x.to), { ring: source ? Number(source.slice(1)) : -1, aim: where ?? -1, dots: list.filter((x) => !["Take", "Claim"].includes(verb(p, x))).map((x) => x.to) });
   },
-  changed: () => { where = null; },
+  changed: () => { where = null; sure = false; },
   keys(T, k, e) {
     if (k === "e") T.play({ do: "end" });
     else if (k === "escape") { source = null; T.refresh(); } else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "do")) { e.preventDefault(); $("do").click(); }
   },
   rules: (classic, p) => [
     "Land that is joined up is a territory. Each has one village and its own purse, the number on the tower.",
-    `Every turn a territory earns 1 coin for each hex without a wood${p?.farms ? ", and 3 for each farm" : ""}, and pays its units: ${[1, 2, 3, 4].slice(0, p ? p.rule.ranks : 4).map((r) => `${upkeepOf(p || { rule: { wages: "fair" } }, r)} for a ${RANK[r].toLowerCase()}`).join(", ")}. If it cannot pay, all its units disband and leave a cairn, which grows into a wood.`,
+    `Every turn a territory earns 1 coin for each hex without a wood${p?.farms ? ", and 3 for each farm" : ""}, and pays its units: ${[1, 2, 3, 4].slice(0, p ? p.rule.ranks : 4).map((r) => `${upkeepOf(p || { rule: { wages: SWITCHES.wages.normal } }, r)} for a ${RANK[r].toLowerCase()}`).join(", ")}. If it cannot pay, all its units disband and leave a cairn, which grows into a wood.`,
     `${p && p.rule.actions < 99 ? `You have ${p.rule.actions} actions a turn.` : "Act as often as you like, then end your turn."} Tap a village to raise a scout for ${p ? raiseOf(p) : 8}${p?.rule.fort ? ` or build a fort for ${p.rule.fort}` : ""}, or tap a unit to move it, then tap where.`,
     "A unit moves anywhere in its territory, or takes a hex beside it. Two units on one hex join: scout and scout make a guard, and so on up to the top rank.",
+    (p ? p.rule.walk === "free" : classic) ? "Moving inside your own land does not use a unit up, so two units can join and still strike. Taking land or clearing a wood ends its turn; a new scout can act at once." : "Each unit moves once a turn.",
     "A unit guards its own hex and every hex beside it. A village guards like a scout and a fort like a guard. You need a higher rank to take guarded land; a marshal can take anything.",
     "Woods earn nothing and spread over empty land. A unit that steps in clears them, and its move is done.",
     "Cut a rival's land in two, and the part without the village starts with no money. Take a village, and its purse is lost.",
     "A number turning red means that territory cannot pay next turn.",
-    "Reach the gold mark on the bar to win, or hold the most land after the last round.",
+    (p ? p.rule.goal === "last" : classic) ? `Win by being the last one standing. You may concede instead; a computer player concedes when one rival holds half the island and three times its land. ${p?.rule.limit ? "After the last round" : `After ${SAFETY} rounds`}, the most land wins.` : "Reach the gold mark on the bar to win, or hold the most land after the last round.",
     "Keys: Tab and arrows choose, Enter acts, E ends the turn, Escape lets go, U takes back.",
   ],
 });

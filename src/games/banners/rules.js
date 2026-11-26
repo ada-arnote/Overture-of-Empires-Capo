@@ -6,21 +6,23 @@ import { MAPS, areaBoard } from "../areas.js";
 import { DICE, odds as chanceOf, meet } from "./dice.js";
 
 export const NONE = -1, HAND = 5, FORT = 4;
-const BASE = 3, PER = 3, LONG = 40, WILD = 3;
+const BASE = 3, PER = 3, WILD = 3;
 /** What the rule sets set. Coda takes each of these as it is given. */
 export const SWITCHES = {
   start: { values: ["dealt", "claimed", "far"], normal: "dealt" },
-  dice: { values: Object.keys(DICE), normal: "guard" },
+  dice: { values: Object.keys(DICE), normal: "standard" },
+  muster: { values: ["floor", "plus"], normal: "floor" }, // floor: 1 for every three provinces, at least 3; plus: 3 more on top of that
   cards: { values: ["rising", "flat", "none"], normal: "rising" },
   goal: { values: [65, 80, 100], normal: 80 },
-  rounds: { values: [12, 20, 40, 0], normal: 40 }, // 0: no limit, play until one side wins (a safety stop at 250)
+  rounds: { values: [12, 20, 40, 0], normal: 40 }, // 0: no limit, play until one side wins (a safety stop at SAFETY rounds)
   order: { values: ["fixed", "rotate"], normal: "fixed" }, // rotate: the first seat moves on each round
-  opening: { values: ["open", "lean", "truce"], normal: "open" }, // lean: the first seat gets no muster on its first turn; truce: nobody attacks in the first round
+  opening: { values: ["open", "lean", "grade", "truce"], normal: "open" }, // lean: at two seats the first seat musters a third on its first turn; grade: in round 1 each seat musters its share by its place in the order (1 of n parts, 2 of n, up to all); truce: nobody attacks in the first round
   neutral: { values: [1, 2, 3], normal: 2 },
+  spoils: { values: ["trade", "wait"], normal: "trade" }, // trade: put a player out, take their cards, and hand in at once while you hold five or more
 };
 const SETS = {
-  classic: { start: "dealt", dice: "guard", cards: "rising", goal: 100, rounds: 0, neutral: 2, order: "fixed", opening: "lean" },
-  ours: { start: "far", dice: "even", cards: "flat", goal: 65, rounds: 40, neutral: 3, order: "fixed", opening: "open" },
+  classic: { start: "dealt", dice: "standard", muster: "floor", cards: "rising", goal: 100, rounds: 0, neutral: 2, order: "fixed", opening: "lean", spoils: "trade" },
+  ours: { start: "far", dice: "even", muster: "plus", cards: "flat", goal: 65, rounds: 40, neutral: 3, order: "fixed", opening: "grade", spoils: "wait" },
 };
 export const EXPANSIONS = ["forts", "leaders", "capitals", "secrets", "events"];
 const off = { values: [false, true], normal: false };
@@ -30,7 +32,14 @@ export const cellsOf = (p, seat) => p.owner.reduce((n, o) => n + (o === seat ? 1
 export const landOf = (p) => p.owner.length;
 export const goalOf = (p) => Math.ceil((p.owner.length * p.rule.goal) / 100);
 export const nameOf = (p, i) => boardOf(p).names[i];
-export const bonusOf = (b, land) => Math.max(1, Math.floor(b.sizes[land] / (b.flat ? 2 : 3)));
+const edges = new WeakMap();
+/** How many of a land's provinces border another land, by land or by a crossing. */
+export function bordersOf(b, land) {
+  if (!edges.has(b)) edges.set(b, b.sizes.map((_, k) => b.near.filter((n, i) => b.region[i] === k && n.some((m) => b.region[m] !== k)).length));
+  return edges.get(b)[land];
+}
+/** What a land pays a turn to whoever holds it whole: a third of its size and half its border provinces, halves rounded down. Every map. */
+export const bonusOf = (b, land) => Math.max(1, Math.floor((2 * b.sizes[land] + 3 * bordersOf(b, land) + 2) / 6));
 export const suitOf = (p, card) => (card >= p.owner.length ? WILD : card % 3);
 const mineOf = (p, s) => p.owner.flatMap((o, i) => (o === s ? [i] : []));
 const living = (p) => Array.from({ length: p.seats }, (_, s) => s).filter((s) => p.owner.includes(s));
@@ -47,8 +56,9 @@ export function wholeOf(p, seat) {
 }
 /** What a seat will be given to place at its turn, and why. Cards come on top. */
 export function muster(p, seat) {
-  const b = boardOf(p), land = Math.floor(cellsOf(p, seat) / PER), lands = wholeOf(p, seat).reduce((n, k) => n + bonusOf(b, k), 0), event = p.event === "harvest" ? 2 : 0;
-  return { base: BASE, land, lands, event, all: BASE + land + lands + event };
+  const b = boardOf(p), plus = p.rule.muster === "plus", base = plus ? BASE : 0, land = plus ? Math.floor(cellsOf(p, seat) / PER) : Math.max(BASE, Math.floor(cellsOf(p, seat) / PER));
+  const lands = wholeOf(p, seat).reduce((n, k) => n + bonusOf(b, k), 0), event = p.event === "harvest" ? 2 : 0;
+  return { base, land, lands, event, all: base + land + lands + event };
 }
 /** How a fight stands: the dice rule with leaders and forts counted in. */
 export function terms(p, from, to) {
@@ -88,9 +98,10 @@ const copy = (p) => ({ ...p, owner: [...p.owner], str: [...p.str], hands: p.hand
 
 /** The start of a seat's turn. Changes p. */
 function begin(p, events) {
-  // a lean first turn, at two seats: the first seat moves first, with half its fresh armies
-  const s = p.seat, m = muster(p, s), lean = p.rule.opening === "lean" && p.seats === 2 && p.round === 1 && p.step === 0;
-  p.left = lean ? Math.floor(m.all / 2) : m.all;
+  // who moves first moves with less: lean, at two seats, gives the first seat a third of its fresh armies on its first turn;
+  // grade gives each seat in round 1 its place in the order in parts of the whole, so the last to move has all of it
+  const s = p.seat, m = muster(p, s), first = p.round === 1, how = p.rule.opening;
+  p.left = first && how === "lean" && p.seats === 2 && p.step === 0 ? Math.floor(m.all / 3) : first && how === "grade" ? Math.floor((m.all * (p.step + 1)) / p.seats) : m.all;
   p.took = 0;
   p.phase = p.left ? "place" : "attack";
   if (p.leaders && p.leaders[s] === NONE && p.round >= p.back[s]) { // a lost leader comes back where the seat is strongest
@@ -148,8 +159,9 @@ function weather(p, dice, events) {
   if (p.event !== "calm") events.push({ kind: "event", what: p.event });
 }
 
+/** A game with no round limit still ends after this many rounds, on the most land, for players who will never break a stalemate. */
+export const SAFETY = 100;
 /** Pass the turn: seats in a fixed order, or with the first seat moving on each round when the rules say so. Changes p. */
-const SAFETY = 100; // a game with no round limit still ends, for bots that will never break a stalemate
 function pass(p, dice, events) {
   const live = living(p);
   if (p.took && p.rule.cards !== "none") {
@@ -204,6 +216,12 @@ function out(p, was, by, events) {
   p.hands[was] = [];
   events.push({ kind: "out", seat: was, by });
 }
+/** After a knockout, under the trade rule: holding five cards or more with a set to hand in, hand in now and place it before attacking on. Changes p. */
+function spoils(p, events) {
+  if (p.over || p.rule.spoils !== "trade" || p.hands[p.seat].length < HAND || !setsOf(p, p.seat).length) return;
+  p.phase = "place";
+  events.push({ kind: "spoils", seat: p.seat, n: p.hands[p.seat].length });
+}
 /** One volley, or volleys until it is settled. Changes p. */
 function fight(p, m, dice, events) {
   const s = p.seat, was = p.owner[m.to], rolls = [], had = p.str[m.from], how = terms(p, m.from, m.to);
@@ -227,10 +245,13 @@ function fight(p, m, dice, events) {
   p.str[m.from] -= 1;
   events.push({ kind: "take", seat: s, at: m.to, was });
   if (p.leaders && was !== NONE && p.leaders[was] === m.to) { p.leaders[was] = NONE; p.back[was] = p.round + 2; events.push({ kind: "leaderlost", seat: was, by: s }); }
-  if (was !== NONE && !p.owner.includes(was)) out(p, was, s, events);
+  const knocked = was !== NONE && !p.owner.includes(was);
+  if (knocked) out(p, was, s, events);
   settle(p, events);
   if (p.over) return;
-  if (p.str[m.from] > 1) { p.phase = "occupy"; p.pend = { from: m.from, to: m.to }; } else if (p.leaders?.[s] === m.from) p.leaders[s] = m.to;
+  if (p.str[m.from] > 1) { p.phase = "occupy"; p.pend = { from: m.from, to: m.to, ...(knocked ? { out: was } : {}) }; return; }
+  if (p.leaders?.[s] === m.from) p.leaders[s] = m.to;
+  if (knocked) spoils(p, events);
 }
 
 /** The different amounts worth offering between one and `n`: every amount when there are few. */
@@ -240,7 +261,7 @@ export function amounts(n) {
 }
 
 export const banners = {
-  id: "banners", version: "3",
+  id: "banners", version: "4",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 4 }, map: { values: MAPS, normal: "world" },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -331,9 +352,11 @@ export const banners = {
       p.str[to] += m.n;
       if (p.leaders?.[s] === from && p.str[to] >= p.str[from]) p.leaders[s] = to; // a leader goes with the larger part
       events.push({ kind: "occupy", seat: s, to, n: m.n + 1 });
+      const knocked = p.pend.out !== undefined;
       p.pend = null;
       p.phase = "attack";
       settle(p, events);
+      if (knocked) spoils(p, events);
     } else {
       if (m.do === "move") {
         p.str[m.from] -= m.n;

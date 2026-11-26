@@ -180,7 +180,9 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       ctx.lineJoin = "round"; ctx.lineWidth = 2; ctx.strokeStyle = "#1a1411";
       if (s.kind === "token") { // the hex's number, red when it comes up often
         const r = Math.max(10, h * 0.46);
-        ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = "#f3e7c6"; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = "#f3e7c6"; ctx.fill();
+        if (s.lit) { ctx.lineWidth = Math.max(4, r * 0.35); ctx.strokeStyle = "#ffd24a"; ctx.stroke(); ctx.strokeStyle = "#1a1411"; } // it yielded on the last roll
+        ctx.lineWidth = 1.5; ctx.stroke();
         ctx.fillStyle = s.hot ? "#b0302a" : "#1a1411"; ctx.font = `700 ${Math.round(r * 1.05)}px Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(s.n), x, y + 1);
         continue;
       }

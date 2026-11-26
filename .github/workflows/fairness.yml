@@ -1,0 +1,95 @@
+# The seat table: 1,000 bot games for every game, rule set and seat count the rules offer (tools/fair.mjs), weekly
+# and by hand. Each job plays a share of the rows on every core it has and keeps its counts; the last job adds them
+# up, publishes the table, and fails when any seat count's best and worst seats are more than 10 points apart.
+# The shares were set from timings on a 16-core desktop (the comment on each): no job is over about 2,300 core-seconds
+# there, so a 4-core runner at half that speed still finishes in about 20 minutes. Long rows are cut with --part k/n.
+# Remeasure and reshare when the rules change much (node tools/fair.mjs prints each row's CPU seconds).
+name: fairness
+
+on:
+  schedule:
+    - cron: "23 4 * * 1" # Mondays
+  workflow_dispatch:
+    inputs:
+      games:
+        description: Games for each seat count
+        default: "1000"
+
+permissions:
+  contents: read
+
+jobs:
+  play:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # CPU seconds for 1,000 games a seat count, one desktop core (Ryzen 3950X), measured 2026-11-26 on v0.4.4 rules
+        include:
+          - { name: banners, args: "banners" } # 816 (Traditional 661, Capo 155)
+          - { name: glass, args: "glass" } # 1,390
+          - { name: fable-capo, args: "fable --style ours" } # 960
+          - { name: fable-trad-2, args: "fable --style classic --seats 2" } # 1,461
+          - { name: fable-trad-3a, args: "fable --style classic --seats 3", part: "1/2" } # 3,599 for the row
+          - { name: fable-trad-3b, args: "fable --style classic --seats 3", part: "2/2" }
+          - { name: fable-trad-4a, args: "fable --style classic --seats 4", part: "1/2" } # 4,469
+          - { name: fable-trad-4b, args: "fable --style classic --seats 4", part: "2/2" }
+          - { name: fable-trad-5a, args: "fable --style classic --seats 5", part: "1/2" } # 3,958
+          - { name: fable-trad-5b, args: "fable --style classic --seats 5", part: "2/2" }
+          - { name: fable-trad-6a, args: "fable --style classic --seats 6", part: "1/2" } # 3,643
+          - { name: fable-trad-6b, args: "fable --style classic --seats 6", part: "2/2" }
+          - { name: inch-live, args: "inch --style classic" } # 1,305 (real time, by spawn slot)
+          - { name: inch-capo-2, args: "inch --style ours --seats 2" } # 1,885
+          - { name: inch-capo-3a, args: "inch --style ours --seats 3", part: "1/2" } # 3,442
+          - { name: inch-capo-3b, args: "inch --style ours --seats 3", part: "2/2" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Play
+        env:
+          GAMES: ${{ inputs.games || '1000' }}
+          ARGS: ${{ matrix.args }}
+          PART: ${{ matrix.part || '1/1' }}
+          NAME: ${{ matrix.name }}
+        run: node tools/fair.mjs $ARGS --games "$GAMES" --part "$PART" --workers "$(nproc)" --json "part-$NAME.json" --out "part-$NAME.md" || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: part-${{ matrix.name }}
+          path: part-${{ matrix.name }}.*
+          if-no-files-found: error
+
+  table:
+    needs: play
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: part-*
+          merge-multiple: true
+          path: parts
+      - name: Seat table
+        run: |
+          set +e
+          node tools/fair.mjs --merge parts/*.json --out fair-table.md
+          code=$?
+          cat fair-table.md >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fair-table
+          path: fair-table.md
+      - name: Every part played
+        if: needs.play.result != 'success'
+        run: |
+          echo "A part did not finish (a crash, a game with no end, or the time limit), so the table above is missing rows."
+          exit 1

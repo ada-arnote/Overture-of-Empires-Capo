@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Brass and Banners, as its rules stand. These check what should survive coming tweaks to dice and turn order:
-// no win rates, dice counts, turn orders or whole-game fingerprints are written down here.
+// no win rates, dice sequences, turn orders or whole-game fingerprints are written down here. The genre rules that
+// ruling 119 fixed for Traditional (3 dice against 2, a muster floor of 3, land bonuses by size and borders, trading
+// at once after a knockout) are checked as rules, not as outcomes.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chance, createMatch, seedState } from "../src/core/index.js";
-import { EXPANSIONS, HAND, NONE, SWITCHES, amounts, banners, boardOf, cellsOf, goalOf, muster, nearOf, odds, setWorth, setsOf } from "../src/games/banners/rules.js";
-import { DICE, odds as diceOdds } from "../src/games/banners/dice.js";
+import { EXPANSIONS, HAND, NONE, SAFETY, SWITCHES, amounts, banners, boardOf, bonusOf, bordersOf, cellsOf, goalOf, muster, nearOf, odds, setWorth, setsOf, wholeOf } from "../src/games/banners/rules.js";
+import { DICE, meet, odds as diceOdds } from "../src/games/banners/dice.js";
+import { areaBoard } from "../src/games/areas.js";
 import { TIERS, choose } from "../src/games/banners/bot.js";
 import { SLOW, botGame, ended, inList, passive, refused, replays, same, sameEachStep, slowOnly } from "./fixtures/bots.js";
 
@@ -22,6 +25,7 @@ const b = boardOf(start().position), A = 0, B = b.near[A][0];
 const apart = (...xs) => b.near.findIndex((n, i) => !xs.includes(i) && xs.every((x) => !n.includes(x)));
 const far = apart(A, B), far2 = apart(A, B, far);
 /** Fight until the attack is settled; strength 40 against 1 takes the place every time it is tried here. */
+const roller = (seed) => chance(seedState(seed));
 const win = (p, from, to, seed = "w") => banners.apply(p, { do: "attack", from, to, roll: "all" }, chance(seedState(seed)));
 
 /** What must hold after every move of any game. */
@@ -108,7 +112,7 @@ test("an attack needs two strength, goes to a neighbour, and never at your own p
   assert.ok(looked > 5 && tried > 0, `looked at ${looked}, tried ${tried}`);
 });
 test("placing: what is mustered is offered only on your own land, and placing all of it starts the attack", () => {
-  const m = start(3, "ours"), p = m.position;
+  const m = createMatch(banners, { seed: "b", options: { seats: 3, style: "custom", start: "far" } }), p = m.position; // a full first turn
   assert.equal(p.left, muster(p, p.seat).all);
   for (const x of m.legal().filter((x) => x.do === "place")) { assert.equal(p.owner[x.at], p.seat); assert.ok(x.n >= 1 && x.n <= p.left); }
   const at = p.owner.indexOf(p.seat);
@@ -157,14 +161,14 @@ test("cards: a full hand with a set must trade; trading adds to what is placed a
   assert.equal(q.left, p.left + setWorth(p, p.seat, cards)); assert.ok(cards.every((c) => !q.hands[p.seat].includes(c) && q.spent.includes(c)));
   assert.ok(setWorth(p, p.seat, cards) > 0);
 });
-test("a game nobody attacks in ends after its rounds; each round every seat moves once; most land wins", () => {
+test("a game nobody attacks in ends after its rounds, or at the safety end with no limit; each round every seat moves once; most land wins", () => {
   /** Everything placed at once on the first place offered; no fights, no marches. */
   const quiet = (list) => list.filter((x) => x.do !== "place" || x.at === list[0].at).reduce((a, x) => (x.do === "place" && a.do === "place" && x.n > a.n ? x : a));
-  for (const start of SWITCHES.start.values) {
-    const m = createMatch(banners, { seed: "quiet " + start, options: { seats: 3, style: "custom", start, rounds: 12 } }), turns = new Map();
+  for (const [start, style, rounds] of [...SWITCHES.start.values.map((x) => [x, "custom", 12]), ["dealt", "classic", 0]]) {
+    const m = createMatch(banners, { seed: `quiet ${start} ${style}`, options: { seats: 3, style, start, rounds } }), turns = new Map();
     passive(m, quiet, (events) => { for (const e of events) if (e.kind === "muster") { const r = m.position.round; turns.set(r, [...(turns.get(r) || []), e.seat]); } });
     const p = m.position, most = Math.max(...[0, 1, 2].map((s) => cellsOf(p, s)));
-    assert.ok(p.over, start); assert.equal(p.round, p.rounds + 1);
+    assert.ok(p.over, start); assert.equal(p.rounds, rounds, "Traditional has no round limit, only the safety end"); assert.equal(p.round, (p.rounds || SAFETY) + 1);
     assert.deepEqual(m.result.winners, [0, 1, 2].filter((s) => cellsOf(p, s) === most));
     for (let r = 2; r <= p.rounds; r++) assert.deepEqual([...turns.get(r)].sort(), [0, 1, 2], `round ${r}`);
   }
@@ -187,4 +191,98 @@ test("the odds shown are the odds thrown, for every dice rule", () => {
 test("amounts: every one when few, sensible steps when many, always one and the whole", () => {
   for (let n = 1; n <= 12; n++) assert.deepEqual(amounts(n), Array.from({ length: n }, (_, i) => i + 1));
   for (const n of [13, 40, 99]) { const a = amounts(n); assert.equal(a[0], 1); assert.equal(a.at(-1), n); for (let i = 1; i < a.length; i++) assert.ok(a[i] > a[i - 1]); }
+});
+
+test("3 against 2: Traditional throws at most 3 dice against 2, highest meets highest, and the odds shown count every throw", () => {
+  const how = DICE[start(2, "classic").position.rule.dice];
+  assert.equal(how.a, 3); assert.equal(how.d, 2); assert.equal(how.tie, "attacker");
+  // the chance worked out again the slow way: every face of every die, one throw at a time
+  const faces = (n) => (n ? faces(n - 1).flatMap((t) => [1, 2, 3, 4, 5, 6].map((v) => [...t, v])) : [[]]), slow = new Map();
+  const chanceOf = (a, d) => {
+    if (a <= 0) return 0;
+    if (d <= 0) return 1;
+    const k = `${a}/${d}`;
+    if (!slow.has(k)) {
+      const X = faces(Math.min(a, how.a)), Y = faces(Math.min(d, how.d));
+      let sum = 0;
+      for (const x of X) for (const y of Y) { const [l, w] = meet(x, y, how); sum += chanceOf(a - l, d - w); }
+      slow.set(k, sum / (X.length * Y.length));
+    }
+    return slow.get(k);
+  };
+  for (let a = 1; a <= 6; a++) for (let d = 1; d <= 6; d++) assert.ok(Math.abs(diceOdds(a, d, how) / 1000000 - chanceOf(a, d)) < 0.00002, `${a} v ${d}: ${diceOdds(a, d, how)} shown, ${chanceOf(a, d)} counted`); // the shown odds round down at each step
+  const d = roller("throws");
+  for (const [att, def] of [[1, 1], [2, 1], [5, 1], [5, 4], [9, 9]]) {
+    const p = made([[A, 0, att + 1], [B, 1, def], [far, 1, 1]], { style: "classic" });
+    for (let i = 0; i < 40; i++) {
+      const f = banners.apply(p, { do: "attack", from: A, to: B, roll: "once" }, d).events.find((e) => e.kind === "fight"), [X, Y] = f.rolls[0];
+      assert.equal(X.length, Math.min(3, att)); assert.equal(Y.length, Math.min(2, def));
+      assert.equal(f.lost.attacker + f.lost.defender, Math.min(X.length, Y.length), "one loss for each pair of dice");
+    }
+  }
+});
+test("muster: Traditional gives one for every three provinces with a floor of 3, Capo 3 more on top, and whole lands pay their bonus", () => {
+  for (const style of ["classic", "ours", "custom"]) {
+    const p = made([], { style }), board = boardOf(p), plus = p.rule.muster === "plus";
+    for (let k = 1; k <= board.n - 2; k++) {
+      p.owner = p.owner.map((_, i) => (i < k ? 0 : 1));
+      const m = muster(p, 0), lands = wholeOf(p, 0).reduce((n, x) => n + bonusOf(board, x), 0);
+      assert.equal(m.lands, lands);
+      assert.equal(m.all, (plus ? 3 + Math.floor(k / 3) : Math.max(3, Math.floor(k / 3))) + lands, `${style}, ${k} provinces`);
+    }
+  }
+});
+test("land bonuses on every map: a third of the size and half the border provinces, halves down; more exposure never pays less", () => {
+  const boards = [areaBoard(0, "world"), ...[1, 2, 3, 4].flatMap((k) => [areaBoard(k, "grown"), areaBoard(k, "isles")])];
+  for (const board of boards) {
+    board.sizes.forEach((size, k) => {
+      const mine = board.near.map((_, i) => i).filter((i) => board.region[i] === k), edge = mine.filter((i) => board.near[i].some((m) => board.region[m] !== k)).length;
+      assert.equal(bordersOf(board, k), edge); assert.ok(edge >= 1 && edge <= size);
+      const v = bonusOf(board, k), six = 2 * size + 3 * edge; // six times the exact value
+      assert.ok(Number.isInteger(v) && v >= 1); assert.ok(six - 6 * v <= 3 && 6 * v - six <= 2, `${board.lands[k]}: ${size} provinces, ${edge} on the border, pays ${v}`);
+    });
+    for (const x of board.sizes.keys()) for (const y of board.sizes.keys()) if (board.sizes[x] >= board.sizes[y] && bordersOf(board, x) >= bordersOf(board, y)) assert.ok(bonusOf(board, x) >= bonusOf(board, y));
+  }
+});
+test("a knockout hands over the cards; at five or more Traditional must hand in at once and place it, then attacks on", () => {
+  const set = [0, 3, 6]; // three of one suit
+  for (const style of ["classic", "ours"]) for (const moveIn of [true, false]) {
+    const p = made([[A, 0, moveIn ? 40 : 2], [B, 1, 1], [far, 2, 3], [far2, 2, 3]], { seats: 3, style, hands: [[...set], [1, 4], []] });
+    let q, events, tries = 0;
+    do ({ position: q, events } = win(p, A, B, `ko ${tries++}`)); while (q.owner[B] !== 0 && tries < 50); // 2 against 1 can fail: try other dice
+    assert.equal(q.owner[B], 0); assert.equal(q.outBy[1], 0); assert.equal(q.hands[0].length, HAND);
+    assert.equal(q.phase, moveIn ? "occupy" : style === "classic" ? "place" : "attack");
+    if (moveIn) ({ position: q, events } = banners.apply(q, { do: "occupy", n: 0 }));
+    if (q.rule.spoils === "wait") { assert.equal(q.phase, "attack"); assert.ok(!events.some((e) => e.kind === "spoils")); continue; }
+    assert.equal(q.phase, "place"); assert.equal(q.left, 0); assert.ok(events.some((e) => e.kind === "spoils" && e.seat === 0));
+    const list = banners.moves(q);
+    assert.ok(list.length && list.every((x) => x.do === "trade"), "only sets may be handed in");
+    const r = banners.apply(q, list[0]).position;
+    assert.equal(r.phase, "place"); assert.ok(r.left > 0); assert.ok(r.hands[0].length < HAND);
+    const t = banners.apply(r, { do: "place", at: B, n: r.left }).position;
+    assert.equal(t.phase, "attack"); assert.equal(t.seat, 0); assert.ok(banners.moves(t).some((x) => x.do === "end"));
+  }
+  // under five cards there is nothing to hand in yet
+  const p = made([[A, 0, 40], [B, 1, 1], [far, 2, 3], [far2, 2, 3]], { seats: 3, style: "classic", hands: [[0], [1], []] });
+  assert.equal(banners.apply(win(p, A, B).position, { do: "occupy", n: 0 }).position.phase, "attack");
+});
+test("first turns: under grade each seat in round 1 musters its place in the order in parts, the last all of it; under lean the first of two musters a third", () => {
+  const firsts = (options) => {
+    const m = createMatch(banners, { seed: "first " + JSON.stringify(options), options }), got = [];
+    while (m.turn !== null && m.position.round === 1) {
+      const p = m.position;
+      if (p.phase === "place" && got[p.step] === undefined) got[p.step] = [p.left, muster(p, p.seat).all];
+      else if (p.phase === "attack" && got[p.step] === undefined) got[p.step] = [0, muster(p, p.seat).all];
+      m.play(p.phase === "attack" ? { do: "end" } : { do: "place", at: p.owner.indexOf(p.seat), n: p.left });
+    }
+    return got;
+  };
+  for (const seats of [2, 3, 5]) {
+    const got = firsts({ seats, style: "custom", start: "far", opening: "grade" });
+    got.forEach(([left, all], i) => assert.equal(left, Math.floor((all * (i + 1)) / seats), `${seats} seats, place ${i + 1}`));
+    assert.equal(got.at(-1)[0], got.at(-1)[1]);
+  }
+  const lean = firsts({ seats: 2, style: "classic" });
+  assert.equal(lean[0][0], Math.floor(lean[0][1] / 3)); assert.equal(lean[1][0], lean[1][1]);
+  for (const [left, all] of firsts({ seats: 3, style: "classic" })) assert.equal(left, all, "lean is for two seats only");
 });

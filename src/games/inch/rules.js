@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // An Inch of Ink (working name). Each seat has one pool of strength. On your turn land cut off from
 // your home falls, your pool grows, and you pour part of it over a border, or wait.
-// Classic is the genre as it is remembered: a wider map, no cut-off rule, no homes to storm, and play until one holds most of it.
+// That is the turn duel (Capo, and Custom on turns). Traditional ("classic") is the real-time game in live.js, with inks, places and ages.
 import { hexBoard, joined } from "../hex.js";
 import { canon, chance, seedState } from "../../core/index.js";
-import { LIVE_MAPS, liveAllows, liveApply, liveBoardOf, liveMoves, liveSetup } from "./live.js";
+import { LIVE_MAPS, PLACE_RATE, liveAllows, liveApply, liveBoardOf, liveMoves, liveSetup } from "./live.js";
 
 const roller = (text) => chance(seedState(text));
 export const liveBoardFor = (p) => liveBoardOf(p, roller);
@@ -18,6 +18,8 @@ export const SWITCHES = {
   shares: { values: ["four", "three"], normal: "four" }, growth: { values: ["rising", "saving"], normal: "rising" }, goal: { values: [45, 55, 60, 70], normal: 60 },
   drawn: { values: [false, true], normal: true }, limit: { values: [10, 16, 20, 40], normal: 40 }, live: { values: [false, true], normal: false },
 };
+/** Real time in Custom: how inks are given, how many places, the ages with their marks and cards, and the easing goal. Traditional has them all. */
+export const LIVE_SWITCHES = { inks: { values: ["chosen", "drawn", "off"], normal: "chosen" }, places: { values: Object.keys(PLACE_RATE), normal: "normal" }, ages: { values: [false, true], normal: true }, ease: { values: [false, true], normal: true } };
 const SETS = {
   classic: (o) => ({ size: 5, cut: false, walls: false, shares: "four", growth: "rising", goal: CLASSIC_PERCENT[o.seats], drawn: o.seats > 2, limit: LONG }),
   ours: (o) => ({ size: 4, cut: true, walls: true, shares: "three", growth: "saving", goal: WIN_PERCENT[o.seats], drawn: false, limit: o.rounds }),
@@ -134,8 +136,8 @@ function advance(p, events, dice) {
 }
 
 export const inch = {
-  id: "inch", version: "6",
-  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, rivals: { values: ["gentle", "even", "hard"], normal: "gentle" }, time: { values: [600, 800, 1800, 0], normal: 800 }, ...SWITCHES },
+  id: "inch", version: "7",
+  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, rounds: { values: [10, 16, 20], normal: 16 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, rivals: { values: ["gentle", "even", "hard"], normal: "gentle" }, time: { values: [600, 800, 1800, 0], normal: 1800 }, ...LIVE_SWITCHES, ...SWITCHES },
 
   setup(o, dice) {
     if (o.style === "classic" || (o.style === "custom" && o.live)) return liveSetup(o, dice, roller);

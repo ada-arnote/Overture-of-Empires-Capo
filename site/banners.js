@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Brass and Banners on the table: place strength, attack with dice, move in, move once.
-import { EXPANSIONS, FORT, HAND, NONE, SWITCHES, banners, bonusOf, boardOf, capsHeld, capsToWin, cellsOf, goalOf, landOf, muster, nameOf, odds, setWorth, setsOf, suitOf, terms, wholeOf } from "../src/games/banners/rules.js";
+import { EXPANSIONS, FORT, HAND, NONE, SAFETY, SWITCHES, banners, bonusOf, bordersOf, boardOf, capsHeld, capsToWin, cellsOf, goalOf, landOf, muster, nameOf, odds, setWorth, setsOf, suitOf, terms, wholeOf } from "../src/games/banners/rules.js";
 import { choose, thinking } from "../src/games/banners/bot.js";
+import { DICE } from "../src/games/banners/dice.js";
 import { areaPicture } from "../src/map/areas.js";
 import { $, ICONS, NAMES, RGB, createTable, el, radio, sheet, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
@@ -87,20 +88,22 @@ createTable({
   game: banners, key: "banners", title: "Brass and Banners", won: "The land is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 4, lengths: [], pace: (p) => (p.owner.length > 40 ? 300 : 430),
   cellsOf, goalOf, landOf, choose, thinking,
   about: {
-    classic: "Traditional: inspired by Risk.\nThe standard world-conquest rules as players know them, on our own world map: all land dealt out, place your armies, attack with dice as often as you like, move once, cards in sets for more armies, and play until one player holds the world. Ours: the attacker throws up to 4 dice and the defender 3, ties go to the defender, and our own card values.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
-    custom: "Custom: your own rules.\nSet every rule yourself: how the game starts, the dice, the cards, how much land wins, the number of rounds, and how strongly empty land is held. Add any expansions on top.",
-    ours: "Capo: our own variation.\nEach player starts alone on one province in empty land. Ties cost both sides, cards are always worth the same, and holding 65% of the land wins. Quicker, with more room to grow before the fighting starts.",
+    classic: "Traditional: inspired by Risk.\nThe standard world-conquest rules as players know them, on our own world map: all land dealt out, place your armies, attack with up to 3 dice against up to 2, move once, cards in sets for more armies (put a player out and you take theirs), and play until one player holds the world. Ours: the map, the lands and what they pay, and our own card values.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
+    custom: "Custom: your own rules.\nSet every rule yourself: how the game starts, the dice, what each turn brings, the cards, how much land wins, the number of rounds, and how strongly empty land is held. Add any expansions on top.",
+    ours: "Capo: our own variation.\nEach player starts alone on one province in empty land. Ties cost both sides, cards are always worth the same, and holding 65% of the land wins. In the first round, whoever moves later places more. Quicker, with more room to grow before the fighting starts.",
     coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
   },
   choices: [{ key: "map", label: "Map", normal: "world", values: [["world", "The world"], ["isles", "An archipelago"], ["grown", "An inland sea"]] }],
   switches: [
     { key: "start", label: "Start", normal: SWITCHES.start.normal, values: [["dealt", "Land dealt out"], ["claimed", "Claim in turn"], ["far", "One capital each"]] },
-    { key: "dice", label: "Dice", normal: SWITCHES.dice.normal, values: [["guard", "4 against 3, ties to defender"], ["even", "4 against 3, ties cost both"], ["open", "3 against 3, ties cost both"], ["heavy", "5 against 3, ties to defender"]] },
+    { key: "dice", label: "Dice", normal: SWITCHES.dice.normal, values: [["standard", "3 against 2, ties to defender"], ["guard", "4 against 3, ties to defender"], ["even", "4 against 3, ties cost both"], ["open", "3 against 3, ties cost both"], ["heavy", "5 against 3, ties to defender"]] },
+    { key: "muster", label: "Each turn", normal: SWITCHES.muster.normal, values: [["floor", "1 for every 3 provinces, at least 3"], ["plus", "3, and 1 for every 3 provinces"]] },
     { key: "cards", label: "Cards", normal: SWITCHES.cards.normal, values: [["rising", "Worth more each time"], ["flat", "Always the same"], ["none", "None"]] },
     { key: "goal", label: "To win", normal: SWITCHES.goal.normal, values: [[65, "65% of the land"], [80, "80% of the land"], [100, "All of it"]] },
     { key: "rounds", label: "Rounds", normal: SWITCHES.rounds.normal, values: [[12, "12, quick"], [20, "20"], [40, "40"], [0, "No limit"]] },
     { key: "order", label: "Turn order", normal: SWITCHES.order.normal, values: [["fixed", "The same each round"], ["rotate", "First seat moves on each round"]] },
-    { key: "opening", label: "First turn", normal: SWITCHES.opening.normal, values: [["open", "Full strength"], ["lean", "First player gets half (two players)"], ["truce", "Nobody attacks in round 1"]] },
+    { key: "opening", label: "First turn", normal: SWITCHES.opening.normal, values: [["open", "Full strength"], ["lean", "First player gets a third (two players)"], ["grade", "Round 1 grows down the order"], ["truce", "Nobody attacks in round 1"]] },
+    { key: "spoils", label: "Put a player out", normal: SWITCHES.spoils.normal, values: [["trade", "Take their cards, hand in at once at five"], ["wait", "Take their cards, hand in next turn"]] },
     { key: "neutral", label: "Empty land held by", normal: SWITCHES.neutral.normal, values: [[1, "1"], [2, "2"], [3, "3"]] },
   ],
   expansions: EXPANSIONS.map((key) => ({ key, label: NICE[key][0], note: NICE[key][1] })),
@@ -111,6 +114,7 @@ createTable({
     if (e.kind === "fight") return e.won ? "" : `${who} attacks ${at(e.to)} from ${at(e.from)}: ${e.lost.attacker} lost, ${e.lost.defender} struck down.`;
     if (e.kind === "take") return `${who} takes ${at(e.at)}${e.was === NONE ? "" : ` from ${NAMES[e.was]}`}.`;
     if (e.kind === "out") return `${who} is out. ${NAMES[e.by]} takes their cards.`;
+    if (e.kind === "spoils") return `${who} holds ${e.n} cards and hands in at once.`;
     if (e.kind === "claim") return `${who} claims ${at(e.at)}.`;
     if (e.kind === "trade") return `${who} hands in a set for ${e.n}.`;
     if (e.kind === "fort") return `${who} builds a fort at ${at(e.at)}.`;
@@ -153,7 +157,7 @@ createTable({
     const g = muster(p, p.seat);
     cards(T);
     const must = p.phase === "place" && p.hands[p.seat].length >= HAND && setsOf(p, p.seat).length > 0;
-    $("info").textContent = must ? "You hold five cards or more. Hand in a set first." : p.phase === "claim" ? (source === null ? "Tap an empty province." : about(p, source)) : p.phase === "setup" ? (source === null ? `${p.reserve[p.seat]} left to set out, five at a time. Tap a province of yours.` : about(p, source)) : p.phase === "place" ? (source === null ? `${g.base} to begin, ${g.land} for land${g.lands ? `, ${g.lands} for whole lands` : ""}${g.event ? ", 2 for the harvest" : ""}. Tap a province of yours.` : about(p, source))
+    $("info").textContent = must ? "You hold five cards or more. Hand in a set first." : p.phase === "claim" ? (source === null ? "Tap an empty province." : about(p, source)) : p.phase === "setup" ? (source === null ? `${p.reserve[p.seat]} left to set out, five at a time. Tap a province of yours.` : about(p, source)) : p.phase === "place" ? (source === null ? (p.took ? "Place what the cards brought, then attack on." : `${g.base ? `${g.base} to begin, ` : ""}${g.land} for land${g.lands ? `, ${g.lands} for whole lands` : ""}${g.event ? ", 2 for the harvest" : ""}`) + ". Tap a province of yours." : about(p, source))
       : p.phase === "occupy" ? "One has moved in. How many more?"
         : fight ? `${p.str[source] - 1} against ${p.str[target]}. If you keep rolling, ${percent(odds(p, source, target))} in 100 to take it.`
           : target !== null ? "Moving ends your turn." : source !== null ? about(p, source) : "Tap a province of yours, then where to.";
@@ -201,21 +205,21 @@ createTable({
   },
   more: {
     label: "The lands",
-    body(T) { const p = T.match.position, b = boardOf(p), u = el("ul"); u.append(...b.lands.map((n, k) => { const s = [0, 1, 2, 3, 4, 5].find((x) => x < p.seats && wholeOf(p, x).includes(k)); return el("li", `${cap(n)}: ${b.sizes[k]} provinces, worth ${bonusOf(b, k)} a turn. ${s === undefined ? "Nobody holds it whole." : `${NAMES[s]} holds it whole.`}`); })); return u; },
+    body(T) { const p = T.match.position, b = boardOf(p), u = el("ul"); u.append(...b.lands.map((n, k) => { const s = [0, 1, 2, 3, 4, 5].find((x) => x < p.seats && wholeOf(p, x).includes(k)); return el("li", `${cap(n)}: ${b.sizes[k]} provinces, ${bordersOf(b, k)} on its borders, worth ${bonusOf(b, k)} a turn. ${s === undefined ? "Nobody holds it whole." : `${NAMES[s]} holds it whole.`}`); })); return u; },
   },
   rules: (_, p) => {
-    const r = p?.rule;
+    const r = p?.rule, d = DICE[r?.dice || SWITCHES.dice.normal];
     return [
-      ...(r ? [`This game: ${r.start === "dealt" ? "land dealt out" : r.start === "claimed" ? "land claimed in turn" : "one capital each"}; hold ${r.goal}% of the land, or be the last one left; after ${p.rounds} rounds the most land wins.`] : []),
+      ...(r ? [`This game: ${r.start === "dealt" ? "land dealt out" : r.start === "claimed" ? "land claimed in turn" : "one capital each"}; hold ${r.goal}% of the land, or be the last one left; ${p.rounds ? `after ${p.rounds} rounds the most land wins` : `no round limit, but a war still running after ${SAFETY} rounds is called off and the most land wins`}.`] : []),
       "Each turn: hand in cards if you like, place new strength, attack as often as you like, then move once or end your turn.",
-      "You place 3, and 1 for every three provinces you hold, and more for every land you hold whole. Gold lines mark the lands; the number by a land's name is what it pays.",
+      `You place ${r?.muster === "plus" ? "3, and 1 for every three provinces you hold" : "1 for every three provinces you hold, at least 3"}, and more for every land you hold whole. Gold lines mark the lands; the number by a land's name is what it pays: a third of its provinces and half of those on its borders.`,
       "To attack, tap a province of yours with 2 or more, then one beside it. Dashed lines over water are crossings.",
-      `You throw a die for each of your strength but one, ${r ? (r.dice === "open" ? 3 : r.dice === "heavy" ? 5 : 4) : 4} at most. The defender throws three at most. Highest meets highest: the lower one loses 1. ${r && (r.dice === "even" || r.dice === "open") ? "If they tie, both lose 1." : "Ties go to the defender in Traditional games."}`,
+      `You throw a die for each of your strength but one, ${d.a} at most. The defender throws one for each of theirs, ${d.d} at most. Highest meets highest: the lower one loses 1. ${d.tie === "both" ? "If they tie, both lose 1." : "Ties go to the defender."}`,
       "Roll once, or roll it out until somebody has won. The chance is shown first. When you win, choose how many move in.",
-      "Take a province in your turn and you draw a card. Three alike, or one of each, can be handed in for more to place. Crowns stand for any. One more for each card that shows a province of yours. With five cards you must hand in a set. Put a player out and you take theirs.",
+      `Take a province in your turn and you draw a card. Three alike, or one of each, can be handed in for more to place. Crowns stand for any. One more for each card that shows a province of yours. With five cards you must hand in a set. Put a player out and you take theirs${r?.spoils === "wait" ? "" : "; if that makes five or more, hand in at once and place what they bring"}.`,
       ...EXPANSIONS.filter((x) => !p || (x === "forts" ? p.forts : x === "leaders" ? p.leaders : x === "capitals" ? p.caps : x === "secrets" ? p.goals : p.event !== undefined)).map((x) => `${NICE[x][0]}: ${NICE[x][1]}`),
       "A soldier is 1 to 4, a horse 5 to 9, a gun 10 or more. Zoom with the wheel or two fingers, and drag the map.",
-      "Whoever moves first changes every round.",
+      `${r?.order === "rotate" ? "Whoever moves first changes every round." : "The same order every round."}${r?.opening === "lean" && p.seats === 2 ? " The first player places a third of its strength on its first turn." : r?.opening === "grade" ? " In round 1 each player places a share by its place in the order: the last places it all." : r?.opening === "truce" ? " Nobody attacks in round 1." : ""}`,
       "Keys: Tab and arrows choose, Enter acts, R rolls once, E ends the turn, Escape lets go, U takes back.",
     ];
   },

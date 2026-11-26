@@ -3,6 +3,7 @@
 
 /** a and d: the most dice each side throws. tie: who loses when the dice are equal, "both" or "attacker". */
 export const DICE = {
+  standard: { a: 3, d: 2, tie: "attacker" }, // the genre's own: up to 3 against up to 2, ties to the defender
   guard: { a: 4, d: 3, tie: "attacker" },
   even: { a: 4, d: 3, tie: "both" },
   open: { a: 3, d: 3, tie: "both" },

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Island Fable on the table: choose a hall or a unit, then what to build or where it goes.
-import { EXPANSIONS, NONE, SWITCHES, WOOD, boardOf, cellsOf, fable, farmPrice, goalOf, landOf, nameOf, raiseOf, territories, upkeepOf } from "../src/games/fable/rules.js";
+import { EXPANSIONS, NONE, SAFETY, SWITCHES, WOOD, boardOf, cellsOf, fable, farmPrice, goalOf, landOf, nameOf, raiseOf, territories, upkeepOf } from "../src/games/fable/rules.js";
 import { choose, thinking } from "../src/games/fable/bot.js";
 import { $, NAMES, PAPER, RGB, createTable, el, radio, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
 
 const SEA = [72, 110, 122], SHALLOW = [98, 138, 146], GRASS = [[150, 186, 104], [142, 180, 98], [158, 190, 112]], RANK = ["", "Scout", "Guard", "Captain", "Marshal"];
-let source = null, where = null, build = "raise"; // source: "h12" a hall, "u7" a unit
+let source = null, where = null, build = "raise", give = null, sure = false; // source: "h12" a hall, "u7" a unit; give: the concede button, sure: tapped once
 
 const legal = (T) => (T.ready() ? T.match.legal() : []);
-const from = (m) => (m.do === "move" ? `u${m.from}` : m.do === "end" ? "end" : `h${m.hall}`);
+const from = (m) => (m.do === "move" ? `u${m.from}` : m.hall === undefined ? m.do : `h${m.hall}`);
 const options = (T) => legal(T).filter((m) => from(m) === source && (source[0] === "u" || m.do === build));
 const verb = (p, m) => (m.do === "fort" ? "Fort at" : m.do === "farm" ? "Farm at" : p.owner[m.to] !== p.seat ? (p.owner[m.to] === NONE ? "Claim" : "Take") : p.unit[m.to] ? "Join" : p.tree[m.to] ? "Clear" : "Stand");
 const weight = { Take: 0, Claim: 1, Clear: 2, Join: 3, Stand: 4, "Fort at": 5, "Farm at": 5 };
@@ -39,8 +39,8 @@ createTable({
   game: fable, key: "fable", title: "The Island Fable", won: "The island is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 3, lengths: [[10, "Short"], [14, "Normal"], [18, "Long"]], pace: (p) => (p.classic ? 240 : 480),
   cellsOf, goalOf, landOf, choose, thinking,
   about: {
-    classic: "Traditional: inspired by Slay.\nThe hex island rules as players know them: the island is dealt out, villages keep purses, soldiers cost wages and merge into higher ranks, woods spread over idle land, and you act as often as you like. Ours: four ranks of our own, our prices and wages, forts of our own, and the more players there are, the less of the island you need to win.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
-    custom: "Custom: your own rules.\nSet every rule yourself: island shape and size, the start, actions a turn, ranks, prices, wages, woods, forts, the goal and the number of rounds. Add any expansions on top.",
+    classic: "Traditional: inspired by Slay.\nThe hex island rules as players know them: the island is dealt out, villages keep purses, soldiers cost wages and merge into higher ranks, woods spread over idle land, you act as often as you like and move freely inside your own land, and you play until one is left or the rest concede. Ours: four ranks of our own, our prices and wages, forts of our own, and a first round of truce.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
+    custom: "Custom: your own rules.\nSet every rule yourself: island shape and size, the start, actions a turn, ranks, prices, wages, woods, forts, the goal, the number of rounds, turn order, the first round and moving at home. Add any expansions on top.",
     ours: "Capo: our own variation.\nA small island settled from one village each, three actions a turn, no woods and no forts. A quick game of about ten rounds.",
     coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
   },
@@ -55,13 +55,14 @@ createTable({
     { key: "actions", label: "Actions a turn", normal: SWITCHES.actions.normal, values: [[3, "3"], [6, "6"], [99, "As many as you like"]] },
     { key: "ranks", label: "Ranks", normal: SWITCHES.ranks.normal, values: [[3, "Up to captain"], [4, "Up to marshal"]] },
     { key: "price", label: "A scout costs", normal: SWITCHES.price.normal, values: [[5, "5"], [8, "8"], [10, "10"]] },
-    { key: "wages", label: "Wages", normal: SWITCHES.wages.normal, values: [["mild", "Mild"], ["fair", "Fair"], ["harsh", "Harsh"]] },
+    { key: "wages", label: "Wages", normal: SWITCHES.wages.normal, values: [["mild", "Mild"], ["fair", "Fair"], ["harsh", "Harsh"], ["steep", "Steep"]] },
     { key: "woods", label: "Woods", normal: SWITCHES.woods.normal, values: [["none", "None"], ["slow", "Spread slowly"], ["fast", "Spread fast"]] },
     { key: "fort", label: "Forts", normal: SWITCHES.fort.normal, values: [[0, "None"], [12, "Cost 12"], [18, "Cost 18"]] },
-    { key: "goal", label: "To win", normal: SWITCHES.goal.normal, values: [[60, "60%"], [75, "75%"], [90, "90%"], [100, "All of it"]] },
-    { key: "limit", label: "Rounds", normal: SWITCHES.limit.normal, values: [[15, "15"], [30, "30"], [50, "50"]] },
+    { key: "goal", label: "To win", normal: SWITCHES.goal.normal, values: [["last", "Last one standing"], [60, "60%"], [75, "75%"], [90, "90%"], [100, "All of it"]] },
+    { key: "limit", label: "Rounds", normal: SWITCHES.limit.normal, values: [[0, "No limit"], [15, "15"], [30, "30"], [50, "50"]] },
     { key: "order", label: "Turn order", normal: SWITCHES.order.normal, values: [["rotate", "First player moves on each round"], ["fixed", "Same first player every round"]] },
     { key: "opening", label: "First round", normal: SWITCHES.opening.normal, values: [["truce", "Truce: no taking a rival's land"], ["open", "Open from the start"]] },
+    { key: "walk", label: "Moving at home", normal: SWITCHES.walk.normal, values: [["free", "Free: the unit can still act"], ["once", "Uses the unit's move"]] },
   ],
   expansions: EXPANSIONS.map((key) => ({ key, label: { farms: "Farms", boats: "Boats", gales: "Gales" }[key], note: { farms: "Build a farm beside a hall or another farm. It pays 3 a turn, and each costs more than the last.", boats: "A unit on the coast can cross up to three hexes of sea. A landing party on one hex feeds itself for its first turn ashore; still alone after that, it disbands.", gales: "Some rounds a gale keeps boats ashore and fells some woods." }[key] })),
   stats(p, s) { const t = territories(p, s); return [["Coin", t.reduce((n, x) => n + x.purse, 0)], ["A turn", `${t.reduce((n, x) => n + x.net, 0) >= 0 ? "+" : ""}${t.reduce((n, x) => n + x.net, 0)}`]]; },
@@ -79,6 +80,7 @@ createTable({
     if (e.kind === "farm") return `${who} plants a farm at ${name(e.at)}.`;
     if (e.kind === "gale") return "A gale: no boats this round.";
     if (e.kind === "done") return `${who} ends the turn.`;
+    if (e.kind === "concede") return `${who} concedes. Their land is anyone's to claim.`;
     return "";
   },
   order: (events) => events.flatMap((e) => (e.kind === "take" ? [e.at] : [])),
@@ -104,7 +106,7 @@ createTable({
     });
   },
   panel(T) {
-    const p = T.match.position, all = legal(T), sources = [...new Set(all.map(from))].filter((s) => s !== "end"), ts = territories(p, p.seat);
+    const p = T.match.position, all = legal(T), sources = [...new Set(all.map(from))].filter((s) => s[0] === "u" || s[0] === "h"), ts = territories(p, p.seat);
     if (source && !sources.includes(source)) source = null;
     const t = source && source[0] === "h" ? ts.find((x) => x.hall === Number(source.slice(1))) : null, kinds = t ? ["raise", "fort", "farm"].filter((k) => all.some((m) => from(m) === source && m.do === k)) : [];
     if (t && !kinds.includes(build)) build = kinds[0] || "raise";
@@ -127,23 +129,28 @@ createTable({
     if (m && m.do !== "move") $("do").append(el("small", ` for ${costOf(p, m, t)}`));
     $("do").onclick = () => { const now = options(T).find((x) => x.to === where); if (now) T.play(now); };
     $("end").onclick = () => { if (T.ready()) T.play({ do: "end" }); };
+    if (!give) { give = el("button", "", "quiet"); give.type = "button"; $("end").before(give); }
+    give.hidden = !all.some((x) => x.do === "concede");
+    give.textContent = sure ? "Concede: tap again" : "Concede";
+    give.onclick = () => { if (!T.ready()) return; if (sure) T.play({ do: "concede" }); else { sure = true; T.refresh(); } };
     T.board.light(list.filter((x) => ["Take", "Claim"].includes(verb(p, x))).map((x) => x.to), { ring: source ? Number(source.slice(1)) : -1, aim: where ?? -1, dots: list.filter((x) => !["Take", "Claim"].includes(verb(p, x))).map((x) => x.to) });
   },
-  changed: () => { where = null; },
+  changed: () => { where = null; sure = false; },
   keys(T, k, e) {
     if (k === "e") T.play({ do: "end" });
     else if (k === "escape") { source = null; T.refresh(); } else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "do")) { e.preventDefault(); $("do").click(); }
   },
   rules: (classic, p) => [
     "Land that is joined up is a territory. Each has one village and its own purse, the number on the tower.",
-    `Every turn a territory earns 1 coin for each hex without a wood${p?.farms ? ", and 3 for each farm" : ""}, and pays its units: ${[1, 2, 3, 4].slice(0, p ? p.rule.ranks : 4).map((r) => `${upkeepOf(p || { rule: { wages: "fair" } }, r)} for a ${RANK[r].toLowerCase()}`).join(", ")}. If it cannot pay, all its units disband and leave a cairn, which grows into a wood.`,
+    `Every turn a territory earns 1 coin for each hex without a wood${p?.farms ? ", and 3 for each farm" : ""}, and pays its units: ${[1, 2, 3, 4].slice(0, p ? p.rule.ranks : 4).map((r) => `${upkeepOf(p || { rule: { wages: SWITCHES.wages.normal } }, r)} for a ${RANK[r].toLowerCase()}`).join(", ")}. If it cannot pay, all its units disband and leave a cairn, which grows into a wood.`,
     `${p && p.rule.actions < 99 ? `You have ${p.rule.actions} actions a turn.` : "Act as often as you like, then end your turn."} Tap a village to raise a scout for ${p ? raiseOf(p) : 8}${p?.rule.fort ? ` or build a fort for ${p.rule.fort}` : ""}, or tap a unit to move it, then tap where.`,
     "A unit moves anywhere in its territory, or takes a hex beside it. Two units on one hex join: scout and scout make a guard, and so on up to the top rank.",
+    (p ? p.rule.walk === "free" : classic) ? "Moving inside your own land does not use a unit up, so two units can join and still strike. Taking land or clearing a wood ends its turn; a new scout can act at once." : "Each unit moves once a turn.",
     "A unit guards its own hex and every hex beside it. A village guards like a scout and a fort like a guard. You need a higher rank to take guarded land; a marshal can take anything.",
     "Woods earn nothing and spread over empty land. A unit that steps in clears them, and its move is done.",
     "Cut a rival's land in two, and the part without the village starts with no money. Take a village, and its purse is lost.",
     "A number turning red means that territory cannot pay next turn.",
-    "Reach the gold mark on the bar to win, or hold the most land after the last round.",
+    (p ? p.rule.goal === "last" : classic) ? `Win by being the last one standing. You may concede instead; a computer player concedes when one rival holds half the island and three times its land. ${p?.rule.limit ? "After the last round" : `After ${SAFETY} rounds`}, the most land wins.` : "Reach the gold mark on the bar to win, or hold the most land after the last round.",
     "Keys: Tab and arrows choose, Enter acts, E ends the turn, Escape lets go, U takes back.",
   ],
 });

@@ -1,27 +1,33 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Island Fable (working name). Joined land is a territory with one hall and its own purse. Units cost
 // upkeep, guard their neighbours and take land. Cut a territory in two and the part without money starves.
-// Traditional is the genre as it is remembered: a dealt island, woods that spread, forts, and as many actions as you like.
-// Capo is our own small, quick game. Coda is every switch by hand. Expansions are added to any of them.
+// Traditional is the genre as it is remembered: a dealt island, woods that spread, forts, as many actions as you like,
+// free movement inside your own land, and play to the last one standing. Capo is our own small, quick game.
+// Custom is every switch by hand. Expansions are added to any of them.
 import { ISLES, SIZES, island, seaRoads } from "./islands.js";
 import { hexBoard, joined } from "../hex.js";
 
 export const NONE = -1, WOOD = 1, CAIRN = 2, FORT_GUARD = 2, FARM_PAYS = 3;
+/** With no round limit a game still ends: after this many rounds, the most land wins. */
+export const SAFETY = 100;
 const PURSE = 6, MANY = 99, ROADS = 3;
-const WAGES = { mild: [0, 1, 3, 6, 10], fair: [0, 2, 5, 11, 22], harsh: [0, 2, 6, 15, 34] };
-/** What the rule sets set. Coda takes each of these as it is given. */
+const WAGES = { mild: [0, 1, 3, 6, 10], fair: [0, 2, 5, 11, 22], harsh: [0, 2, 6, 15, 34], steep: [0, 2, 6, 18, 54] };
+/** What the rule sets set. Custom takes each of these as it is given. */
 export const SWITCHES = {
   isle: { values: ISLES, normal: "round" }, size: { values: Object.keys(SIZES), normal: "medium" },
   start: { values: ["dealt", "homes"], normal: "dealt" }, actions: { values: [3, 6, MANY], normal: MANY }, ranks: { values: [3, 4], normal: 4 },
-  price: { values: [5, 8, 10], normal: 8 }, wages: { values: Object.keys(WAGES), normal: "fair" }, woods: { values: ["none", "slow", "fast"], normal: "slow" },
-  fort: { values: [0, 12, 18], normal: 12 }, goal: { values: [60, 75, 90, 100], normal: 75 }, limit: { values: [15, 30, 50], normal: 50 },
+  price: { values: [5, 8, 10], normal: 8 }, wages: { values: Object.keys(WAGES), normal: "harsh" }, woods: { values: ["none", "slow", "fast"], normal: "slow" },
+  fort: { values: [0, 12, 18], normal: 12 },
+  goal: { values: ["last", 60, 75, 90, 100], normal: "last" }, // last: play until one is left; the others may concede
+  limit: { values: [0, 15, 30, 50], normal: 0 }, // 0: no round limit, only the safety end
   order: { values: ["rotate", "fixed"], normal: "rotate" }, // rotate: the first seat moves on each round (measured fairer here, with the truce)
   opening: { values: ["truce", "open"], normal: "truce" }, // truce: nobody takes land from a rival in the first round
+  walk: { values: ["free", "once"], normal: "free" }, // free: moving inside your own land does not use the unit up
 };
 const normal = (over) => ({ ...Object.fromEntries(Object.entries(SWITCHES).map(([k, v]) => [k, v.normal])), ...over });
 const SETS = {
   classic: (o) => normal({ isle: o.isle, size: o.size }),
-  ours: (o) => ({ isle: "small", size: "tiny", start: "homes", actions: 3, ranks: 3, price: 5, wages: "mild", woods: "none", fort: 0, goal: { 2: 60, 3: 45 }[o.seats] || 45, limit: o.rounds, order: "rotate", opening: "truce" }),
+  ours: (o) => ({ isle: "small", size: "tiny", start: "homes", actions: 3, ranks: 3, price: 5, wages: "mild", woods: "none", fort: 0, goal: { 2: 60, 3: 45 }[o.seats] || 45, limit: o.rounds, order: "rotate", opening: "truce", walk: "once" }),
 };
 export const EXPANSIONS = ["farms", "boats", "gales"];
 const off = { values: [false, true], normal: false };
@@ -30,8 +36,10 @@ const radius = (p) => SIZES[p.rule.size].radius;
 export const boardOf = (p) => hexBoard(radius(p));
 export const cellsOf = (p, seat) => p.owner.reduce((n, o) => n + (o === seat ? 1 : 0), 0);
 export const landOf = (p) => p.water.reduce((n, w) => n + (w ? 0 : 1), 0);
-/** Traditional asks less of each player the more there are. */
-export const goalOf = (p) => Math.ceil((landOf(p) * (p.style === "classic" ? { 2: 75, 3: 60, 4: 50, 5: 45, 6: 40 }[p.seats] : p.rule.goal)) / 100);
+/** The land that wins at once. Played to the last one standing, that is the whole island (the bar's end). */
+export const goalOf = (p) => (p.rule.goal === "last" ? landOf(p) : Math.ceil((landOf(p) * p.rule.goal) / 100));
+/** Whether a seat may concede: only where the game is played to the last one standing. */
+export const mayConcede = (p) => p.rule.goal === "last";
 export const nameOf = (p, i) => { const [q, r] = boardOf(p).cells[i], R = radius(p); return String.fromCharCode(65 + r + R) + (q + R + 1 + Math.min(0, r)); };
 export const raiseOf = (p) => p.rule.price;
 export const upkeepOf = (p, rank) => WAGES[p.rule.wages][rank];
@@ -135,16 +143,29 @@ export function act(before, m) {
     else if (p.unit[m.to]) { p.unit[m.to] += 1; events.push({ kind: "merge", seat: s, at: m.to, rank: p.unit[m.to], raised: true }); }
     else { p.unit[m.to] = 1; p.moved[m.to] = p.tree[m.to] ? 1 : 0; events.push({ kind: p.tree[m.to] ? "clear" : "raise", seat: s, at: m.to }); p.tree[m.to] = 0; }
   } else {
-    const rank = p.unit[m.from];
+    const rank = p.unit[m.from], rest = p.rule.walk === "free" && !m.sea; // free: a step inside your own land leaves the unit ready
     p.unit[m.from] = 0;
     p.moved[m.from] = 0;
     p.landed[m.from] = 0;
     if (p.owner[m.to] !== s) take(p, s, m.to, rank, events);
-    else if (p.unit[m.to]) { p.unit[m.to] += rank; p.moved[m.to] = 1; events.push({ kind: "merge", seat: s, at: m.to, rank: p.unit[m.to] }); }
-    else { p.unit[m.to] = rank; p.moved[m.to] = 1; events.push({ kind: p.tree[m.to] ? "clear" : "move", seat: s, from: m.from, at: m.to, to: m.to }); p.tree[m.to] = 0; }
+    else if (p.unit[m.to]) { p.unit[m.to] += rank; p.moved[m.to] = rest ? p.moved[m.to] : 1; events.push({ kind: "merge", seat: s, at: m.to, rank: p.unit[m.to] }); } // ready if both parts were
+    else { p.unit[m.to] = rank; p.moved[m.to] = rest && !p.tree[m.to] ? 0 : 1; events.push({ kind: p.tree[m.to] ? "clear" : "move", seat: s, from: m.from, at: m.to, to: m.to }); p.tree[m.to] = 0; }
     if (m.sea) { p.landed[m.to] = 1; settle(p, s, events); } // fed once, at the next turn of its seat
   }
   return { position: p, events };
+}
+
+/** A seat gives up: its units go home, its villages and forts are abandoned, and its land is anyone's to claim. */
+function concede(before) {
+  const p = copy(before), s = p.seat, cells = [];
+  for (let c = 0; c < p.owner.length; c++) {
+    if (p.owner[c] !== s) continue;
+    const farm = p.farm[c], tree = p.tree[c];
+    bare(p, c);
+    p.farm[c] = farm; p.tree[c] = tree; p.hall[c] = 0; p.purse[c] = 0; p.owner[c] = NONE;
+    cells.push(c);
+  }
+  return { position: p, events: [{ kind: "concede", seat: s, cells }] };
 }
 
 /** The start of a seat's turn: units rest, territories earn and pay. Changes p. */
@@ -194,7 +215,7 @@ function finish(p, winners, why, events) {
 function after(p, stop, dice, events) {
   const live = Array.from({ length: p.seats }, (_, s) => s).filter((s) => cellsOf(p, s) > 0);
   if (live.length === 1) return finish(p, live, "the only one left", events);
-  if (cellsOf(p, p.seat) >= goalOf(p)) return finish(p, [p.seat], "held enough of the island", events);
+  if (p.rule.goal !== "last" && cellsOf(p, p.seat) >= goalOf(p)) return finish(p, [p.seat], "held enough of the island", events);
   if (!stop && p.left > 0) return undefined;
   do {
     if (++p.step === p.seats) {
@@ -202,7 +223,7 @@ function after(p, stop, dice, events) {
       p.round++;
       if (p.round > p.rounds) {
         const most = Math.max(...live.map((s) => cellsOf(p, s)));
-        return finish(p, live.filter((s) => cellsOf(p, s) === most), "held the most land at the end", events);
+        return finish(p, live.filter((s) => cellsOf(p, s) === most), p.rule.limit ? "held the most land at the end" : `held the most land after ${SAFETY} rounds`, events);
       }
       nature(p, dice, events);
     }
@@ -218,12 +239,12 @@ function deal(p, b, dice) {
   land.slice(0, even).forEach((c, i) => { p.owner[c] = i % p.seats; });
   for (let s = 0; s < p.seats; s++) {
     settle(p, s);
-    for (const t of territories(p, s)) p.purse[t.hall] = Math.min(t.cells.length * 2, 10) + (p.seats === 2 && s === 0 ? 1 : 0); // of two, the first starts a coin richer a village: the second strikes first after the truce (measured 49.6/50.4)
+    for (const t of territories(p, s)) p.purse[t.hall] = Math.min(t.cells.length * 2, 10) + (p.seats < 4 && s !== 1 ? 2 : 0); // the second seat strikes first after the truce: of two or three, the others start 2 coins richer a village (rules 7, 1,000 games: 46.8/53.2 and 30.7/35.6/33.7)
   }
 }
 
 export const fable = {
-  id: "fable", version: "6",
+  id: "fable", version: "7",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 }, rounds: { values: [10, 14, 18], normal: 14 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -233,7 +254,7 @@ export const fable = {
     const rule = SETS[o.style] ? SETS[o.style](o) : Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]]));
     if (o.seats > 3 && rule.size === "tiny") rule.size = "small";
     const b = hexBoard(SIZES[rule.size].radius), zero = () => b.cells.map(() => 0), made = island(rule.isle, rule.size, o.seats, dice, rule.start === "homes");
-    const p = { classic: o.style !== "ours", style: o.style, rule, boats: o.boats, farms: o.farms, seats: o.seats, rounds: rule.limit, water: made.water, order: dice.shuffle(b.cells.map((_, i) => i)), owner: b.cells.map(() => NONE), unit: zero(), moved: zero(), hall: zero(), purse: zero(), tree: zero(), fort: zero(), farm: zero(), landed: zero(), seat: 0, step: 0, round: 1, left: rule.actions, over: null };
+    const p = { classic: o.style !== "ours", style: o.style, rule, boats: o.boats, farms: o.farms, seats: o.seats, rounds: rule.limit || SAFETY, water: made.water, order: dice.shuffle(b.cells.map((_, i) => i)), owner: b.cells.map(() => NONE), unit: zero(), moved: zero(), hall: zero(), purse: zero(), tree: zero(), fort: zero(), farm: zero(), landed: zero(), seat: 0, step: 0, round: 1, left: rule.actions, over: null };
     if (o.gales) p.gale = false;
     if (rule.start === "homes") {
       made.homes.forEach((h, s) => {
@@ -249,9 +270,9 @@ export const fable = {
   },
   turn: (p) => (p.over ? null : p.seat),
 
-  /** Raise a unit, build, move a unit, or end the turn. */
+  /** Raise a unit, build, move a unit, end the turn, or concede. */
   moves(p) {
-    const { near } = boardOf(p), s = p.seat, out = [{ do: "end" }], roads = p.boats && !p.gale ? seaRoads(boardOf(p), p.water, ROADS) : null;
+    const { near } = boardOf(p), s = p.seat, out = mayConcede(p) ? [{ do: "end" }, { do: "concede" }] : [{ do: "end" }], roads = p.boats && !p.gale ? seaRoads(boardOf(p), p.water, ROADS) : null;
     const guard = new Map(), guarded = (c) => { if (!guard.has(c)) guard.set(c, defence(p, c)); return guard.get(c); };
     for (const t of territories(p, s)) {
       const inside = new Set(t.cells), edge = new Set();
@@ -289,13 +310,13 @@ export const fable = {
       }
     }
     // the truce of the first round: land may be bought or walked into, but none taken from a rival yet
-    if (p.rule.opening === "truce" && p.round === 1) return out.filter((m) => m.do === "end" || p.owner[m.to] === s || p.owner[m.to] === NONE);
+    if (p.rule.opening === "truce" && p.round === 1) return out.filter((m) => m.to === undefined || p.owner[m.to] === s || p.owner[m.to] === NONE);
     return out;
   },
 
   apply(before, m, dice) {
-    const made = m.do === "end" ? { position: copy(before), events: [{ kind: "done", seat: before.seat }] } : act(before, m);
-    after(made.position, m.do === "end", dice, made.events);
+    const made = m.do === "end" ? { position: copy(before), events: [{ kind: "done", seat: before.seat }] } : m.do === "concede" ? concede(before) : act(before, m);
+    after(made.position, m.do === "end" || m.do === "concede", dice, made.events);
     return made;
   },
   result: (p) => p.over,

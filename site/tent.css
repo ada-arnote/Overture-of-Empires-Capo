@@ -1,0 +1,217 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* The front page as a war tent: docs/design/war-tent.md */
+@font-face { font-family: "Tent Roman"; src: url("fonts/tent-roman/tent-roman.woff2") format("woff2"); font-display: swap }
+@font-face { font-family: "Spectral"; src: url("fonts/spectral/spectral-400.woff2") format("woff2"); font-display: swap }
+@font-face { font-family: "Atkinson Hyperlegible"; src: url("fonts/atkinson/atkinson-400.woff2") format("woff2"); font-display: swap }
+@font-face { font-family: "Atkinson Hyperlegible"; font-weight: 700; src: url("fonts/atkinson/atkinson-700.woff2") format("woff2"); font-display: swap }
+:root {
+  --canvas: #22364f; --weave: rgba(255, 255, 255, .035); --seam: #5d7593;
+  --ink: #f1ead6; --ink-soft: #c3c6bb; --link: #e6c27a; --brass-dark: #e0b866;
+  /* tent blues (no red: owner, ruling 126); walnut */
+  --field: #152740; --field-stripe: #1b3150; --field-ink: #f4eddb; --field-soft: #d6cfbd; --blue: #152740; --blue2: #6f93bf; --stitch: rgba(244, 237, 219, .55);
+  --desk: #523f3c; --desk-dark: #35282a; --grain: rgba(28, 14, 24, .26); --figure: rgba(20, 8, 18, .3); --sheen: rgba(200, 180, 196, .07);
+  --brass: #b08a3a; --plate: #c7a14f; --plate-ink: #1d1a12;
+  --paper: #f1ead6; --paper-edge: #cfc5a6; --paper-ink: #20221c; --paper-soft: #4f4a3c; --paper-link: #1f3d5c;
+  --sea: #e6dfc8; --land: #d8c79c; --coast: #5a4a35; --grid: rgba(90, 74, 53, .28);
+  --wax: #8f2b22; --wax-dark: #6c1f18; --wax-ink: #fbeee0;
+  --trunk: #414c3b; --trunk-dark: #2f382b; --trunk-ink: #eee8d3; --trunk-soft: #d3cdb6;
+  --box: #ece4cd; --box-edge: #b9ae8c; --box-ink: #20221c; --box-soft: #4b4c40; --band-ink: #fbeee0;
+  --g-banners: #8f2b22; --g-fable: #2a6152; --g-glass: #85590c; --g-inch: #26324f;
+  --cork: #b48d5c; --speck: rgba(70, 45, 15, .22); --thread: #a3261d; --pin: #b3261e; --shine: #f0b7a8;
+  --glow: rgba(255, 190, 90, 0); --flame: #a89f84; --focus: #f1ead6; --halo: #0d1a2c; --shadow: rgba(0, 0, 0, .45);
+  --display: "Tent Roman", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --text: "Spectral", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --label: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #131f30; --weave: rgba(255, 255, 255, .03); --seam: #4f6580;
+    --ink: #ece3c9; --ink-soft: #b9af94; --link: #e0b866; --brass-dark: #e0b866;
+    --field: #0c1726; --field-stripe: #112036; --field-ink: #ece3c9; --field-soft: #c3bba3; --blue: #0c1726; --blue2: #4f74a3; --stitch: rgba(236, 227, 201, .4);
+    --desk: #3a2c2c; --desk-dark: #221a1b; --grain: rgba(0, 0, 0, .3); --figure: rgba(8, 0, 6, .38); --sheen: rgba(190, 160, 180, .05);
+    --brass: #c9a04e; --paper: #dccfa9; --paper-edge: #a99b74; --paper-ink: #1f1c15; --paper-soft: #4a4435;
+    --sea: #d2c59d; --land: #c0ab7b; --coast: #4a3c2a; --grid: rgba(74, 60, 42, .3);
+    --trunk: #252c22; --trunk-dark: #181d16; --trunk-ink: #e9e2cb; --trunk-soft: #bdb79f;
+    --box: #33291c; --box-edge: #5a4a32; --box-ink: #ece3c9; --box-soft: #c2b89c; --band-ink: #1d1a12;
+    --g-banners: #d0685a; --g-fable: #5fa893; --g-glass: #d9a441; --g-inch: #8ea0d6;
+    --cork: #5e4628; --speck: rgba(0, 0, 0, .3); --thread: #c9463a; --pin: #c9463a; --shine: #f3c2b6;
+    --glow: rgba(255, 176, 80, .17); --flame: #ffc35a; --focus: #e0b866; --halo: #0b1420; --shadow: rgba(0, 0, 0, .55);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --canvas: #131f30; --weave: rgba(255, 255, 255, .03); --seam: #4f6580;
+  --ink: #ece3c9; --ink-soft: #b9af94; --link: #e0b866; --brass-dark: #e0b866;
+  --field: #0c1726; --field-stripe: #112036; --field-ink: #ece3c9; --field-soft: #c3bba3; --blue: #0c1726; --blue2: #4f74a3; --stitch: rgba(236, 227, 201, .4);
+  --desk: #3a2c2c; --desk-dark: #221a1b; --grain: rgba(0, 0, 0, .3); --figure: rgba(8, 0, 6, .38); --sheen: rgba(190, 160, 180, .05);
+  --brass: #c9a04e; --paper: #dccfa9; --paper-edge: #a99b74; --paper-ink: #1f1c15; --paper-soft: #4a4435;
+  --sea: #d2c59d; --land: #c0ab7b; --coast: #4a3c2a; --grid: rgba(74, 60, 42, .3);
+  --trunk: #252c22; --trunk-dark: #181d16; --trunk-ink: #e9e2cb; --trunk-soft: #bdb79f;
+  --box: #33291c; --box-edge: #5a4a32; --box-ink: #ece3c9; --box-soft: #c2b89c; --band-ink: #1d1a12;
+  --g-banners: #d0685a; --g-fable: #5fa893; --g-glass: #d9a441; --g-inch: #8ea0d6;
+  --cork: #5e4628; --speck: rgba(0, 0, 0, .3); --thread: #c9463a; --pin: #c9463a; --shine: #f3c2b6;
+  --glow: rgba(255, 176, 80, .17); --flame: #ffc35a; --focus: #e0b866; --halo: #0b1420; --shadow: rgba(0, 0, 0, .55);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box }
+body {
+  margin: 0; color: var(--ink); font: 17px/1.55 var(--text); background-color: var(--canvas);
+  background-image: radial-gradient(60rem 34rem at 88% 0, var(--glow), transparent 70%), repeating-linear-gradient(0deg, var(--weave) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, var(--weave) 0 1px, transparent 1px 3px);
+}
+a { color: var(--link); text-underline-offset: .18em }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; box-shadow: 0 0 0 7px var(--halo); border-radius: 3px }
+.skip { position: absolute; left: 12px; top: -80px; z-index: 20; padding: 12px 16px; background: var(--paper); color: var(--paper-ink); font: 700 16px var(--label) }
+.skip:focus { top: calc(env(safe-area-inset-top, 0px) + 8px) }
+.in, .wrap { max-width: 68rem; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+
+/* ridge, valance, hem */
+.ridge { --focus: var(--field-ink); --halo: #0d1a2c; color: var(--field-ink); background: repeating-linear-gradient(90deg, var(--field) 0 88px, var(--field-stripe) 88px 176px, var(--blue2) 176px 179px) }
+.ridge .in { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 20px; padding-block: 6px }
+.ridge ul { display: flex; flex-wrap: wrap; margin: 0 0 0 -10px; padding: 0; list-style: none }
+.ridge a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px; font: 16px var(--label); color: inherit }
+.lantern { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px 0 10px; cursor: pointer; font: 700 15px var(--label); color: inherit; background: none; border: 2px solid var(--field-soft); border-radius: 4px }
+.lantern svg { width: 22px; height: 30px }
+.flame { fill: var(--flame) }
+.frame { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round }
+.valance {
+  height: 28px; border-top: 6px solid var(--blue2);
+  background: linear-gradient(var(--stitch), var(--stitch)) 0 2px / 100% 1px no-repeat,
+    radial-gradient(circle at 50% 0, var(--blue) 0 19px, transparent 20px) 0 0 / 92px 22px repeat-x,
+    radial-gradient(circle at 50% 0, var(--blue2) 0 19px, transparent 20px) 46px 0 / 92px 22px repeat-x;
+}
+.hem { height: 12px; background: repeating-linear-gradient(90deg, var(--blue) 0 46px, var(--blue2) 46px 92px) }
+@media (min-width: 761px) {
+  body { background-image: linear-gradient(90deg, var(--blue) 0 8px, var(--blue2) 8px 13px, transparent 13px calc(100% - 13px), var(--blue2) calc(100% - 13px) calc(100% - 8px), var(--blue) calc(100% - 8px)), radial-gradient(60rem 34rem at 88% 0, var(--glow), transparent 70%), repeating-linear-gradient(0deg, var(--weave) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, var(--weave) 0 1px, transparent 1px 3px) }
+}
+
+.wrap, main { display: flex; flex-direction: column; gap: clamp(40px, 7vw, 72px) }
+.wrap { padding-block: 4px 48px }
+.intro { display: grid; gap: 14px }
+h1 { margin: 0; font: 400 clamp(2.3rem, 7.4vw, 4.2rem)/1.02 var(--display); letter-spacing: -.01em; text-wrap: balance }
+.lede { margin: 0; max-width: 40rem; font-size: clamp(1.08rem, 2.4vw, 1.3rem); line-height: 1.45 }
+.note { margin: 0; max-width: 40rem; color: var(--ink-soft); font: 15px/1.5 var(--label) }
+.eyebrow { margin: 0 0 2px; font: 700 14px/1.3 var(--label); letter-spacing: .12em; text-transform: uppercase; color: var(--brass-dark) }
+h2 { margin: 0; font: 400 clamp(1.7rem, 4.6vw, 2.4rem)/1.1 var(--display); text-wrap: balance }
+.head { margin-bottom: 16px }
+.head::after { content: ""; display: block; width: 84px; height: 5px; margin-top: 10px; background: linear-gradient(90deg, var(--blue2) 0 33%, var(--blue) 33% 67%, var(--blue2) 67%) }
+.head p:last-child { margin: 6px 0 0; max-width: 40rem; color: var(--ink-soft) }
+section { scroll-margin-top: 16px }
+
+/* the desk */
+.desk {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: clamp(14px, 2.4vw, 26px); align-items: center;
+  padding: clamp(14px, 2.6vw, 28px) clamp(14px, 2.6vw, 28px) clamp(22px, 3.4vw, 38px);
+  background-color: var(--desk); border-radius: 5px; border-bottom: 12px solid var(--desk-dark); box-shadow: 0 18px 30px -14px var(--shadow);
+  background-image: radial-gradient(ellipse 30% 9% at 22% 70%, var(--figure), transparent), radial-gradient(ellipse 24% 6% at 78% 22%, var(--figure), transparent),
+    repeating-linear-gradient(2deg, var(--grain) 0 1px, transparent 1px 7px), repeating-linear-gradient(-1deg, var(--figure) 0 2px, transparent 2px 31px), linear-gradient(170deg, var(--sheen), transparent 60%);
+}
+.desk::before, .desk::after, .trunk::before, .trunk::after { content: ""; position: absolute; bottom: -12px; width: 34px; height: 34px; border: 5px solid var(--brass); border-top: 0; pointer-events: none }
+.desk::before, .trunk::before { left: 0; border-right: 0; border-radius: 0 0 0 5px }
+.desk::after, .trunk::after { right: 0; border-left: 0; border-radius: 0 0 5px 0 }
+.map { position: relative; aspect-ratio: 600 / 340; background: var(--sea); border: 1px solid var(--paper-edge); box-shadow: 0 6px 14px -4px var(--shadow); transform: rotate(-.5deg) }
+.map > * { position: absolute; inset: 0; width: 100%; height: 100% }
+.coast { filter: drop-shadow(.7px 0 0 var(--coast)) drop-shadow(-.7px 0 0 var(--coast)) drop-shadow(0 .7px 0 var(--coast)) drop-shadow(0 -.7px 0 var(--coast)) }
+.coast div { height: 100%; background: var(--land); -webkit-mask: url("icons/world/coast.svg") 0 0 / 100% 100% no-repeat; mask: url("icons/world/coast.svg") 0 0 / 100% 100% no-repeat }
+.grid { fill: none; stroke: var(--grid); stroke-width: .7 }
+.fold { fill: none; stroke: var(--paper-edge); stroke-width: 1.2 }
+.route { fill: none; stroke: var(--wax); stroke-width: 1.8; stroke-dasharray: 2 5; stroke-linecap: round }
+.rose { fill: none; stroke: var(--coast) }
+.ink { fill: var(--coast) }
+.maptext { font: 15px var(--display); letter-spacing: .06em; fill: var(--coast) }
+.maptitle { font: 15px var(--display); fill: var(--paper-ink); letter-spacing: .1em }
+.blk-b { fill: var(--field) } .blk-r { fill: var(--wax) } .blk-s { fill: var(--coast); opacity: .35 }
+.brassf { fill: var(--brass) } .brasss { fill: none; stroke: var(--brass); stroke-width: 2.4; stroke-linecap: round } .steel { stroke: var(--coast); stroke-width: 1.4; stroke-linecap: round }
+
+.orders, .pinned, .dispatches li { background: var(--paper); color: var(--paper-ink); border: 1px solid var(--paper-edge) }
+.orders { position: relative; padding: 18px 18px 20px; box-shadow: 0 6px 14px -4px var(--shadow) }
+.orders h3 { margin: 0 0 6px; font: 400 1.7rem/1.1 var(--display) }
+.orders p { margin: 0 0 12px }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; padding: 0; list-style: none }
+.tags li { padding: 3px 8px; border: 1.5px solid var(--paper-soft); border-radius: 2px; font: 700 14px/1.3 var(--label); color: var(--paper-soft) }
+.seal { display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 18px 6px 8px; border-radius: 26px; background: var(--wax); color: var(--wax-ink); font: 700 17px var(--label); text-decoration: none; box-shadow: inset 0 -3px 0 var(--wax-dark), 0 3px 6px -2px var(--shadow) }
+.seal svg { width: 34px; height: 34px }
+.ring { fill: none; stroke: currentColor; stroke-width: 1.5; opacity: .8 }
+.mark { fill: currentColor }
+.how { display: flex; align-items: center; min-height: 44px; margin-top: 6px; color: var(--paper-link); font: 16px var(--label) }
+
+/* the trunk */
+.trunk { position: relative; background: var(--trunk); border: 2px solid var(--trunk-dark); border-radius: 7px; box-shadow: 0 18px 30px -14px var(--shadow) }
+.trunk::before, .trunk::after { bottom: -2px; width: 30px; height: 30px }
+.lid { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; padding: 12px clamp(14px, 3vw, 26px); background: var(--trunk-dark); color: var(--trunk-ink); border-bottom: 4px solid var(--brass); border-radius: 5px 5px 0 0; font: 700 14px/1.4 var(--label); letter-spacing: .16em; text-transform: uppercase }
+.lid span + span { color: var(--trunk-soft); letter-spacing: .08em }
+.tray { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 0; padding: clamp(14px, 3vw, 26px); list-style: none }
+.box { position: relative; display: flex; flex-direction: column; min-width: 0; background: var(--box); color: var(--box-ink); border: 1px solid var(--box-edge); border-radius: 3px; box-shadow: 0 5px 0 -1px var(--trunk-dark) }
+.g-banners { --g: var(--g-banners) } .g-fable { --g: var(--g-fable) } .g-glass { --g: var(--g-glass) } .g-inch { --g: var(--g-inch) }
+.band { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; background: var(--g); color: var(--band-ink); font: 700 14px var(--label); letter-spacing: .14em; text-transform: uppercase }
+.band svg { width: 54px; height: 44px; flex: none; fill: currentColor }
+.cut { fill: var(--g) }
+.body { display: flex; flex-direction: column; gap: 8px; flex: 1; padding: 14px 14px 16px }
+.box h3 { margin: 0; font: 400 1.6rem/1.1 var(--display) }
+.box h3 a { color: inherit; text-decoration: none }
+.box h3 a::after { content: ""; position: absolute; inset: 0 }
+.box p { margin: 0; color: var(--box-soft) }
+.facts { font: 15px/1.4 var(--label) }
+.plate { align-self: flex-start; margin-top: auto; display: inline-flex; align-items: center; min-height: 44px; padding: 0 20px; background: var(--plate); color: var(--plate-ink); border-radius: 2px; font: 700 16px var(--label); letter-spacing: .04em; box-shadow: inset 0 0 0 2px var(--plate), inset 0 0 0 3px var(--plate-ink) }
+.box:hover .plate, .box:focus-within .plate { text-decoration: underline }
+
+/* dispatches */
+.dispatches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; margin: 0; padding: 0; list-style: none }
+.dispatches li { position: relative; padding: 12px 14px 12px 22px; border-left: 0 }
+.dispatches li::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 8px; background: repeating-linear-gradient(180deg, var(--paper-soft) 0 6px, transparent 6px 12px) }
+.dispatches b { display: block; font: 400 1.25rem/1.2 var(--display) }
+.dispatches small { display: block; font: 700 14px/1.4 var(--label); color: var(--paper-soft) }
+.dispatches span { display: block; margin-top: 2px; font-size: 16px; line-height: 1.45 }
+
+/* Coda's board */
+.hang { position: relative; padding-top: 30px }
+.hang::before, .hang::after { content: ""; position: absolute; top: 0; width: 3px; height: 34px; background: var(--seam) }
+.hang::before { left: 14% } .hang::after { right: 14% }
+.rail { position: absolute; top: 0; left: 6%; right: 6%; height: 8px; border-radius: 4px; background: var(--desk) }
+.board {
+  position: relative; padding: clamp(18px, 3vw, 30px); border: 10px solid var(--desk); border-radius: 3px; box-shadow: inset 0 0 0 2px var(--desk-dark), 0 0 0 2px var(--desk-dark), 0 18px 30px -14px var(--shadow);
+  background: radial-gradient(var(--speck) 1px, transparent 1.6px) 0 0 / 13px 13px, radial-gradient(var(--speck) 1px, transparent 1.4px) 6px 9px / 19px 17px, var(--cork);
+}
+.pins { position: relative; display: grid; gap: 34px 30px; grid-template-columns: 1fr 1.5fr 1fr; grid-template-areas: "a main b" "c main d" "e f g"; align-items: center }
+.threads { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible }
+.threads path { fill: none; stroke: var(--thread); stroke-width: 1.7; stroke-linecap: round }
+.pinned { position: relative; z-index: 1; min-width: 0; padding: 18px 14px 12px; box-shadow: 0 5px 8px -3px var(--shadow); font: 16px/1.4 var(--label) }
+.pinned::before { content: ""; position: absolute; left: 50%; top: 5px; width: 13px; height: 13px; margin-left: -6.5px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, var(--shine) 0 2px, var(--pin) 3px); box-shadow: 1px 2px 2px var(--shadow) }
+.pinned b { display: block; font: 400 1.2rem/1.15 var(--display) }
+.p-main { grid-area: main; padding: 26px 20px 18px; transform: rotate(-.4deg) }
+.p-main h3 { margin: 0 0 4px; font: 400 clamp(1.5rem, 4vw, 2.1rem)/1.08 var(--display) }
+.p-main small { display: block; margin-bottom: 8px; font: 700 14px/1.4 var(--label); letter-spacing: .1em; text-transform: uppercase; color: var(--wax) }
+.p-main p { margin: 0 0 6px; font: 17px/1.5 var(--text) }
+.p-main a { display: inline-flex; align-items: center; min-height: 44px; color: var(--paper-link) }
+.p-a { grid-area: a; transform: rotate(1deg) } .p-b { grid-area: b; transform: rotate(-1.2deg) } .p-c { grid-area: c } .p-d { grid-area: d; transform: rotate(.8deg) }
+.p-e { grid-area: e; transform: rotate(-.8deg) } .p-f { grid-area: f; justify-self: center; max-width: 18rem; transform: rotate(.6deg) } .p-g { grid-area: g }
+.sketch { padding: 20px 10px 8px; justify-self: center; width: min(100%, 9.5rem) }
+.sketch svg { display: block; width: 100% }
+.sk { fill: none; stroke: var(--coast); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round } .tone { fill: var(--land) }
+
+/* the ledger */
+.ledger { margin: 0; border-top: 3px solid var(--blue2); box-shadow: 0 -6px 0 -3px var(--blue) }
+.ledger div { display: grid; grid-template-columns: minmax(7rem, 11rem) minmax(0, 1fr); gap: 2px 20px; padding: 12px 0; border-bottom: 1px solid var(--seam) }
+.ledger dt { font: 700 15px/1.5 var(--label); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft) }
+.ledger dd { margin: 0; max-width: 44rem }
+.ledger a { display: inline-block; padding: 9px 0; margin: -9px 0 }
+
+@media (prefers-reduced-motion: no-preference) {
+  .box { transition: box-shadow .16s, transform .16s }
+  .box:hover { transform: translateY(-3px); box-shadow: 0 8px 0 -1px var(--trunk-dark) }
+  [aria-pressed="true"] .flame { animation: flicker 2.6s ease-in-out infinite alternate; transform-origin: 50% 80% }
+  @keyframes flicker { 50% { transform: scale(.94, 1.05) } }
+}
+@media (max-width: 1040px) { .tray { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+@media (max-width: 760px) {
+  .desk { grid-template-columns: minmax(0, 1fr) }
+  .map { transform: none }
+  .orders { margin: -26px 8px 0 }
+  .pins { grid-template-columns: 1fr 1fr; grid-template-areas: "main main" "a b" "d e" "f c"; gap: 30px 18px }
+  .p-g { display: none }
+  .p-f { justify-self: stretch; max-width: none }
+  .ledger div { grid-template-columns: minmax(0, 1fr) }
+}
+@media (max-width: 600px) { .tray, .dispatches { grid-template-columns: minmax(0, 1fr) } }
+@media (forced-colors: active) { .seal, .plate, .lantern { border: 2px solid ButtonText } }

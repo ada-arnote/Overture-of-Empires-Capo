@@ -4,11 +4,13 @@ import { NONE, boardOf, cellsOf, goalOf, growth, inch, liveBoardFor, poolLimit, 
 import { choose, thinking } from "../src/games/inch/bot.js";
 import { $, NAMES, PAPER, RGB, createTable, radio, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
-import { board as liveBoard, ending as liveEnding, key as liveKey, leave as liveLeave, lineOf as liveLine, liveGoal, panel as livePanel, seen as liveSeen } from "./inchlive.js";
+import { board as liveBoard, ending as liveEnding, key as liveKey, leave as liveLeave, lineOf as liveLine, liveGoal, panel as livePanel, record, rules as liveRules, seen as liveSeen, summary as liveSummary, time as liveTime } from "./inchlive.js";
 
 const SHARE = { quarter: "Quarter", third: "A third", half: "Half", most: "Most", all: "All" }, HILL = [201, 178, 140];
 const cells = (n) => `${n} ${n === 1 ? "cell" : "cells"}`, place = (to) => (to === NONE ? "empty land" : NAMES[to]);
-let target = null, share = "half";
+let target = null, share = "half", style = "classic";
+const LIVE = (s, extra) => s === "classic" || (s === "custom" && !!extra.live), CUSTOM = (s, extra) => s === "custom" && !!extra.live;
+const CITIES = { key: "cities", label: "Cities", note: "Spend strength on a city: it holds more and grows faster." }, BOATS = { key: "boats", label: "Boats", note: "Send a share across the sea to land on a far coast. Always on where the map has more than one landmass." };
 
 const offers = (T) => (T.ready() ? T.match.legal().filter((m) => m.do === "pour") : []);
 const offer = (T) => offers(T).find((m) => m.to === target && m.share === share);
@@ -26,22 +28,28 @@ function aim(T, i) {
 createTable({
   game: inch, key: "inch", title: "An Inch of Ink", won: "The map is yours.", lengths: [[10, "Short"], [16, "Normal"], [20, "Long"]], pace: () => 650,
   cellsOf: (p, s) => (p.live ? p.land[s] : cellsOf(p, s)), goalOf: (p) => (p.live ? liveGoal(p) : goalOf(p)), landOf: (p) => (p.live ? p.total : p.owner.length), choose, thinking,
-  summary: (T) => { const p = T.match.position; if (!p.live) return null; const m = Math.round((p.tick * 0.5) / 60); return `${p.names[T.match.result.winners[0]]} ${T.match.result.why}, after ${m < 1 ? "less than a minute" : `${m} ${m === 1 ? "minute" : "minutes"}`} of game time.`; },
+  summary: (T) => (T.match.position.live ? liveSummary(T) : null),
   ending: (T) => (T.match.position.live ? liveEnding(T) : null),
   // real time shows game time, not a round; a nation is out only once it has lost the land it had
-  roundText: (p) => (p.live ? `${Math.floor(p.tick / 120)}:${String(Math.floor((p.tick / 2) % 60)).padStart(2, "0")} of game time` : null),
+  roundText: (p) => (p.live ? `${liveTime(p)} of game time` : null),
   outOf: (p, s) => (p.live ? p.tick > 4 && !p.alive[s] : cellsOf(p, s) === 0),
   kindsOf: (o) => (o.style === "classic" || (o.style === "custom" && o.live) ? ["you"] : null),
-  alone: (style, extra) => style === "classic" || (style === "custom" && extra.live),
-  expansionsFor: (style, extra) => style === "classic" || (style === "custom" && extra.live),
+  alone: LIVE,
+  // cities are Custom only: the list of expansions follows the rules last asked about
+  expansionsFor: (s, extra) => { style = s; return LIVE(s, extra); },
+  get expansions() { return style === "classic" ? [BOATS] : [CITIES, BOATS]; },
   seen: (T, events) => { if (T.match.position.live) liveSeen(T, events); },
   // Custom first chooses the clock: real time shows its own choices, turns show the turn game's switches
   choices: [
     { key: "live", label: "Clock", normal: false, only: ["custom"], values: [[false, "Turns"], [true, "Real time"]] },
-    { key: "map", label: "Map", normal: "world", only: ["classic", "custom"], when: (style, extra) => style === "classic" || extra.live, values: [["world", "The world"], ["continents", "Continents"], ["islands", "Islands"]] },
-    { key: "nations", label: "Nations", normal: 20, only: ["classic", "custom"], when: (style, extra) => style === "classic" || extra.live, values: [[8, "8"], [12, "12"], [20, "20"], [30, "30"], [50, "50"]] },
-    { key: "rivals", label: "Rivals", normal: "gentle", only: ["classic", "custom"], when: (style, extra) => style === "classic" || extra.live, values: [["gentle", "Gentle"], ["even", "Even"], ["hard", "Hard"]] },
-    { key: "time", label: "Time limit", normal: 800, only: ["custom"], when: (style, extra) => !!extra.live, values: [[600, "10 minutes"], [800, "13 minutes 20 seconds"], [1800, "30 minutes"], [0, "None"]] },
+    { key: "map", label: "Map", normal: "world", only: ["classic", "custom"], when: LIVE, values: [["world", "The world"], ["continents", "Continents"], ["islands", "Islands"]] },
+    { key: "nations", label: "Nations", normal: 20, only: ["classic", "custom"], when: LIVE, values: [[8, "8"], [12, "12"], [20, "20"], [30, "30"], [50, "50"]] },
+    { key: "rivals", label: "Rivals", normal: "gentle", only: ["classic", "custom"], when: LIVE, values: [["gentle", "Gentle"], ["even", "Even"], ["hard", "Hard"]] },
+    { key: "inks", label: "Inks", normal: "chosen", only: ["custom"], when: CUSTOM, values: [["chosen", "You choose yours"], ["drawn", "Drawn for everyone"], ["off", "Off"]] },
+    { key: "places", label: "Places", normal: "normal", only: ["custom"], when: CUSTOM, values: [["none", "None"], ["few", "Few"], ["normal", "Normal"], ["many", "Many"]] },
+    { key: "ages", label: "Ages and marks", normal: true, only: ["custom"], when: CUSTOM, values: [[true, "On"], [false, "Off"]] },
+    { key: "ease", label: "Goal in the last age", normal: true, only: ["custom"], when: CUSTOM, values: [[true, "Eases to 66%"], [false, "Stays at 80%"]] },
+    { key: "time", label: "Time limit", normal: 1800, only: ["custom"], when: CUSTOM, values: [[1800, "30 minutes"], [800, "13 minutes 20 seconds"], [600, "10 minutes"], [0, "None"]] },
     // the turn game's switches
     { key: "size", label: "Map", normal: 5, only: ["custom"], when: (style, extra) => !extra.live, values: [[4, "61 cells"], [5, "91 cells"]] },
     { key: "cut", label: "Cut-off land", normal: false, only: ["custom"], when: (style, extra) => !extra.live, values: [[false, "Stays yours"], [true, "Falls away"]] },
@@ -52,7 +60,6 @@ createTable({
     { key: "drawn", label: "Order with three", normal: true, only: ["custom"], when: (style, extra) => !extra.live, values: [[true, "Drawn each round"], [false, "Rotates"]] },
     { key: "limit", label: "Rounds", normal: 40, only: ["custom"], when: (style, extra) => !extra.live, values: [[10, "10"], [16, "16"], [20, "20"], [40, "40"]] },
   ],
-  expansions: [{ key: "cities", label: "Cities", note: "Spend strength on a city: it holds more and grows faster." }, { key: "boats", label: "Boats", note: "Send a share across the sea to land on a far coast. Always on where the map has more than one landmass." }],
   stats: (p, s) => p.live ? [["Strength", p.troops[s]], ["Nations left", p.alive.filter(Boolean).length]] : (() => { const c = cellsOf(p, s), x = p.pool[s]; return [["Strength", x], ["Grows", p.home[s] === NONE ? "out" : `+${Math.max(0, Math.min(growth(p, s), poolLimit(c) - x))}`]]; })(),
   line(e, p) {
     if (p?.live) return liveLine(e, p);
@@ -105,12 +112,13 @@ createTable({
     else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "pour")) { e.preventDefault(); $("pour").click(); }
   },
   about: {
-    classic: "Traditional: inspired by Territorial.io and OpenFront.io.\nThe browser land-grab as players know it, in real time: start anywhere on the world map or a made one, among up to 50 nations. Your strength grows with your land; send a share of it with the slider and watch the border creep. Ours: small hexes in place of pixels, our own numbers and maps, a pause button, and the clock in half-second ticks so a game can be saved.\nNot affiliated with or endorsed by their makers. Our own map, names and art.",
-    custom: "Custom: your own rules.\nChoose the clock first. In real time: the map, the nations, how hard your rivals play and the time limit. In turns: map size, whether cut-off land falls, walled homes, the shares you pour, how strength grows, the goal, the turn order and the number of rounds.",
+    classic: "Traditional: our own real-time land-grab.\nPick an ink and start anywhere on the world map or a made one, among up to 50 nations. Your strength grows with your land; send a share of it with the slider and watch the border creep. Each ink spreads in its own way, places on the map help whoever holds them, and at 3:00 and 7:00 a new age brings a choice. Land you encircle soaks through. A pause button, and a clock in half-second ticks so a game can be saved.\nNot a copy of any other game: our own rules, map, names and art.",
+    custom: "Custom: your own rules.\nChoose the clock first. In real time: the map, the nations, how hard your rivals play, inks, places, the ages, the easing goal, the time limit, and cities. In turns: map size, whether cut-off land falls, walled homes, the shares you pour, how strength grows, the goal, the turn order and the number of rounds.",
     ours: "Capo: our own variation.\nA smaller map where land cut off from your tower falls away, homes are walled, and saving strength pays. Hold 55% with two players, 45% with three.",
     coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
   },
   switches: [], // all of Custom's switches are choices above, so each shows only with the clock it belongs to
   fresh: () => { liveLeave(); },
-  rules: (classic, p) => p?.live ? ["Real time: the clock runs on its own. Pause it, or run it faster, with the buttons.", "Tap empty land to start your nation. Your strength grows every half second: more for more land, a little more for saving, up to a limit set by your land.", "Choose a share with the slider, then tap a neighbour, or empty land beside yours. That share of your strength goes, and the border creeps forward until it is spent.", "Each cell costs 2, 3 more on hills, and more where the owner holds much strength on little land. Taking a cell costs its owner some strength too.", "Win by holding 80% of the land, or by being the last one left.", p.limit ? `If nobody has after ${Math.floor(p.limit / 120)} minutes${p.limit % 120 ? ` ${(p.limit % 120) / 2} seconds` : ""}, the biggest nation wins.` : "There is no time limit.", "If you lose all your land you are out: watch the others play on to the end, or start again.", ...[({ gentle: "Rivals are gentle: they grow slower than you and leave you alone for the first three minutes.", even: "Rivals are even: they grow as fast as you.", hard: "Rivals are hard: they grow faster than you and attack sooner." })[p.rivals]].filter(Boolean), ...(p.building ? ["Cities: tap Build a city, then one of your cells. A city holds more and grows faster; each costs more than the last."] : []), ...(p.boats ? [`Boats: tap a coast across the water, up to ${liveBoardFor(p).range} cells of sea away. Landing costs double the cell; boats that cannot pay it lose one cell's price, and the rest come home.`] : []), "Keys: 1 to 0 choose the share, Space pauses."] : ((p ? p.rule.growth === "rising" : classic) ? ["Your strength is one pool. The number on your tower shows it. It grows every turn: 3, and 1 for every 3 cells you hold, and a little more each round for everyone.", "Tap empty land or a rival, choose how much to pour, and the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A rival's land costs more when they hold a lot of strength on little land.", "The tower only shows whose land it is. If it is taken it moves.", "Reach the gold mark on the bar to win. If nobody has after 40 rounds, the most land wins.", "Whoever moves first changes every round. With three, the order of each round is drawn.", "Keys: 1 to 4 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."] : ["Your strength is one pool. The number on your tower shows it. It grows every turn: land grows it, and saving a little more.", "Tap empty land or a rival, choose how much to pour, and the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A cell with four of yours around it costs half.", "A rival's land costs more when they hold a lot of strength on little land. A home costs 3 more.", "Land cut off from your tower falls at the start of your turn. If your tower is taken, it moves to your largest piece of land.", "Reach the gold mark on the bar to win, or hold the most land after the last round. Whoever moves first changes every round.", "Keys: 1, 2, 3 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."]),
+  more: record,
+  rules: (classic, p) => (p ? p.live : classic) ? liveRules(p) : ((p ? p.rule.growth === "rising" : classic) ? ["Your strength is one pool. The number on your tower shows it. It grows every turn: 3, and 1 for every 3 cells you hold, and a little more each round for everyone.", "Tap empty land or a rival, choose how much to pour, and the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A rival's land costs more when they hold a lot of strength on little land.", "The tower only shows whose land it is. If it is taken it moves.", "Reach the gold mark on the bar to win. If nobody has after 40 rounds, the most land wins.", "Whoever moves first changes every round. With three, the order of each round is drawn.", "Keys: 1 to 4 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."] : ["Your strength is one pool. The number on your tower shows it. It grows every turn: land grows it, and saving a little more.", "Tap empty land or a rival, choose how much to pour, and the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A cell with four of yours around it costs half.", "A rival's land costs more when they hold a lot of strength on little land. A home costs 3 more.", "Land cut off from your tower falls at the start of your turn. If your tower is taken, it moves to your largest piece of land.", "Reach the gold mark on the bar to win, or hold the most land after the last round. Whoever moves first changes every round.", "Keys: 1, 2, 3 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."]),
 });

@@ -2,7 +2,7 @@
 // Makes one self-contained page for each game, that opens by double-click, with no server. node tools/bundle.mjs
 // The same pages go in play/, which is what the web address serves: one file cannot be half an old version.
 // Each module becomes a function; imports and exports become plain objects. Only the forms this project uses are understood.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,13 +53,27 @@ export function bundle(entry) {
   return `"use strict";\nconst $m = [];\n${parts.join("\n")}`;
 }
 
-export function page(html, css, js, home = "", fetches = false) {
-  const safe = js.replace(/<\/script/gi, "<\\/script"), hash = createHash("sha256").update(`\n${safe}\n`).digest("base64");
+const KINDS = { woff2: "font/woff2", ogg: "audio/ogg", mp3: "audio/mpeg", svg: "image/svg+xml", png: "image/png", webp: "image/webp" };
+
+/** Points a page at the site's fonts, icons and sounds, named as whole quoted or url() paths relative to site/ ("sounds/move.ogg"):
+ *  from the site when served (home is the way back to site/), or inlined as data: when the page has to stand alone. */
+export function assets(text, home, from) {
+  return text.replace(/(["'(])(?:\.\/)?((?:fonts|icons|sounds)\/[\w./-]+?\.(woff2|ogg|mp3|svg|png|webp))(?=["')])/g, (_, q, ref, ext) => {
+    const file = path.join(from, ref);
+    if (ref.split("/").includes("..") || !existsSync(file)) throw new Error(`${ref}: no such file in site/`);
+    return q + (home ? home + ref : `data:${KINDS[ext]};base64,${readFileSync(file).toString("base64")}`);
+  });
+}
+
+export function page(html, css, js, home = "", fetches = false, from = path.join(root, "site")) {
+  const safe = assets(js, home, from).replace(/<\/script/gi, "<\\/script"), hash = createHash("sha256").update(`\n${safe}\n`).digest("base64");
   // a page that fetches keeps the addresses it may reach (its own site for map data, an AI for the story); the games reach nothing
   const reach = html.match(/connect-src ([^;"]*)/)?.[1]?.trim() || "", talk = fetches && reach ? ` connect-src ${reach};` : "";
-  return html
-    .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, () => `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src data:;${talk} base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">`)
-    .replace(/<link rel="stylesheet"[^>]*>/, () => `<style>\n${css}</style>`)
+  // served pages load fonts, pictures and sounds from their own site; the double-click page carries them inside, as data:
+  const own = home ? "'self'" : "data:", img = home ? "'self' data:" : "data:";
+  return assets(html, home, from)
+    .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, () => `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src ${img}; font-src ${own}; media-src ${own};${talk} base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">`)
+    .replace(/<link rel="stylesheet"[^>]*>/, () => `<style>\n${assets(css, home, from)}</style>`)
     .replace(/<a href="\.\/" class="text">All games<\/a>/, home ? `<a href="${home}" class="text">All games</a>` : "")
     .replace(/<script type="module"[^>]*><\/script>/, () => `<script>\n${safe}\n</script>`);
 }
