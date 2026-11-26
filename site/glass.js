@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Grain and Glass on the table: roll, build in the hexes your routes reach, trade, and race to the points.
-import { AWARD, BUSY, COST, EXPANSIONS, GOODS, NONE, SWITCHES, WASTE, boardOf, canPay, glass, goalOf, pointsOf, rateOf, roadOf, sellPrice } from "../src/games/glass/rules.js";
+import { AWARD, BUSY, COST, EXPANSIONS, GOODS, NONE, SWITCHES, TERMS, WASTE, boardOf, glass, goalOf, pointsOf, rateOf, roadOf, sellPrice, total } from "../src/games/glass/rules.js";
 import { choose, thinking } from "../src/games/glass/bot.js";
-import { $, NAMES, RGB, createTable, el, radio, toast } from "./table.js";
+import { $, NAMES, RGB, createTable, el, radio, sheet, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
 
 const SEA = [70, 116, 140], TILE = [[226, 196, 96], [176, 206, 214], [196, 120, 82], [228, 226, 214]], WASTEG = [150, 140, 120];
@@ -11,6 +11,8 @@ const PLAN = { harvest: "Harvest: two goods you lack", works: "Works: two free r
 const AWARDS = { road: "Great Road", warden: "Toll Warden" };
 const BUILDS = { route: ["Route"], depot: ["Depot", "1 point"], town: ["Town", "2 points, on a depot"], harbour: ["Harbour", "on a depot by the sea"], plan: ["Plan"] };
 let kind = "depot", where = null;
+/** The trade being put together: with whom ("bank", a seat, "any", or a list by name), which goods, and on which terms. */
+const draft = { who: "bank", give: 0, get: 1, terms: 0, back: 0, counter: 0 };
 
 const legal = (T) => (T.ready() ? T.match.legal() : []);
 const nameOf = (p, i) => { const [q, r] = boardOf(p).cells[i], R = boardOf(p).radius; return String.fromCharCode(65 + r + R) + (q + R + 1 + Math.min(0, r)); };
@@ -18,23 +20,39 @@ const costText = (c) => c.flatMap((n, k) => (n ? [`${n} ${GOODS[k]}`] : [])).joi
 /** The builds this game has, and what a hand still lacks for one. */
 const buildsOf = (p) => Object.keys(BUILDS).filter((k) => (k === "harbour" ? p.harbours : k !== "plan" || (p.rule.plans && p.deck.length)));
 const missing = (h, k) => costText(COST[k].map((n, g) => Math.max(0, n - h[g])));
-const kindOf = (m) => (["swap", "sell", "buy", "offer", "charter", "take", "withdraw"].includes(m.do) ? "trade" : ["accept", "refuse", "hold"].includes(m.do) ? "answer" : m.do);
+const kindOf = (m) => (["swap", "sell", "buy", "offer", "charter", "take", "withdraw"].includes(m.do) ? "trade" : ["accept", "refuse", "hold", "counter"].includes(m.do) ? "answer" : m.do);
+const same = (a, b) => Object.keys(b).every((k) => a[k] === b[k]);
 const keyOf = (m) => (m.at !== undefined && m.from === undefined ? m.at : JSON.stringify(m)); // a hex, or the whole move where one hex has several
-const deal = (d) => `1 ${GOODS[d.give]} for 1 ${GOODS[d.get]}`;
+const deal = (d) => `${d.n} ${GOODS[d.give]} for ${d.k} ${GOODS[d.get]}`;
 const raidText = (p) => (p.rule.roll === "sum" ? "A 7" : "Doubles");
-const held = (p) => Object.entries(AWARDS).flatMap(([k, v]) => (p[k] === NONE ? [] : [`${v}: ${NAMES[p[k]]}`]));
+/** Where each award stands for a seat: who holds it and with how many, how near the seat is, and who is one short of taking it. */
+function awardsOf(p, s) {
+  const counts = { road: (o) => roadOf(p, o), warden: (o) => p.tolls[o] }, words = { road: "routes", warden: "tolls" };
+  return Object.keys(AWARDS).filter((k) => k === "road" || (p.rule.gate && p.rule.plans)).map((k) => {
+    const mine = counts[k](s), at = p[k], rival = Array.from({ length: p.seats }, (_, o) => o).filter((o) => o !== s).reduce((a, b) => (counts[k](b) > counts[k](a) ? b : a));
+    if (at === NONE) return [`${AWARDS[k]} ${mine}/${AWARD[k]}`, false, `${AWARDS[k]}: you have ${mine} of the ${AWARD[k]} ${words[k]} it takes`];
+    if (at !== s) return [`${AWARDS[k]}: ${NAMES[at]} ${counts[k](at)}, you ${mine}`, false];
+    const close = counts[k](rival) >= mine - 1;
+    return [`${AWARDS[k]}: yours with ${mine}${close ? `, ${NAMES[rival]} has ${counts[k](rival)}` : ""}`, close];
+  });
+}
+/** How many ways in 36 a number comes up. */
+const waysOf = (p) => (p.rule.roll === "sum" ? [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1] : [0, 1, 3, 5, 7, 9, 11]);
 /** What a hex gives, in words: its good and number; for a depot, those of the hexes around it too. */
 const yieldOf = (p, i) => (p.land[i] && p.good[i] !== WASTE ? `${GOODS[p.good[i]]} ${p.num[i]}` : "");
 const yields = (p, at, around) => [at, ...(around ? boardOf(p).near[at] : [])].map((i) => yieldOf(p, i)).filter(Boolean).join(", ") || "nothing";
+/** Goods a depot here would gather in 36 rolls, on average: the ways each hex around it comes up, added. */
+const worth = (p, at) => [at, ...boardOf(p).near[at]].reduce((n, i) => n + (i === p.gate ? 0 : pips(p, i)), 0);
 function label(p, m) {
   if (m.do === "swap") return `Give ${rateOf(p, p.seat, m.give)} ${GOODS[m.give]} for 1 ${GOODS[m.get]}`;
   if (m.do === "sell") return `Sell 1 ${GOODS[m.good]} for ${sellPrice(p, p.seat, m.good)} coin`;
   if (m.do === "buy") return `Buy 1 ${GOODS[m.good]} for 4 coin`;
   if (m.do === "offer") return m.to === NONE ? `Offer anyone ${deal(m)}, open until the round ends` : `Offer ${NAMES[m.to]} ${deal(m)}`;
-  if (m.do === "accept") return `Take it: give 1 ${GOODS[p.ask.get]}, get 1 ${GOODS[p.ask.give]} from ${NAMES[p.ask.from]}`;
+  if (m.do === "accept") return p.ask.countered ? `Agree: give ${p.ask.n} ${GOODS[p.ask.give]}, get ${p.ask.k} ${GOODS[p.ask.get]}` : `Take it: give ${p.ask.k} ${GOODS[p.ask.get]}, get ${p.ask.n} ${GOODS[p.ask.give]}`;
+  if (m.do === "counter") return `Counter: give ${m.k} ${GOODS[m.get]}, get ${m.n} ${GOODS[p.ask.give]}`;
   if (m.do === "refuse") return "Turn it down";
   if (m.do === "hold") return "Leave it open: take it on your turn, until the round ends";
-  if (m.do === "take") return `Take ${NAMES[m.from]}'s offer: give 1 ${GOODS[m.get]}, get 1 ${GOODS[m.give]}`;
+  if (m.do === "take") return `Take ${NAMES[m.from]}'s offer: give ${m.k} ${GOODS[m.get]}, get ${m.n} ${GOODS[m.give]}`;
   if (m.do === "withdraw") return `Withdraw your offer to ${m.to === NONE ? "anyone" : NAMES[m.to]}: ${deal(m)}`;
   if (m.do === "spoil") return `Lose 1 ${GOODS[m.good]}`;
   if (m.do === "charter") return `Fill charter ${m.k + 1} for 2 points`;
@@ -55,23 +73,65 @@ function tap(T, i) {
 /** The cost card: every build, what it is worth, and what your hand still lacks for it. Kept in view on a wide screen. */
 const costs = el("aside", undefined, "paper");
 costs.id = "costs"; costs.hidden = true; costs.setAttribute("aria-label", "Costs");
-$("seats").after(costs);
+const rolls = el("aside", undefined, "paper");
+rolls.id = "rolls"; rolls.hidden = true; rolls.setAttribute("aria-label", "Rolls so far");
+$("seats").after(costs, rolls);
 function card(T) {
   const p = T.match.position, me = T.human() ? p.seat : T.kinds.indexOf("you");
   costs.hidden = T.demo || me < 0 || T.match.turn === null;
-  if (costs.hidden) return;
+  if (costs.hidden) { rolls.hidden = true; return; }
   costs.replaceChildren(el("h2", "Costs"), ...buildsOf(p).map((k) => {
     const short = p.phase === "open" ? "" : missing(p.hands[me], k), row = el("p", undefined, short ? "short" : ""); // the opening is free
     row.append(el("b", BUILDS[k][0]), `${BUILDS[k][1] ? `, ${BUILDS[k][1]}` : ""}: ${costText(COST[k])}`, ...(short ? [el("small", `Missing ${short}`)] : []));
     return row;
   }));
-  const a = costs.getBoundingClientRect(), b = $("seats").getBoundingClientRect();
-  if (a.height && b.height && a.bottom + 8 > b.top) costs.hidden = true; // many seats on a short screen: the greyed builds in the move panel say the same
+  const bank = el("p"), seats = $("seats").getBoundingClientRect(), over = () => { const a = costs.getBoundingClientRect(); return a.height && seats.height && a.bottom + 8 > seats.top; };
+  bank.append(el("b", "Bank"), `: ${GOODS.map((g, k) => `${rateOf(p, me, k)} ${g}`).join(", ")} for 1`);
+  if (p.rule.market === "fixed" && p.phase !== "open") costs.append(bank);
+  if (over()) bank.remove(); // a short screen: the trade desk shows the rates too
+  if (over()) costs.hidden = true; // many seats on a short screen: the greyed builds in the move panel say the same
+  // the rolls so far, under the seats where there is room; always a press away under Rolls
+  rolls.hidden = !p.roll;
+  if (rolls.hidden) return;
+  rolls.replaceChildren(el("h2", "Rolls"), histogram(p));
+  const at = rolls.getBoundingClientRect();
+  if (at.height && seats.height && seats.bottom + 8 > at.top) rolls.hidden = true;
 }
+
+/** The rolls so far as bars, one for each number, with a line on each where the long run would put it. */
+function histogram(p) {
+  const ways = waysOf(p), nums = ways.flatMap((w, n) => (w ? [n] : [])), rolled = nums.reduce((a, n) => a + p.rolls[n], 0);
+  const top = Math.max(1, ...nums.map((n) => Math.max(p.rolls[n], Math.ceil((ways[n] * rolled) / 36)))), box = el("div", undefined, "hist");
+  box.setAttribute("role", "img");
+  box.setAttribute("aria-label", `${rolled} ${rolled === 1 ? "roll" : "rolls"} so far. ${nums.map((n) => `${n}: ${p.rolls[n]}`).join(", ")}.`);
+  box.append(...nums.map((n) => {
+    const col = el("div", undefined, p.rule.roll === "sum" && n === 7 ? "raid" : BUSY[p.rule.roll].includes(n) ? "hot" : ""), bars = el("span"), bar = el("i"), due = el("u");
+    bar.style.height = `${(100 * p.rolls[n]) / top}%`;
+    due.style.bottom = `${(100 * ways[n] * rolled) / (36 * top)}%`;
+    bars.append(bar, due);
+    col.append(el("small", p.rolls[n] ? String(p.rolls[n]) : ""), bars, el("b", String(n)));
+    return col;
+  }));
+  return box;
+}
+/** Rolls and goods: every roll so far against the long run, and what each player has gathered from the harvest. */
+function ledger(T) {
+  const p = T.match.position, body = el("div"), rolled = p.rolls.reduce((a, v) => a + v, 0), wrap = el("div", undefined, "ranks"), table = el("table");
+  const tr = (cells, tag = "td") => { const r = el("tr"); r.append(...cells.map((c, i) => { const x = el(i ? tag : "th", String(c)); if (!i) x.scope = tag === "th" ? "col" : "row"; return x; })); return r; };
+  const raids = p.rule.roll === "sum" ? ` A 7, the raid roll, has come up ${p.rolls[7]} ${p.rolls[7] === 1 ? "time" : "times"}; over the long run it is one roll in six.` : "";
+  body.append(el("p", rolled ? `${rolled} ${rolled === 1 ? "roll" : "rolls"} so far. The line across each bar is where the long run would put it.${raids}` : "No rolls yet."), histogram(p));
+  table.append(tr(["Gathered", ...GOODS, "All"], "th"), ...p.gained.map((g, s) => tr([NAMES[s], ...g, total(g)])));
+  table.setAttribute("aria-label", "Goods gathered from the harvest");
+  wrap.append(table);
+  body.append(el("p", "Goods each player has gathered from the harvest. Trades, plans and the toll gate are not counted."), wrap, el("p", "The dice are fair and come from the game's seed: the same seed and moves always roll the same."));
+  sheet("Rolls and goods", body, "Close", "paper");
+}
+
+// The guided first game}
 
 // The guided first game: a small island, 8 points to win, a gentle bot, and you place first
 const pos = (T) => T.match.position, has = (ev, ...k) => ev.some((e) => k.includes(e.kind));
-const pips = (p, i) => (p.land[i] && p.good[i] !== WASTE ? (p.rule.roll === "sum" ? 6 - Math.abs(7 - p.num[i]) : 2 * p.num[i] - 1) : 0);
+function pips(p, i) { return p.land[i] && p.good[i] !== WASTE ? waysOf(p)[p.num[i]] : 0; }
 /** The legal hex where a depot would gather most, for the lesson to point at. */
 const richest = (T) => legal(T).filter((m) => m.do === "depot").map((m) => m.at).sort((a, b) => [b, ...boardOf(pos(T)).near[b]].reduce((n, i) => n + pips(pos(T), i), 0) - [a, ...boardOf(pos(T)).near[a]].reduce((n, i) => n + pips(pos(T), i), 0))[0];
 const tab = (k) => [...$("sources").children].find((b) => b.textContent.startsWith(KINDS[k]) && !b.disabled) || $("sources");
@@ -116,6 +176,7 @@ createTable({
     { key: "market", label: "Market", normal: SWITCHES.market.normal, values: [["fixed", "Swap 4 for 1, less at ports"], ["falling", "Coin, falling prices"]] },
     { key: "charters", label: "Charters", normal: false, values: [[false, "Off"], [true, "On"]] },
     { key: "gate", label: "Toll gate", normal: true, values: [[true, "On: blocks a hex, takes a good"], [false, "Off"]] },
+    { key: "spare", label: "Gentle gate", normal: SWITCHES.spare.normal, values: [[0, "Off: it takes from anyone"], [2, "Spares players on 2 points"], [3, "Spares players on 3 points or fewer"]] },
     { key: "hand", label: "Spoilage on a raid roll", normal: SWITCHES.hand.normal, values: SWITCHES.hand.values.map((v) => [v, v ? `Over ${v} goods lose half` : "Never"]) },
     { key: "plans", label: "Plans", normal: true, values: [[true, "On"], [false, "Off"]] },
     { key: "awards", label: "Great Road and Toll Warden", normal: SWITCHES.awards.normal, values: [[true, "On, 2 points each"], [false, "Off"]] },
@@ -126,7 +187,7 @@ createTable({
     { key: "limit", label: "Rounds", normal: SWITCHES.limit.normal, values: [[12, "12"], [16, "16"], [24, "24"], [40, "40"]] },
   ],
   expansions: EXPANSIONS.map((key) => ({ key, label: { ships: "Ships", harbours: "Harbours", seasons: "Seasons" }[key], note: { ships: "Routes may cross the sea beside the coast, for 2 Glass and 2 Salt.", harbours: "Build a harbour on a coastal depot: swap 2 of anything for 1.", seasons: "Each round may bring plenty of one good (one each), a drought (each loses one of it), or fair trade (better rates and prices)." }[key] })),
-  stats: (p, s) => [["Goods", p.hands[s].reduce((n, v) => n + v, 0)], p.rule.market === "falling" ? ["Coin", p.coin[s]] : ["Plans", p.held[s].length], ...(p.rule.awards ? [["Awards", Object.keys(AWARDS).filter((k) => p[k] === s).map((k) => AWARDS[k]).join(", ") || "None"]] : [])],
+  stats: (p, s) => [["Goods", p.hands[s].reduce((n, v) => n + v, 0)], p.rule.market === "falling" ? ["Coin", p.coin[s]] : ["Plans", p.held[s].length], ...(p.rule.awards ? [["Awards", Object.keys(AWARDS).filter((k) => p[k] === s).map((k) => AWARDS[k]).join(", ") || "None"]] : []), ...(p.over ? [["Gathered", total(p.gained[s])]] : [])],
   line(e, p) {
     const who = NAMES[e.seat], at = (i) => nameOf(p, i);
     if (e.kind === "roll") return `${who} rolls ${e.dice[0]} and ${e.dice[1]}: ${e.n}${e.raid ? `, a raid roll${p.rule.gate ? ": the toll gate moves" : ""}` : ""}.`;
@@ -143,8 +204,9 @@ createTable({
     if (e.kind === "toll") return `${who} moves the toll gate to ${at(e.at)}${e.from === NONE ? "" : ` and takes 1 ${GOODS[e.good]} from ${NAMES[e.from]}`}.`;
     if (e.kind === "plan") return e.seal ? `${who} draws a seal: a point.` : `${who} draws a plan.`;
     if (e.kind === "use") return `${who} plays ${PLAN[e.plan].split(":")[0].toLowerCase()}.`;
-    if (e.kind === "ask") return `${who} offers ${NAMES[e.to]} ${GOODS[e.give]} for ${GOODS[e.get]}.`;
-    if (e.kind === "offer") return `${NAMES[e.to]} ${e.yes ? "takes" : "turns down"} ${who}'s offer.`;
+    if (e.kind === "ask") return `${who} offers ${NAMES[e.to]} ${deal(e)}.`;
+    if (e.kind === "counter") return `${who} counters: ${e.k} ${GOODS[e.get]} for ${e.n} ${GOODS[e.give]}.`;
+    if (e.kind === "offer") return e.countered ? `${who} ${e.yes ? "agrees to" : "turns down"} ${NAMES[e.to]}'s counter${e.yes ? `: ${deal(e)}` : ""}.` : `${NAMES[e.to]} ${e.yes ? "takes" : "turns down"} ${who}'s offer${e.yes ? `: ${deal(e)}` : ""}.`;
     if (e.kind === "post") return e.to === NONE ? `${who} offers anyone ${deal(e)}, open until the round ends.` : `${NAMES[e.to]} leaves ${who}'s offer open: ${deal(e)}.`;
     if (e.kind === "take") return `${who} takes ${NAMES[e.from]}'s open offer: ${deal(e)}.`;
     if (e.kind === "withdraw") return `${who} withdraws an offer: ${deal(e)}.`;
@@ -166,7 +228,7 @@ createTable({
         const q = T.match.position, out = [];
         q.land.forEach((l, at) => {
           if (q.port[at] !== NONE) out.push({ kind: "port", at, good: q.port[at] });
-          if (l && q.good[at] !== WASTE) out.push({ kind: "token", at, n: q.num[at], hot: BUSY[q.rule.roll].includes(q.num[at]), lit: q.lit.includes(at) }); // lit: it yielded on the last roll
+          if (l && q.good[at] !== WASTE) out.push({ kind: "token", at, n: q.num[at], pips: pips(q, at), hot: BUSY[q.rule.roll].includes(q.num[at]), lit: q.lit.includes(at) }); // lit: it yielded on the last roll
           if (q.route[at].length) out.push({ kind: "route", at, seats: q.route[at].map((s) => RGB[s]) });
           if (q.depot[at] !== NONE) out.push({ kind: q.town[at] ? "town" : "depot", at, seat: q.depot[at], rgb: RGB[q.depot[at]], harbour: !!q.harbour[at] });
         });
@@ -179,37 +241,95 @@ createTable({
     });
   },
   panel(T) {
-    const p = T.match.position, all = legal(T), s = p.seat, kinds = [...new Set(all.filter((m) => m.do !== "end").map(kindOf))];
+    const p = T.match.position, all = legal(T), s = p.seat, h = p.hands[s], kinds = [...new Set(all.filter((m) => m.do !== "end").map(kindOf))];
     if (!kinds.includes(kind)) kind = kinds.includes("depot") ? "depot" : kinds[0] || "trade";
     card(T);
     // every build stays in the row: one you cannot make yet is greyed, and says what is missing or why
     const shown = p.phase === "main" ? [...buildsOf(p), ...kinds.filter((k) => !BUILDS[k])] : kinds;
-    const why = (k) => (missing(p.hands[s], k) ? `missing ${missing(p.hands[s], k)}` : p.left <= 0 ? "no actions left" : { route: "nowhere to lay one", depot: "no free hex your routes reach", town: "no depot to raise", harbour: "no depot by the sea", plan: "none left" }[k]);
-    const list = all.filter((m) => m.do !== "end" && kindOf(m) === kind);
-    if (!list.some((m) => keyOf(m) === where)) where = list[0] ? keyOf(list[0]) : null;
-    const roll = p.roll ? ` Rolled ${p.roll[0]} and ${p.roll[1]}, so ${p.rule.roll === "sum" ? p.roll[0] + p.roll[1] : Math.max(...p.roll)}: ${p.lit.length ? `${p.lit.length} ${p.lit.length === 1 ? "hex yields" : "hexes yield"}, ringed on the board` : "nothing yields"}.` : "";
+    const why = (k) => (missing(h, k) ? `missing ${missing(h, k)}` : p.left <= 0 ? "no actions left" : { route: "nowhere to lay one", depot: "no free hex your routes reach", town: "no depot to raise", harbour: "no depot by the sea", plan: "none left" }[k]);
+    const a = p.ask, roll = p.roll ? ` Rolled ${p.roll[0]} and ${p.roll[1]}, so ${p.rule.roll === "sum" ? p.roll[0] + p.roll[1] : Math.max(...p.roll)}: ${p.lit.length ? `${p.lit.length} ${p.lit.length === 1 ? "hex yields" : "hexes yield"}, ringed on the board` : "nothing yields"}.` : "";
     const phase = { open: `Place your ${p.opened % 2 ? "route" : "depot"}`, toll: p.played ? "Move the toll gate: block a hex and take a good from a rival beside it." : `${raidText(p)}: move the toll gate, block a hex and take a good from a rival beside it.${roll}`, works: "Lay your free routes",
-      spoil: `${raidText(p)}: spoilage. ${NAMES[s]} holds more than ${p.rule.hand} goods and loses ${p.spoil[s]} more.`, answer: p.ask && `${NAMES[p.ask.from]} offers ${NAMES[s]} 1 ${GOODS[p.ask.give]} for 1 ${GOODS[p.ask.get]}.` }[p.phase];
+      spoil: `${raidText(p)}: spoilage. ${NAMES[s]} holds more than ${p.rule.hand} goods and loses ${p.spoil[s]} more.`,
+      answer: a && (a.countered ? `${NAMES[a.to]} counters ${NAMES[s]}'s offer: ${a.k} ${GOODS[a.get]} for ${a.n} ${GOODS[a.give]}.` : `${NAMES[a.from]} offers ${NAMES[s]} ${deal(a)}.`) }[p.phase];
     $("status").textContent = phase || `${T.solo() ? "Your turn" : `${NAMES[s]}'s turn`}.${roll}`;
-    $("info").replaceChildren(...GOODS.map((g, k) => { const b = el("span", `${p.hands[s][k]} ${g}`); b.style.background = `rgb(${TILE[k]})`; return b; }), ...(p.rule.market === "falling" ? [el("span", `${p.coin[s]} coin`)] : []), el("span", `${pointsOf(p, s)} of ${goalOf(p)} points`),
-      ...(p.rule.awards ? [el("span", held(p).join(", ") || `Great Road: ${roadOf(p, s)} of ${AWARD.road} routes`)] : []), ...(p.deals.length ? [el("span", `${p.deals.length} open ${p.deals.length === 1 ? "offer" : "offers"}`)] : []));
+    const tally = el("button", "Rolls");
+    tally.type = "button"; tally.id = "tally"; tally.title = "Rolls and goods (L)"; tally.onclick = () => ledger(T);
+    $("info").replaceChildren(...GOODS.map((g, k) => { const b = el("span", `${h[k]} ${g}`); b.style.background = `rgb(${TILE[k]})`; return b; }), ...(p.rule.market === "falling" ? [el("span", `${p.coin[s]} coin`)] : []), el("span", `${pointsOf(p, s)} of ${goalOf(p)} points`),
+      ...(p.rule.awards ? awardsOf(p, s).map(([text, close, more]) => { const c = el("span", text, close ? "close" : ""); if (more) c.title = more; return c; }) : []), ...(p.deals.length ? [el("span", `${p.deals.length} open ${p.deals.length === 1 ? "offer" : "offers"}`)] : []), ...(p.roll ? [tally] : []));
     $("sources").hidden = p.phase !== "main" || !kinds.length;
     radio($("sources"), shown.map((k) => ({ value: k, label: KINDS[k], off: !kinds.includes(k), note: !kinds.includes(k) ? why(k) : COST[k] ? costText(COST[k]) : undefined })), kind, (v) => { kind = v; where = null; T.refresh(); });
-    $("wheres").hidden = !list.length;
-    radio($("wheres"), list.map((m) => ({ value: keyOf(m), label: label(p, m), note: m.at === undefined ? undefined : yields(p, m.at, m.do === "depot") })), where, (v) => { where = v; T.refresh(); });
-    const m = list.find((x) => keyOf(x) === where);
+    // what the second row lists, and the move chosen: places for a build, answers to an offer, or one side of the trade desk
+    let list = all.filter((m) => m.do !== "end" && kindOf(m) === kind), extra = [], m = null, none = p.phase === "main" ? "Nothing to do here" : "Choose a hex";
+    const rows = [], row = (name, items, chosen, pick) => { const d = el("div", undefined, "pick"); d.setAttribute("role", "radiogroup"); d.setAttribute("aria-label", name); radio(d, items, chosen, pick); rows.push(el("p", name, "cap"), d); };
+    const set = (k) => (v) => { draft[k] = v; T.refresh(); }, goods = (skip, note, off) => GOODS.flatMap((g, i) => (i === skip ? [] : [{ value: i, label: g, rgb: TILE[i], note: note?.(i), off: off?.(i) }]));
+    if (p.phase === "main" && kind === "trade") {
+      const fixed = p.rule.market === "fixed", lists = { market: list.filter((x) => ["sell", "buy"].includes(x.do)), charters: list.filter((x) => x.do === "charter"), open: list.filter((x) => ["take", "withdraw"].includes(x.do)) };
+      const rivals = Array.from({ length: p.seats }, (_, o) => o).filter((o) => o !== s), left = Math.min(p.offers, p.rule.offers - p.deals.filter((d) => d.from === s).length);
+      const whos = [fixed ? { value: "bank", label: "Bank", note: "at your rates" } : { value: "market", label: "Market", note: "sell and buy" },
+        ...(p.rule.charters ? [{ value: "charters", label: "Charters", note: lists.charters.length ? "2 points" : "none you can fill", off: !lists.charters.length }] : []),
+        ...(p.rule.offers ? [...rivals.map((o) => ({ value: o, label: NAMES[o], rgb: RGB[o], note: `${total(p.hands[o])} goods` })), { value: "any", label: "Anyone", note: "stays open" }] : []),
+        ...(lists.open.length ? [{ value: "open", label: "Open offers", note: `${lists.open.length} to take or withdraw` }] : [])];
+      if (!whos.some((w) => w.value === draft.who && !w.off)) draft.who = whos[0].value;
+      row("Trade with", whos, draft.who, (v) => { draft.who = v; where = null; T.refresh(); });
+      if (lists[draft.who]) list = lists[draft.who];
+      else {
+        const bank = draft.who === "bank", [n, k] = TERMS[draft.terms], to = draft.who === "any" ? NONE : draft.who;
+        if (draft.get === draft.give) draft.get = (draft.give + 1) % 4;
+        row("You give", goods(-1, (g) => (bank ? `${rateOf(p, s, g)} for 1` : `have ${h[g]}`), (g) => h[g] < (bank ? rateOf(p, s, g) : 1)), draft.give, (v) => { draft.give = v; if (draft.get === v) draft.get = (v + 1) % 4; T.refresh(); });
+        row("You get", goods(draft.give, (g) => `have ${h[g]}`), draft.get, set("get"));
+        if (!bank) row("Terms: yours for theirs", TERMS.map(([x, y], i) => ({ value: i, label: `${x} for ${y}`, off: h[draft.give] < x })), draft.terms, set("terms"));
+        const want = bank ? { do: "swap", give: draft.give, get: draft.get } : { do: "offer", to, give: draft.give, get: draft.get, n, k };
+        m = all.find((x) => same(x, want)) || null;
+        list = [];
+        none = m ? "" : bank ? `You need ${rateOf(p, s, draft.give)} ${GOODS[draft.give]}` : p.left <= 0 ? "No actions left" : left <= 0 ? "No offers left this turn" : h[draft.give] < n ? `You need ${n} ${GOODS[draft.give]}`
+          : to !== NONE && p.hands[to][draft.get] < k ? `${NAMES[to]} has too little ${GOODS[draft.get]}` : p.tried.includes([to, draft.give, draft.get, n, k].join(" ")) ? "Turned down this turn" : "An offer like it is already open";
+        if (!bank && left > 0) rows.push(el("p", `${left} ${left === 1 ? "offer" : "offers"} left this turn. ${to === NONE ? "It stays open until taken, withdrawn, or the round ends." : "They answer at once, and may counter."}`, "hint"));
+      }
+    } else if (p.phase === "answer" && !a.countered) {
+      const counters = list.filter((x) => x.do === "counter");
+      list = list.filter((x) => x.do !== "counter");
+      if (counters.length) extra = [{ value: "counter", label: "Counter-offer", note: "name your terms" }];
+      if (where === "counter" && counters.length) {
+        const can = (g, t) => counters.some((x) => x.get === g && (t === undefined || (x.n === TERMS[t][0] && x.k === TERMS[t][1])));
+        if (!can(draft.back)) draft.back = counters[0].get;
+        if (!can(draft.back, draft.counter)) draft.counter = TERMS.findIndex((_, t) => can(draft.back, t));
+        row("You give", goods(a.give, (g) => `have ${h[g]}`, (g) => !can(g)), draft.back, set("back"));
+        row(`For ${NAMES[a.from]}'s ${GOODS[a.give]}`, TERMS.map(([x, y], t) => ({ value: t, label: `Give ${y}, get ${x}`, off: !can(draft.back, t) })), draft.counter, set("counter"));
+        m = counters.find((x) => x.get === draft.back && x.n === TERMS[draft.counter][0] && x.k === TERMS[draft.counter][1]) || null;
+      }
+    }
+    const values = [...list.map(keyOf), ...extra.map((x) => x.value)];
+    if (!values.includes(where)) where = values[0] ?? null;
+    $("wheres").hidden = !values.length;
+    radio($("wheres"), [...list.map((x) => ({ value: keyOf(x), label: label(p, x), note: x.at === undefined ? undefined : `${yields(p, x.at, x.do === "depot")}${x.do === "depot" ? `: ${worth(p, x.at)} goods in 36 rolls` : ""}` })), ...extra], where, (v) => { where = v; T.refresh(); });
+    $("desk").hidden = !rows.length;
+    $("desk").replaceChildren(...rows);
+    m ||= list.find((x) => keyOf(x) === where) || null;
     $("do").disabled = !m;
-    $("do").textContent = m ? label(p, m) : p.phase === "main" ? "Nothing to do here" : "Choose a hex";
+    $("do").textContent = m ? label(p, m) : none;
     $("do").onclick = () => { if (m && T.ready()) T.play(m); };
     $("end").hidden = p.phase !== "main";
     $("end").onclick = () => { if (T.ready()) T.play({ do: "end" }); };
     T.board.light(list.filter((x) => x.at !== undefined).map((x) => x.at), { aim: m?.at ?? -1 });
   },
-  listing: (T) => { const p = T.match.position; return { head: ["Hex", "Gives", "Built"], rows: p.land.map((l, i) => i).filter((i) => p.land[i]).map((i) => [nameOf(p, i), yieldOf(p, i) || "waste", [p.depot[i] !== NONE && `${NAMES[p.depot[i]]}'s ${p.town[i] ? "town" : "depot"}`, p.route[i].length && `routes: ${p.route[i].map((s) => NAMES[s]).join(", ")}`, p.gate === i && "the toll gate"].filter(Boolean).join("; ")]) }; },
+  listing: (T) => { const p = T.match.position; return { head: ["Hex", "Gives", "In 36 rolls", "Built"], rows: p.land.map((l, i) => i).filter((i) => p.land[i]).map((i) => [nameOf(p, i), yieldOf(p, i) || "waste", pips(p, i), [p.depot[i] !== NONE && `${NAMES[p.depot[i]]}'s ${p.town[i] ? "town" : "depot"}`, p.route[i].length && `routes: ${p.route[i].map((s) => NAMES[s]).join(", ")}`, p.gate === i && "the toll gate"].filter(Boolean).join("; ")]) }; },
   changed: (T) => { where = null; card(T); },
-  seen: (T) => card(T),
+  seen(T, events) { // what just happened to the one person at the table, said at once: goods gathered, goods taken, an offer answered
+    card(T);
+    const me = T.solo() ? T.kinds.indexOf("you") : -1, said = [];
+    if (me < 0 || T.demo) return;
+    for (const e of events) {
+      if (e.kind === "harvest" && e.got[me].some((v) => v)) said.push(`You gather ${costText(e.got[me])}.`);
+      if (e.kind === "toll" && e.from === me) said.push(`${NAMES[e.seat]} takes 1 ${GOODS[e.good]} from you.`);
+      if (e.kind === "toll" && e.seat === me && e.from !== NONE) said.push(`You take 1 ${GOODS[e.good]} from ${NAMES[e.from]}.`);
+      if (e.kind === "award" && e.from === me) said.push(`${NAMES[e.seat]} takes the ${AWARDS[e.what]} from you.`);
+    }
+    if (said.length) toast(said.join(" "));
+  },
   keys(T, k, e) {
     if (k === "e") $("end").click();
+    else if (k === "l" && T.match.position.roll) ledger(T);
+    else if (k === "t" && !$("sources").hidden && legal(T).some((m) => kindOf(m) === "trade")) { kind = "trade"; where = null; T.refresh(); }
     else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "do")) { e.preventDefault(); $("do").click(); }
   },
   rules: (_, p) => { const r = p?.rule || Object.fromEntries(Object.entries(SWITCHES).map(([k, o]) => [k, o.normal])); return [ // before a game: Traditional's
@@ -217,13 +337,16 @@ createTable({
     "Each turn begins with a roll. Every hex showing that number gives one of its good to each depot on it or beside it, and two to a town. A dark hex gives nothing.",
     `Build: a route (${costText(COST.route)}) on a hex beside your routes or depots; a depot (${costText(COST.depot)}) on a hex your routes reach, with no depot on it or beside it; a town (${costText(COST.town)}) in place of a depot.`,
     r.market === "falling" ? "Sell goods for coin: 3, then 2, then 1 as more of a good is sold; prices recover each turn. Buy any good for 4 coin." : "Swap 4 of one good for 1 of any other at the bank, 3 at a port hex of yours, 2 at a port for that good.",
-    "Offer one player one good for one of theirs: they take it, turn it down, or leave it open to take on their own turn. Or offer it to anyone. An open offer stands until it is taken, you withdraw it, or the round ends. A bot takes an offer when it has more of what you ask for than of what you give, and never leaves one open.",
+    "Offer one player a good for one of theirs, one for one or up to three for one either way: they take it, turn it down, name other terms once (a counter-offer, which you take or turn down), or leave it open to take on their own turn. Or offer it to anyone. An open offer stands until it is taken, you withdraw it, or the round ends. An offer turned down cannot be made again that turn.",
+    "A bot trades when the swap brings its next build closer and costs it less than the bank would, or when it gets more goods than it gives and needs none of them. It never trades with a player two points from winning, never leaves an offer open, and asks the leader for two for one. The easy bot simply gives what it has more of.",
     ...(r.plans ? [`Draw a plan for ${costText(COST.plan)}: a harvest of two goods you lack, two free routes, a toll (move the gate and take a good), or a seal worth a point. Play one plan a turn.`] : []),
     ...(r.gate || r.hand ? [`${r.roll === "high" ? "Doubles are" : "A 7 is"} the raid roll${r.roll === "high" ? "" : ": no hex carries a 7, so nothing yields"}.${r.hand ? ` Anyone holding more than ${r.hand} goods loses half, rounded down, and chooses what.` : ""}${r.gate ? " Then the roller moves the toll gate to another hex and takes one good, unseen, from a rival with a depot on it or beside it. The hex under the gate yields nothing until it moves." : ""}`] : []),
     ...(r.awards ? [`Awards, 2 points each, held by whoever leads and passed on when beaten: the Great Road, for the most routes in one joined network (at least ${AWARD.road})${r.gate && r.plans ? `, and the Toll Warden, for the most tolls played (at least ${AWARD.warden})` : ""}.`] : []),
     ...(r.charters ? ["Charters: three public orders for six goods. Fill one for 2 points. Joining two ports with your routes scores 2."] : []),
     `Openings: each player places a depot and a route, in order and then back again. The second depot starts you with ${r.opening === "full" ? "one good for every hex on it or beside it" : "one of each good on it or beside it"}.`,
-    "Each roll rings the numbers that yield in silver, and the log says who got what. Builds you cannot pay for yet stay in the list, greyed, with what is missing; the cost card shows them all.",
-    "Keys: Tab and arrows choose, Enter acts, E ends the turn, U takes back.",
+    ...(r.spare ? [`The gentle gate: the toll gate takes nothing from a player with ${r.spare} points or fewer.`] : []),
+    "Each roll rings the numbers that yield in silver, and the log says who got what. Builds you cannot pay for yet stay in the list, greyed, with what is missing; the cost card shows them all, with your bank rates.",
+    "Rolls and goods (the Rolls button, or L) shows every roll so far against the long run, and what each player has gathered. The dice come from the game's seed and are never adjusted.",
+    "Keys: Tab and arrows choose, Enter acts, T trades, L shows the rolls, E ends the turn, U takes back.",
   ]; },
 });
