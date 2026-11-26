@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-pMg6XX9hblSuNlnSRWxamcOkh/eX5eB1WqJ0Eoyjpy4='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-A4vBLQEzux2L18hY02WtFTabdxGT3AlvM72ROn6mkT0='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo world map</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -417,7 +417,7 @@ function worldMap(canvas, world, o) {
     const inner = new Path2D(), outer = new Path2D(), coast = new Path2D(), mine = new Path2D(), me = o.mine?.();
     world.sides.forEach((ids, k) => {
       (ids.length < 2 ? coast : owners.get(ids[0]) === owners.get(ids[1]) ? inner : outer).addPath(world.lines[k]);
-      // the edge of the player's land, coast included, outlined in gold
+      // the edge of the player's land, coast included, outlined in silver
       if (me && ids.some((id) => owners.get(id) === me) && !(ids.length === 2 && owners.get(ids[0]) === owners.get(ids[1]))) mine.addPath(world.lines[k]);
     });
     layers = { owners, fills, inner, outer, coast, mine };
@@ -456,7 +456,7 @@ function worldMap(canvas, world, o) {
       c.setLineDash([]);
     }
     c.strokeStyle = "rgba(255,244,214,.7)"; c.lineWidth = 1.4 / s; c.stroke(layers.outer);
-    if (o.mine?.()) { c.strokeStyle = "#e2b866"; c.lineWidth = 2.2 / s; c.stroke(layers.mine); }
+    if (o.mine?.()) { c.strokeStyle = "#dfe5ec"; c.lineWidth = 2.2 / s; c.stroke(layers.mine); }
     labels(c, cw, ch, layers.owners);
     drawn = { ...view };
     canvas.dataset.paintMs = Math.round(performance.now() - t0); // how long a full paint takes, for checking on slow phones
@@ -474,7 +474,7 @@ function worldMap(canvas, world, o) {
     ctx.setTransform(k, 0, 0, k, (drawn.x - view.x) * view.s * d, (drawn.y - view.y) * view.s * d);
     ctx.drawImage(base, 0, 0);
     const chosen = o.picked?.(), hit = chosen && world.provinces.get(chosen);
-    if (hit) { const s = view.s; ctx.setTransform(d * s, 0, 0, d * s, -view.x * s * d, -view.y * s * d); ctx.strokeStyle = "#e2b866"; ctx.lineWidth = 2.6 / s; ctx.stroke(hit.path); }
+    if (hit) { const s = view.s; ctx.setTransform(d * s, 0, 0, d * s, -view.x * s * d, -view.y * s * d); ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2.6 / s; ctx.stroke(hit.path); }
   }
 
   // country names when far out, province names when close in; nothing printed over anything else
@@ -563,7 +563,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.6.3";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "9a0a4d53";
+const BUILD = "dca707a3";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
 return $x; })({});

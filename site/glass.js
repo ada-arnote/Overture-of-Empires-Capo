@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Grain and Glass on the table: roll, build in the hexes your routes reach, trade, and race to the points.
-import { AWARD, BUSY, COST, EXPANSIONS, GOODS, NONE, SWITCHES, WASTE, boardOf, glass, goalOf, pointsOf, rateOf, roadOf, sellPrice } from "../src/games/glass/rules.js";
+import { AWARD, BUSY, COST, EXPANSIONS, GOODS, NONE, SWITCHES, WASTE, boardOf, canPay, glass, goalOf, pointsOf, rateOf, roadOf, sellPrice } from "../src/games/glass/rules.js";
 import { choose, thinking } from "../src/games/glass/bot.js";
 import { $, NAMES, RGB, createTable, el, radio, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
@@ -9,11 +9,15 @@ const SEA = [70, 116, 140], TILE = [[226, 196, 96], [176, 206, 214], [196, 120, 
 const KINDS = { route: "Route", depot: "Depot", town: "Town", harbour: "Harbour", plan: "Plan", trade: "Trade", use: "Play a plan", answer: "Answer the offer", spoil: "Spoilage", toll: "Toll gate" };
 const PLAN = { harvest: "Harvest: two goods you lack", works: "Works: two free routes", toll: "Toll: move the gate and take a good", seal: "Seal: a point" };
 const AWARDS = { road: "Great Road", warden: "Toll Warden" };
+const BUILDS = { route: ["Route"], depot: ["Depot", "1 point"], town: ["Town", "2 points, on a depot"], harbour: ["Harbour", "on a depot by the sea"], plan: ["Plan"] };
 let kind = "depot", where = null;
 
 const legal = (T) => (T.ready() ? T.match.legal() : []);
 const nameOf = (p, i) => { const [q, r] = boardOf(p).cells[i], R = boardOf(p).radius; return String.fromCharCode(65 + r + R) + (q + R + 1 + Math.min(0, r)); };
 const costText = (c) => c.flatMap((n, k) => (n ? [`${n} ${GOODS[k]}`] : [])).join(", ");
+/** The builds this game has, and what a hand still lacks for one. */
+const buildsOf = (p) => Object.keys(BUILDS).filter((k) => (k === "harbour" ? p.harbours : k !== "plan" || (p.rule.plans && p.deck.length)));
+const missing = (h, k) => costText(COST[k].map((n, g) => Math.max(0, n - h[g])));
 const kindOf = (m) => (["swap", "sell", "buy", "offer", "charter", "take", "withdraw"].includes(m.do) ? "trade" : ["accept", "refuse", "hold"].includes(m.do) ? "answer" : m.do);
 const keyOf = (m) => (m.at !== undefined && m.from === undefined ? m.at : JSON.stringify(m)); // a hex, or the whole move where one hex has several
 const deal = (d) => `1 ${GOODS[d.give]} for 1 ${GOODS[d.get]}`;
@@ -48,9 +52,57 @@ function tap(T, i) {
   return toast(p.phase === "toll" ? "Choose a hex that yields something." : "Nothing you can build there now.");
 }
 
+/** The cost card: every build, what it is worth, and what your hand still lacks for it. Kept in view on a wide screen. */
+const costs = el("aside", undefined, "paper");
+costs.id = "costs"; costs.hidden = true; costs.setAttribute("aria-label", "Costs");
+$("seats").after(costs);
+function card(T) {
+  const p = T.match.position, me = T.human() ? p.seat : T.kinds.indexOf("you");
+  costs.hidden = T.demo || me < 0 || T.match.turn === null;
+  if (costs.hidden) return;
+  costs.replaceChildren(el("h2", "Costs"), ...buildsOf(p).map((k) => {
+    const short = p.phase === "open" ? "" : missing(p.hands[me], k), row = el("p", undefined, short ? "short" : ""); // the opening is free
+    row.append(el("b", BUILDS[k][0]), `${BUILDS[k][1] ? `, ${BUILDS[k][1]}` : ""}: ${costText(COST[k])}`, ...(short ? [el("small", `Missing ${short}`)] : []));
+    return row;
+  }));
+  const a = costs.getBoundingClientRect(), b = $("seats").getBoundingClientRect();
+  if (a.height && b.height && a.bottom + 8 > b.top) costs.hidden = true; // many seats on a short screen: the greyed builds in the move panel say the same
+}
+
+// The guided first game: a small island, 8 points to win, a gentle bot, and you place first
+const pos = (T) => T.match.position, has = (ev, ...k) => ev.some((e) => k.includes(e.kind));
+const pips = (p, i) => (p.land[i] && p.good[i] !== WASTE ? (p.rule.roll === "sum" ? 6 - Math.abs(7 - p.num[i]) : 2 * p.num[i] - 1) : 0);
+/** The legal hex where a depot would gather most, for the lesson to point at. */
+const richest = (T) => legal(T).filter((m) => m.do === "depot").map((m) => m.at).sort((a, b) => [b, ...boardOf(pos(T)).near[b]].reduce((n, i) => n + pips(pos(T), i), 0) - [a, ...boardOf(pos(T)).near[a]].reduce((n, i) => n + pips(pos(T), i), 0))[0];
+const tab = (k) => [...$("sources").children].find((b) => b.textContent.startsWith(KINDS[k]) && !b.disabled) || $("sources");
+const LESSON = {
+  seed: "lesson 1", options: { style: "custom", seats: 2, size: "small", goal: 8, opening: "full", offers: 1 }, kinds: ["you", "easy"],
+  steps: [
+    { at: (T) => (pos(T).opened % 2 ? $("wheres") : richest(T)), or: () => $("wheres"), done: (T, ev) => has(ev, "route"),
+      say: (T) => (pos(T).opened % 2 ? "Now a route, on a hex beside your depot. Routes are how you reach new hexes to build on." : "Place your first depot, on the board or in the list. It gathers from its own hex and the six around it. A hex's number is the roll that makes it yield; red 6 and 8 come up most.") },
+    { when: (T) => pos(T).phase === "open", at: (T) => (pos(T).opened % 2 ? $("wheres") : richest(T)), or: () => $("wheres"), done: (T) => pos(T).phase !== "open",
+      say: (T) => (pos(T).opened % 2 ? "And its route. Then the game begins." : "The bot has placed twice. Now your second depot: it starts you with one good for every hex around it.") },
+    { when: (T) => pos(T).phase === "main", at: (T) => pos(T).lit[0] ?? $("status"), or: () => $("info"), next: true,
+      say: (T) => { const p = pos(T), [a, b] = p.roll || [0, 0]; return `Each turn starts with a roll: ${a} and ${b} make ${a + b}. Every hex with that number gives its good to each depot on it or beside it, two to a town. Your goods are counted in the panel.`; } },
+    { when: (T) => pos(T).phase === "main", at: () => tab("trade"), next: true, done: (T, ev) => has(ev, "swap", "ask", "post", "take", "sell", "buy"),
+      say: "Short of a good? Choose Trade: swap 4 of one good for 1 of another with the bank (fewer at a port of yours), or offer the bot one for one." },
+    { when: (T) => pos(T).phase === "main", at: () => (costs.getClientRects().length ? costs : $("sources")), next: true, done: (T, ev) => has(ev, "route", "depot", "town", "plan"),
+      say: "Building scores. A route reaches a new hex; a depot on a hex your routes reach is 1 point; a town in place of a depot is 2. What you cannot pay for yet is greyed, with what is missing." },
+    { when: (T) => pos(T).phase === "main", at: () => $("end"), done: (T, ev) => has(ev, "done"),
+      say: "When you are done, press End turn. The bot plays, then you roll again." },
+    { when: (T) => pos(T).round > 1, at: (T) => (pos(T).gate === NONE ? $("status") : pos(T).gate), or: () => $("status"), next: true, done: (T, ev) => has(ev, "toll"),
+      say: (T) => `${pos(T).phase === "toll" ? "A 7: the raid roll. " : "A roll of 7 is the raid: "}nothing yields, and anyone holding more than ${pos(T).rule.hand} goods loses half. Then the roller moves the toll gate, the barrier on the board, to block a hex and take a good from a rival beside it.` },
+    { when: (T) => pos(T).round > 1 && pos(T).phase === "main", at: () => $("info"), next: true,
+      say: `Awards are 2 points each, for whoever leads: the Great Road for ${AWARD.road} routes joined, the Toll Warden for ${AWARD.warden} tolls played. A plan costs ${costText(COST.plan)}: free routes, goods, a toll, or a point.` },
+    { at: () => $("round"), next: true,
+      say: (T) => `The first to ${goalOf(pos(T))} points wins: a depot is 1, a town 2, an award 2, a seal 1. The goal stays at the top of the screen. That is the lesson; play on.` },
+  ],
+};
+
 createTable({
   game: glass, key: "glass", title: "Grain and Glass", won: "The island's trade is yours.", outOf: () => false /* nobody is knocked out of a trading game */, seats: [2, 3, 4, 5, 6], normal: 3, lengths: [], pace: () => 420,
-  unit: "Points", cellsOf: pointsOf, goalOf, landOf: (p) => goalOf(p) + 3, choose, thinking,
+  unit: "Points", cellsOf: pointsOf, goalOf, landOf: (p) => goalOf(p) + 3, choose, thinking, lesson: LESSON,
+  roundText: (p, wide = innerWidth > 820) => (p.over ? null : `Round ${p.round}${p.classic ? "" : `${wide ? " of " : "/"}${p.rounds}`}, ${goalOf(p)}${wide ? " points" : ""} to win`), // the goal in view all game
   about: {
     classic: "Traditional: inspired by Catan.\nThe settle-and-trade rules as players know them: hexes yield goods when their number is rolled, you build routes, depots and towns, trade with the bank and the other players, buy cards, and race to 10 points. A 7 spoils big hands and sends the toll gate to block a hex and take a good; the Great Road and the Toll Warden are worth 2 points to whoever leads; two free depots and routes to start, in order and back; offers can stay open. Ours: depots and towns stand in hexes and gather from the hexes beside them, our own goods, costs and plans, and the first player drawn by dice.\nNot affiliated with or endorsed by its makers. Our own island, names and art.",
     custom: "Custom: your own rules.\nSet every rule yourself: the island, the harvest roll, the points to win, the market, charters, the toll gate, plans, spoilage, awards, the opening, trade offers, actions a turn and the number of rounds. Add any expansions on top.",
@@ -106,6 +158,7 @@ createTable({
   board(T, stage) {
     const p = T.match.position, b = boardOf(p), sea = b.cells.map((_, i) => !p.land[i]), none = b.cells.map(() => false);
     document.body.classList.remove("atlas");
+    card(T);
     return hexBoard(T, stage, {
       cells: b.cells, rough: none, sea, plain: true, ground: (i) => (sea[i] ? SEA : p.good[i] === WASTE ? WASTEG : TILE[p.good[i]]),
       owner: () => b.cells.map(() => NONE),
@@ -122,21 +175,26 @@ createTable({
       },
       tap: (i) => tap(T, i),
       can: (i) => legal(T).some((m) => m.at === i),
+      fit: b.cells.flatMap((_, i) => (p.land[i] || b.near[i].some((m) => p.land[m]) ? [i] : [])), // the island and the sea beside it fill the screen
     });
   },
   panel(T) {
     const p = T.match.position, all = legal(T), s = p.seat, kinds = [...new Set(all.filter((m) => m.do !== "end").map(kindOf))];
     if (!kinds.includes(kind)) kind = kinds.includes("depot") ? "depot" : kinds[0] || "trade";
+    card(T);
+    // every build stays in the row: one you cannot make yet is greyed, and says what is missing or why
+    const shown = p.phase === "main" ? [...buildsOf(p), ...kinds.filter((k) => !BUILDS[k])] : kinds;
+    const why = (k) => (missing(p.hands[s], k) ? `missing ${missing(p.hands[s], k)}` : p.left <= 0 ? "no actions left" : { route: "nowhere to lay one", depot: "no free hex your routes reach", town: "no depot to raise", harbour: "no depot by the sea", plan: "none left" }[k]);
     const list = all.filter((m) => m.do !== "end" && kindOf(m) === kind);
     if (!list.some((m) => keyOf(m) === where)) where = list[0] ? keyOf(list[0]) : null;
-    const roll = p.roll ? ` Rolled ${p.roll[0]} and ${p.roll[1]}: ${p.lit.length ? `${p.lit.length} ${p.lit.length === 1 ? "hex yields" : "hexes yield"}, ringed in gold` : "nothing yields"}.` : "";
+    const roll = p.roll ? ` Rolled ${p.roll[0]} and ${p.roll[1]}, so ${p.rule.roll === "sum" ? p.roll[0] + p.roll[1] : Math.max(...p.roll)}: ${p.lit.length ? `${p.lit.length} ${p.lit.length === 1 ? "hex yields" : "hexes yield"}, ringed on the board` : "nothing yields"}.` : "";
     const phase = { open: `Place your ${p.opened % 2 ? "route" : "depot"}`, toll: p.played ? "Move the toll gate: block a hex and take a good from a rival beside it." : `${raidText(p)}: move the toll gate, block a hex and take a good from a rival beside it.${roll}`, works: "Lay your free routes",
       spoil: `${raidText(p)}: spoilage. ${NAMES[s]} holds more than ${p.rule.hand} goods and loses ${p.spoil[s]} more.`, answer: p.ask && `${NAMES[p.ask.from]} offers ${NAMES[s]} 1 ${GOODS[p.ask.give]} for 1 ${GOODS[p.ask.get]}.` }[p.phase];
     $("status").textContent = phase || `${T.solo() ? "Your turn" : `${NAMES[s]}'s turn`}.${roll}`;
     $("info").replaceChildren(...GOODS.map((g, k) => { const b = el("span", `${p.hands[s][k]} ${g}`); b.style.background = `rgb(${TILE[k]})`; return b; }), ...(p.rule.market === "falling" ? [el("span", `${p.coin[s]} coin`)] : []), el("span", `${pointsOf(p, s)} of ${goalOf(p)} points`),
       ...(p.rule.awards ? [el("span", held(p).join(", ") || `Great Road: ${roadOf(p, s)} of ${AWARD.road} routes`)] : []), ...(p.deals.length ? [el("span", `${p.deals.length} open ${p.deals.length === 1 ? "offer" : "offers"}`)] : []));
     $("sources").hidden = p.phase !== "main" || !kinds.length;
-    radio($("sources"), kinds.map((k) => ({ value: k, label: KINDS[k], note: COST[k] ? costText(COST[k]) : undefined })), kind, (v) => { kind = v; where = null; T.refresh(); });
+    radio($("sources"), shown.map((k) => ({ value: k, label: KINDS[k], off: !kinds.includes(k), note: !kinds.includes(k) ? why(k) : COST[k] ? costText(COST[k]) : undefined })), kind, (v) => { kind = v; where = null; T.refresh(); });
     $("wheres").hidden = !list.length;
     radio($("wheres"), list.map((m) => ({ value: keyOf(m), label: label(p, m), note: m.at === undefined ? undefined : yields(p, m.at, m.do === "depot") })), where, (v) => { where = v; T.refresh(); });
     const m = list.find((x) => keyOf(x) === where);
@@ -148,15 +206,16 @@ createTable({
     T.board.light(list.filter((x) => x.at !== undefined).map((x) => x.at), { aim: m?.at ?? -1 });
   },
   listing: (T) => { const p = T.match.position; return { head: ["Hex", "Gives", "Built"], rows: p.land.map((l, i) => i).filter((i) => p.land[i]).map((i) => [nameOf(p, i), yieldOf(p, i) || "waste", [p.depot[i] !== NONE && `${NAMES[p.depot[i]]}'s ${p.town[i] ? "town" : "depot"}`, p.route[i].length && `routes: ${p.route[i].map((s) => NAMES[s]).join(", ")}`, p.gate === i && "the toll gate"].filter(Boolean).join("; ")]) }; },
-  changed: () => { where = null; },
+  changed: (T) => { where = null; card(T); },
+  seen: (T) => card(T),
   keys(T, k, e) {
     if (k === "e") $("end").click();
     else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "do")) { e.preventDefault(); $("do").click(); }
   },
   rules: (_, p) => { const r = p?.rule || Object.fromEntries(Object.entries(SWITCHES).map(([k, o]) => [k, o.normal])); return [ // before a game: Traditional's
+    `The first to ${r.goal} points wins. A depot is worth 1, a town 2, each award 2, a seal 1.`,
     "Each turn begins with a roll. Every hex showing that number gives one of its good to each depot on it or beside it, and two to a town. A dark hex gives nothing.",
     `Build: a route (${costText(COST.route)}) on a hex beside your routes or depots; a depot (${costText(COST.depot)}) on a hex your routes reach, with no depot on it or beside it; a town (${costText(COST.town)}) in place of a depot.`,
-    "A depot is worth 1 point and a town 2.",
     r.market === "falling" ? "Sell goods for coin: 3, then 2, then 1 as more of a good is sold; prices recover each turn. Buy any good for 4 coin." : "Swap 4 of one good for 1 of any other at the bank, 3 at a port hex of yours, 2 at a port for that good.",
     "Offer one player one good for one of theirs: they take it, turn it down, or leave it open to take on their own turn. Or offer it to anyone. An open offer stands until it is taken, you withdraw it, or the round ends. A bot takes an offer when it has more of what you ask for than of what you give, and never leaves one open.",
     ...(r.plans ? [`Draw a plan for ${costText(COST.plan)}: a harvest of two goods you lack, two free routes, a toll (move the gate and take a good), or a seal worth a point. Play one plan a turn.`] : []),
@@ -164,7 +223,7 @@ createTable({
     ...(r.awards ? [`Awards, 2 points each, held by whoever leads and passed on when beaten: the Great Road, for the most routes in one joined network (at least ${AWARD.road})${r.gate && r.plans ? `, and the Toll Warden, for the most tolls played (at least ${AWARD.warden})` : ""}.`] : []),
     ...(r.charters ? ["Charters: three public orders for six goods. Fill one for 2 points. Joining two ports with your routes scores 2."] : []),
     `Openings: each player places a depot and a route, in order and then back again. The second depot starts you with ${r.opening === "full" ? "one good for every hex on it or beside it" : "one of each good on it or beside it"}.`,
-    "Each roll rings the hexes that yield in gold, and the log says who got what.",
+    "Each roll rings the numbers that yield in silver, and the log says who got what. Builds you cannot pay for yet stay in the list, greyed, with what is missing; the cost card shows them all.",
     "Keys: Tab and arrows choose, Enter acts, E ends the turn, U takes back.",
   ]; },
 });

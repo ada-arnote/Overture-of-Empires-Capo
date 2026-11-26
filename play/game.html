@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-eiyCxAmLWLLwA+pqQSCxUXTvprYDohITeNuYatq4PnE='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-1yaoS0Sfee3+qbx9x0U7KHbJZ4Rp3nl5RNnRTT5ALx8='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -1722,7 +1722,7 @@ function worldMap(canvas, world, o) {
     const inner = new Path2D(), outer = new Path2D(), coast = new Path2D(), mine = new Path2D(), me = o.mine?.();
     world.sides.forEach((ids, k) => {
       (ids.length < 2 ? coast : owners.get(ids[0]) === owners.get(ids[1]) ? inner : outer).addPath(world.lines[k]);
-      // the edge of the player's land, coast included, outlined in gold
+      // the edge of the player's land, coast included, outlined in silver
       if (me && ids.some((id) => owners.get(id) === me) && !(ids.length === 2 && owners.get(ids[0]) === owners.get(ids[1]))) mine.addPath(world.lines[k]);
     });
     layers = { owners, fills, inner, outer, coast, mine };
@@ -1761,7 +1761,7 @@ function worldMap(canvas, world, o) {
       c.setLineDash([]);
     }
     c.strokeStyle = "rgba(255,244,214,.7)"; c.lineWidth = 1.4 / s; c.stroke(layers.outer);
-    if (o.mine?.()) { c.strokeStyle = "#e2b866"; c.lineWidth = 2.2 / s; c.stroke(layers.mine); }
+    if (o.mine?.()) { c.strokeStyle = "#dfe5ec"; c.lineWidth = 2.2 / s; c.stroke(layers.mine); }
     labels(c, cw, ch, layers.owners);
     drawn = { ...view };
     canvas.dataset.paintMs = Math.round(performance.now() - t0); // how long a full paint takes, for checking on slow phones
@@ -1779,7 +1779,7 @@ function worldMap(canvas, world, o) {
     ctx.setTransform(k, 0, 0, k, (drawn.x - view.x) * view.s * d, (drawn.y - view.y) * view.s * d);
     ctx.drawImage(base, 0, 0);
     const chosen = o.picked?.(), hit = chosen && world.provinces.get(chosen);
-    if (hit) { const s = view.s; ctx.setTransform(d * s, 0, 0, d * s, -view.x * s * d, -view.y * s * d); ctx.strokeStyle = "#e2b866"; ctx.lineWidth = 2.6 / s; ctx.stroke(hit.path); }
+    if (hit) { const s = view.s; ctx.setTransform(d * s, 0, 0, d * s, -view.x * s * d, -view.y * s * d); ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2.6 / s; ctx.stroke(hit.path); }
   }
 
   // country names when far out, province names when close in; nothing printed over anything else
@@ -1925,7 +1925,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.6.3";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "5cbda7f3";
+const BUILD = "4ad52025";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
 return $x; })({});
@@ -2113,7 +2113,7 @@ function home() {
 }
 
 // ---- map views: countries in their own colours, friends and foes of the player, or might ----
-const RELATION = { you: "#e2b866", alliance: "#4f9a6b", defence: "#5fa08a", trade: "#4a7fa8", war: "#c9553f", none: "#4b5354" };
+const RELATION = { you: "#d3dbe4", alliance: "#4f9a6b", defence: "#5fa08a", trade: "#4a7fa8", war: "#c9553f", none: "#4b5354" };
 function viewColour(code) {
   if (!state || view === "countries") return colourOf(code);
   if (view === "might") { const m = mightOf(geo(), code); return `hsl(${40 - m * 4} ${30 + m * 5}% ${20 + m * 5}%)`; }
@@ -2790,7 +2790,7 @@ const GUIDED = "capo-guide-1";
 const dockButton = (i) => () => $("dock").children[i];
 const GUIDE = [
   [() => null, "Welcome to Capo", () => `You lead ${name(state.player)}. This shows one turn, start to finish: about a minute.`],
-  [() => $("map"), "The world", () => "Drag to move and pinch or scroll to zoom. Tap any province to see who holds it, its neighbours, and anything disputed. Your land has a gold edge."],
+  [() => $("map"), "The world", () => "Drag to move and pinch or scroll to zoom. Tap any province to see who holds it, its neighbours, and anything disputed. Your land has a silver edge."],
   [dockButton(0), "1. Decide", () => "Write what you do in Actions, in your own words, as many as you like. Ideas are there to start you off."],
   [() => $("top").querySelector("select"), "2. Choose how far", () => "Jump a week, a month, a year, any length, or until something happens."],
   [() => $("top").querySelector("button.go"), "3. Advance", () => "Capo writes a prompt. Copy it into a new chat with any AI you use and paste the whole reply back. Or give Capo an AI's address in the Game menu, and it asks for you."],

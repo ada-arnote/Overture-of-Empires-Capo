@@ -96,7 +96,7 @@ export function worldMap(canvas, world, o) {
     const inner = new Path2D(), outer = new Path2D(), coast = new Path2D(), mine = new Path2D(), me = o.mine?.();
     world.sides.forEach((ids, k) => {
       (ids.length < 2 ? coast : owners.get(ids[0]) === owners.get(ids[1]) ? inner : outer).addPath(world.lines[k]);
-      // the edge of the player's land, coast included, outlined in gold
+      // the edge of the player's land, coast included, outlined in silver
       if (me && ids.some((id) => owners.get(id) === me) && !(ids.length === 2 && owners.get(ids[0]) === owners.get(ids[1]))) mine.addPath(world.lines[k]);
     });
     layers = { owners, fills, inner, outer, coast, mine };
@@ -135,7 +135,7 @@ export function worldMap(canvas, world, o) {
       c.setLineDash([]);
     }
     c.strokeStyle = "rgba(255,244,214,.7)"; c.lineWidth = 1.4 / s; c.stroke(layers.outer);
-    if (o.mine?.()) { c.strokeStyle = "#e2b866"; c.lineWidth = 2.2 / s; c.stroke(layers.mine); }
+    if (o.mine?.()) { c.strokeStyle = "#dfe5ec"; c.lineWidth = 2.2 / s; c.stroke(layers.mine); }
     labels(c, cw, ch, layers.owners);
     drawn = { ...view };
     canvas.dataset.paintMs = Math.round(performance.now() - t0); // how long a full paint takes, for checking on slow phones
@@ -153,7 +153,7 @@ export function worldMap(canvas, world, o) {
     ctx.setTransform(k, 0, 0, k, (drawn.x - view.x) * view.s * d, (drawn.y - view.y) * view.s * d);
     ctx.drawImage(base, 0, 0);
     const chosen = o.picked?.(), hit = chosen && world.provinces.get(chosen);
-    if (hit) { const s = view.s; ctx.setTransform(d * s, 0, 0, d * s, -view.x * s * d, -view.y * s * d); ctx.strokeStyle = "#e2b866"; ctx.lineWidth = 2.6 / s; ctx.stroke(hit.path); }
+    if (hit) { const s = view.s; ctx.setTransform(d * s, 0, 0, d * s, -view.x * s * d, -view.y * s * d); ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2.6 / s; ctx.stroke(hit.path); }
   }
 
   // country names when far out, province names when close in; nothing printed over anything else

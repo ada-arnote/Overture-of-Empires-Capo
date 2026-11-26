@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-crOi0ouzDqd1iK63rzCNmkafZy+SOTBnbd4ZSFx3PKE='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-lzRsRi62yBaR5kLv7t42b0GzKKQhTFmsD7++CxgGeuE='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Grain and Glass</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -289,6 +289,16 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
 @media (prefers-reduced-motion: reduce) { #coach-ring { animation: none } }
 </style>
 <link rel="icon" href="data:,">
+<style>
+/* the cost card: a paper note at the top left on a wide screen; on a phone the move panel's greyed builds say the same */
+#costs { position: fixed; z-index: 2; left: max(16px, env(safe-area-inset-left)); top: 16px; width: 208px; padding: 10px 12px 12px; border-radius: var(--r-2); box-shadow: var(--lift-1); zoom: var(--ui-scale); font: var(--fs-1)/1.35 var(--sans) }
+#costs h2 { font: 700 var(--fs-1)/1.3 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent); margin-bottom: 6px }
+#costs p + p { margin-top: 6px } #costs b { font-size: var(--fs-2) } #costs small { display: block; font-weight: 700 }
+#costs .short { color: var(--text-3) } #costs .short b { font-weight: 400 }
+.menu #costs { display: none }
+@media (max-width: 820px), (max-height: 640px) { #costs { display: none } }
+@media (max-width: 820px) { #round { font-size: var(--fs-2) } } /* room for the goal beside the round */
+</style>
 </head>
 <body class="menu">
 <p id="broken" class="broken">If nothing happens, this copy was opened as a file. Open <b>play-glass.html</b> from the dist folder instead.</p>
@@ -320,7 +330,7 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
 <main id="title" class="title">
   <p class="eyebrow">Overture of Empires: Capo</p>
   <h1>Grain and<br>Glass</h1>
-  <p class="tag">A settle-and-trade game. Roll for goods, build, trade, and race to the points.</p>
+  <p class="tag">A settle-and-trade game. Roll for goods, build, trade, and race to 10 points.</p>
   <div class="panel card">
     <div class="go"><button id="resume" type="button" class="quiet" hidden>Continue</button><button id="quick" type="button" class="main">Play</button></div>
     <p id="preset" class="about"></p>
@@ -1828,7 +1838,7 @@ void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2
 const FS = `#version 300 es
 precision highp float; precision highp int;
 uniform sampler2D uId,uHt,uTab; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell;
-uniform vec3 uInk,uPale,uWall,uGlow; out vec4 o;
+uniform vec3 uInk,uPale,uWall,uGlow,uLand; out vec4 o;
 int raw(ivec2 t){ if(t.x<0||t.y<0||t.x>=int(uSize.x)||t.y>=int(uSize.y)) return 0; vec4 v=texelFetch(uId,t,0); return int(v.r*255.+.5)+256*int(v.g*255.+.5); }
 int idAt(vec2 p){ return raw(ivec2(floor(p))); }
 int idSoft(vec2 p){ vec2 q=p-.5,f=fract(q); ivec2 b=ivec2(floor(q)); int a=raw(b),c=raw(b+ivec2(1,0)),d=raw(b+ivec2(0,1)),e=raw(b+ivec2(1,1));
@@ -1869,7 +1879,7 @@ vec3 face(vec2 p,int id,float foot){
     // beside owned land only the owned side draws the edge, so the ink meets the ground as it is
     else if(!them){ float l=dot(a.rgb,vec3(.3,.6,.1)); vec3 line=l>.36?uInk:uPale; c=mix(c,near?line:mix(line,a.rgb,.55),near?.42:.15); } }
   else if(edge) c=mix(c,uInk,b.a<.99?.46:.16);
-  if(land) c=mix(c,uGlow,own?.6:.92);
+  if(land) c=mix(c,uLand,own?.6:.92);
   float gl=b.g; if(gl>0.){ float pulse=uTime<=0.?1.:.72+.28*cos(uTime*6.2832); c=mix(c,uGlow,gl*(edge?.95:.34*pulse)); }
   return c; }
 void main(){
@@ -1951,7 +1961,7 @@ class Painter {
     g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform2f(u.uLight, -0.6, -0.8);
     g.uniform1f(u.uS, cam.s); g.uniform1f(u.uQ, cam.q); g.uniform1f(u.uDpr, dpr); g.uniform1f(u.uUnit, o.unit); g.uniform1f(u.uMost, o.most); g.uniform1f(u.uRelief, o.relief); g.uniform1f(u.uTime, o.time); g.uniform1f(u.uPat, o.pat ? 1 : 0); g.uniform1f(u.uCell, m.R);
     const f3 = (k, c) => g.uniform3f(u[k], c[0] / 255, c[1] / 255, c[2] / 255);
-    f3("uInk", o.ink); f3("uPale", o.pale); f3("uWall", o.wall); f3("uGlow", o.glow);
+    f3("uInk", o.ink); f3("uPale", o.pale); f3("uWall", o.wall); f3("uGlow", o.glow); f3("uLand", o.land || o.glow);
     g.drawArrays(g.TRIANGLES, 0, 3);
   }
   destroy() { this.g.getExtension("WEBGL_lose_context")?.loseContext(); }
@@ -2029,13 +2039,13 @@ function canDraw() {
   return !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(name);
 }
 
-function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44 }) {
+function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null }) {
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
   const m = picture || hexPicture(cells, rough, sea, size), painter = new Painter(under), cam = new Camera(), system = matchMedia("(prefers-reduced-motion: reduce)");
   painter.load(m);
-  const ends = m.ends || m.mid.flatMap(([x, y]) => [[x - m.R, y], [x + m.R, y], [x, y - m.R], [x, y + m.R]]);
+  const ends = m.ends || (fit ? fit.map((i) => m.mid[i]) : m.mid).flatMap(([x, y]) => [[x - m.R, y], [x + m.R, y], [x, y - m.R], [x, y + m.R]]); // fit: the cells worth framing (an island without most of its sea)
   const show = m.mid.map((_, i) => ({ land: lands?.[i], rgb: ground(i), from: ground(i), to: ground(i), owner: -1, top: sea[i] ? 0.2 : 1, topTo: sea[i] ? 0.2 : 1, glow: 0, wet: 0, start: 0, ends: 0 }));
   const tops = new Float32Array(m.n + 1), listeners = { pick: [], hover: [] };
   let L = LOOKS[look], lookName = look, motion = "system", pat = false, queued = false, dirty = true, alive = true, spots = [], hovering = -1, swing = null, until = 0, lit = 0, marks = [], point = null;
@@ -2072,7 +2082,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     const beat = calm() || !lit ? 0 : Math.max(0, 1.5 - (t - lit) / 1000); // a preview pulses briefly, then the board is still
     if (beat > 0) moving = true;
     if (dirty) { painter.send(show); dirty = false; }
-    painter.draw(cam, dpr(), { unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, pat, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [255, 226, 150] });
+    painter.draw(cam, dpr(), { unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, pat, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [226, 233, 241], land: [255, 226, 150] }); // silver marks what can be chosen; the lands keep their own line
     drawOver(t);
     if (moving) redraw();
   }
@@ -2080,7 +2090,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   /** A standing figure. Its rank shows as bars on its chest; one that has acted is dimmed. */
   function figure(s, x, y, h) {
     ctx.beginPath(); ctx.ellipse(x + h * 0.08, y, h * 0.34, h * 0.13, 0, 0, 7); ctx.fillStyle = "rgba(12,9,7,.42)"; ctx.fill();
-    if (s.now) { ctx.beginPath(); ctx.ellipse(x, y, h * 0.42, h * 0.17, 0, 0, 7); ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(255,233,181,.95)"; ctx.stroke(); }
+    if (s.now) { ctx.beginPath(); ctx.ellipse(x, y, h * 0.42, h * 0.17, 0, 0, 7); ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(238,243,248,.95)"; ctx.stroke(); }
     ctx.save(); ctx.translate(x, y); ctx.scale(h, h);
     ctx.beginPath(); ctx.moveTo(-0.27, 0); ctx.quadraticCurveTo(-0.25, -0.34, -0.17, -0.58); ctx.lineTo(-0.1, -0.62); ctx.arc(0, -0.8, 0.19, 2.1, 7.32); ctx.lineTo(0.17, -0.58); ctx.quadraticCurveTo(0.25, -0.34, 0.27, 0); ctx.closePath();
     ctx.lineWidth = 3.2 / h; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(20,15,12,.95)"; ctx.stroke();
@@ -2110,7 +2120,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       ctx.restore();
     }
     const q = Math.max(9.5, r * (s.seat < 0 ? 0.56 : 0.68));
-    ctx.beginPath(); ctx.arc(x, y, q, 0, 7); ctx.fillStyle = s.seat < 0 ? "rgba(214,202,172,.94)" : s.now ? "#ffe9b5" : "#f6eedb"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = s.seat < 0 ? "#1a1411" : `rgb(${s.rgb.map((v) => Math.round(v * 0.45))})`; ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, y, q, 0, 7); ctx.fillStyle = s.seat < 0 ? "rgba(214,202,172,.94)" : s.now ? "#dfe8f3" : "#f6eedb"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = s.seat < 0 ? "#1a1411" : `rgb(${s.rgb.map((v) => Math.round(v * 0.45))})`; ctx.stroke();
     if (s.seat >= 0) { emblem(ctx, icons[s.seat], x + q * 1.15, y - q * 0.15, q * 0.95); ctx.lineWidth = 2.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.fillStyle = "#fdf6e4"; ctx.fill("evenodd"); }
     if (s.cap) { emblem(ctx, 3, x - q * 1.2, y - q * 0.1, q * 1.1); ctx.lineWidth = 2.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.fillStyle = "#ffd76a"; ctx.fill(); }
     if (s.leader) { emblem(ctx, 8, x, y - r * 2.15, q * 1.1); ctx.lineWidth = 2.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.fillStyle = "#ffd76a"; ctx.fill(); }
@@ -2120,7 +2130,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     cam.projectTo(m.mid[a][0], m.mid[a][1], show[a].top * unit()); const x = cam.px, y = cam.py; cam.projectTo(m.mid[b][0], m.mid[b][1], show[b].top * unit());
     const X = cam.px, Y = cam.py, long = Math.hypot(X - x, Y - y) || 1, u = (X - x) / long, v = (Y - y) / long, w = 5, g = 15, p = (t, n) => [x + u * t - v * n, y + v * t + u * n], s = Math.min(16, long / 4), e = Math.max(s + 2, long - 17);
     ctx.beginPath(); [p(s, -w / 2), p(e - g, -w), p(e - g, -w * 2.2), p(e, 0), p(e - g, w * 2.2), p(e - g, w), p(s, w / 2)].forEach(([i, j], k) => (k ? ctx.lineTo(i, j) : ctx.moveTo(i, j))); ctx.closePath();
-    ctx.fillStyle = "rgba(255,226,150,.92)"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#1a1411"; ctx.stroke();
+    ctx.fillStyle = "rgba(232,238,245,.94)"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#1a1411"; ctx.stroke();
   }
 
   function drawOver(t) {
@@ -2152,16 +2162,18 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       cam.projectTo(a[0], a[1], 0.6 * unit()); const x = cam.px, y = cam.py; cam.projectTo(b[0], b[1], 0.6 * unit());
       ctx.setLineDash([7, 6]); ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(250,240,214,.8)"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(cam.px, cam.py); ctx.stroke(); ctx.setLineDash([]);
     }
+    const chosen = new Set(spots.flatMap((s) => (s.kind === "dot" && !s.small ? [s.at] : []))), numbered = new Set(spots.flatMap((s) => (s.kind === "token" ? [s.at] : [])));
     for (const s of spots) { // things that grow or are built on the ground
       if (!["tree", "cairn", "farm", "fort", "token", "route", "depot", "town", "gate", "port"].includes(s.kind)) continue;
       cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit());
       const x = cam.px, y = cam.py, h = size * 0.62 * cam.pk;
       ctx.lineJoin = "round"; ctx.lineWidth = 2; ctx.strokeStyle = "#1a1411";
       if (s.kind === "token") { // the hex's number, red when it comes up often
-        const r = Math.max(10, h * 0.46);
+        const r = Math.min(size * 0.4 * cam.pk, Math.max(10, h * 0.46)); // never so big that the ground's colour is lost, or tokens touch on a small screen
+        if (chosen.has(s.at) && size * cam.pk >= 30) { ctx.beginPath(); ctx.arc(x, y, r + Math.max(3, r * 0.3), 0, 7); ctx.lineWidth = 5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.lineWidth = 2.5; ctx.strokeStyle = "#eef2f6"; ctx.stroke(); ctx.strokeStyle = "#1a1411"; } // can be chosen: a ring round the number, which stays in view (small hexes have only their bright edge, so the ground still shows)
         ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = "#f3e7c6"; ctx.fill();
-        if (s.lit) { ctx.lineWidth = Math.max(4, r * 0.35); ctx.strokeStyle = "#ffd24a"; ctx.stroke(); ctx.strokeStyle = "#1a1411"; } // it yielded on the last roll
         ctx.lineWidth = 1.5; ctx.stroke();
+        if (s.lit) { const b = Math.max(4, r * 0.4); ctx.beginPath(); ctx.arc(x, y, r + b / 2, 0, 7); ctx.lineWidth = b + 3; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.lineWidth = b; ctx.strokeStyle = "#f6f8fb"; ctx.stroke(); } // it yielded on the last roll: a bright band round the number
         ctx.fillStyle = s.hot ? "#b0302a" : "#1a1411"; ctx.font = `700 ${Math.round(r * 1.05)}px Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(s.n), x, y + 1);
         continue;
       }
@@ -2190,16 +2202,16 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
         ctx.fillStyle = "#2f5a34"; ctx.fill(); ctx.stroke();
       }
     }
-    for (const s of spots) if (s.kind === "dot") {
+    for (const s of spots) if (s.kind === "dot" && !numbered.has(s.at)) { // a numbered hex is ringed round its number instead
       cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit());
       const held = spots.some((x) => x.at === s.at && (x.kind === "unit" || x.kind === "tower" || x.kind === "army")), r = size * (held ? 0.62 : s.small ? 0.1 : 0.15);
       ctx.beginPath(); ctx.ellipse(cam.px, cam.py, r, r * flat, 0, 0, 7);
-      if (held) { ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,226,150,.95)"; ctx.stroke(); continue; }
-      ctx.fillStyle = "rgba(255,226,150,.95)"; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(24,20,18,.8)"; ctx.stroke();
+      if (held) { ctx.lineWidth = 5; ctx.strokeStyle = "rgba(24,20,18,.55)"; ctx.stroke(); ctx.lineWidth = 3; ctx.strokeStyle = "rgba(238,243,248,.95)"; ctx.stroke(); continue; }
+      ctx.fillStyle = "rgba(238,243,248,.95)"; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(24,20,18,.8)"; ctx.stroke();
     }
     for (const s of spots) if (s.kind === "ring") {
       cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit());
-      ctx.beginPath(); ctx.ellipse(cam.px, cam.py, size * 0.7, size * 0.7 * flat, 0, 0, 7); ctx.fillStyle = s.aim ? "rgba(255,255,255,.25)" : "rgba(255,226,150,.28)"; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = s.aim ? "#ffffff" : "#ffe296"; ctx.stroke(); if (s.aim) { ctx.lineWidth = 1.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); }
+      ctx.beginPath(); ctx.ellipse(cam.px, cam.py, size * 0.7, size * 0.7 * flat, 0, 0, 7); ctx.fillStyle = s.aim ? "rgba(255,255,255,.25)" : "rgba(226,233,241,.28)"; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = s.aim ? "#ffffff" : "#dfe6ee"; ctx.stroke(); if (s.aim) { ctx.lineWidth = 1.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); }
     }
     const stand = spots.filter((s) => s.kind === "tower" || s.kind === "unit" || s.kind === "army").map((s) => { cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit()); return { s, x: cam.px, y: cam.py, k: cam.pk }; }).sort((a, b) => a.y - b.y);
     for (const { s, x, y, k } of stand) {
@@ -2212,7 +2224,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       g.addColorStop(0, `rgb(${c.map((v) => Math.min(255, Math.round(v * 1.45 + 24)))})`); g.addColorStop(1, `rgb(${c.map((v) => Math.round(v * 0.62))})`);
       tower(ctx); ctx.lineWidth = 3.4 / h; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(20,15,12,.95)"; ctx.stroke(); ctx.fillStyle = g; ctx.fill(); ctx.restore();
       const r = Math.max(10.5, h * 0.26), by = foot - h * 0.34;
-      ctx.beginPath(); ctx.arc(x, by, r, 0, 7); ctx.fillStyle = s.warn ? "#f2a08c" : s.now ? "#ffe9b5" : "#f6eedb"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#1a1411"; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, by, r, 0, 7); ctx.fillStyle = s.warn ? "#f2a08c" : s.now ? "#dfe8f3" : "#f6eedb"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#1a1411"; ctx.stroke();
       ctx.fillStyle = "#1a1411"; ctx.font = `700 ${Math.round(r * 1.12)}px system-ui,"Segoe UI",sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(s.count), x, by + 0.5);
     }
     if (point) arrow(...point);
@@ -2339,7 +2351,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.6.3";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "71bb4bc0";
+const BUILD = "bf249b64";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
 return $x; })({});
@@ -3490,7 +3502,7 @@ function patterns(make, f) {
 }
 
 /**
- * o.picture and o.fine { cells, of } for a board of provinces. Otherwise o: cells (axial), rough[], sea[], ground(i), owner() -> seats or -1 by cell, pieces() -> standing pieces, tap(i), can(i).
+ * o.picture and o.fine { cells, of } for a board of provinces. Otherwise o: cells (axial), fit (the cells to frame, or all), rough[], sea[], ground(i), owner() -> seats or -1 by cell, pieces() -> standing pieces, tap(i), can(i).
  */
 function hexBoard(T, stage, o) {
   let b = null, svg = null, pat = false;
@@ -3520,7 +3532,7 @@ function hexBoard(T, stage, o) {
   };
   if (canDraw()) {
     try {
-      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, look: LOOKS[kept] ? kept : wide && !o.plain ? "relief" : "flat" });
+      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, fit: o.fit, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, look: LOOKS[kept] ? kept : wide && !o.plain ? "relief" : "flat" });
       b.on("pick", (i) => { if (i >= 0) o.tap(i); });
       b.on("hover", (i) => b?.setCursor(i >= 0 && T.ready() && o.can(i)));
       b.on("lost", () => { b = null; still(); });
@@ -3547,7 +3559,7 @@ return $x; })({});
 $m[0] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Grain and Glass on the table: roll, build in the hexes your routes reach, trade, and race to the points.
-const { AWARD, BUSY, COST, EXPANSIONS, GOODS, NONE, SWITCHES, WASTE, boardOf, glass, goalOf, pointsOf, rateOf, roadOf, sellPrice } = $m[1];
+const { AWARD, BUSY, COST, EXPANSIONS, GOODS, NONE, SWITCHES, WASTE, boardOf, canPay, glass, goalOf, pointsOf, rateOf, roadOf, sellPrice } = $m[1];
 const { choose, thinking } = $m[3];
 const { $, NAMES, RGB, createTable, el, radio, toast } = $m[12];
 const { hexBoard } = $m[23];
@@ -3556,11 +3568,15 @@ const SEA = [70, 116, 140], TILE = [[226, 196, 96], [176, 206, 214], [196, 120, 
 const KINDS = { route: "Route", depot: "Depot", town: "Town", harbour: "Harbour", plan: "Plan", trade: "Trade", use: "Play a plan", answer: "Answer the offer", spoil: "Spoilage", toll: "Toll gate" };
 const PLAN = { harvest: "Harvest: two goods you lack", works: "Works: two free routes", toll: "Toll: move the gate and take a good", seal: "Seal: a point" };
 const AWARDS = { road: "Great Road", warden: "Toll Warden" };
+const BUILDS = { route: ["Route"], depot: ["Depot", "1 point"], town: ["Town", "2 points, on a depot"], harbour: ["Harbour", "on a depot by the sea"], plan: ["Plan"] };
 let kind = "depot", where = null;
 
 const legal = (T) => (T.ready() ? T.match.legal() : []);
 const nameOf = (p, i) => { const [q, r] = boardOf(p).cells[i], R = boardOf(p).radius; return String.fromCharCode(65 + r + R) + (q + R + 1 + Math.min(0, r)); };
 const costText = (c) => c.flatMap((n, k) => (n ? [`${n} ${GOODS[k]}`] : [])).join(", ");
+/** The builds this game has, and what a hand still lacks for one. */
+const buildsOf = (p) => Object.keys(BUILDS).filter((k) => (k === "harbour" ? p.harbours : k !== "plan" || (p.rule.plans && p.deck.length)));
+const missing = (h, k) => costText(COST[k].map((n, g) => Math.max(0, n - h[g])));
 const kindOf = (m) => (["swap", "sell", "buy", "offer", "charter", "take", "withdraw"].includes(m.do) ? "trade" : ["accept", "refuse", "hold"].includes(m.do) ? "answer" : m.do);
 const keyOf = (m) => (m.at !== undefined && m.from === undefined ? m.at : JSON.stringify(m)); // a hex, or the whole move where one hex has several
 const deal = (d) => `1 ${GOODS[d.give]} for 1 ${GOODS[d.get]}`;
@@ -3595,9 +3611,57 @@ function tap(T, i) {
   return toast(p.phase === "toll" ? "Choose a hex that yields something." : "Nothing you can build there now.");
 }
 
+/** The cost card: every build, what it is worth, and what your hand still lacks for it. Kept in view on a wide screen. */
+const costs = el("aside", undefined, "paper");
+costs.id = "costs"; costs.hidden = true; costs.setAttribute("aria-label", "Costs");
+$("seats").after(costs);
+function card(T) {
+  const p = T.match.position, me = T.human() ? p.seat : T.kinds.indexOf("you");
+  costs.hidden = T.demo || me < 0 || T.match.turn === null;
+  if (costs.hidden) return;
+  costs.replaceChildren(el("h2", "Costs"), ...buildsOf(p).map((k) => {
+    const short = p.phase === "open" ? "" : missing(p.hands[me], k), row = el("p", undefined, short ? "short" : ""); // the opening is free
+    row.append(el("b", BUILDS[k][0]), `${BUILDS[k][1] ? `, ${BUILDS[k][1]}` : ""}: ${costText(COST[k])}`, ...(short ? [el("small", `Missing ${short}`)] : []));
+    return row;
+  }));
+  const a = costs.getBoundingClientRect(), b = $("seats").getBoundingClientRect();
+  if (a.height && b.height && a.bottom + 8 > b.top) costs.hidden = true; // many seats on a short screen: the greyed builds in the move panel say the same
+}
+
+// The guided first game: a small island, 8 points to win, a gentle bot, and you place first
+const pos = (T) => T.match.position, has = (ev, ...k) => ev.some((e) => k.includes(e.kind));
+const pips = (p, i) => (p.land[i] && p.good[i] !== WASTE ? (p.rule.roll === "sum" ? 6 - Math.abs(7 - p.num[i]) : 2 * p.num[i] - 1) : 0);
+/** The legal hex where a depot would gather most, for the lesson to point at. */
+const richest = (T) => legal(T).filter((m) => m.do === "depot").map((m) => m.at).sort((a, b) => [b, ...boardOf(pos(T)).near[b]].reduce((n, i) => n + pips(pos(T), i), 0) - [a, ...boardOf(pos(T)).near[a]].reduce((n, i) => n + pips(pos(T), i), 0))[0];
+const tab = (k) => [...$("sources").children].find((b) => b.textContent.startsWith(KINDS[k]) && !b.disabled) || $("sources");
+const LESSON = {
+  seed: "lesson 1", options: { style: "custom", seats: 2, size: "small", goal: 8, opening: "full", offers: 1 }, kinds: ["you", "easy"],
+  steps: [
+    { at: (T) => (pos(T).opened % 2 ? $("wheres") : richest(T)), or: () => $("wheres"), done: (T, ev) => has(ev, "route"),
+      say: (T) => (pos(T).opened % 2 ? "Now a route, on a hex beside your depot. Routes are how you reach new hexes to build on." : "Place your first depot, on the board or in the list. It gathers from its own hex and the six around it. A hex's number is the roll that makes it yield; red 6 and 8 come up most.") },
+    { when: (T) => pos(T).phase === "open", at: (T) => (pos(T).opened % 2 ? $("wheres") : richest(T)), or: () => $("wheres"), done: (T) => pos(T).phase !== "open",
+      say: (T) => (pos(T).opened % 2 ? "And its route. Then the game begins." : "The bot has placed twice. Now your second depot: it starts you with one good for every hex around it.") },
+    { when: (T) => pos(T).phase === "main", at: (T) => pos(T).lit[0] ?? $("status"), or: () => $("info"), next: true,
+      say: (T) => { const p = pos(T), [a, b] = p.roll || [0, 0]; return `Each turn starts with a roll: ${a} and ${b} make ${a + b}. Every hex with that number gives its good to each depot on it or beside it, two to a town. Your goods are counted in the panel.`; } },
+    { when: (T) => pos(T).phase === "main", at: () => tab("trade"), next: true, done: (T, ev) => has(ev, "swap", "ask", "post", "take", "sell", "buy"),
+      say: "Short of a good? Choose Trade: swap 4 of one good for 1 of another with the bank (fewer at a port of yours), or offer the bot one for one." },
+    { when: (T) => pos(T).phase === "main", at: () => (costs.getClientRects().length ? costs : $("sources")), next: true, done: (T, ev) => has(ev, "route", "depot", "town", "plan"),
+      say: "Building scores. A route reaches a new hex; a depot on a hex your routes reach is 1 point; a town in place of a depot is 2. What you cannot pay for yet is greyed, with what is missing." },
+    { when: (T) => pos(T).phase === "main", at: () => $("end"), done: (T, ev) => has(ev, "done"),
+      say: "When you are done, press End turn. The bot plays, then you roll again." },
+    { when: (T) => pos(T).round > 1, at: (T) => (pos(T).gate === NONE ? $("status") : pos(T).gate), or: () => $("status"), next: true, done: (T, ev) => has(ev, "toll"),
+      say: (T) => `${pos(T).phase === "toll" ? "A 7: the raid roll. " : "A roll of 7 is the raid: "}nothing yields, and anyone holding more than ${pos(T).rule.hand} goods loses half. Then the roller moves the toll gate, the barrier on the board, to block a hex and take a good from a rival beside it.` },
+    { when: (T) => pos(T).round > 1 && pos(T).phase === "main", at: () => $("info"), next: true,
+      say: `Awards are 2 points each, for whoever leads: the Great Road for ${AWARD.road} routes joined, the Toll Warden for ${AWARD.warden} tolls played. A plan costs ${costText(COST.plan)}: free routes, goods, a toll, or a point.` },
+    { at: () => $("round"), next: true,
+      say: (T) => `The first to ${goalOf(pos(T))} points wins: a depot is 1, a town 2, an award 2, a seal 1. The goal stays at the top of the screen. That is the lesson; play on.` },
+  ],
+};
+
 createTable({
   game: glass, key: "glass", title: "Grain and Glass", won: "The island's trade is yours.", outOf: () => false /* nobody is knocked out of a trading game */, seats: [2, 3, 4, 5, 6], normal: 3, lengths: [], pace: () => 420,
-  unit: "Points", cellsOf: pointsOf, goalOf, landOf: (p) => goalOf(p) + 3, choose, thinking,
+  unit: "Points", cellsOf: pointsOf, goalOf, landOf: (p) => goalOf(p) + 3, choose, thinking, lesson: LESSON,
+  roundText: (p, wide = innerWidth > 820) => (p.over ? null : `Round ${p.round}${p.classic ? "" : `${wide ? " of " : "/"}${p.rounds}`}, ${goalOf(p)}${wide ? " points" : ""} to win`), // the goal in view all game
   about: {
     classic: "Traditional: inspired by Catan.\nThe settle-and-trade rules as players know them: hexes yield goods when their number is rolled, you build routes, depots and towns, trade with the bank and the other players, buy cards, and race to 10 points. A 7 spoils big hands and sends the toll gate to block a hex and take a good; the Great Road and the Toll Warden are worth 2 points to whoever leads; two free depots and routes to start, in order and back; offers can stay open. Ours: depots and towns stand in hexes and gather from the hexes beside them, our own goods, costs and plans, and the first player drawn by dice.\nNot affiliated with or endorsed by its makers. Our own island, names and art.",
     custom: "Custom: your own rules.\nSet every rule yourself: the island, the harvest roll, the points to win, the market, charters, the toll gate, plans, spoilage, awards, the opening, trade offers, actions a turn and the number of rounds. Add any expansions on top.",
@@ -3653,6 +3717,7 @@ createTable({
   board(T, stage) {
     const p = T.match.position, b = boardOf(p), sea = b.cells.map((_, i) => !p.land[i]), none = b.cells.map(() => false);
     document.body.classList.remove("atlas");
+    card(T);
     return hexBoard(T, stage, {
       cells: b.cells, rough: none, sea, plain: true, ground: (i) => (sea[i] ? SEA : p.good[i] === WASTE ? WASTEG : TILE[p.good[i]]),
       owner: () => b.cells.map(() => NONE),
@@ -3669,21 +3734,26 @@ createTable({
       },
       tap: (i) => tap(T, i),
       can: (i) => legal(T).some((m) => m.at === i),
+      fit: b.cells.flatMap((_, i) => (p.land[i] || b.near[i].some((m) => p.land[m]) ? [i] : [])), // the island and the sea beside it fill the screen
     });
   },
   panel(T) {
     const p = T.match.position, all = legal(T), s = p.seat, kinds = [...new Set(all.filter((m) => m.do !== "end").map(kindOf))];
     if (!kinds.includes(kind)) kind = kinds.includes("depot") ? "depot" : kinds[0] || "trade";
+    card(T);
+    // every build stays in the row: one you cannot make yet is greyed, and says what is missing or why
+    const shown = p.phase === "main" ? [...buildsOf(p), ...kinds.filter((k) => !BUILDS[k])] : kinds;
+    const why = (k) => (missing(p.hands[s], k) ? `missing ${missing(p.hands[s], k)}` : p.left <= 0 ? "no actions left" : { route: "nowhere to lay one", depot: "no free hex your routes reach", town: "no depot to raise", harbour: "no depot by the sea", plan: "none left" }[k]);
     const list = all.filter((m) => m.do !== "end" && kindOf(m) === kind);
     if (!list.some((m) => keyOf(m) === where)) where = list[0] ? keyOf(list[0]) : null;
-    const roll = p.roll ? ` Rolled ${p.roll[0]} and ${p.roll[1]}: ${p.lit.length ? `${p.lit.length} ${p.lit.length === 1 ? "hex yields" : "hexes yield"}, ringed in gold` : "nothing yields"}.` : "";
+    const roll = p.roll ? ` Rolled ${p.roll[0]} and ${p.roll[1]}, so ${p.rule.roll === "sum" ? p.roll[0] + p.roll[1] : Math.max(...p.roll)}: ${p.lit.length ? `${p.lit.length} ${p.lit.length === 1 ? "hex yields" : "hexes yield"}, ringed on the board` : "nothing yields"}.` : "";
     const phase = { open: `Place your ${p.opened % 2 ? "route" : "depot"}`, toll: p.played ? "Move the toll gate: block a hex and take a good from a rival beside it." : `${raidText(p)}: move the toll gate, block a hex and take a good from a rival beside it.${roll}`, works: "Lay your free routes",
       spoil: `${raidText(p)}: spoilage. ${NAMES[s]} holds more than ${p.rule.hand} goods and loses ${p.spoil[s]} more.`, answer: p.ask && `${NAMES[p.ask.from]} offers ${NAMES[s]} 1 ${GOODS[p.ask.give]} for 1 ${GOODS[p.ask.get]}.` }[p.phase];
     $("status").textContent = phase || `${T.solo() ? "Your turn" : `${NAMES[s]}'s turn`}.${roll}`;
     $("info").replaceChildren(...GOODS.map((g, k) => { const b = el("span", `${p.hands[s][k]} ${g}`); b.style.background = `rgb(${TILE[k]})`; return b; }), ...(p.rule.market === "falling" ? [el("span", `${p.coin[s]} coin`)] : []), el("span", `${pointsOf(p, s)} of ${goalOf(p)} points`),
       ...(p.rule.awards ? [el("span", held(p).join(", ") || `Great Road: ${roadOf(p, s)} of ${AWARD.road} routes`)] : []), ...(p.deals.length ? [el("span", `${p.deals.length} open ${p.deals.length === 1 ? "offer" : "offers"}`)] : []));
     $("sources").hidden = p.phase !== "main" || !kinds.length;
-    radio($("sources"), kinds.map((k) => ({ value: k, label: KINDS[k], note: COST[k] ? costText(COST[k]) : undefined })), kind, (v) => { kind = v; where = null; T.refresh(); });
+    radio($("sources"), shown.map((k) => ({ value: k, label: KINDS[k], off: !kinds.includes(k), note: !kinds.includes(k) ? why(k) : COST[k] ? costText(COST[k]) : undefined })), kind, (v) => { kind = v; where = null; T.refresh(); });
     $("wheres").hidden = !list.length;
     radio($("wheres"), list.map((m) => ({ value: keyOf(m), label: label(p, m), note: m.at === undefined ? undefined : yields(p, m.at, m.do === "depot") })), where, (v) => { where = v; T.refresh(); });
     const m = list.find((x) => keyOf(x) === where);
@@ -3695,15 +3765,16 @@ createTable({
     T.board.light(list.filter((x) => x.at !== undefined).map((x) => x.at), { aim: m?.at ?? -1 });
   },
   listing: (T) => { const p = T.match.position; return { head: ["Hex", "Gives", "Built"], rows: p.land.map((l, i) => i).filter((i) => p.land[i]).map((i) => [nameOf(p, i), yieldOf(p, i) || "waste", [p.depot[i] !== NONE && `${NAMES[p.depot[i]]}'s ${p.town[i] ? "town" : "depot"}`, p.route[i].length && `routes: ${p.route[i].map((s) => NAMES[s]).join(", ")}`, p.gate === i && "the toll gate"].filter(Boolean).join("; ")]) }; },
-  changed: () => { where = null; },
+  changed: (T) => { where = null; card(T); },
+  seen: (T) => card(T),
   keys(T, k, e) {
     if (k === "e") $("end").click();
     else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "do")) { e.preventDefault(); $("do").click(); }
   },
   rules: (_, p) => { const r = p?.rule || Object.fromEntries(Object.entries(SWITCHES).map(([k, o]) => [k, o.normal])); return [ // before a game: Traditional's
+    `The first to ${r.goal} points wins. A depot is worth 1, a town 2, each award 2, a seal 1.`,
     "Each turn begins with a roll. Every hex showing that number gives one of its good to each depot on it or beside it, and two to a town. A dark hex gives nothing.",
     `Build: a route (${costText(COST.route)}) on a hex beside your routes or depots; a depot (${costText(COST.depot)}) on a hex your routes reach, with no depot on it or beside it; a town (${costText(COST.town)}) in place of a depot.`,
-    "A depot is worth 1 point and a town 2.",
     r.market === "falling" ? "Sell goods for coin: 3, then 2, then 1 as more of a good is sold; prices recover each turn. Buy any good for 4 coin." : "Swap 4 of one good for 1 of any other at the bank, 3 at a port hex of yours, 2 at a port for that good.",
     "Offer one player one good for one of theirs: they take it, turn it down, or leave it open to take on their own turn. Or offer it to anyone. An open offer stands until it is taken, you withdraw it, or the round ends. A bot takes an offer when it has more of what you ask for than of what you give, and never leaves one open.",
     ...(r.plans ? [`Draw a plan for ${costText(COST.plan)}: a harvest of two goods you lack, two free routes, a toll (move the gate and take a good), or a seal worth a point. Play one plan a turn.`] : []),
@@ -3711,7 +3782,7 @@ createTable({
     ...(r.awards ? [`Awards, 2 points each, held by whoever leads and passed on when beaten: the Great Road, for the most routes in one joined network (at least ${AWARD.road})${r.gate && r.plans ? `, and the Toll Warden, for the most tolls played (at least ${AWARD.warden})` : ""}.`] : []),
     ...(r.charters ? ["Charters: three public orders for six goods. Fill one for 2 points. Joining two ports with your routes scores 2."] : []),
     `Openings: each player places a depot and a route, in order and then back again. The second depot starts you with ${r.opening === "full" ? "one good for every hex on it or beside it" : "one of each good on it or beside it"}.`,
-    "Each roll rings the hexes that yield in gold, and the log says who got what.",
+    "Each roll rings the numbers that yield in silver, and the log says who got what. Builds you cannot pay for yet stay in the list, greyed, with what is missing; the cost card shows them all.",
     "Keys: Tab and arrows choose, Enter acts, E ends the turn, U takes back.",
   ]; },
 });
