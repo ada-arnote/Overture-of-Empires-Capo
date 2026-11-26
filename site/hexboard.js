@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The hex board for a game's screen: the moving one when the device can draw it, else a still picture that can be tapped.
 import { LOOKS, canDraw, createBoard } from "../src/map/board.js";
+import { STYLES, STYLE_KEY } from "../src/map/style.js";
 import { ICONS, RGB } from "./table.js";
 
 /** The seats' patterns for the still board, the same six as on the moving board and the score bar: /, dots, |, x, \, -. */
@@ -52,7 +53,7 @@ export function hexBoard(T, stage, o) {
   };
   if (canDraw()) {
     try {
-      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, fit: o.fit, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, terrain: o.terrain, wood: "textures/walnut.webp", probe: !LOOKS[kept] && !weak, look: LOOKS[kept] ? kept : weak ? "flat" : "relief" });
+      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, fit: o.fit, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, terrain: o.terrain, style: get(STYLE_KEY) || "war", wood: "textures/walnut.webp", probe: !LOOKS[kept] && !weak, look: LOOKS[kept] ? kept : weak ? "flat" : "relief" });
       if (b.style.pack) fetch(`models/${b.style.pack}`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((buf) => { if (buf) b?.pack(buf); }).catch(() => {}); // a style's sculpted models come after the board is up; the code-made ones stand meanwhile
       b.on("slow", () => { try { localStorage.setItem(SLOW, "1"); } catch { /* it will be timed again next time */ } b?.setLook("flat"); });
       b.on("pick", (i) => { if (i >= 0) o.tap(i); });
@@ -63,6 +64,10 @@ export function hexBoard(T, stage, o) {
   return {
     get looks() { return b ? Object.entries(LOOKS).map(([k, v]) => [k, v.name]) : []; },
     get look() { return b?.look; },
+    /** The styles a board can wear, the one it wears, and a change of style (kept for every game). */
+    get styles() { return b ? Object.entries(STYLES).map(([k, v]) => [k, v.name]) : []; },
+    get style() { return b?.styleName; },
+    setStyle(k) { try { localStorage.setItem(STYLE_KEY, k); } catch { /* this visit only */ } b?.setStyle(k); },
     setLook: (k) => b?.setLook(k),
     patterns(on) { pat = !!on; if (b) b.patterns(pat); else if (svg) still(); },
     motion: (mode) => b?.motion(mode),

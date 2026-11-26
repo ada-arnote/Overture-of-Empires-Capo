@@ -8,7 +8,7 @@ import { canDraw } from "../src/map/board.js";
 import { Camera } from "../src/map/camera.js";
 import { Meshes } from "../src/map/mesh.js";
 import { models } from "../src/map/models.js";
-import { STYLES } from "../src/map/style.js";
+import { STYLE_KEY, styleOf } from "../src/map/style.js";
 import { WorldGround } from "../src/map/world.js";
 
 /** Fetch and unpack a world: absolute points for every arc, a path, box and middle for every province. */
@@ -102,7 +102,7 @@ export function worldMap(canvas, world, o) {
   let queued = false, moved = 0, last = null, pinch = null, drawn = null, settle = 0, layers = null, signature = "", later = 0, wide = 1, lit = null, timed = [], pieces = null;
 
   // ---- the lit map: its own canvas under this one ----
-  const style = STYLES.painted, cam = new Camera();
+  const style = styleOf(read(STYLE_KEY)), cam = new Camera(); // the same style as the table games wear
   function light() {
     if (lit || read(FLAT) || !canDraw()) return;
     const under = document.createElement("canvas");
@@ -184,7 +184,7 @@ export function worldMap(canvas, world, o) {
       if ((p.band || 0) > b || (p.until ?? 9) < b) continue;
       const q = Array.isArray(p.at) ? p.at : world.provinces.get(p.at)?.label;
       if (!q) continue;
-      list.push({ m: p.m, x: q[0] + (p.dx || 0) * k, y: q[1] + (p.dy || 0) * k, z: p.sea ? 0 : 1, s: k * (p.size || 1), t: p.turn || 0, rgb: p.owner ? rgbOf(o.colour?.(p.owner) || ownerColour(p.owner)) : p.rgb || null });
+      list.push({ m: p.m, x: q[0] + (p.dx || 0) * k, y: q[1] + (p.dy || 0) * k, z: p.sea ? 0 : 1, s: k * (p.size || 1) * style.scale, t: p.turn || 0, rgb: p.owner ? rgbOf(o.colour?.(p.owner) || ownerColour(p.owner)) : p.rgb || null });
     }
     lit.meshes.set(list);
     return k;
@@ -195,7 +195,7 @@ export function worldMap(canvas, world, o) {
     cam.set({ W: cw, H: ch, s: view.s, cx: view.x + cw / 2 / view.s, cy: view.y + ch / 2 / view.s, tilt: t, yaw: 0, q: 0 });
     const k = stage(), pad = k * 2;
     lit.meshes.cast([x0 - pad, y0 - pad, x1 - x0 + pad * 2, y1 - y0 + pad * 2], rise(), style.sun, k * 1.4);
-    lit.ground.draw(cam, d, { style, relief: Math.max(0.2, Math.min(1, (wide * 2.4) / view.s)), rise: rise(), tint: o.tint?.() ?? 0.56, lamp: (u) => lit.meshes.lamp(u, true, style.sun) });
+    lit.ground.draw(cam, d, { style, relief: Math.max(0.2, Math.min(1, (wide * 2.4) / view.s)), rise: rise(), tint: o.tint?.() ?? style.map.tint, lamp: (u) => lit.meshes.lamp(u, true, style.sun) });
     lit.meshes.draw(cam, rise(), style);
   }
 

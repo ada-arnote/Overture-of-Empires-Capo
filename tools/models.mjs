@@ -83,7 +83,7 @@ export function triangles(file) {
 }
 
 /** One model for the pack: upright, on the ground, the right size, cut down, in palette slots. */
-export function shape(tris, { tris: want = 300, size = 0.45, turn = 0, owner = [] } = {}, pal = STYLES.painted.pal) {
+export function shape(tris, { tris: want = 300, size = 0.45, turn = 0, owner = [] } = {}, pal = STYLES.war.pal) {
   const ct = Math.cos(turn), st = Math.sin(turn);
   // glTF has y up and faces +z; our table has z up and faces the player along +y: a turn, not a mirror
   let all = tris.map((t) => ({ ...t, p: t.p.map(([x, y, z]) => [-x * ct - z * st, -x * st + z * ct, y]) }));

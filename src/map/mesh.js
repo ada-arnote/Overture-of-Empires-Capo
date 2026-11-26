@@ -5,7 +5,7 @@
 // A style is data (style.js): its palette, finishes and lamp go in as numbers; no code here knows one style from another.
 export const HEAD = `#version 300 es
 precision highp float;
-uniform vec2 uView,uMid,uC,uYaw,uTilt; uniform vec3 uSun; uniform vec4 uWin; uniform float uS,uQ,uK,uLift,uTall;
+uniform vec2 uView,uMid,uC,uYaw,uTilt; uniform vec3 uSun; uniform vec4 uWin; uniform float uS,uQ,uK,uLift,uTall,uOut;
 vec4 clip(vec3 p){ vec2 d=(p.xy-uC)*uS; float X=d.x*uYaw.x-d.y*uYaw.y,Y=d.x*uYaw.y+d.y*uYaw.x,Z=p.z*uS,D=Y*uTilt.y+Z*uTilt.x,w=1.-uQ*D;
   return vec4(2.*(uMid.x*w+X)/uView.x-w,w-2.*(uMid.y*w+Y*uTilt.x-Z*uTilt.y)/uView.y,-uK*D,w); }`;
 // corner: place, facing and finish, colour slot and shade. instance: place and size, turn, colour and dimness
@@ -16,7 +16,7 @@ vec3 world(out vec3 n){ vec3 l=aP*iP.w; n=vec3(aN.x*iR.x-aN.y*iR.y,aN.x*iR.y+aN.
 const VS = `${HEAD}${INS}
 uniform vec3 uPal[16]; uniform vec2 uTone;
 out vec3 vN,vP,vC; out vec2 vF;
-void main(){ vec3 n,p=world(n); vN=n; vP=p; int f=int(aN.w*127.+.5);
+void main(){ vec3 n,p=world(n); vN=n; vP=p; p+=n*uOut; int f=int(aN.w*127.+.5);
   vec3 c=uPal[int(aC.r*255.+.5)&15]*(aC.g*2.); if(f==3) c=iC.rgb; if(f==1) c=mix(iC.rgb,vec3(dot(iC.rgb,vec3(.3,.6,.1))),uTone.y)*uTone.x*aC.g*2.; vC=c*aC.a*iC.a; vF=vec2(float(f),iC.a);
   gl_Position=clip(p); }`;
 /** The shadow test, shared with the grounds: how much of the lamp a point at height z misses. Needs uSun, uWin (the picture's window on the ground) and uTall. */
@@ -27,7 +27,8 @@ float shd(vec2 p,float z){ if(uShOn<=0.) return 0.; vec2 q=(p-uSun.xy/uSun.z*z-u
 const FS = `${HEAD}${SHADE}
 uniform vec4 uFin[4]; uniform vec3 uAmb;
 in vec3 vN,vP,vC; in vec2 vF; out vec4 o;
-void main(){ vec3 n=normalize(vN),L=normalize(uSun),V=vec3(uTilt.y*uYaw.y,uTilt.y*uYaw.x,uTilt.x); vec4 f=uFin[int(vF.x+.5)];
+void main(){ if(uOut>0.){ o=vec4(.06,.055,.06,1.); return; }
+  vec3 n=normalize(vN),L=normalize(uSun),V=vec3(uTilt.y*uYaw.y,uTilt.y*uYaw.x,uTilt.x); vec4 f=uFin[int(vF.x+.5)];
   float df=max(dot(n,L),0.),sh=shd(vP.xy,vP.z),lit=df*(1.-uAmb.z*sh);
   vec3 c=vC*(uAmb.x+uAmb.y*n.z+f.x*lit+.24*max(dot(n,V),0.)); // the lamp, the room, and a little light from where the player sits
   c+=f.y*pow(max(dot(n,normalize(L+V)),0.),f.z)*(1.-sh)*vF.y+f.w*pow(1.-max(dot(n,V),0.),3.);
@@ -162,6 +163,8 @@ export class Meshes {
     this.lamp(u, true, style.sun);
     g.uniform3fv(u.uPal, style.pal.flat().map((v) => v / 255)); g.uniform4fv(u.uFin, style.fin.flat()); g.uniform3f(u.uAmb, ...style.amb); g.uniform2f(u.uTone, ...style.tone);
     g.enable(g.DEPTH_TEST); g.depthFunc(g.LESS);
+    if (style.outline) { g.depthMask(false); g.uniform1f(u.uOut, style.outline / cam.s); this.pass(u); g.depthMask(true); } // a dark shell, a little larger, drawn first: what shows round the model is its outline
+    g.uniform1f(u.uOut, 0);
     this.pass(u);
     g.disable(g.DEPTH_TEST);
   }

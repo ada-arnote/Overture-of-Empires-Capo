@@ -9,7 +9,7 @@ import { DEPTH, HEAD, SHADE, aim, program } from "./mesh.js";
 
 // heights: one byte, 96 is the sea's surface; made from noise when a world brings no picture of its own
 const COMMON = `
-uniform sampler2D uRelief; uniform vec2 uSize; uniform float uReal,uSeed,uShade,uRel;
+uniform sampler2D uRelief; uniform vec2 uSize; uniform vec4 uWash; uniform float uReal,uSeed,uShade,uRel,uGloss;
 float grain(vec2 p){ p=floor(p); return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
 float nz(vec2 p){ vec2 f=fract(p); f=f*f*(3.-2.*f); return mix(mix(grain(p),grain(p+vec2(1.,0.)),f.x),mix(grain(p+vec2(0.,1.)),grain(p+1.),f.x),f.y); }
 float hgt(vec2 p){ if(uReal>0.) return texture(uRelief,p/uSize).r; vec2 q=p/uSize.x*9.+uSeed; float r=1.-abs(2.*nz(q*1.7)-1.);
@@ -26,6 +26,7 @@ in vec2 vP; in vec4 vC; in float vZ; out vec4 o;
 void main(){ float h=hgt(vP),t=clamp((h-.376)/.624,0.,1.); vec2 g=slope(vP);
   // the land's own colour by its height: green plain, dry upland, brown mountain, snow
   vec3 c=mix(vec3(.47,.54,.37),vec3(.68,.62,.44),smoothstep(.02,.2,t)); c=mix(c,vec3(.5,.41,.33),smoothstep(.2,.48,t)); c=mix(c,vec3(.95,.96,.97),smoothstep(.56,.74,t));
+  c=mix(c,uWash.rgb,uWash.a);
   float glow=vC.a<.6?1.:0.,ice=uReal>0.?1.-smoothstep(.55,.95,texture(uRelief,vP/uSize).a):0.; // a province that is lit: chosen, or offered. Ice, where the world's picture marks it
   c=mix(c,vec3(.9,.94,.97),ice);
   c=mix(c,vC.rgb,uTint*(1.-.45*ice))*clamp(1.-dot(g,uSun.xy)*26.*uRel,.6,1.36)*(.96+.07*grain(vP*uS*1.5));
@@ -44,7 +45,7 @@ void main(){ vec2 uv=vec2(gl_FragCoord.x/uDpr,uView.y-gl_FragCoord.y/uDpr)-uMid,
     float h=uReal>0.?hgt(p):.2+.1*nz(p/uSize.x*5.+uSeed),dp=clamp((.376-h)/.376,0.,1.); vec2 g=uReal>0.?slope(p):vec2(0.);
     c=mix(vec3(.33,.52,.6),vec3(.09,.17,.28),smoothstep(0.,.75,dp))*clamp(1.-dot(g,uSun.xy)*6.*uRel,.84,1.16);
     vec2 w=g*9.; vec3 v=vec3(0.,uTilt.y,uTilt.x);
-    c+=.2*pow(max(dot(normalize(vec3(-w,1.)),normalize(normalize(uSun)+v)),0.),30.); c*=(.97+.06*grain(p*uS*1.5))*(1.-uShade*shd(p,0.));
+    c=mix(c,uWash.rgb,uWash.a*.8); c+=.2*uGloss*pow(max(dot(normalize(vec3(-w,1.)),normalize(normalize(uSun)+v)),0.),30.); c*=(.97+.06*grain(p*uS*1.5))*(1.-uShade*shd(p,0.));
     c*=1.-.35*smoothstep(-14.*foot,0.,sd); }
   else { float mg=max(hs.x,hs.y)*.09,r=mg*.6; d=d-mg+r; float bd=length(max(d,0.))+min(max(d.x,d.y),0.)-r;
     c=texture(uWood,p/(max(hs.x,hs.y)*vec2(1.3,.65))).rgb; c=mix(c,vec3(.3,.19,.12),uWoodK.y)*uWoodK.x; c*=1.-.3*smoothstep(mg*.5,0.,bd)*step(0.,bd);
@@ -115,7 +116,7 @@ export class WorldGround {
     const both = ({ P, u }) => {
       g.useProgram(P); aim(g, u, cam);
       g.uniform1i(u.uTab, 0); g.uniform1i(u.uRelief, 1); g.uniform1i(u.uWood, 3); g.uniform2f(u.uSize, ...this.size); g.uniform1f(u.uReal, this.real); g.uniform1f(u.uSeed, this.seed);
-      g.uniform3f(u.uSun, ...o.style.sun); g.uniform1f(u.uShOn, 0); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uRel, o.relief ?? 1);
+      g.uniform3f(u.uSun, ...o.style.sun); g.uniform1f(u.uShOn, 0); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uRel, (o.relief ?? 1) * o.style.map.relief); g.uniform1f(u.uGloss, o.style.surface.gloss); g.uniform4f(u.uWash, ...o.style.map.wash.map((v, i) => (i < 3 ? v / 255 : v)));
       o.lamp?.(u);
       return u;
     };

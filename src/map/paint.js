@@ -6,7 +6,7 @@ const VS = `#version 300 es
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS = `#version 300 es
 precision highp float; precision highp int;
-uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable,uTall,uK,uShade; uniform vec3 uSun,uBaize,uRule; uniform vec4 uWin; uniform vec2 uWoodK;${SHADE}
+uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable,uTall,uK,uShade; uniform vec3 uSun,uBaize,uRule,uMark; uniform vec4 uWin,uSurf,uWash; uniform vec2 uWoodK;${SHADE}
 float dep(vec2 p,float z){ vec2 d=(p-uC)*uS; float D=(d.x*uYaw.y+d.y*uYaw.x)*uTilt.y+z*uTilt.x; return .5-.5*uK*D/(1.-uQ*D); }
 uniform vec3 uInk,uPale,uWall,uGlow,uLand; out vec4 o;
 int raw(ivec2 t){ if(t.x<0||t.y<0||t.x>=int(uSize.x)||t.y>=int(uSize.y)) return 0; vec4 v=texelFetch(uId,t,0); return int(v.r*255.+.5)+256*int(v.g*255.+.5); }
@@ -43,30 +43,31 @@ float pattern(vec2 q,int k){
   if(k==4) return hatch((q.x-q.y)*.7071,6.5);
   return hatch(q.y,5.5); }
 vec3 face(vec2 p,int id,float foot){
-  vec4 a=tab(id,0),b=tab(id,1); vec3 c=a.rgb; float e=2.;
+  vec4 a=tab(id,0),b=tab(id,1); vec3 c=mix(a.rgb,uWash.rgb,uWash.a*(a.a<.99?.7:1.)); float e=2.; // a style may wash every colour toward its paper; an owner's less, so it still reads
   vec2 g=vec2(ht(p+vec2(e,0.))-ht(p-vec2(e,0.)),ht(p+vec2(0.,e))-ht(p-vec2(0.,e)))/100.;
   vec4 t2=tab(id,2),t3=tab(id,3); int kd=int(t2.r*255.+.5); vec2 q=(p-vec2(t3.r+t3.g*256.,t3.b+t3.a*256.)*15.9375)/uCell; float fm=0.;
   if(kd>1){ float sd=t2.g,rim=kd>5?1.:smoothstep(.93,.78,max(abs(q.x),abs(q.x)*.5+abs(q.y)*.866)/.866); fm=form(kd,p,q,sd);
     g+=vec2(form(kd,p+vec2(1.,0.),q+vec2(1.,0.)/uCell,sd)-fm,form(kd,p+vec2(0.,1.),q+vec2(0.,1.)/uCell,sd)-fm)*rim*(kd==3?.5:kd>5?.2:.16);
     c*=mix(1.,kd==2?.84+.24*fm:kd==3?.66+.42*fm:kd==5?1.04-.16*fm:.86+.22*fm,rim); if(kd==5) c=mix(c,vec3(.96,.97,.95),.35*rim*(1.-fm)*grain(floor(q*3.6+sd)*7.)); }
-  float k=clamp(1.-dot(g,uLight)*2.3*uRelief,.56,1.36); c*=k; c=mix(c,vec3(1.,.97,.9),.30*smoothstep(78.,118.,ht(p))*uRelief);
-  c*=.965+.07*grain(p*1.5); // paper
+  float k=clamp(1.-dot(g,uLight)*2.3*uRelief*uSurf.y,.56,1.36); c*=k;
+  if(uMark.x>0.){ float sl=length(g); if(sl>.04){ vec2 dn=g/sl; c=mix(c,uInk,uMark.x*smoothstep(.05,.28,sl)*hatch(dot((p-uC)*uS,vec2(-dn.y,dn.x)),4.5)); } } // slopes as pen strokes down the hill c=mix(c,vec3(1.,.97,.9),.30*smoothstep(78.,118.,ht(p))*uRelief);
+  c*=1.+.07*uSurf.x*(grain(p*1.5)-.5); // paper
   float wet=b.b; c=mix(c,c*c*1.15,wet*.55); // fresh ink is deeper
-  if(wet>0.) c+=vec3(.10)*wet*smoothstep(.0,1.,k-1.)*2.+min(uBev,1.)*wet*.5*shine(g*2.5+vec2(nz(p*.35)-.5,nz(p*.35+7.)-.5)*.7,18.); // and it shines while it is wet
+  if(wet>0.) c+=vec3(.10)*wet*smoothstep(.0,1.,k-1.)*2.+min(uBev,1.)*uSurf.w*wet*.5*shine(g*2.5+vec2(nz(p*.35)-.5,nz(p*.35+7.)-.5)*.7,18.); // and it shines while it is wet
   if(uBev>0.){ // a tile is a moulded thing: its rim falls away and catches the light, and a taller neighbour shades its foot
     vec2 bv=vec2(0.); float ao=0.,sh=0.;
     for(int i=0;i<12;i++){ float t=float(i)*1.0471976+.3; vec2 d=vec2(cos(t),sin(t)); int n=idAt(p+d*(i<6?uBev:uBev*.5)); if(n==id) continue;
       float dh=(n<=0?0.:tab(n,1).r)-b.r; if(dh>.004) ao+=1.; else if(dh<-.004||(kd!=1&&(uSlab>0.||n<=0||abs(tab(n,0).a-a.a)>.002))) bv+=d; }
     if(kd==1){ for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idAt(p+vec2(cos(t),sin(t))*uCell*.42); if(n>0&&tab(n,1).r>b.r+.004) sh+=1.; }
-      c=mix(c*.88,c*1.16+vec3(0.,.035,.03),min(1.,sh/3.+ao/6.)); if(ao>3.) c=mix(c,vec3(.9,.95,.94),.4); c+=.3*shine(g*4.,50.); } // water: deep away from land, pale and foaming at the shore, and the only gloss on the board
+      c=mix(c*.88,c*1.16+vec3(0.,.035,.03),min(1.,sh/3.+ao/6.)); if(ao>3.) c=mix(c,vec3(.9,.95,.94),.4); c+=.3*uSurf.w*shine(g*4.,50.); c=mix(c,uInk,uMark.y*hatch((p.y-uC.y)*uS*uTilt.x,7.)); } // water: deep away from land, pale and foaming at the shore, and the only gloss on the board
     else c*=1.-.045*ao;
-    if(bv!=vec2(0.)){ float f=dot(normalize(bv),uLight)*min(1.,length(bv)/2.5)*(1.+wet); c*=1.+.3*f; c+=max(f,0.)*.05; } }
+    if(bv!=vec2(0.)){ float f=dot(normalize(bv),uLight)*min(1.,length(bv)/2.5)*(1.+wet); c*=1.+.3*uSurf.z*f; c+=max(f,0.)*.05*uSurf.z; } }
   bool owned=a.a<.99;
   if(owned&&uPat>0.){ vec2 d=(p-uC)*uS; int s=((int(a.a*255.+.5)-20)*154)%211; // 154 undoes the 37 the owner was stored with
     float l=dot(a.rgb,vec3(.2126,.7152,.0722)); c=mix(c,l>.45?uInk:uPale,pattern(vec2(d.x*uYaw.x-d.y*uYaw.y,(d.x*uYaw.y+d.y*uYaw.x)*uTilt.x),s%6)*(l>.45?.32:.27)); }
   // borders: a firm line where the owner changes, a faint one between cells of one owner.
   // Owned land is ringed by an ink line and a paper line, whatever its colour: paper outside where it meets dark sea, else ink.
-  float w=max(1.6,foot*1.1),px=foot*uDpr,r2=owned?max(w*2.6,min(px*3.2,uCell*.2)):w*2.6; bool edge=false,own=false,land=false,them=false,dark=false;
+  float w=max(1.6,foot*1.1)*uMark.z,px=foot*uDpr,r2=owned?max(w*2.6,min(px*3.2,uCell*.2)):w*2.6; bool edge=false,own=false,land=false,them=false,dark=false;
   for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*r2); if(n!=id){ edge=true; float o2=tab(max(n,0),0).a; if(n<=0||abs(o2-a.a)>.002){ own=true; if(n>0&&o2<.99) them=true; if(n>0&&o2>.99&&dot(tab(n,0).rgb,vec3(.3,.6,.1))<.42) dark=true; } if(n>0){ float m=tab(n,1).a; if((m>.99)!=(b.a>.99)) own=true; else if(abs(m-b.a)>.002) land=true; } } }
   if(own){ bool near=false; float r1=owned?max(w*1.5,min(px*1.8,uCell*.11)):w*1.5; for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*r1); if(n!=id) near=true; }
     if(owned) c=near!=dark?uInk*.5:mix(c,uPale,dark?.9:.6);
@@ -176,6 +177,7 @@ export class Painter {
     g.enable(g.DEPTH_TEST); g.depthFunc(g.ALWAYS); // the ground fills the screen and writes every depth, so nothing needs clearing
     g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uShOn, 0);
     o.lamp?.(u);
+    const sf = o.style.surface; g.uniform4f(u.uSurf, sf.grain, sf.relief, sf.bevel, sf.gloss); g.uniform4f(u.uWash, sf.wash[0] / 255, sf.wash[1] / 255, sf.wash[2] / 255, sf.wash[3]); g.uniform3f(u.uMark, sf.hatch, sf.ruled, sf.edge);
     const st = o.style.table; g.uniform3f(u.uBaize, st.baize[0] / 255, st.baize[1] / 255, st.baize[2] / 255); g.uniform3f(u.uRule, st.rule[0] / 255, st.rule[1] / 255, st.rule[2] / 255); g.uniform2f(u.uWoodK, st.wood[0], st.wood[1]);
     g.uniform1i(u.uId, 0); g.uniform1i(u.uHt, 1); g.uniform1i(u.uTab, 2); g.uniform1i(u.uWood, 3);
     g.uniform2f(u.uSize, m.w, m.h); g.uniform2f(u.uView, cam.W, cam.H); g.uniform2f(u.uMid, cam.mx, cam.my); g.uniform2f(u.uC, cam.cx, cam.cy);

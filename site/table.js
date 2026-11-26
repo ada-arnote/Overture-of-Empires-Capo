@@ -691,6 +691,7 @@ export function createTable(G) {
     row("Bot speed", ...bind("speed"), CHOICES.speed);
     row("Motion", ...bind("motion"), CHOICES.motion);
     if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
+    if (board?.styles?.length) row("Board style", () => board.style, (v) => board.setStyle(v), board.styles); // 3D hook: styles are data (src/map/style.js)
     row("Letter keys", ...bind("keys"), CHOICES.keys);
     box.append(el("p", "E ends the turn (press twice), U takes back, and each game has a few more. Off leaves Tab, arrows, Enter and Escape.", "about"));
     row("Seat patterns", ...bind("patterns"), CHOICES.patterns);

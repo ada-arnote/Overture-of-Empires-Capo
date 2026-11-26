@@ -6,7 +6,7 @@ import { hexPicture } from "./hexes.js";
 import { Meshes } from "./mesh.js";
 import { models, unpack } from "./models.js";
 import { Painter } from "./paint.js";
-import { STYLES } from "./style.js";
+import { STYLES, styleOf } from "./style.js";
 
 const DEG = Math.PI / 180;
 export const LOOKS = {
@@ -82,7 +82,8 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   if (wood) { const img = new Image(); img.onload = () => { if (alive) { painter.wood(img); redraw(); } }; img.src = wood; }
   let timed = probe ? [] : null;
   // The mesh layer: real shapes for scenery and pieces, in every look but Flat (where the drawn pieces stay, as the plain and accessible view).
-  const look3 = STYLES[style] || STYLES.painted, lift = () => 9 * L.rise;
+  let look3 = styleOf(style), styleName = STYLES[style] ? style : "war";
+  const lift = () => 9 * L.rise;
   let meshes = null, staged = false;
   try { meshes = new Meshes(painter.g, models()); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); }
   const solid = () => L.rise > 0 && !!meshes;
@@ -91,7 +92,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   /** What stands on the board, as models: scenery from what the land is, then the pieces the game lists. Sizes are in cell radii. */
   function stage() {
     const out = [], R = m.R, big = grown(), rnd = (i, k) => { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
-    const put = (name, at, dx = 0, dy = 0, s = 1, rgb = null, t = 0, dim = 1) => out.push({ m: name, x: m.mid[at][0] + dx * R * big, y: m.mid[at][1] + dy * R * big, z: show[at].top, s: s * R * big, rgb, t, dim });
+    const put = (name, at, dx = 0, dy = 0, s = 1, rgb = null, t = 0, dim = 1) => (look3.models[name] ?? name) && out.push({ m: look3.models[name] ?? name, x: m.mid[at][0] + dx * R * big, y: m.mid[at][1] + dy * R * big, z: show[at].top, s: s * R * big * look3.scale, rgb, t, dim });
     show.forEach((c, i) => {
       if (c.kind === 7) put("hill", i, 0, 0, (R < 20 ? 0.62 : 0.9) / big, c.rgb.map((v) => v * 0.94), rnd(i, 1) * 6);
       else if (c.kind === 6 || c.kind === 10) put("peak", i, 0, -0.05, c.kind === 6 ? 0.62 : 1, null, rnd(i, 2) * 6);
@@ -442,6 +443,8 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     get solid() { return solid(); },
     /** A style's pack of sculpted models, once fetched: they take the place of the code-made ones of the same names. */
     pack(buffer) { if (meshes) { meshes.add(unpack(buffer)); staged = false; redraw(); } },
-    get style() { return look3; },
+    get style() { return look3; }, get styleName() { return styleName; },
+    /** Another style: the same board and pieces, in other materials. */
+    setStyle(name) { if (!STYLES[name]) return; styleName = name; look3 = STYLES[name]; staged = false; dirty = true; redraw(); },
   };
 }

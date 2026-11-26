@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-lWxkI8BqmlgwKvWQvp8U7C6KF4/1J/fsQO3hQFJOC2Q='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-fd61UTMrzjxBEOpqm9LUEvuKxvJ71GVA0Ax/dWLht7E='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo world map</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -451,7 +451,7 @@ $m[5] = (($x) => {
 // A style is data (style.js): its palette, finishes and lamp go in as numbers; no code here knows one style from another.
 const HEAD = `#version 300 es
 precision highp float;
-uniform vec2 uView,uMid,uC,uYaw,uTilt; uniform vec3 uSun; uniform vec4 uWin; uniform float uS,uQ,uK,uLift,uTall;
+uniform vec2 uView,uMid,uC,uYaw,uTilt; uniform vec3 uSun; uniform vec4 uWin; uniform float uS,uQ,uK,uLift,uTall,uOut;
 vec4 clip(vec3 p){ vec2 d=(p.xy-uC)*uS; float X=d.x*uYaw.x-d.y*uYaw.y,Y=d.x*uYaw.y+d.y*uYaw.x,Z=p.z*uS,D=Y*uTilt.y+Z*uTilt.x,w=1.-uQ*D;
   return vec4(2.*(uMid.x*w+X)/uView.x-w,w-2.*(uMid.y*w+Y*uTilt.x-Z*uTilt.y)/uView.y,-uK*D,w); }`;
 // corner: place, facing and finish, colour slot and shade. instance: place and size, turn, colour and dimness
@@ -462,7 +462,7 @@ vec3 world(out vec3 n){ vec3 l=aP*iP.w; n=vec3(aN.x*iR.x-aN.y*iR.y,aN.x*iR.y+aN.
 const VS = `${HEAD}${INS}
 uniform vec3 uPal[16]; uniform vec2 uTone;
 out vec3 vN,vP,vC; out vec2 vF;
-void main(){ vec3 n,p=world(n); vN=n; vP=p; int f=int(aN.w*127.+.5);
+void main(){ vec3 n,p=world(n); vN=n; vP=p; p+=n*uOut; int f=int(aN.w*127.+.5);
   vec3 c=uPal[int(aC.r*255.+.5)&15]*(aC.g*2.); if(f==3) c=iC.rgb; if(f==1) c=mix(iC.rgb,vec3(dot(iC.rgb,vec3(.3,.6,.1))),uTone.y)*uTone.x*aC.g*2.; vC=c*aC.a*iC.a; vF=vec2(float(f),iC.a);
   gl_Position=clip(p); }`;
 /** The shadow test, shared with the grounds: how much of the lamp a point at height z misses. Needs uSun, uWin (the picture's window on the ground) and uTall. */
@@ -473,7 +473,8 @@ float shd(vec2 p,float z){ if(uShOn<=0.) return 0.; vec2 q=(p-uSun.xy/uSun.z*z-u
 const FS = `${HEAD}${SHADE}
 uniform vec4 uFin[4]; uniform vec3 uAmb;
 in vec3 vN,vP,vC; in vec2 vF; out vec4 o;
-void main(){ vec3 n=normalize(vN),L=normalize(uSun),V=vec3(uTilt.y*uYaw.y,uTilt.y*uYaw.x,uTilt.x); vec4 f=uFin[int(vF.x+.5)];
+void main(){ if(uOut>0.){ o=vec4(.06,.055,.06,1.); return; }
+  vec3 n=normalize(vN),L=normalize(uSun),V=vec3(uTilt.y*uYaw.y,uTilt.y*uYaw.x,uTilt.x); vec4 f=uFin[int(vF.x+.5)];
   float df=max(dot(n,L),0.),sh=shd(vP.xy,vP.z),lit=df*(1.-uAmb.z*sh);
   vec3 c=vC*(uAmb.x+uAmb.y*n.z+f.x*lit+.24*max(dot(n,V),0.)); // the lamp, the room, and a little light from where the player sits
   c+=f.y*pow(max(dot(n,normalize(L+V)),0.),f.z)*(1.-sh)*vF.y+f.w*pow(1.-max(dot(n,V),0.),3.);
@@ -608,6 +609,8 @@ class Meshes {
     this.lamp(u, true, style.sun);
     g.uniform3fv(u.uPal, style.pal.flat().map((v) => v / 255)); g.uniform4fv(u.uFin, style.fin.flat()); g.uniform3f(u.uAmb, ...style.amb); g.uniform2f(u.uTone, ...style.tone);
     g.enable(g.DEPTH_TEST); g.depthFunc(g.LESS);
+    if (style.outline) { g.depthMask(false); g.uniform1f(u.uOut, style.outline / cam.s); this.pass(u); g.depthMask(true); } // a dark shell, a little larger, drawn first: what shows round the model is its outline
+    g.uniform1f(u.uOut, 0);
     this.pass(u);
     g.disable(g.DEPTH_TEST);
   }
@@ -718,28 +721,65 @@ $x.ears = ears; $x.lathe = lathe; $x.prism = prism; $x.box = box; $x.move = move
 return $x; })({});
 $m[8] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Styles, as data. A style is a palette, a set of finishes, a lamp, a table to lie on and a named set of models:
-// nothing in the mesh layer or the recipes knows one style from another, so a new style is a new entry here (and, for
-// sculpted sets, a pack of models to fetch), never new code.
+// Styles, as data. A style is a palette, a set of finishes, a lamp, a surface, a table to lie on and a named set of models:
+// nothing in the grounds, the mesh layer or the recipes knows one style from another, so a new style is a new entry here
+// (and, for sculpted sets, a pack of models to fetch), never new code. Packs are data; features are code, written once.
+// A style never sets the camera, the rules, the seats' colours or the page's own bars and menus.
 /** The palette's slots, by name. Recipes paint with these, never with a colour of their own. */
 const SLOT = { metal: 0, wood: 1, stone: 2, roof: 3, thatch: 4, wall: 5, pine: 6, leaf: 7, snow: 8, gold: 9, cloth: 10, hull: 11, dark: 12, field: 13, iron: 14, bone: 15 };
-/** The finishes, by row: matte paint, the owner's enamel, metal, the ground's own colour. Each: how much the lamp adds, shine, how tight the shine is, rim light. */
-const STYLES = {
-  painted: {
-    name: "Painted miniatures",
-    set: "code", // which models: the ones made in code
-    pack: "", // a sculpted set to fetch on top of them (a file in site/models/), or none
-    pal: [[142, 150, 162], [104, 76, 54], [146, 142, 134], [142, 70, 56], [190, 158, 92], [214, 204, 180], [44, 82, 62], [70, 112, 66], [238, 240, 240], [214, 176, 84], [232, 224, 202], [112, 80, 56], [40, 34, 32], [200, 170, 92], [74, 78, 86], [226, 220, 204]],
-    fin: [[0.62, 0.04, 12, 0.05], [0.6, 0.16, 28, 0.07], [0.5, 0.42, 20, 0.1], [0.62, 0.02, 10, 0.03]],
-    sun: [-0.6, -0.8, 1.3], // where the lamp is: up and to the left, as on a drawn map
-    amb: [0.54, 0.14, 0.7], // light with no lamp, more of it from above, and how dark a cast shadow is
-    tone: [0.92, 0.14], // the owner's colour as paint on a miniature: a little darker and greyer than on a screen
-    ground: 0.36, // how dark a cast shadow is on the ground
-    table: { baize: [14, 27, 51], rule: [184, 196, 212], wood: [0.8, 0.35] }, // the cloth, the line round it, and the wood: how bright, how far toned to one brown
-  },
+
+/** War table, the default and the root of the others: matte painted miniatures on a walnut table. */
+const WAR = {
+  name: "War table",
+  set: "code", // which models: the ones made in code
+  pack: "", // a sculpted set to fetch on top of them (a file in site/models/), or none
+  models: {}, // one model in place of another, by name: { foot: "army" } stands a block where a soldier would be; "" stands nothing
+  scale: 1, // pieces larger or smaller
+  outline: 0, // a dark line round every model, in screen points; 0 for none
+  pal: [[142, 150, 162], [104, 76, 54], [146, 142, 134], [142, 70, 56], [190, 158, 92], [214, 204, 180], [44, 82, 62], [70, 112, 66], [238, 240, 240], [214, 176, 84], [232, 224, 202], [112, 80, 56], [40, 34, 32], [200, 170, 92], [74, 78, 86], [226, 220, 204]],
+  // the finishes, by row: matte paint, the owner's enamel, metal, the ground's own colour. Each: how much the lamp adds, shine, how tight the shine is, rim light
+  fin: [[0.62, 0.04, 12, 0.05], [0.6, 0.16, 28, 0.07], [0.5, 0.42, 20, 0.1], [0.62, 0.02, 10, 0.03]],
+  sun: [-0.6, -0.8, 1.3], // where the lamp is: up and to the left, as on a drawn map
+  amb: [0.54, 0.14, 0.7], // light with no lamp, more of it from above, and how dark a cast shadow is on a model
+  tone: [0.92, 0.14], // the owner's colour as paint on a miniature: a little darker and greyer than on a screen
+  ground: 0.36, // how dark a cast shadow is on the ground
+  // the ground: paper grain, how strongly heights are lit, how deep a tile's rim is cut, gloss on water and wet ink;
+  // wash: every colour drawn toward one (r, g, b, how far); hatch: slopes drawn as pen strokes; ruled: water drawn with ruled lines; edge: how heavy the ink lines are
+  surface: { grain: 1, relief: 1, bevel: 1, gloss: 1, wash: [0, 0, 0, 0], hatch: 0, ruled: 0, edge: 1 },
+  map: { tint: 0.56, relief: 1, wash: [0, 0, 0, 0] }, // Capo's world: how much of the owner's colour lies over the land's own, how strongly its heights are lit, and a wash as above
+  table: { baize: [14, 27, 51], rule: [184, 196, 212], wood: [0.8, 0.35] }, // the cloth, the line round it, and the wood: how bright, how far toned to one brown
 };
 
-$x.SLOT = SLOT; $x.STYLES = STYLES;
+const STYLES = {
+  war: WAR,
+  // paper and ink: a survey chart on the desk, with stained blocks stamped with map symbols in place of figures
+  campaign: {
+    ...WAR, name: "Campaign map",
+    models: { foot: "army", horse: "armour", gun: "guns", unit1: "army", unit2: "guns", unit3: "armour", unit4: "leader", hill: "", peak: "" },
+    pal: [[120, 126, 138], [124, 96, 70], [150, 150, 150], [96, 104, 128], [176, 164, 132], [226, 226, 222], [72, 96, 92], [96, 116, 100], [240, 242, 244], [178, 160, 112], [228, 226, 218], [116, 96, 76], [27, 42, 68], [186, 176, 140], [70, 78, 96], [238, 236, 228]],
+    fin: [[0.34, 0.02, 10, 0.02], [0.34, 0.04, 14, 0.03], [0.34, 0.1, 14, 0.04], [0.3, 0.02, 10, 0.02]],
+    amb: [0.74, 0.1, 0.4], tone: [0.82, 0.3], ground: 0.2,
+    surface: { grain: 1.7, relief: 0.4, bevel: 0.3, gloss: 0, wash: [233, 237, 242, 0.5], hatch: 0.55, ruled: 0.3, edge: 1.25 },
+    map: { tint: 0.4, relief: 0.75, wash: [233, 237, 242, 0.55] },
+    table: { baize: [36, 52, 78], rule: [206, 214, 226], wood: [0.66, 0.6] },
+  },
+  // high clarity: flat, outlined, no texture, larger pieces
+  clear: {
+    ...WAR, name: "Clear",
+    scale: 1.15, outline: 1.6,
+    fin: [[0.3, 0, 10, 0], [0.3, 0, 10, 0], [0.3, 0.06, 12, 0], [0.3, 0, 10, 0]],
+    amb: [0.82, 0.06, 0.25], tone: [1, 0], ground: 0.14,
+    surface: { grain: 0, relief: 0.3, bevel: 0.7, gloss: 0, wash: [0, 0, 0, 0], hatch: 0, ruled: 0, edge: 1.45 },
+    map: { tint: 0.86, relief: 0.35, wash: [0, 0, 0, 0] },
+    table: { baize: [14, 18, 26], rule: [232, 238, 246], wood: [0.42, 0.9] },
+  },
+};
+/** Where the player's choice of style is kept, the same for every game. */
+const STYLE_KEY = "capo-style";
+/** The style of a name, or the default. */
+const styleOf = (name) => STYLES[name] || STYLES.war;
+
+$x.SLOT = SLOT; $x.STYLES = STYLES; $x.STYLE_KEY = STYLE_KEY; $x.styleOf = styleOf;
 return $x; })({});
 $m[6] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -916,7 +956,7 @@ const VS = `#version 300 es
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS = `#version 300 es
 precision highp float; precision highp int;
-uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable,uTall,uK,uShade; uniform vec3 uSun,uBaize,uRule; uniform vec4 uWin; uniform vec2 uWoodK;${SHADE}
+uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable,uTall,uK,uShade; uniform vec3 uSun,uBaize,uRule,uMark; uniform vec4 uWin,uSurf,uWash; uniform vec2 uWoodK;${SHADE}
 float dep(vec2 p,float z){ vec2 d=(p-uC)*uS; float D=(d.x*uYaw.y+d.y*uYaw.x)*uTilt.y+z*uTilt.x; return .5-.5*uK*D/(1.-uQ*D); }
 uniform vec3 uInk,uPale,uWall,uGlow,uLand; out vec4 o;
 int raw(ivec2 t){ if(t.x<0||t.y<0||t.x>=int(uSize.x)||t.y>=int(uSize.y)) return 0; vec4 v=texelFetch(uId,t,0); return int(v.r*255.+.5)+256*int(v.g*255.+.5); }
@@ -953,30 +993,31 @@ float pattern(vec2 q,int k){
   if(k==4) return hatch((q.x-q.y)*.7071,6.5);
   return hatch(q.y,5.5); }
 vec3 face(vec2 p,int id,float foot){
-  vec4 a=tab(id,0),b=tab(id,1); vec3 c=a.rgb; float e=2.;
+  vec4 a=tab(id,0),b=tab(id,1); vec3 c=mix(a.rgb,uWash.rgb,uWash.a*(a.a<.99?.7:1.)); float e=2.; // a style may wash every colour toward its paper; an owner's less, so it still reads
   vec2 g=vec2(ht(p+vec2(e,0.))-ht(p-vec2(e,0.)),ht(p+vec2(0.,e))-ht(p-vec2(0.,e)))/100.;
   vec4 t2=tab(id,2),t3=tab(id,3); int kd=int(t2.r*255.+.5); vec2 q=(p-vec2(t3.r+t3.g*256.,t3.b+t3.a*256.)*15.9375)/uCell; float fm=0.;
   if(kd>1){ float sd=t2.g,rim=kd>5?1.:smoothstep(.93,.78,max(abs(q.x),abs(q.x)*.5+abs(q.y)*.866)/.866); fm=form(kd,p,q,sd);
     g+=vec2(form(kd,p+vec2(1.,0.),q+vec2(1.,0.)/uCell,sd)-fm,form(kd,p+vec2(0.,1.),q+vec2(0.,1.)/uCell,sd)-fm)*rim*(kd==3?.5:kd>5?.2:.16);
     c*=mix(1.,kd==2?.84+.24*fm:kd==3?.66+.42*fm:kd==5?1.04-.16*fm:.86+.22*fm,rim); if(kd==5) c=mix(c,vec3(.96,.97,.95),.35*rim*(1.-fm)*grain(floor(q*3.6+sd)*7.)); }
-  float k=clamp(1.-dot(g,uLight)*2.3*uRelief,.56,1.36); c*=k; c=mix(c,vec3(1.,.97,.9),.30*smoothstep(78.,118.,ht(p))*uRelief);
-  c*=.965+.07*grain(p*1.5); // paper
+  float k=clamp(1.-dot(g,uLight)*2.3*uRelief*uSurf.y,.56,1.36); c*=k;
+  if(uMark.x>0.){ float sl=length(g); if(sl>.04){ vec2 dn=g/sl; c=mix(c,uInk,uMark.x*smoothstep(.05,.28,sl)*hatch(dot((p-uC)*uS,vec2(-dn.y,dn.x)),4.5)); } } // slopes as pen strokes down the hill c=mix(c,vec3(1.,.97,.9),.30*smoothstep(78.,118.,ht(p))*uRelief);
+  c*=1.+.07*uSurf.x*(grain(p*1.5)-.5); // paper
   float wet=b.b; c=mix(c,c*c*1.15,wet*.55); // fresh ink is deeper
-  if(wet>0.) c+=vec3(.10)*wet*smoothstep(.0,1.,k-1.)*2.+min(uBev,1.)*wet*.5*shine(g*2.5+vec2(nz(p*.35)-.5,nz(p*.35+7.)-.5)*.7,18.); // and it shines while it is wet
+  if(wet>0.) c+=vec3(.10)*wet*smoothstep(.0,1.,k-1.)*2.+min(uBev,1.)*uSurf.w*wet*.5*shine(g*2.5+vec2(nz(p*.35)-.5,nz(p*.35+7.)-.5)*.7,18.); // and it shines while it is wet
   if(uBev>0.){ // a tile is a moulded thing: its rim falls away and catches the light, and a taller neighbour shades its foot
     vec2 bv=vec2(0.); float ao=0.,sh=0.;
     for(int i=0;i<12;i++){ float t=float(i)*1.0471976+.3; vec2 d=vec2(cos(t),sin(t)); int n=idAt(p+d*(i<6?uBev:uBev*.5)); if(n==id) continue;
       float dh=(n<=0?0.:tab(n,1).r)-b.r; if(dh>.004) ao+=1.; else if(dh<-.004||(kd!=1&&(uSlab>0.||n<=0||abs(tab(n,0).a-a.a)>.002))) bv+=d; }
     if(kd==1){ for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idAt(p+vec2(cos(t),sin(t))*uCell*.42); if(n>0&&tab(n,1).r>b.r+.004) sh+=1.; }
-      c=mix(c*.88,c*1.16+vec3(0.,.035,.03),min(1.,sh/3.+ao/6.)); if(ao>3.) c=mix(c,vec3(.9,.95,.94),.4); c+=.3*shine(g*4.,50.); } // water: deep away from land, pale and foaming at the shore, and the only gloss on the board
+      c=mix(c*.88,c*1.16+vec3(0.,.035,.03),min(1.,sh/3.+ao/6.)); if(ao>3.) c=mix(c,vec3(.9,.95,.94),.4); c+=.3*uSurf.w*shine(g*4.,50.); c=mix(c,uInk,uMark.y*hatch((p.y-uC.y)*uS*uTilt.x,7.)); } // water: deep away from land, pale and foaming at the shore, and the only gloss on the board
     else c*=1.-.045*ao;
-    if(bv!=vec2(0.)){ float f=dot(normalize(bv),uLight)*min(1.,length(bv)/2.5)*(1.+wet); c*=1.+.3*f; c+=max(f,0.)*.05; } }
+    if(bv!=vec2(0.)){ float f=dot(normalize(bv),uLight)*min(1.,length(bv)/2.5)*(1.+wet); c*=1.+.3*uSurf.z*f; c+=max(f,0.)*.05*uSurf.z; } }
   bool owned=a.a<.99;
   if(owned&&uPat>0.){ vec2 d=(p-uC)*uS; int s=((int(a.a*255.+.5)-20)*154)%211; // 154 undoes the 37 the owner was stored with
     float l=dot(a.rgb,vec3(.2126,.7152,.0722)); c=mix(c,l>.45?uInk:uPale,pattern(vec2(d.x*uYaw.x-d.y*uYaw.y,(d.x*uYaw.y+d.y*uYaw.x)*uTilt.x),s%6)*(l>.45?.32:.27)); }
   // borders: a firm line where the owner changes, a faint one between cells of one owner.
   // Owned land is ringed by an ink line and a paper line, whatever its colour: paper outside where it meets dark sea, else ink.
-  float w=max(1.6,foot*1.1),px=foot*uDpr,r2=owned?max(w*2.6,min(px*3.2,uCell*.2)):w*2.6; bool edge=false,own=false,land=false,them=false,dark=false;
+  float w=max(1.6,foot*1.1)*uMark.z,px=foot*uDpr,r2=owned?max(w*2.6,min(px*3.2,uCell*.2)):w*2.6; bool edge=false,own=false,land=false,them=false,dark=false;
   for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*r2); if(n!=id){ edge=true; float o2=tab(max(n,0),0).a; if(n<=0||abs(o2-a.a)>.002){ own=true; if(n>0&&o2<.99) them=true; if(n>0&&o2>.99&&dot(tab(n,0).rgb,vec3(.3,.6,.1))<.42) dark=true; } if(n>0){ float m=tab(n,1).a; if((m>.99)!=(b.a>.99)) own=true; else if(abs(m-b.a)>.002) land=true; } } }
   if(own){ bool near=false; float r1=owned?max(w*1.5,min(px*1.8,uCell*.11)):w*1.5; for(int i=0;i<6;i++){ float t=float(i)*1.0471976; int n=idSoft(p+vec2(cos(t),sin(t))*r1); if(n!=id) near=true; }
     if(owned) c=near!=dark?uInk*.5:mix(c,uPale,dark?.9:.6);
@@ -1086,6 +1127,7 @@ class Painter {
     g.enable(g.DEPTH_TEST); g.depthFunc(g.ALWAYS); // the ground fills the screen and writes every depth, so nothing needs clearing
     g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uShOn, 0);
     o.lamp?.(u);
+    const sf = o.style.surface; g.uniform4f(u.uSurf, sf.grain, sf.relief, sf.bevel, sf.gloss); g.uniform4f(u.uWash, sf.wash[0] / 255, sf.wash[1] / 255, sf.wash[2] / 255, sf.wash[3]); g.uniform3f(u.uMark, sf.hatch, sf.ruled, sf.edge);
     const st = o.style.table; g.uniform3f(u.uBaize, st.baize[0] / 255, st.baize[1] / 255, st.baize[2] / 255); g.uniform3f(u.uRule, st.rule[0] / 255, st.rule[1] / 255, st.rule[2] / 255); g.uniform2f(u.uWoodK, st.wood[0], st.wood[1]);
     g.uniform1i(u.uId, 0); g.uniform1i(u.uHt, 1); g.uniform1i(u.uTab, 2); g.uniform1i(u.uWood, 3);
     g.uniform2f(u.uSize, m.w, m.h); g.uniform2f(u.uView, cam.W, cam.H); g.uniform2f(u.uMid, cam.mx, cam.my); g.uniform2f(u.uC, cam.cx, cam.cy);
@@ -1110,7 +1152,7 @@ const { hexPicture } = $m[4];
 const { Meshes } = $m[5];
 const { models, unpack } = $m[6];
 const { Painter } = $m[9];
-const { STYLES } = $m[8];
+const { STYLES, styleOf } = $m[8];
 
 const DEG = Math.PI / 180;
 const LOOKS = {
@@ -1186,7 +1228,8 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   if (wood) { const img = new Image(); img.onload = () => { if (alive) { painter.wood(img); redraw(); } }; img.src = wood; }
   let timed = probe ? [] : null;
   // The mesh layer: real shapes for scenery and pieces, in every look but Flat (where the drawn pieces stay, as the plain and accessible view).
-  const look3 = STYLES[style] || STYLES.painted, lift = () => 9 * L.rise;
+  let look3 = styleOf(style), styleName = STYLES[style] ? style : "war";
+  const lift = () => 9 * L.rise;
   let meshes = null, staged = false;
   try { meshes = new Meshes(painter.g, models()); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); }
   const solid = () => L.rise > 0 && !!meshes;
@@ -1195,7 +1238,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   /** What stands on the board, as models: scenery from what the land is, then the pieces the game lists. Sizes are in cell radii. */
   function stage() {
     const out = [], R = m.R, big = grown(), rnd = (i, k) => { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
-    const put = (name, at, dx = 0, dy = 0, s = 1, rgb = null, t = 0, dim = 1) => out.push({ m: name, x: m.mid[at][0] + dx * R * big, y: m.mid[at][1] + dy * R * big, z: show[at].top, s: s * R * big, rgb, t, dim });
+    const put = (name, at, dx = 0, dy = 0, s = 1, rgb = null, t = 0, dim = 1) => (look3.models[name] ?? name) && out.push({ m: look3.models[name] ?? name, x: m.mid[at][0] + dx * R * big, y: m.mid[at][1] + dy * R * big, z: show[at].top, s: s * R * big * look3.scale, rgb, t, dim });
     show.forEach((c, i) => {
       if (c.kind === 7) put("hill", i, 0, 0, (R < 20 ? 0.62 : 0.9) / big, c.rgb.map((v) => v * 0.94), rnd(i, 1) * 6);
       else if (c.kind === 6 || c.kind === 10) put("peak", i, 0, -0.05, c.kind === 6 ? 0.62 : 1, null, rnd(i, 2) * 6);
@@ -1546,7 +1589,9 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     get solid() { return solid(); },
     /** A style's pack of sculpted models, once fetched: they take the place of the code-made ones of the same names. */
     pack(buffer) { if (meshes) { meshes.add(unpack(buffer)); staged = false; redraw(); } },
-    get style() { return look3; },
+    get style() { return look3; }, get styleName() { return styleName; },
+    /** Another style: the same board and pieces, in other materials. */
+    setStyle(name) { if (!STYLES[name]) return; styleName = name; look3 = STYLES[name]; staged = false; dirty = true; redraw(); },
   };
 }
 
@@ -1564,7 +1609,7 @@ const { DEPTH, HEAD, SHADE, aim, program } = $m[5];
 
 // heights: one byte, 96 is the sea's surface; made from noise when a world brings no picture of its own
 const COMMON = `
-uniform sampler2D uRelief; uniform vec2 uSize; uniform float uReal,uSeed,uShade,uRel;
+uniform sampler2D uRelief; uniform vec2 uSize; uniform vec4 uWash; uniform float uReal,uSeed,uShade,uRel,uGloss;
 float grain(vec2 p){ p=floor(p); return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
 float nz(vec2 p){ vec2 f=fract(p); f=f*f*(3.-2.*f); return mix(mix(grain(p),grain(p+vec2(1.,0.)),f.x),mix(grain(p+vec2(0.,1.)),grain(p+1.),f.x),f.y); }
 float hgt(vec2 p){ if(uReal>0.) return texture(uRelief,p/uSize).r; vec2 q=p/uSize.x*9.+uSeed; float r=1.-abs(2.*nz(q*1.7)-1.);
@@ -1581,6 +1626,7 @@ in vec2 vP; in vec4 vC; in float vZ; out vec4 o;
 void main(){ float h=hgt(vP),t=clamp((h-.376)/.624,0.,1.); vec2 g=slope(vP);
   // the land's own colour by its height: green plain, dry upland, brown mountain, snow
   vec3 c=mix(vec3(.47,.54,.37),vec3(.68,.62,.44),smoothstep(.02,.2,t)); c=mix(c,vec3(.5,.41,.33),smoothstep(.2,.48,t)); c=mix(c,vec3(.95,.96,.97),smoothstep(.56,.74,t));
+  c=mix(c,uWash.rgb,uWash.a);
   float glow=vC.a<.6?1.:0.,ice=uReal>0.?1.-smoothstep(.55,.95,texture(uRelief,vP/uSize).a):0.; // a province that is lit: chosen, or offered. Ice, where the world's picture marks it
   c=mix(c,vec3(.9,.94,.97),ice);
   c=mix(c,vC.rgb,uTint*(1.-.45*ice))*clamp(1.-dot(g,uSun.xy)*26.*uRel,.6,1.36)*(.96+.07*grain(vP*uS*1.5));
@@ -1599,7 +1645,7 @@ void main(){ vec2 uv=vec2(gl_FragCoord.x/uDpr,uView.y-gl_FragCoord.y/uDpr)-uMid,
     float h=uReal>0.?hgt(p):.2+.1*nz(p/uSize.x*5.+uSeed),dp=clamp((.376-h)/.376,0.,1.); vec2 g=uReal>0.?slope(p):vec2(0.);
     c=mix(vec3(.33,.52,.6),vec3(.09,.17,.28),smoothstep(0.,.75,dp))*clamp(1.-dot(g,uSun.xy)*6.*uRel,.84,1.16);
     vec2 w=g*9.; vec3 v=vec3(0.,uTilt.y,uTilt.x);
-    c+=.2*pow(max(dot(normalize(vec3(-w,1.)),normalize(normalize(uSun)+v)),0.),30.); c*=(.97+.06*grain(p*uS*1.5))*(1.-uShade*shd(p,0.));
+    c=mix(c,uWash.rgb,uWash.a*.8); c+=.2*uGloss*pow(max(dot(normalize(vec3(-w,1.)),normalize(normalize(uSun)+v)),0.),30.); c*=(.97+.06*grain(p*uS*1.5))*(1.-uShade*shd(p,0.));
     c*=1.-.35*smoothstep(-14.*foot,0.,sd); }
   else { float mg=max(hs.x,hs.y)*.09,r=mg*.6; d=d-mg+r; float bd=length(max(d,0.))+min(max(d.x,d.y),0.)-r;
     c=texture(uWood,p/(max(hs.x,hs.y)*vec2(1.3,.65))).rgb; c=mix(c,vec3(.3,.19,.12),uWoodK.y)*uWoodK.x; c*=1.-.3*smoothstep(mg*.5,0.,bd)*step(0.,bd);
@@ -1670,7 +1716,7 @@ class WorldGround {
     const both = ({ P, u }) => {
       g.useProgram(P); aim(g, u, cam);
       g.uniform1i(u.uTab, 0); g.uniform1i(u.uRelief, 1); g.uniform1i(u.uWood, 3); g.uniform2f(u.uSize, ...this.size); g.uniform1f(u.uReal, this.real); g.uniform1f(u.uSeed, this.seed);
-      g.uniform3f(u.uSun, ...o.style.sun); g.uniform1f(u.uShOn, 0); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uRel, o.relief ?? 1);
+      g.uniform3f(u.uSun, ...o.style.sun); g.uniform1f(u.uShOn, 0); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uRel, (o.relief ?? 1) * o.style.map.relief); g.uniform1f(u.uGloss, o.style.surface.gloss); g.uniform4f(u.uWash, ...o.style.map.wash.map((v, i) => (i < 3 ? v / 255 : v)));
       o.lamp?.(u);
       return u;
     };
@@ -1702,7 +1748,7 @@ const { canDraw } = $m[2];
 const { Camera } = $m[3];
 const { Meshes } = $m[5];
 const { models } = $m[6];
-const { STYLES } = $m[8];
+const { STYLE_KEY, styleOf } = $m[8];
 const { WorldGround } = $m[10];
 
 /** Fetch and unpack a world: absolute points for every arc, a path, box and middle for every province. */
@@ -1796,7 +1842,7 @@ function worldMap(canvas, world, o) {
   let queued = false, moved = 0, last = null, pinch = null, drawn = null, settle = 0, layers = null, signature = "", later = 0, wide = 1, lit = null, timed = [], pieces = null;
 
   // ---- the lit map: its own canvas under this one ----
-  const style = STYLES.painted, cam = new Camera();
+  const style = styleOf(read(STYLE_KEY)), cam = new Camera(); // the same style as the table games wear
   function light() {
     if (lit || read(FLAT) || !canDraw()) return;
     const under = document.createElement("canvas");
@@ -1878,7 +1924,7 @@ function worldMap(canvas, world, o) {
       if ((p.band || 0) > b || (p.until ?? 9) < b) continue;
       const q = Array.isArray(p.at) ? p.at : world.provinces.get(p.at)?.label;
       if (!q) continue;
-      list.push({ m: p.m, x: q[0] + (p.dx || 0) * k, y: q[1] + (p.dy || 0) * k, z: p.sea ? 0 : 1, s: k * (p.size || 1), t: p.turn || 0, rgb: p.owner ? rgbOf(o.colour?.(p.owner) || ownerColour(p.owner)) : p.rgb || null });
+      list.push({ m: p.m, x: q[0] + (p.dx || 0) * k, y: q[1] + (p.dy || 0) * k, z: p.sea ? 0 : 1, s: k * (p.size || 1) * style.scale, t: p.turn || 0, rgb: p.owner ? rgbOf(o.colour?.(p.owner) || ownerColour(p.owner)) : p.rgb || null });
     }
     lit.meshes.set(list);
     return k;
@@ -1889,7 +1935,7 @@ function worldMap(canvas, world, o) {
     cam.set({ W: cw, H: ch, s: view.s, cx: view.x + cw / 2 / view.s, cy: view.y + ch / 2 / view.s, tilt: t, yaw: 0, q: 0 });
     const k = stage(), pad = k * 2;
     lit.meshes.cast([x0 - pad, y0 - pad, x1 - x0 + pad * 2, y1 - y0 + pad * 2], rise(), style.sun, k * 1.4);
-    lit.ground.draw(cam, d, { style, relief: Math.max(0.2, Math.min(1, (wide * 2.4) / view.s)), rise: rise(), tint: o.tint?.() ?? 0.56, lamp: (u) => lit.meshes.lamp(u, true, style.sun) });
+    lit.ground.draw(cam, d, { style, relief: Math.max(0.2, Math.min(1, (wide * 2.4) / view.s)), rise: rise(), tint: o.tint?.() ?? style.map.tint, lamp: (u) => lit.meshes.lamp(u, true, style.sun) });
     lit.meshes.draw(cam, rise(), style);
   }
 
@@ -2069,7 +2115,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.8.2";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "0c8ec0fe";
+const BUILD = "a9f87b6d";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
