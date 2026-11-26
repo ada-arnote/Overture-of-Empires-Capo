@@ -49,6 +49,13 @@ function geo() {
   };
 }
 
+/** The way back to every game, when this page has one (the double-click copy does not). */
+function home() {
+  const a = $("homelink").querySelector("a"), p = el("p", undefined, "note");
+  if (a) { const b = a.cloneNode(true); b.textContent = "Back to all games"; p.append(b); }
+  return p;
+}
+
 // ---- the first screen ----
 function startScreen() {
   const box = $("start-box"), kept = load(), pick = el("input", undefined, "plain"), list = el("datalist");
@@ -78,7 +85,7 @@ function startScreen() {
   const l1 = el("label"); l1.append("Your country", pick, list);
   box.replaceChildren(el("p", "Overture of Empires", "eyebrow"), el("h1", "Capo"),
     el("p", "Lead any country in the world today, or live in one. You decide what to do; an AI tells what happens; the rules keep the facts. An early test build of the new screen.", "note"),
-    l1, el("div", "How you play", "note"), modes, go,
+    l1, el("div", "How you play", "note"), modes, go, home(),
     el("p", "Fiction for adults. Not news and not a forecast. Real public figures may appear. Needs an AI: paste each turn into any AI you use, or give an address.", "note"));
   $("start").classList.add("open");
 }
@@ -234,7 +241,7 @@ function gameSheet(box) {
     button("Save to a file", () => { const a = el("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: "application/json" })); a.download = `capo-${state.player}-turn-${state.turn}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }),
     button("Open a file", () => file.click()),
     button("New game", () => { if (confirm("Leave this game? It stays saved until you begin another.")) { open(null); $("top").hidden = true; $("dock").hidden = true; state = null; startScreen(); } }));
-  box.append(el("h2", "Game"), el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back.`, "note"), saves, file,
+  box.append(el("h2", "Game"), home(), el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back.`, "note"), saves, file,
     el("h3", "How Capo reaches an AI"), line("Route", pick), line("Address", base), line("Model", model), line("Key", key), keepLine, aiRow,
     el("p", `Today: ${route.calls || 0} calls, about ${route.sent || 0} tokens sent and ${route.got || 0} received.`, "note"),
     el("p", "A key goes only to the address you give, straight from this page. Capo has no server and never sees it.", "note"));
