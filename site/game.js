@@ -9,6 +9,8 @@ import { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharact
 import { STANDING, askPrompt, changeStanding, chatPrompt, councilPrompt, moveFavour, readAsk, readChat, readCouncil, seatsFor, talkLines } from "../src/story/talk.js";
 import { loadWorld, ownerColour, worldMap } from "./worldmap.js";
 import { ask, forgetKey, loadRoute, saveRoute } from "./ai.js";
+import { BUILD, SOURCE_URL, VERSION } from "./config.js";
+import { guard } from "./guard.js";
 
 const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);
@@ -716,6 +718,13 @@ function askCouncil(members) {
 }
 
 
+/** Which build this is, and where its source can be read (the AGPL asks that every copy says so). */
+function about() {
+  const p = el("p", `Overture of Empires: Capo, version ${VERSION}, build ${BUILD}. Free software under the GNU AGPL. `, "note"), a = el("a", "Source code");
+  a.href = SOURCE_URL; a.target = "_blank"; a.rel = "noopener"; p.append(a);
+  return p;
+}
+
 function gameSheet(box) {
   const pick = el("select", undefined, "plain"), base = el("input", undefined, "plain"), model = el("input", undefined, "plain"), key = el("input", undefined, "plain"), keep = el("input");
   pick.append(new Option("Paste by hand into any AI", "paste"), new Option("An address I give (chat-completions form)", "address")); pick.value = route.route;
@@ -724,7 +733,7 @@ function gameSheet(box) {
   Object.assign(key, { type: "password", value: route.key, placeholder: "Key, if the service needs one", autocomplete: "off" });
   Object.assign(keep, { type: "checkbox", checked: !!route.remember });
   const line = (label, input) => { const l = el("label", undefined, "note"); l.style.display = "grid"; l.style.gap = "4px"; l.append(label, input); return l; };
-  const keepLine = el("label", undefined, "note"); keepLine.append(keep, " Remember the key on this device");
+  const keepLine = el("label", undefined, "note"); keepLine.append(keep, " Remember the key in this browser (not on a shared device)");
   const store = () => { route = { ...route, route: pick.value, base: base.value.trim(), model: model.value.trim(), key: key.value, remember: keep.checked }; saveRoute(route); };
   const aiRow = el("div", undefined, "row");
   aiRow.append(button("Save", () => { store(); toast("Saved."); }, "go"), button("Test", async () => { store(); try { const t = await ask(route, "Reply with the single word READY."); toast(`It answered: ${t.slice(0, 40)}`); } catch (e) { toast(e.message); } }), button("Forget the key", () => { route = forgetKey(route); open("game"); toast("Key forgotten."); }));
@@ -753,7 +762,8 @@ function gameSheet(box) {
     el("h3", "Save the world as a scenario"), el("p", `A starting point others can play: today's date, who holds what, wars, treaties, story facts and might${state.custom ? `, and ${state.custom.name}` : ""}. Not your actions, chats or council.`, "note"), sTitle, sBlurb, sOpen, sRow,
     el("h3", "How Capo reaches an AI"), line("Route", pick), line("Address", base), line("Model", model), line("Key", key), keepLine, aiRow,
     el("p", `Today: ${route.calls || 0} calls, about ${route.sent || 0} tokens sent and ${route.got || 0} received.`, "note"),
-    el("p", "A key goes only to the address you give, straight from this page. Capo has no server and never sees it.", "note"));
+    el("p", "A key goes only to the address you give, straight from this page; Capo has no server and never sees it. Use a key with a spending cap. A remembered key stays in this browser, where other pages at this site's address could read it, so leave Remember off on a shared or borrowed device.", "note"),
+    about());
 }
 
 // ---- the guide: one turn, start to finish, pointing at each part of the screen; once, and again from the Game menu ----
@@ -833,4 +843,5 @@ async function start() {
   if (kept?.state && (homes.has(kept.state.player) || kept.state.custom?.code === kept.state.player)) { state = mend(kept.state); past = (kept.past || []).map(mend); play(); } else startScreen();
 }
 addEventListener("keydown", (e) => { if (e.key === "Escape" && guideAt >= 0) guide(-1); });
+guard();
 start();

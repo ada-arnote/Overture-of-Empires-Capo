@@ -18,3 +18,4 @@ h2 { font: 500 1.6rem/1.2 var(--serif); margin: 1.8em 0 .7em; color: var(--gold)
 .soon { opacity: .62; cursor: default } .soon:hover { border-color: var(--line); transform: none } .soon b { font-size: 1.6rem }
 h1 { font-size: clamp(2.6rem, 8vw, 5rem) }
 .game.wide { grid-column: 1 / -1 }
+.privacy { margin-top: 10px; font-size: 15px; color: var(--soft) } .privacy b { color: var(--text) } .privacy a { color: var(--gold) }

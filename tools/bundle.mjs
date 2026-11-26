@@ -55,7 +55,7 @@ export function page(html, css, js, home = "", fetches = false) {
   // a page that fetches keeps the addresses it may reach (its own site for map data, an AI for the story); the games reach nothing
   const reach = html.match(/connect-src ([^;"]*)/)?.[1]?.trim() || "", talk = fetches && reach ? ` connect-src ${reach};` : "";
   return html
-    .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, () => `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src data:;${talk} base-uri 'none'; form-action 'none'">`)
+    .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, () => `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src data:;${talk} base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">`)
     .replace(/<link rel="stylesheet"[^>]*>/, () => `<style>\n${css}</style>`)
     .replace(/<a href="\.\/" class="text">All games<\/a>/, home ? `<a href="${home}" class="text">All games</a>` : "")
     .replace(/<script type="module"[^>]*><\/script>/, () => `<script>\n${safe}\n</script>`);
@@ -65,7 +65,9 @@ if (process.argv[1]?.endsWith("bundle.mjs")) {
   const at = (f) => readFileSync(path.join(root, "site", f), "utf8"), out = path.join(root, "dist");
   mkdirSync(out, { recursive: true });
   for (const name of ["inch", "fable", "banners", "glass", "world", "game"]) {
-    const fetches = ["world", "game"].includes(name), js = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`, text = page(at(`${name}.html`), at("table.css"), js, "", fetches);
+    // each page is stamped with a short fingerprint of its own code, so the footer says exactly which build is live
+    const raw = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`, stamp = createHash("sha256").update(raw).digest("hex").slice(0, 8);
+    const fetches = ["world", "game"].includes(name), js = raw.replace('const BUILD = "dev";', `const BUILD = "${stamp}";`), text = page(at(`${name}.html`), at("table.css"), js, "", fetches);
     mkdirSync(path.join(root, "play"), { recursive: true });
     writeFileSync(path.join(root, "play", `${name}.html`), page(at(`${name}.html`), at("table.css"), js, "../site/", fetches));
     writeFileSync(path.join(out, `play-${name}.html`), text);

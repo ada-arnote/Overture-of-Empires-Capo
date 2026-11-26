@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A first look at the world province map that Capo's story worlds will be played on.
 import { loadWorld, worldMap } from "./worldmap.js";
+import { BUILD, SOURCE_URL, VERSION } from "./config.js";
+import { guard } from "./guard.js";
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
@@ -32,4 +34,7 @@ async function start() {
   $("names").append(...[...names.keys()].sort().map((n) => { const o = document.createElement("option"); o.value = n; return o; }));
   $("find").addEventListener("change", (e) => { const id = names.get(e.target.value); if (id) { choose(world.provinces.get(id)); map.show(id); e.target.blur(); } });
 }
+guard();
+// the credit line also names the build and links the source
+{ const c = document.querySelector(".credit"), a = document.createElement("a"); a.href = SOURCE_URL; a.textContent = "source"; a.style.color = "inherit"; c.append(`. Version ${VERSION}, build ${BUILD}, `, a); }
 start();

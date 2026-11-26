@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-DQL7blgvdX6+qAllT2UGM4QGVN9BBclHWNKovcWCcGw='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+8aszXzGzgk02X45PVl0eO2JqQQtgZc217I50fmToIw='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Grain and Glass</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -1929,17 +1929,38 @@ $m[18] = (($x) => {
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-const VERSION = "0.0.1";
+const VERSION = "0.4.0";
+// "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
+const BUILD = "ed84cd5b";
 
-$x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION;
+$x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
+return $x; })({});
+$m[19] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
+function guard() {
+  let framed = false;
+  try { framed = window.top !== window.self; } catch { framed = true; }
+  if (!framed) return;
+  const p = document.createElement("p"), a = document.createElement("a");
+  a.href = location.href; a.target = "_top"; a.rel = "noopener"; a.textContent = "Open this game in its own tab";
+  p.append("This page cannot be shown inside another site. ", a);
+  p.style.cssText = "margin:40px auto;max-width:30em;font:18px/1.5 Georgia,serif;color:#f1e9d6;text-align:center";
+  document.body.replaceChildren(p);
+  document.body.style.background = "#12171a";
+}
+
+$x.guard = guard;
 return $x; })({});
 $m[17] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-const { SOURCE_URL, VERSION } = $m[18];
+const { BUILD, SOURCE_URL, VERSION } = $m[18];
+const { guard } = $m[19];
 
 /** Every page shows its version and where its source can be read. */
 function footer() {
-  document.getElementById("version").textContent = `Version ${VERSION}`;
+  guard();
+  document.getElementById("version").textContent = `Version ${VERSION}, build ${BUILD}`;
   const at = document.getElementById("source");
   if (!/^https:\/\//.test(SOURCE_URL)) { at.textContent = "Source code: the address is not set yet"; return; }
   const a = document.createElement("a");
@@ -1950,7 +1971,7 @@ function footer() {
 
 $x.footer = footer;
 return $x; })({});
-$m[19] = (($x) => {
+$m[20] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Games played by pasting a link. The whole game is in the part after #, which browsers do not send to the host.
 // With a password the game is locked (AES-GCM, the key made from the password by PBKDF2) before it goes in the link.
@@ -2022,7 +2043,7 @@ $m[12] = (($x) => {
 const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } = $m[5];
 const { EMBLEMS, emblem } = $m[13];
 const { footer } = $m[17];
-const { canLock, linkGames, makeLink, newId, readLink } = $m[19];
+const { canLock, linkGames, makeLink, newId, readLink } = $m[20];
 
 const COLOURS = [["Azure", [91, 143, 196]], ["Rust", [208, 106, 75]], ["Moss", [138, 168, 81]], ["Plum", [160, 108, 182]], ["Saffron", [222, 176, 62]], ["Teal", [64, 160, 150]], ["Rose", [220, 124, 154]], ["Slate", [112, 124, 138]], ["Umber", [146, 100, 64]], ["Indigo", [88, 92, 190]], ["Lime", [186, 208, 72]], ["Crimson", [176, 48, 62]], ["Ivory", [236, 226, 200]], ["Night", [52, 58, 78]]];
 const LOOK0 = [[0, 0], [1, 1], [2, 2], [3, 3], [4, 8], [5, 4]];
@@ -2560,7 +2581,7 @@ function createTable(G) {
 
 $x.COLOURS = COLOURS; $x.NAMES = NAMES; $x.RGB = RGB; $x.ICONS = ICONS; $x.PAPER = PAPER; $x.dress = dress; $x.$ = $; $x.el = el; $x.sleep = sleep; $x.sign = sign; $x.radio = radio; $x.toast = toast; $x.sheet = sheet; $x.createTable = createTable;
 return $x; })({});
-$m[20] = (($x) => {
+$m[21] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The hex board for a game's screen: the moving one when the device can draw it, else a still picture that can be tapped.
 const { LOOKS, canDraw, createBoard } = $m[13];
@@ -2619,7 +2640,7 @@ $m[0] = (($x) => {
 const { COST, EXPANSIONS, GOODS, NONE, SWITCHES, WASTE, boardOf, glass, goalOf, pointsOf, priceOf, rateOf } = $m[1];
 const { choose, thinking } = $m[3];
 const { $, NAMES, RGB, createTable, el, radio, toast } = $m[12];
-const { hexBoard } = $m[20];
+const { hexBoard } = $m[21];
 
 const SEA = [70, 116, 140], TILE = [[226, 196, 96], [176, 206, 214], [196, 120, 82], [228, 226, 214]], WASTEG = [150, 140, 120];
 const KINDS = { route: "Route", depot: "Depot", town: "Town", harbour: "Harbour", plan: "Plan", trade: "Trade", use: "Play a plan" };

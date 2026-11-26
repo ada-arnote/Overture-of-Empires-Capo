@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-UrSDBeJuVpbamavcAf8FPyXyd5FtDYmloTSaqbmf9Os='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-/8LQlTfGl3Cr+0mvg93OKv6tgM0o6cNAPuK6xsNUJ80='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -1865,6 +1865,35 @@ async function ask(r, prompt, signal) {
 
 $x.loadRoute = loadRoute; $x.saveRoute = saveRoute; $x.forgetKey = forgetKey; $x.ask = ask;
 return $x; })({});
+$m[9] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Where this copy's source code can be read. Anyone who runs a changed copy puts their own address here.
+const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
+// Where the games can be opened. Links made from a page opened as a file use it.
+const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
+const VERSION = "0.4.0";
+// "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
+const BUILD = "014f4550";
+
+$x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
+return $x; })({});
+$m[10] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
+function guard() {
+  let framed = false;
+  try { framed = window.top !== window.self; } catch { framed = true; }
+  if (!framed) return;
+  const p = document.createElement("p"), a = document.createElement("a");
+  a.href = location.href; a.target = "_top"; a.rel = "noopener"; a.textContent = "Open this game in its own tab";
+  p.append("This page cannot be shown inside another site. ", a);
+  p.style.cssText = "margin:40px auto;max-width:30em;font:18px/1.5 Georgia,serif;color:#f1e9d6;text-align:center";
+  document.body.replaceChildren(p);
+  document.body.style.background = "#12171a";
+}
+
+$x.guard = guard;
+return $x; })({});
 $m[0] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's game screen: the world map full-screen, a top bar, the dock and the province card, as in the original
@@ -1877,6 +1906,8 @@ const { CHARACTER, SCENARIOS, SOON, characterPrompt, checkScenario, readCharacte
 const { STANDING, askPrompt, changeStanding, chatPrompt, councilPrompt, moveFavour, readAsk, readChat, readCouncil, seatsFor, talkLines } = $m[5];
 const { loadWorld, ownerColour, worldMap } = $m[7];
 const { ask, forgetKey, loadRoute, saveRoute } = $m[8];
+const { BUILD, SOURCE_URL, VERSION } = $m[9];
+const { guard } = $m[10];
 
 const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);
@@ -2584,6 +2615,13 @@ function askCouncil(members) {
 }
 
 
+/** Which build this is, and where its source can be read (the AGPL asks that every copy says so). */
+function about() {
+  const p = el("p", `Overture of Empires: Capo, version ${VERSION}, build ${BUILD}. Free software under the GNU AGPL. `, "note"), a = el("a", "Source code");
+  a.href = SOURCE_URL; a.target = "_blank"; a.rel = "noopener"; p.append(a);
+  return p;
+}
+
 function gameSheet(box) {
   const pick = el("select", undefined, "plain"), base = el("input", undefined, "plain"), model = el("input", undefined, "plain"), key = el("input", undefined, "plain"), keep = el("input");
   pick.append(new Option("Paste by hand into any AI", "paste"), new Option("An address I give (chat-completions form)", "address")); pick.value = route.route;
@@ -2592,7 +2630,7 @@ function gameSheet(box) {
   Object.assign(key, { type: "password", value: route.key, placeholder: "Key, if the service needs one", autocomplete: "off" });
   Object.assign(keep, { type: "checkbox", checked: !!route.remember });
   const line = (label, input) => { const l = el("label", undefined, "note"); l.style.display = "grid"; l.style.gap = "4px"; l.append(label, input); return l; };
-  const keepLine = el("label", undefined, "note"); keepLine.append(keep, " Remember the key on this device");
+  const keepLine = el("label", undefined, "note"); keepLine.append(keep, " Remember the key in this browser (not on a shared device)");
   const store = () => { route = { ...route, route: pick.value, base: base.value.trim(), model: model.value.trim(), key: key.value, remember: keep.checked }; saveRoute(route); };
   const aiRow = el("div", undefined, "row");
   aiRow.append(button("Save", () => { store(); toast("Saved."); }, "go"), button("Test", async () => { store(); try { const t = await ask(route, "Reply with the single word READY."); toast(`It answered: ${t.slice(0, 40)}`); } catch (e) { toast(e.message); } }), button("Forget the key", () => { route = forgetKey(route); open("game"); toast("Key forgotten."); }));
@@ -2621,7 +2659,8 @@ function gameSheet(box) {
     el("h3", "Save the world as a scenario"), el("p", `A starting point others can play: today's date, who holds what, wars, treaties, story facts and might${state.custom ? `, and ${state.custom.name}` : ""}. Not your actions, chats or council.`, "note"), sTitle, sBlurb, sOpen, sRow,
     el("h3", "How Capo reaches an AI"), line("Route", pick), line("Address", base), line("Model", model), line("Key", key), keepLine, aiRow,
     el("p", `Today: ${route.calls || 0} calls, about ${route.sent || 0} tokens sent and ${route.got || 0} received.`, "note"),
-    el("p", "A key goes only to the address you give, straight from this page. Capo has no server and never sees it.", "note"));
+    el("p", "A key goes only to the address you give, straight from this page; Capo has no server and never sees it. Use a key with a spending cap. A remembered key stays in this browser, where other pages at this site's address could read it, so leave Remember off on a shared or borrowed device.", "note"),
+    about());
 }
 
 // ---- the guide: one turn, start to finish, pointing at each part of the screen; once, and again from the Game menu ----
@@ -2701,6 +2740,7 @@ async function start() {
   if (kept?.state && (homes.has(kept.state.player) || kept.state.custom?.code === kept.state.player)) { state = mend(kept.state); past = (kept.past || []).map(mend); play(); } else startScreen();
 }
 addEventListener("keydown", (e) => { if (e.key === "Escape" && guideAt >= 0) guide(-1); });
+guard();
 start();
 
 
