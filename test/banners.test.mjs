@@ -6,8 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chance, createMatch, seedState } from "../src/core/index.js";
-import { EXPANSIONS, HAND, NONE, SAFETY, SWITCHES, amounts, banners, boardOf, bonusOf, bordersOf, cellsOf, goalOf, muster, nearOf, odds, setWorth, setsOf, wholeOf } from "../src/games/banners/rules.js";
-import { DICE, meet, odds as diceOdds } from "../src/games/banners/dice.js";
+import { EXPANSIONS, HAND, NONE, SAFETY, SWITCHES, amounts, banners, boardOf, bonusOf, bordersOf, cellsOf, gain, goalOf, muster, nearOf, odds, setWorth, setsOf, toll, wholeOf } from "../src/games/banners/rules.js";
+import { DICE, fair, meet, odds as diceOdds, toll as diceToll } from "../src/games/banners/dice.js";
 import { areaBoard } from "../src/games/areas.js";
 import { TIERS, choose } from "../src/games/banners/bot.js";
 import { SLOW, botGame, ended, inList, passive, refused, replays, same, sameEachStep, slowOnly } from "./fixtures/bots.js";
@@ -266,7 +266,7 @@ test("a knockout hands over the cards; at five or more Traditional must hand in 
   const p = made([[A, 0, 40], [B, 1, 1], [far, 2, 3], [far2, 2, 3]], { seats: 3, style: "classic", hands: [[0], [1], []] });
   assert.equal(banners.apply(win(p, A, B).position, { do: "occupy", n: 0 }).position.phase, "attack");
 });
-test("first turns: under grade each seat in round 1 musters its place in the order in parts, the last all of it; under lean the first of two musters a third", () => {
+test("first turns: under grade each seat in round 1 musters more the later it moves, the first at least half and the last all of it; under lean the first of two musters a third", () => {
   const firsts = (options) => {
     const m = createMatch(banners, { seed: "first " + JSON.stringify(options), options }), got = [];
     while (m.turn !== null && m.position.round === 1) {
@@ -279,10 +279,77 @@ test("first turns: under grade each seat in round 1 musters its place in the ord
   };
   for (const seats of [2, 3, 5]) {
     const got = firsts({ seats, style: "custom", start: "far", opening: "grade" });
-    got.forEach(([left, all], i) => assert.equal(left, Math.floor((all * (i + 1)) / seats), `${seats} seats, place ${i + 1}`));
+    got.forEach(([left, all], i) => assert.equal(left, Math.floor((all * (seats + i)) / (2 * seats - 1)), `${seats} seats, place ${i + 1}`));
+    got.forEach(([left, all], i) => { assert.ok(2 * left + 1 >= all, "nobody starts with less than half, rounded down"); if (i) assert.ok(left >= got[i - 1][0]); });
     assert.equal(got.at(-1)[0], got.at(-1)[1]);
   }
   const lean = firsts({ seats: 2, style: "classic" });
   assert.equal(lean[0][0], Math.floor(lean[0][1] / 3)); assert.equal(lean[1][0], lean[1][1]);
   for (const [left, all] of firsts({ seats: 3, style: "classic" })) assert.equal(left, all, "lean is for two seats only");
+});
+
+test("scored rounds: Capo is ten of them; from round 2 each seat scores what it holds as its turn starts, everyone once more at the end, and the most points wins", () => {
+  const quiet = (list) => list.filter((x) => x.do !== "place" || x.at === list[0].at).reduce((a, x) => (x.do === "place" && a.do === "place" && x.n > a.n ? x : a));
+  const m = start(3), scored = [0, 0, 0], times = [0, 0, 0];
+  assert.equal(m.position.rule.score, "rounds"); assert.equal(m.position.rounds, 10); assert.deepEqual(m.position.points, [0, 0, 0]);
+  passive(m, quiet, (events) => {
+    for (const e of events) if (e.kind === "score") {
+      assert.ok(m.position.round > 1, "nothing is scored in round 1");
+      assert.ok(Number.isInteger(e.n) && e.n >= 0);
+      scored[e.seat] += e.n; times[e.seat]++;
+      assert.equal(e.all, scored[e.seat]);
+    }
+  });
+  const p = m.position;
+  assert.deepEqual(p.points, scored);
+  assert.deepEqual(times, [10, 10, 10], "nine turn starts and the end");
+  assert.equal(p.over.why, "scored the most over the rounds");
+  assert.ok(p.over.winners.every((s) => p.points[s] === Math.max(...p.points)));
+  // what is scored is what is held: 1 for every three provinces, a whole land's bonus, 2 for a capital when capitals are played
+  const q = made([[A, 0, 2], [B, 0, 2], [far, 0, 2], [far2, 1, 2]]);
+  assert.equal(gain(q, 0), 1); assert.equal(gain(q, 1), 0);
+  const land = boardOf(q).region[A], whole = made(boardOf(q).region.flatMap((k, i) => (k === land ? [[i, 0, 1]] : [])));
+  assert.equal(gain(whole, 0), Math.floor(cellsOf(whole, 0) / 3) + bonusOf(boardOf(whole), land));
+  assert.equal(gain({ ...q, caps: [A, far2] }, 1), 2);
+  // level on points, the most land wins; and land rules keep no points at all
+  for (const style of ["classic", "custom"]) assert.equal(start(2, style).position.points, null);
+  assert.equal(createMatch(banners, { seed: "s", options: { style: "custom", score: "rounds", rounds: 0 } }).position.points, null, "scoring needs a last round");
+});
+test("scored rounds: a seat is scored after the others have answered, and holding enough land still wins at once", () => {
+  const p = made([[A, 0, 40], [B, 1, 1], [far, 1, 1], [far2, 0, 1]], { round: 2, points: [0, 0], step: 0 });
+  const took = win(p, A, B).position, done = banners.apply(banners.apply(took, { do: "occupy", n: 0 }, roller("o")).position, { do: "end" }, roller("e"));
+  assert.deepEqual(done.position.points[0], 0, "taking land scores nothing until your turn comes round again");
+  assert.ok(done.events.some((e) => e.kind === "score" && e.seat === 1), "the next seat is scored as its turn starts");
+  const all = made(b.near.map((_, i) => [i, i === far ? 1 : 0, i === A ? 40 : 1]).filter(([i]) => i !== B).concat([[B, 1, 1]]), { round: 2, points: [0, 9] });
+  const end = win(all, A, B).position;
+  assert.deepEqual(end.over.winners, [0]); assert.equal(end.over.why, "held enough of the land");
+});
+test("what a fight is likely to cost: nothing against nobody, never more than was sent, more against more; one throw's fair share adds up", () => {
+  for (const [name, d] of Object.entries(DICE)) {
+    const how = { ...d, up: 0, down: 0 };
+    assert.equal(diceToll(5, 0, how), 0); assert.equal(diceToll(0, 5, how), 0);
+    for (const a of [1, 3, 8, 20]) for (const dn of [1, 2, 6]) {
+      const t = diceToll(a, dn, how);
+      assert.ok(Number.isInteger(t) && t >= 0 && t <= 1000 * a, `${name} ${a} against ${dn}: ${t}`);
+      if (a >= 20) assert.ok(diceToll(a, dn + 3, how) > t, "a larger garrison costs more to take");
+    }
+    for (let a = 1; a <= d.a; a++) for (let dn = 1; dn <= d.d; dn++) {
+      const [x, y] = fair(a, dn, how), pairs = Math.min(a, dn);
+      assert.ok(x >= 0 && y >= 0 && x + y >= 1000 * pairs - 2 && x + y <= 2000 * pairs, `${name} ${a} dice against ${dn}`);
+      if (d.tie === "attacker") assert.ok(Math.abs(x + y - 1000 * pairs) <= 2, "each pair of dice costs one side exactly one");
+    }
+  }
+  const p = made([[A, 0, 9], [B, 1, 3]]);
+  assert.equal(toll(p, A, B), diceToll(8, 3, { ...DICE[p.rule.dice], up: 0, down: 0 }));
+});
+test("the hard bot plays whole legal games in every rule set, the same way from the same seed", () => {
+  assert.ok(TIERS.includes("hard"));
+  for (const style of STYLES) {
+    const run = () => botGame(banners, choose, { seed: "hard " + style, options: { seats: 3, style }, tiers: ["hard", "normal", "hard"], each: sound });
+    const m = run();
+    ended(m, 3);
+    if (style === "ours") assert.equal(run().fingerprint(), m.fingerprint());
+  }
+  const all = Object.fromEntries(EXPANSIONS.map((x) => [x, true]));
+  ended(botGame(banners, choose, { seed: "hard all", options: { seats: 4, style: "ours", ...all }, tiers: ["hard"], each: sound }), 4);
 });

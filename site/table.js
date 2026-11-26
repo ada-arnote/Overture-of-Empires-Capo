@@ -25,7 +25,7 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const THEME = "capo-tent-theme";
 const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["away", "A friend, by link"]];
 // gentle is the lessons' bot, not offered in the setup
-const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
+const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", gentle: "Gentle bot", hard: "Hard bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
 const store = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* files still work */ } };
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 
@@ -522,9 +522,9 @@ export function createTable(G) {
     for (const m of marks) if (m.room > 26) { x.drawImage(sign(m.s), m.at, m.y - 13, 26, 26); x.fillStyle = inkOf(RGB[m.s]); x.fillText(nameOf(m.s), m.at + 32, m.y + 1); }
     c.setAttribute("role", "img"); c.setAttribute("aria-label", `Land held over the game. At the end: ${tally(p).map((v, s) => `${nameOf(s)} ${v}`).join(", ")}.`);
     // places
-    let rows = ranked(Array.from({ length: names ? names.length : T.kinds.length }, (_, s) => ({ seat: s, won: r.winners.includes(s), score: G.cellsOf(p, s), fell: fell[s] })));
+    let rows = ranked(Array.from({ length: names ? names.length : T.kinds.length }, (_, s) => ({ seat: s, won: r.winners.includes(s), score: (G.placeOf || G.cellsOf)(p, s), land: G.cellsOf(p, s), fell: fell[s] }))); // G.placeOf: what places are ranked by, when it is not land
     if (names) rows = rows.filter((w, i) => i < 8 || mine(w.seat));
-    rows = rows.map((w) => ({ ...w, name: nameOf(w.seat), figures: [[G.unit || "Land", w.score], ...G.stats(p, w.seat), ...(rounds ? [["Rounds", w.fell ?? last]] : [])] }));
+    rows = rows.map((w) => ({ ...w, name: nameOf(w.seat), figures: [[G.unit || "Land", w.land], ...G.stats(p, w.seat), ...(rounds ? [["Rounds", w.fell ?? last]] : [])] }));
     const scroll = el("div", undefined, "ranks"), table = el("table"), head = el("tr");
     head.append(...["Place", "Player", ...rows[0].figures.map(([k]) => k)].map((t) => { const th = el("th", t); th.scope = "col"; return th; }));
     table.append(head, ...rows.map((w) => {
@@ -553,7 +553,7 @@ export function createTable(G) {
     look.onclick = closeSheet;
     copyIt.onclick = async () => { try { await navigator.clipboard.writeText(text); copyIt.textContent = "Copied"; } catch { toast(text); } };
     go.append(all, change, again); minor.append(look, copyIt);
-    body.append(hero, scroll, c, go, minor);
+    body.append(hero, scroll, c, ...[G.report?.(T)].filter(Boolean), go, minor); // G.report: the figures a game adds to the end
     sheet(lost ? "Defeat" : people ? "Victory" : "The end", body, null, `end ${lost ? "lose" : "win"}`);
     again.focus();
   }
@@ -672,7 +672,7 @@ export function createTable(G) {
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
       const li = el("li"), k = el("select");
-      k.append(...KINDS.map(([v, t]) => new Option(t, v)));
+      k.append(...(G.hard ? [...KINDS.slice(0, 1), ["hard", WORDS.hard], ...KINDS.slice(1)] : KINDS).map(([v, t]) => new Option(t, v))); // G.hard: the game has a hard bot to offer
       k.value = setup.who[s];
       k.setAttribute("aria-label", NAMES[s]);
       k.onchange = () => { setup.who[s] = k.value; passLine(); };

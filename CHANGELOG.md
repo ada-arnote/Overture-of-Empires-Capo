@@ -2,6 +2,26 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Brass and Banners: scored rounds, a hard bot, and battles you can read
+
+**Players**
+- **Capo is now ten scored rounds.** From round 2 you score at the start of your turn for what you still hold (1 for every three provinces, and each whole land's bonus; 2 for a capital when capitals are played), so every player is scored after the others have had their answer. After round 10 everyone left scores once more and the most points wins; level on points, the most land. Holding 65% of the land, or being the last one left, still wins at once. Custom has the same rule as a switch (Scoring), and a 10-round length.
+- **A fairer first round.** Where the first round grows down the order (Capo, and Custom's "Round 1 grows down the order"), nobody now starts with less than half: the first to move places a little over half of its strength and the last places all of it. Before, the first of four placed nothing.
+- **Battles on the map.** Every fight shows its last throw's dice between the two provinces and what each side lost, rising off the board, for bots' fights as well as yours. The panel says how many throws were made, what each side lost and whether the province fell, so a rolled-out fight no longer hides its cost.
+- **The likely cost, before you roll.** Beside the chance of taking a province, the panel gives what rolling it out is likely to cost you.
+- **Every die counted.** "Lands and dice" in the menu lists every die thrown by each player: how often each face came up, the average, and how far the dice ran ahead of or behind the odds.
+- **A battle record at the end.** The end screen adds provinces taken and lost, fights won, strength struck down and fallen, each player's dice luck, and the boldest win of the game.
+- **A hard bot.** It plans a whole march instead of one fight at a time, and counts what each fight is likely to cost. Against the ordinary bot it won 54 in 100 two-player Capo games, 60 in 100 two-player Traditional games, and 33 in 100 four-player Capo games where an even share is 25.
+- **Bots move faster.** Placing and moving in take a fraction of the time they did; fights keep enough time to be read.
+- The dice of the last fight no longer sit under the next one you choose, and the hidden dice box no longer keeps a label from another game.
+
+**Contributors**
+- Rules version 6 (one bump): `score` switch and `points` in the position, `gain()`, the new grade, `rounds: 10`. Fairness, 1,000 normal-bot games a seat count, widest gap between seats in points: Capo 7.2 / 2.9 / 4.0 / 6.4 / 3.3 at 2 to 6 seats; Traditional 0.8 / 4.1 / 2.3 / 4.0 / 6.6.
+- `dice.js` gains `toll()` (the likely cost of rolling out, in thousandths) and `fair()` (one throw's expected losses). The battle record is counted by replaying the seed and moves, so it needs no saved state.
+- Three small hooks in `site/table.js`: `G.hard` (offer a hard bot), `G.placeOf` (what places are ranked by) and `G.report` (a game's own figures on the end screen).
+
 ## v0.7.0 (2026-11-26): new worlds, and a deeper Capo
 
 ### A deeper Capo: gauges, ambitions, crises, causes for war, the press

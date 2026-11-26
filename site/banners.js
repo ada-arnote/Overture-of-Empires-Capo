@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Brass and Banners on the table: place strength, attack with dice, move in, move once.
-import { EXPANSIONS, FORT, HAND, NONE, SAFETY, SWITCHES, banners, bonusOf, bordersOf, boardOf, capsHeld, capsToWin, cellsOf, goalOf, landOf, muster, nameOf, odds, setWorth, setsOf, suitOf, terms, wholeOf } from "../src/games/banners/rules.js";
+import { EXPANSIONS, FORT, HAND, NONE, SAFETY, SWITCHES, banners, bonusOf, bordersOf, boardOf, capsHeld, capsToWin, cellsOf, gain, goalOf, landOf, muster, nameOf, odds, setWorth, setsOf, suitOf, terms, toll, wholeOf } from "../src/games/banners/rules.js";
 import { choose, thinking } from "../src/games/banners/bot.js";
-import { DICE } from "../src/games/banners/dice.js";
+import { DICE, fair, meet } from "../src/games/banners/dice.js";
+import { createMatch } from "../src/core/index.js";
+import { settings } from "./shell.js";
 import { areaPicture } from "../src/map/areas.js";
 import { $, ICONS, NAMES, RGB, createTable, el, radio, sheet, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
@@ -64,12 +66,83 @@ function die(n, rgb, lost) {
 }
 function showDice(T) {
   const f = shown, box = $("dice");
-  box.hidden = !f;
-  if (!f) return;
+  box.hidden = $("fought").hidden = !f;
+  if (!f) { box.removeAttribute("aria-label"); return; }
+  const them = f.was === NONE ? "the defenders" : NAMES[f.was], n = f.rolls.length, place = nameOf(T.match.position, f.to);
+  $("fought").textContent = `${n === 1 ? "One throw" : `${n} throws`}: ${NAMES[f.seat]} lost ${f.lost.attacker}, ${them} lost ${f.lost.defender}. ${place} ${f.won ? "is taken" : "holds"}.`;
   const [A, D] = f.rolls[f.rolls.length - 1], row = (list, other, rgb, tie) => { const d = el("div"); list.forEach((n, i) => { const s = die(n, rgb, i < other.length && (n < other[i] || (n === other[i] && tie))); s.style.animationDelay = `${i * 45}ms`; d.append(s); }); return d; };
   box.setAttribute("role", "img");
-  box.setAttribute("aria-label", `${NAMES[f.seat]} rolled ${A.join(", ")}. ${f.was === NONE ? "The defenders" : NAMES[f.was]} rolled ${D.join(", ")}.`);
+  box.setAttribute("aria-label", `${n > 1 ? "The last throw: " : ""}${NAMES[f.seat]} rolled ${A.join(", ")}. ${cap(them)} rolled ${D.join(", ")}.`);
   box.replaceChildren(row(A, D, RGB[f.seat], true), row(D, A, f.was === NONE ? [206, 196, 170] : RGB[f.was], shownTie));
+}
+/** A fight shown where it happened: the last throw's dice between the two provinces, and what each side lost, rising off the map. */
+function onMap(T, e) {
+  const a = T.board?.at?.(e.from), d = T.board?.at?.(e.to);
+  if (!a || !d || T.demo || T.hurry || settings.speed === "instant") return;
+  const stage = $("stage").getBoundingClientRect(), still = document.documentElement.classList.contains("still"), quick = settings.speed === "fast" && !T.human() ? 0.6 : 1;
+  const put = (node, at, ms, rise) => {
+    Object.assign(node.style, { position: "fixed", left: `${stage.left + at.x}px`, top: `${stage.top + at.y}px`, transform: "translate(-50%, -50%)", zIndex: "2", pointerEvents: "none" });
+    node.setAttribute("aria-hidden", "true");
+    document.body.append(node);
+    if (!still) node.animate([{ opacity: 0, transform: "translate(-50%, -30%) scale(.7)" }, { opacity: 1, transform: "translate(-50%, -50%)", offset: 0.15 }, { opacity: 1, transform: `translate(-50%, ${-50 - rise / 2}%)`, offset: 0.75 }, { opacity: 0, transform: `translate(-50%, ${-50 - rise}%)` }], { duration: ms * quick, easing: "ease-out" });
+    setTimeout(() => node.remove(), ms * quick - 20);
+  };
+  const pale = [206, 196, 170], lost = (n, at, rgb) => {
+    if (!n) return;
+    const b = el("b", `−${n}`);
+    Object.assign(b.style, { font: "800 20px/1 system-ui, sans-serif", color: "#fff", background: "#a3271b", border: `2px solid rgb(${rgb})`, borderRadius: "999px", padding: "4px 9px", boxShadow: "0 2px 8px rgba(0,0,0,.5)" });
+    put(b, { x: at.x, y: at.y - 26 }, 1300, 160);
+  };
+  const [A, D] = e.rolls[e.rolls.length - 1], box = el("div");
+  const row = (list, other, rgb, loses) => { const r = el("div"); Object.assign(r.style, { display: "flex", gap: "2px", justifyContent: "center" }); list.forEach((n, i) => { const s = die(n, rgb, i < other.length && (n < other[i] || (n === other[i] && loses))); s.style.width = s.style.height = "20px"; r.append(s); }); return r; };
+  Object.assign(box.style, { display: "grid", gap: "2px", padding: "4px", borderRadius: "8px", background: "rgba(13,22,35,.82)", boxShadow: "0 2px 10px rgba(0,0,0,.5)" });
+  box.append(row(A, D, RGB[e.seat], true), row(D, A, e.was === NONE ? pale : RGB[e.was], shownTie));
+  put(box, { x: (a.x + d.x) / 2, y: (a.y + d.y) / 2 }, 1100, 30);
+  lost(e.lost.attacker, a, RGB[e.seat]);
+  lost(e.lost.defender, d, e.was === NONE ? pale : RGB[e.was]);
+}
+
+/** The battle record: every fight of the game counted again from its seed and moves, so a game opened from a save has it too. */
+function record(T) {
+  const m = T.match, again = createMatch(banners, { seed: m.seed, options: m.options }), seats = m.options.seats;
+  const rows = Array.from({ length: seats }, () => ({ faces: [0, 0, 0, 0, 0, 0, 0], dice: 0, fights: 0, won: 0, taken: 0, gone: 0, struck: 0, fallen: 0, luck: 0 }));
+  let bold = null;
+  for (const move of m.list) {
+    const p = again.position;
+    for (const e of again.play(move)) {
+      if (e.kind === "take") { rows[e.seat].taken++; if (e.was !== NONE) rows[e.was].gone++; }
+      if (e.kind !== "fight") continue;
+      const how = terms(p, e.from, e.to), me = rows[e.seat], you = e.was === NONE ? null : rows[e.was], chance = odds(p, e.from, e.to);
+      me.fights++; if (e.won) me.won++;
+      me.struck += e.lost.defender; me.fallen += e.lost.attacker;
+      if (you) { you.struck += e.lost.attacker; you.fallen += e.lost.defender; }
+      if (e.won && move.roll === "all" && (!bold || chance < bold.chance)) bold = { chance, seat: e.seat, at: e.to };
+      for (const [A, D] of e.rolls) {
+        const [a, d] = meet(A, D, how), [ea, ed] = fair(A.length, D.length, how), swing = 1000 * (d - a) - (ed - ea); // how far the throw went the attacker's way, past what the odds give
+        for (const v of A) { me.faces[v]++; me.dice++; }
+        me.luck += swing;
+        if (you) { for (const v of D) { you.faces[v]++; you.dice++; } you.luck -= swing; }
+      }
+    }
+  }
+  return { rows, bold };
+}
+const signed = (n) => { const v = Math.round(n / 100) / 10; return v > 0 ? `+${v.toFixed(1)}` : v < 0 ? `−${Math.abs(v).toFixed(1)}` : "0.0"; };
+function grid(head, rows, label) {
+  const box = el("div", undefined, "ranks"), t = el("table"), tr = el("tr");
+  tr.append(...head.map((h) => { const th = el("th", h); th.scope = "col"; return th; }));
+  t.append(tr, ...rows.map(([name, ...cells]) => { const r = el("tr"), th = el("th", name); th.scope = "row"; r.append(th, ...cells.map((c) => el("td", String(c)))); return r; }));
+  t.setAttribute("aria-label", label);
+  box.append(t);
+  return box;
+}
+/** Every die thrown so far, by player: how often each face came up, the average, and how far the dice ran ahead of the odds. */
+function tally(T) {
+  const { rows } = record(T), box = el("div");
+  if (!rows.some((r) => r.dice)) { box.append(el("p", "No dice have been thrown yet.")); return box; }
+  box.append(grid(["Player", "Dice", "1", "2", "3", "4", "5", "6", "Average", "Luck"], rows.map((r, s) => [NAMES[s], r.dice, ...r.faces.slice(1), r.dice ? (r.faces.reduce((n, c, v) => n + c * v, 0) / r.dice).toFixed(2) : "", signed(r.luck)]), "Every die thrown"),
+    el("p", "A fair die averages 3.50. Luck is the strength your dice won or saved beyond what the odds give: above zero the dice ran your way, below zero against you. The same seed and moves always throw the same dice."));
+  return box;
 }
 
 const words = (g, p) => { const b = boardOf(p); return g.kind === "lands" ? `Hold ${g.lands.map((k) => b.lands[k]).join(" and ")} whole.` : g.kind === "share" ? `Hold ${g.many} provinces.` : g.kind === "strong" ? `Hold ${g.many} provinces with 3 or more on each.` : `Put ${NAMES[g.seat]} out. If someone else does, hold ${Math.ceil((p.owner.length * 45) / 100)} provinces.`; };
@@ -143,12 +216,22 @@ const LESSON = {
 const NICE = { forts: ["Forts", "Spend 4 of what you muster to build one. It throws one more die in defence."], leaders: ["Leaders", "Each player has one. It adds 1 to your best die where it stands, and comes back two rounds after it is lost."], capitals: ["Capitals", "Hold more than half of them at the start of your turn and you win. They add 1 to the defender's best die."], secrets: ["Secret goals", "Each player is dealt one. It counts at the start of your turn."], events: ["Seasons", "Some rounds bring a harvest, a storm that closes the crossings, or unrest."] };
 
 createTable({
-  game: banners, key: "banners", title: "Brass and Banners", won: "The land is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 4, lengths: [], pace: (p) => (p.owner.length > 40 ? 300 : 430),
+  game: banners, key: "banners", title: "Brass and Banners", won: "The land is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 4, lengths: [], hard: true,
+  // bots do not linger: moving in and placing are quick, a fight is given time to be read
+  pace: (p) => (p.phase === "occupy" ? 110 : p.phase === "attack" ? (p.owner.length > 40 ? 300 : 380) : 220),
+  placeOf: (p, s) => (p.points ? 1000 * p.points[s] + cellsOf(p, s) : cellsOf(p, s)),
+  roundText: (p) => (p.points ? `Round ${Math.min(p.round, p.rounds)} of ${p.rounds}` : ""),
+  report(T) {
+    const { rows, bold } = record(T), p = T.match.position, box = el("div");
+    box.append(grid(["Player", "Taken", "Lost", "Fights won", "Struck down", "Fallen", "Dice luck"], rows.map((r, s) => [NAMES[s], r.taken, r.gone, `${r.won} of ${r.fights}`, r.struck, r.fallen, signed(r.luck)]), "The battle record"));
+    if (bold && bold.chance < 600000) box.append(el("p", `Boldest win: ${NAMES[bold.seat]} took ${nameOf(p, bold.at)} at ${percent(bold.chance)} in 100.`, "about"));
+    return box;
+  },
   cellsOf, goalOf, landOf, choose, thinking, lesson: LESSON,
   about: {
     classic: "Traditional: inspired by Risk.\nThe standard world-conquest rules as players know them, on our own world map: all land dealt out, place your armies, attack with up to 3 dice against up to 2, move once, cards in sets for more armies (put a player out and you take theirs), and play until one player holds the world. Ours: the map, the lands and what they pay, and our own card values.\nNot affiliated with or endorsed by its makers. Our own map, names and art.",
     custom: "Custom: your own rules.\nSet every rule yourself: how the game starts, the dice, what each turn brings, the cards, how much land wins, the number of rounds, and how strongly empty land is held. Add any expansions on top.",
-    ours: "Capo: our own variation.\nEach player starts alone on one province in empty land. Ties cost both sides, cards are always worth the same, and holding 65% of the land wins. In the first round, whoever moves later places more. Quicker, with more room to grow before the fighting starts.",
+    ours: "Capo: our own variation.\nTen scored rounds. Each player starts alone on one province in empty land. From round 2 you score at the start of your turn for what you still hold: 1 for every three provinces and each whole land's bonus. After round 10 everyone scores once more and the most points wins; holding 65% of the land, or being the last one left, wins at once. Ties cost both sides, cards are always worth the same, and in the first round whoever moves later places more.",
     coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
   },
   choices: [{ key: "map", label: "Map", normal: "world", values: [["world", "The world"], ["isles", "An archipelago"], ["grown", "An inland sea"]] }],
@@ -158,14 +241,15 @@ createTable({
     { key: "muster", label: "Each turn", normal: SWITCHES.muster.normal, values: [["floor", "1 for every 3 provinces, at least 3"], ["plus", "3, and 1 for every 3 provinces"]] },
     { key: "cards", label: "Cards", normal: SWITCHES.cards.normal, values: [["rising", "Worth more each time"], ["flat", "Always the same"], ["none", "None"]] },
     { key: "goal", label: "To win", normal: SWITCHES.goal.normal, values: [[65, "65% of the land"], [80, "80% of the land"], [100, "All of it"]] },
-    { key: "rounds", label: "Rounds", normal: SWITCHES.rounds.normal, values: [[12, "12, quick"], [20, "20"], [40, "40"], [0, "No limit"]] },
+    { key: "rounds", label: "Rounds", normal: SWITCHES.rounds.normal, values: [[10, "10, quick"], [12, "12"], [20, "20"], [40, "40"], [0, "No limit"]] },
+    { key: "score", label: "Scoring", normal: SWITCHES.score.normal, values: [["land", "Most land when the rounds end"], ["rounds", "Points every round"]] },
     { key: "order", label: "Turn order", normal: SWITCHES.order.normal, values: [["fixed", "The same each round"], ["rotate", "First seat moves on each round"]] },
     { key: "opening", label: "First turn", normal: SWITCHES.opening.normal, values: [["open", "Full strength"], ["lean", "First player gets a third (two players)"], ["grade", "Round 1 grows down the order"], ["truce", "Nobody attacks in round 1"]] },
     { key: "spoils", label: "Put a player out", normal: SWITCHES.spoils.normal, values: [["trade", "Take their cards, hand in at once at five"], ["wait", "Take their cards, hand in next turn"]] },
     { key: "neutral", label: "Empty land held by", normal: SWITCHES.neutral.normal, values: [[1, "1"], [2, "2"], [3, "3"]] },
   ],
   expansions: EXPANSIONS.map((key) => ({ key, label: NICE[key][0], note: NICE[key][1] })),
-  stats: (p, s) => [["Army", p.str.reduce((n, v, i) => n + (p.owner[i] === s ? v : 0), 0)], p.caps ? ["Capitals", `${capsHeld(p, s)}/${capsToWin(p)}`] : ["Cards", p.hands[s].length]],
+  stats: (p, s) => [...(p.points ? [["Points", p.points[s]]] : []), ["Army", p.str.reduce((n, v, i) => n + (p.owner[i] === s ? v : 0), 0)], p.caps ? ["Capitals", `${capsHeld(p, s)}/${capsToWin(p)}`] : ["Cards", p.hands[s].length]],
   line(e, p) {
     const who = NAMES[e.seat], at = (i) => nameOf(p, i);
     if (e.kind === "place") return `${who} places ${e.n} at ${at(e.at)}.`;
@@ -182,9 +266,10 @@ createTable({
     if (e.kind === "event") return e.what === "harvest" ? "A good harvest: 2 more for everyone this round." : e.what === "storm" ? "Storms: nobody crosses water this round." : `Unrest: ${at(e.at)} leaves ${who}.`;
     if (e.kind === "move") return `${who} moves ${e.n} from ${at(e.from)} to ${at(e.to)}.`;
     if (e.kind === "done") return `${who} ends the turn.`;
+    if (e.kind === "score") return e.last ? `${who} scores ${e.n} at the end: ${e.all} points.` : `${who} scores ${e.n}: ${e.all} points.`;
     return "";
   },
-  seen(T, events) { for (const e of events) if (e.kind === "fight") { shown = e; shownTie = terms(T.match.position, e.from, e.to).tie === "both"; showDice(T); } else if (e.kind === "muster") { shown = null; if (!T.demo) showDice(T); } },
+  seen(T, events) { for (const e of events) if (e.kind === "fight") { shown = e; shownTie = terms(T.match.position, e.from, e.to).tie === "both"; showDice(T); onMap(T, e); } else if (e.kind === "muster") { shown = null; if (!T.demo) showDice(T); } },
   fresh(T) { source = target = null; much = -1; shown = null; showDice(T); },
   order: (events) => events.flatMap((e) => (e.kind === "take" ? [e.at] : [])),
   board(T, stage) {
@@ -211,13 +296,14 @@ createTable({
     if (source !== null && !o.sources.includes(source)) { source = target = null; o = offers(T); }
     if (target !== null && !o.targets.includes(target)) { target = null; o = offers(T); }
     const who = T.solo() ? "" : `${NAMES[p.seat]}: `, m = o.now[0], fight = p.phase === "attack" && m && rolls(p, m), sums = fight ? [] : keys(o.now, "n");
+    if (shown && fight && target !== shown.to) { shown = null; showDice(T); } // the last fight's dice do not sit under the next one
     $("status").textContent = who + cap(p.phase === "claim" ? "claim a province" : p.phase === "place" || p.phase === "setup" ? `place ${p.left}` : p.phase === "occupy" ? `${nameOf(p, p.pend.to)} is yours` : target !== null && fight ? `attack ${nameOf(p, target)}` : target !== null ? `move to ${nameOf(p, target)}` : "attack, move once, or end your turn");
     const g = muster(p, p.seat);
     cards(T);
     const must = p.phase === "place" && p.hands[p.seat].length >= HAND && setsOf(p, p.seat).length > 0;
-    $("info").textContent = must ? "You hold five cards or more. Hand in a set first." : p.phase === "claim" ? (source === null ? "Tap an empty province." : about(p, source)) : p.phase === "setup" ? (source === null ? `${p.reserve[p.seat]} left to set out, five at a time. Tap a province of yours.` : about(p, source)) : p.phase === "place" ? (source === null ? (p.took ? "Place what the cards brought, then attack on." : `${g.base ? `${g.base} to begin, ` : ""}${g.land} for land${g.lands ? `, ${g.lands} for whole lands` : ""}${g.event ? ", 2 for the harvest" : ""}`) + ". Tap a province of yours." : about(p, source))
+    $("info").textContent = must ? "You hold five cards or more. Hand in a set first." : p.phase === "claim" ? (source === null ? "Tap an empty province." : about(p, source)) : p.phase === "setup" ? (source === null ? `${p.reserve[p.seat]} left to set out, five at a time. Tap a province of yours.` : about(p, source)) : p.phase === "place" ? (source === null ? (p.took ? "Place what the cards brought, then attack on." : `${g.base ? `${g.base} to begin, ` : ""}${g.land} for land${g.lands ? `, ${g.lands} for whole lands` : ""}${g.event ? ", 2 for the harvest" : ""}`) + `.${p.points && p.round > 1 && !p.took ? ` You scored ${gain(p, p.seat)} for what you held.` : ""} Tap a province of yours.` : about(p, source))
       : p.phase === "occupy" ? "One has moved in. How many more?"
-        : fight ? `${p.str[source] - 1} against ${p.str[target]}. If you keep rolling, ${percent(odds(p, source, target))} in 100 to take it.`
+        : fight ? `${p.str[source] - 1} against ${p.str[target]}. If you keep rolling, ${percent(odds(p, source, target))} in 100 to take it, at a likely cost of ${Math.round(toll(p, source, target) / 1000)}.`
           : target !== null ? "Moving ends your turn." : source !== null ? about(p, source) : "Tap a province of yours, then where to.";
     $("sources").hidden = !o.sources.length;
     radio($("sources"), o.sources.map((i) => ({ value: i, label: nameOf(p, i), note: `${p.str[i]} strong` })), source, (v) => { source = v; target = null; much = -1; T.refresh(); });
@@ -263,18 +349,19 @@ createTable({
     else if (k === "escape") { source = target = null; T.refresh(); } else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "do")) { e.preventDefault(); $("do").click(); }
   },
   more: {
-    label: "The lands",
-    body(T) { const p = T.match.position, b = boardOf(p), u = el("ul"); u.append(...b.lands.map((n, k) => { const s = [0, 1, 2, 3, 4, 5].find((x) => x < p.seats && wholeOf(p, x).includes(k)); return el("li", `${cap(n)}: ${b.sizes[k]} provinces, ${bordersOf(b, k)} on its borders, worth ${bonusOf(b, k)} a turn. ${s === undefined ? "Nobody holds it whole." : `${NAMES[s]} holds it whole.`}`); })); return u; },
+    label: "Lands and dice",
+    body(T) { const p = T.match.position, b = boardOf(p), u = el("ul"), box = el("div"); box.append(el("h3", "Every die thrown"), tally(T), el("h3", "The lands"), u); u.append(...b.lands.map((n, k) => { const s = [0, 1, 2, 3, 4, 5].find((x) => x < p.seats && wholeOf(p, x).includes(k)); return el("li", `${cap(n)}: ${b.sizes[k]} provinces, ${bordersOf(b, k)} on its borders, worth ${bonusOf(b, k)} a turn. ${s === undefined ? "Nobody holds it whole." : `${NAMES[s]} holds it whole.`}`); })); return box; },
   },
   rules: (_, p) => {
     const r = p?.rule, d = DICE[r?.dice || SWITCHES.dice.normal];
     return [
-      ...(r ? [`This game: ${r.start === "dealt" ? "land dealt out" : r.start === "claimed" ? "land claimed in turn" : "one capital each"}; hold ${r.goal}% of the land, or be the last one left; ${p.rounds ? `after ${p.rounds} rounds the most land wins` : `no round limit, but a war still running after ${SAFETY} rounds is called off and the most land wins`}.`] : []),
+      ...(r ? [`This game: ${r.start === "dealt" ? "land dealt out" : r.start === "claimed" ? "land claimed in turn" : "one capital each"}; hold ${r.goal}% of the land, or be the last one left; ${p.rounds ? `after ${p.rounds} rounds the most ${p.points ? "points" : "land"} wins` : `no round limit, but a war still running after ${SAFETY} rounds is called off and the most land wins`}.`] : []),
       "Each turn: hand in cards if you like, place new strength, attack as often as you like, then move once or end your turn.",
       `You place ${r?.muster === "plus" ? "3, and 1 for every three provinces you hold" : "1 for every three provinces you hold, at least 3"}, and more for every land you hold whole. Gold lines mark the lands; the number by a land's name is what it pays: a third of its provinces and half of those on its borders.`,
       "To attack, tap a province of yours with 2 or more, then one beside it. Dashed lines over water are crossings.",
       `You throw a die for each of your strength but one, ${d.a} at most. The defender throws one for each of theirs, ${d.d} at most. Highest meets highest: the lower one loses 1. ${d.tie === "both" ? "If they tie, both lose 1." : "Ties go to the defender."}`,
-      "Roll once, or roll it out until somebody has won. The chance is shown first. When you win, choose how many move in.",
+      ...(p?.points ? [`Scored rounds: from round 2, at the start of your turn you score for what you still hold: 1 for every three provinces, and each whole land's bonus${p.caps ? ", and 2 for each capital" : ""}. After round ${p.rounds} everyone left scores once more. Level on points, the most land wins.`] : []),
+      "Roll once, or roll it out until somebody has won. The chance and the likely cost are shown first; the dice and the losses appear on the map, and Lands and dice in the menu counts every die thrown. When you win, choose how many move in.",
       `Take a province in your turn and you draw a card. Three alike, or one of each, can be handed in for more to place. Crowns stand for any. One more for each card that shows a province of yours. With five cards you must hand in a set. Put a player out and you take theirs${r?.spoils === "wait" ? "" : "; if that makes five or more, hand in at once and place what they bring"}.`,
       ...EXPANSIONS.filter((x) => !p || (x === "forts" ? p.forts : x === "leaders" ? p.leaders : x === "capitals" ? p.caps : x === "secrets" ? p.goals : p.event !== undefined)).map((x) => `${NICE[x][0]}: ${NICE[x][1]}`),
       "A soldier is 1 to 4, a horse 5 to 9, a gun 10 or more. Zoom with the wheel or two fingers, and drag the map.",

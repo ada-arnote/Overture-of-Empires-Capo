@@ -5,7 +5,7 @@
 import { MAPS, areaBoard, bonusOf, bordersOf } from "../areas.js";
 // what a land pays is kept with the board maker, which reads the same rule to keep lands even
 export { bonusOf, bordersOf } from "../areas.js";
-import { DICE, odds as chanceOf, meet } from "./dice.js";
+import { DICE, odds as chanceOf, meet, toll as tollOf } from "./dice.js";
 
 export const NONE = -1, HAND = 5, FORT = 4;
 const BASE = 3, PER = 3, WILD = 3;
@@ -16,15 +16,16 @@ export const SWITCHES = {
   muster: { values: ["floor", "plus"], normal: "floor" }, // floor: 1 for every three provinces, at least 3; plus: 3 more on top of that
   cards: { values: ["rising", "flat", "none"], normal: "rising" },
   goal: { values: [65, 80, 100], normal: 80 },
-  rounds: { values: [12, 20, 40, 0], normal: 40 }, // 0: no limit, play until one side wins (a safety stop at SAFETY rounds)
+  rounds: { values: [10, 12, 20, 40, 0], normal: 40 }, // 0: no limit, play until one side wins (a safety stop at SAFETY rounds)
   order: { values: ["fixed", "rotate"], normal: "fixed" }, // rotate: the first seat moves on each round
   opening: { values: ["open", "lean", "grade", "truce"], normal: "open" }, // lean: at two seats the first seat musters a third on its first turn; grade: in round 1 each seat musters its share by its place in the order (1 of n parts, 2 of n, up to all); truce: nobody attacks in the first round
   neutral: { values: [1, 2, 3], normal: 2 },
   spoils: { values: ["trade", "wait"], normal: "trade" }, // trade: put a player out, take their cards, and hand in at once while you hold five or more
+  score: { values: ["land", "rounds"], normal: "land" }, // rounds: from round 2 each seat scores what it holds at the start of its turn, and once more at the end; the most points wins when the rounds run out
 };
 const SETS = {
-  classic: { start: "dealt", dice: "standard", muster: "floor", cards: "rising", goal: 100, rounds: 0, neutral: 2, order: "fixed", opening: "lean", spoils: "trade" },
-  ours: { start: "far", dice: "even", muster: "plus", cards: "flat", goal: 65, rounds: 40, neutral: 3, order: "fixed", opening: "grade", spoils: "wait" },
+  classic: { start: "dealt", dice: "standard", muster: "floor", cards: "rising", goal: 100, rounds: 0, neutral: 2, order: "fixed", opening: "lean", spoils: "trade", score: "land" },
+  ours: { start: "far", dice: "even", muster: "plus", cards: "flat", goal: 65, rounds: 10, neutral: 3, order: "fixed", opening: "grade", spoils: "wait", score: "rounds" },
 };
 export const EXPANSIONS = ["forts", "leaders", "capitals", "secrets", "events"];
 const off = { values: [false, true], normal: false };
@@ -54,6 +55,11 @@ export function muster(p, seat) {
   const lands = wholeOf(p, seat).reduce((n, k) => n + bonusOf(b, k), 0), event = p.event === "harvest" ? 2 : 0;
   return { base, land, lands, event, all: base + land + lands + event };
 }
+/** What a seat scores for what it holds now, under scored rounds: 1 for every three provinces, each whole land's bonus, 2 for each capital. */
+export function gain(p, seat) {
+  const b = boardOf(p);
+  return Math.floor(cellsOf(p, seat) / PER) + wholeOf(p, seat).reduce((n, k) => n + bonusOf(b, k), 0) + (p.caps ? 2 * capsHeld(p, seat) : 0);
+}
 /** How a fight stands: the dice rule with leaders and forts counted in. */
 export function terms(p, from, to) {
   const d = DICE[p.rule.dice], o = p.owner[to];
@@ -61,6 +67,8 @@ export function terms(p, from, to) {
 }
 /** The chance, in millionths, of taking a place by rolling until it is settled. `att` is the strength able to attack. */
 export const odds = (p, from, to, att = p.str[from] - 1) => chanceOf(att, p.str[to], terms(p, from, to));
+/** What rolling it out is likely to cost the attacker, in thousandths of one strength. */
+export const toll = (p, from, to, att = p.str[from] - 1) => tollOf(att, p.str[to], terms(p, from, to));
 
 // ---- cards ----
 /** Sets a seat can hand in: three of a kind, or one of each. A wild card stands for any. One offer for each shape. */
@@ -88,14 +96,14 @@ function draw(p, dice) {
 }
 
 // ---- turns ----
-const copy = (p) => ({ ...p, owner: [...p.owner], str: [...p.str], hands: p.hands.map((h) => [...h]), deck: [...p.deck], spent: [...p.spent], reserve: [...p.reserve], outBy: [...p.outBy], back: [...p.back], forts: p.forts && [...p.forts], leaders: p.leaders && [...p.leaders], caps: p.caps && [...p.caps], goals: p.goals && p.goals.map((g) => ({ ...g })), pend: p.pend ? { ...p.pend } : null });
+const copy = (p) => ({ ...p, owner: [...p.owner], str: [...p.str], hands: p.hands.map((h) => [...h]), deck: [...p.deck], spent: [...p.spent], reserve: [...p.reserve], outBy: [...p.outBy], back: [...p.back], points: p.points && [...p.points], forts: p.forts && [...p.forts], leaders: p.leaders && [...p.leaders], caps: p.caps && [...p.caps], goals: p.goals && p.goals.map((g) => ({ ...g })), pend: p.pend ? { ...p.pend } : null });
 
 /** The start of a seat's turn. Changes p. */
 function begin(p, events) {
   // who moves first moves with less: lean, at two seats, gives the first seat a third of its fresh armies on its first turn;
   // grade gives each seat in round 1 its place in the order in parts of the whole, so the last to move has all of it
   const s = p.seat, m = muster(p, s), first = p.round === 1, how = p.rule.opening;
-  p.left = first && how === "lean" && p.seats === 2 && p.step === 0 ? Math.floor(m.all / 3) : first && how === "grade" ? Math.floor((m.all * (p.step + 1)) / p.seats) : m.all;
+  p.left = first && how === "lean" && p.seats === 2 && p.step === 0 ? Math.floor(m.all / 3) : first && how === "grade" ? Math.floor((m.all * (p.seats + p.step)) / (2 * p.seats - 1)) : m.all;
   p.took = 0;
   p.phase = p.left ? "place" : "attack";
   if (p.leaders && p.leaders[s] === NONE && p.round >= p.back[s]) { // a lost leader comes back where the seat is strongest
@@ -104,6 +112,8 @@ function begin(p, events) {
     events.push({ kind: "leader", seat: s, at: p.leaders[s] });
   }
   events.push({ kind: "muster", seat: s, ...m });
+  // scored rounds: what you still hold when your turn comes round again counts, so every seat is scored after the others have answered
+  if (p.points && !first) { const n = gain(p, s); p.points[s] += n; events.push({ kind: "score", seat: s, n, all: p.points[s] }); }
   // what you hold at the start of your own turn counts, so the others have had a round to answer
   if (p.round > 2 && p.caps && p.owner[p.caps[s]] === s && capsHeld(p, s) >= capsToWin(p)) finish(p, [s], "held the capitals", events);
   else if (p.round > 2 && reached(p, s)) finish(p, [s], "reached a secret goal", events);
@@ -153,6 +163,12 @@ function weather(p, dice, events) {
   if (p.event !== "calm") events.push({ kind: "event", what: p.event });
 }
 
+/** The end of scored rounds: everyone left scores once more, and the most points wins; level on points, the most land. Changes p. */
+function tally(p, live, events) {
+  for (const s of live) { const n = gain(p, s); p.points[s] += n; events.push({ kind: "score", seat: s, n, all: p.points[s], last: true }); }
+  const top = Math.max(...live.map((s) => p.points[s])), level = live.filter((s) => p.points[s] === top), most = Math.max(...level.map((s) => cellsOf(p, s)));
+  return finish(p, level.filter((s) => cellsOf(p, s) === most), "scored the most over the rounds", events);
+}
 /** A game with no round limit still ends after this many rounds, on the most land, for players who will never break a stalemate. */
 export const SAFETY = 100;
 /** Pass the turn: seats in a fixed order, or with the first seat moving on each round when the rules say so. Changes p. */
@@ -167,6 +183,7 @@ function pass(p, dice, events) {
       p.step = 0;
       p.round++;
       if (p.round > (p.rounds || SAFETY)) {
+        if (p.points) return tally(p, live, events);
         const most = Math.max(...live.map((s) => cellsOf(p, s)));
         return finish(p, live.filter((s) => cellsOf(p, s) === most), p.rounds ? "held the most land at the end" : "held the most land when the long war was called off", events);
       }
@@ -255,7 +272,7 @@ export function amounts(n) {
 }
 
 export const banners = {
-  id: "banners", version: "5",
+  id: "banners", version: "6",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 4 }, map: { values: MAPS, normal: "world" },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -264,7 +281,7 @@ export const banners = {
   setup(o, dice) {
     const key = dice.below(0x40000000), b = areaBoard(key, o.map), all = b.near.map((_, i) => i);
     const rule = SETS[o.style] ? { ...SETS[o.style] } : Object.fromEntries(Object.keys(SWITCHES).map((k) => [k, o[k]])), each = Math.floor(b.n / o.seats);
-    const p = { classic: true, style: o.style, rule, key, map: o.map, seats: o.seats, owner: Array(b.n).fill(NONE), str: Array(b.n).fill(rule.neutral), hands: Array.from({ length: o.seats }, () => []), deck: [], spent: [], traded: 0, reserve: Array(o.seats).fill(0), outBy: Array(o.seats).fill(NONE), seat: 0, step: 0, round: 1, rounds: rule.rounds, phase: "place", left: 0, took: 0, pend: null, over: null, forts: null, leaders: null, back: Array(o.seats).fill(0), caps: null, goals: null };
+    const p = { classic: true, style: o.style, rule, key, map: o.map, seats: o.seats, owner: Array(b.n).fill(NONE), str: Array(b.n).fill(rule.neutral), hands: Array.from({ length: o.seats }, () => []), deck: [], spent: [], traded: 0, reserve: Array(o.seats).fill(0), outBy: Array(o.seats).fill(NONE), seat: 0, step: 0, round: 1, rounds: rule.rounds, phase: "place", left: 0, took: 0, pend: null, over: null, forts: null, leaders: null, back: Array(o.seats).fill(0), caps: null, goals: null, points: rule.score === "rounds" && rule.rounds ? Array(o.seats).fill(0) : null };
     if (rule.cards !== "none") p.deck = dice.shuffle([...all, b.n, b.n + 1]);
     if (o.forts) p.forts = all.map(() => 0);
     if (o.leaders) p.leaders = Array(o.seats).fill(NONE);

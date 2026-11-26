@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-WxeB5zn3ye7UrdxZUyUcEE6l+bC7W5dyVqHeIaeMg+U='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-USjU1X8ccNvcGEl2RKTJXcuetjCmtDTaVS8pt/5Mxck='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>An Inch of Ink</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -2356,7 +2356,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.7.0";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "b63a1e2b";
+const BUILD = "0dd57201";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -2735,7 +2735,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const THEME = "capo-tent-theme";
 const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["away", "A friend, by link"]];
 // gentle is the lessons' bot, not offered in the setup
-const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
+const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", gentle: "Gentle bot", hard: "Hard bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
 const store = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* files still work */ } };
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 
@@ -3232,9 +3232,9 @@ function createTable(G) {
     for (const m of marks) if (m.room > 26) { x.drawImage(sign(m.s), m.at, m.y - 13, 26, 26); x.fillStyle = inkOf(RGB[m.s]); x.fillText(nameOf(m.s), m.at + 32, m.y + 1); }
     c.setAttribute("role", "img"); c.setAttribute("aria-label", `Land held over the game. At the end: ${tally(p).map((v, s) => `${nameOf(s)} ${v}`).join(", ")}.`);
     // places
-    let rows = ranked(Array.from({ length: names ? names.length : T.kinds.length }, (_, s) => ({ seat: s, won: r.winners.includes(s), score: G.cellsOf(p, s), fell: fell[s] })));
+    let rows = ranked(Array.from({ length: names ? names.length : T.kinds.length }, (_, s) => ({ seat: s, won: r.winners.includes(s), score: (G.placeOf || G.cellsOf)(p, s), land: G.cellsOf(p, s), fell: fell[s] }))); // G.placeOf: what places are ranked by, when it is not land
     if (names) rows = rows.filter((w, i) => i < 8 || mine(w.seat));
-    rows = rows.map((w) => ({ ...w, name: nameOf(w.seat), figures: [[G.unit || "Land", w.score], ...G.stats(p, w.seat), ...(rounds ? [["Rounds", w.fell ?? last]] : [])] }));
+    rows = rows.map((w) => ({ ...w, name: nameOf(w.seat), figures: [[G.unit || "Land", w.land], ...G.stats(p, w.seat), ...(rounds ? [["Rounds", w.fell ?? last]] : [])] }));
     const scroll = el("div", undefined, "ranks"), table = el("table"), head = el("tr");
     head.append(...["Place", "Player", ...rows[0].figures.map(([k]) => k)].map((t) => { const th = el("th", t); th.scope = "col"; return th; }));
     table.append(head, ...rows.map((w) => {
@@ -3263,7 +3263,7 @@ function createTable(G) {
     look.onclick = closeSheet;
     copyIt.onclick = async () => { try { await navigator.clipboard.writeText(text); copyIt.textContent = "Copied"; } catch { toast(text); } };
     go.append(all, change, again); minor.append(look, copyIt);
-    body.append(hero, scroll, c, go, minor);
+    body.append(hero, scroll, c, ...[G.report?.(T)].filter(Boolean), go, minor); // G.report: the figures a game adds to the end
     sheet(lost ? "Defeat" : people ? "Victory" : "The end", body, null, `end ${lost ? "lose" : "win"}`);
     again.focus();
   }
@@ -3382,7 +3382,7 @@ function createTable(G) {
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
       const li = el("li"), k = el("select");
-      k.append(...KINDS.map(([v, t]) => new Option(t, v)));
+      k.append(...(G.hard ? [...KINDS.slice(0, 1), ["hard", WORDS.hard], ...KINDS.slice(1)] : KINDS).map(([v, t]) => new Option(t, v))); // G.hard: the game has a hard bot to offer
       k.value = setup.who[s];
       k.setAttribute("aria-label", NAMES[s]);
       k.onchange = () => { setup.who[s] = k.value; passLine(); };

@@ -69,3 +69,23 @@ export function odds(att, def, how) {
   chances.set(k, v);
   return v;
 }
+
+const tolls = new Map();
+/** What rolling it out is likely to cost the attacker, in thousandths of one strength, win or lose. */
+export function toll(att, def, how) {
+  if (att <= 0 || def <= 0) return 0;
+  const a = Math.min(att, 60), d = Math.min(def, 60), k = `${a}/${d}/${how.a}/${how.d}/${how.tie}/${how.up}/${how.down}`;
+  if (tolls.has(k)) return tolls.get(k);
+  let sum = 0, all = 0;
+  for (const [x, y, w] of results(Math.min(a, how.a), Math.min(d, how.d), how)) { sum += w * (1000 * x + toll(a - x, d - y, how)); all += w; }
+  const v = Math.floor(sum / all);
+  if (tolls.size > 60000) tolls.clear();
+  tolls.set(k, v);
+  return v;
+}
+/** What one throw is expected to cost each side, in thousandths: [attacker, defender]. For the roll tally's measure of luck. */
+export function fair(a, d, how) {
+  let x = 0, y = 0, all = 0;
+  for (const [p, q, w] of results(a, d, how)) { x += w * p; y += w * q; all += w; }
+  return [Math.floor((1000 * x) / all), Math.floor((1000 * y) / all)];
+}
