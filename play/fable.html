@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-yh70dopP4C70YY7CaBfR6sWWWeCO6fkt7HV/yVeCT20='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-X1cX/b7pBNwdW3a8O0floXefklisP5I6tlaug4bTI4s='; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>The Island Fable</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -541,12 +541,12 @@ function deal(p, b, dice) {
   land.slice(0, even).forEach((c, i) => { p.owner[c] = i % p.seats; });
   for (let s = 0; s < p.seats; s++) {
     settle(p, s);
-    for (const t of territories(p, s)) p.purse[t.hall] = Math.min(t.cells.length * 2, 10) + (p.seats === 2 ? 1 * s : 0); // the second of two moves later and starts a little richer
+    for (const t of territories(p, s)) p.purse[t.hall] = Math.min(t.cells.length * 2, 10) + (p.seats === 2 && s === 0 ? 1 : 0); // of two, the first starts a coin richer a village: the second strikes first after the truce (measured 49.6/50.4)
   }
 }
 
 const fable = {
-  id: "fable", version: "5",
+  id: "fable", version: "6",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 }, rounds: { values: [10, 14, 18], normal: 14 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -1719,9 +1719,9 @@ $m[17] = (($x) => {
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-const VERSION = "0.4.2";
+const VERSION = "0.4.3";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "518a8568";
+const BUILD = "1f9991c9";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
 return $x; })({});

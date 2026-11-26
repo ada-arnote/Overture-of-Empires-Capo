@@ -218,12 +218,12 @@ function deal(p, b, dice) {
   land.slice(0, even).forEach((c, i) => { p.owner[c] = i % p.seats; });
   for (let s = 0; s < p.seats; s++) {
     settle(p, s);
-    for (const t of territories(p, s)) p.purse[t.hall] = Math.min(t.cells.length * 2, 10) + (p.seats === 2 ? 1 * s : 0); // the second of two moves later and starts a little richer
+    for (const t of territories(p, s)) p.purse[t.hall] = Math.min(t.cells.length * 2, 10) + (p.seats === 2 && s === 0 ? 1 : 0); // of two, the first starts a coin richer a village: the second strikes first after the truce (measured 49.6/50.4)
   }
 }
 
 export const fable = {
-  id: "fable", version: "5",
+  id: "fable", version: "6",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 }, rounds: { values: [10, 14, 18], normal: 14 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
