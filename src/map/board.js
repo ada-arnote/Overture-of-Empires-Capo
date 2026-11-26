@@ -318,7 +318,9 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   });
 
   return {
-    layout, get look() { return lookName; }, on(what, f) { (listeners[what] ||= []).push(f); },
+    layout, get look() { return lookName; },
+    /** Zoom and move without a wheel, a pinch or a drag: by a factor about the middle (0 shows the whole board), by a share of the board. */
+    zoom(f) { zoomed(f ? zoom * f : 1); }, pan(dx, dy) { if (zoom > 1) slide((dx * m.w) / zoom, (dy * m.h) / zoom); }, on(what, f) { (listeners[what] ||= []).push(f); },
     setLook(name) { if (!LOOKS[name]) return; const a = { tilt: cam.tilt, yaw: cam.yaw, q: cam.q }; lookName = name; L = LOOKS[name]; if (calm()) { layout({ left: cam.left, right: cam.right, top: cam.top, bottom: cam.bottom }); for (const c of [under, over]) c.animate?.([{ opacity: 0.25 }, { opacity: 1 }], { duration: 180, easing: "ease-out" }); return; } swing = { t: performance.now(), a }; redraw(); },
     /** Seat patterns over owned land, so colour is never the only sign of whose it is. */
     patterns(on) { pat = !!on; redraw(); },

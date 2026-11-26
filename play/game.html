@@ -4,190 +4,232 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-DVQfUZ6No7i+Ll8Il42hMltgGMVSqg/OD/Din01MVS0='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta name="theme-color" content="#0d1623">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-RKfZn2QmuhmGJSZzsGptouYaTfcS8YiH4gGpbaSG+8U='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* Every game screen takes its look from this file: the four table games, Capo and the world map.
+   1. Tokens: colour, type, space, shape, depth, motion. 2. Materials. 3. Components. 4. The table games' layout.
+   The rule of three materials: LACQUER (dark, a silver keyline) is what floats over the map and stays; PAPER is what you
+   pick up and read (a dispatch, a card, the rules, a lesson); SILVER is the one main action in view and the mark of what is chosen.
+   Blue and silver (the owner, 26 November): no gold. Warm colour belongs to the seats and the boards alone. */
+
+/* ---- 1. tokens ---- */
+@font-face { font-family: "Tent Roman"; src: url("../site/fonts/tent-roman/tent-roman.woff2") format("woff2"); font-display: swap }
+@font-face { font-family: "Spectral"; src: url("../site/fonts/spectral/spectral-400.woff2") format("woff2"); font-display: swap }
+@font-face { font-family: "Atkinson Hyperlegible"; src: url("../site/fonts/atkinson/atkinson-400.woff2") format("woff2"); font-display: swap }
+@font-face { font-family: "Atkinson Hyperlegible"; font-weight: 700; src: url("../site/fonts/atkinson/atkinson-700.woff2") format("woff2"); font-display: swap }
 :root {
-  --table: #12171a; --table2: #1f2a2c; --panel: rgba(19, 24, 26, .84); --line: rgba(236, 222, 186, .16); --line2: rgba(236, 222, 186, .34);
-  --text: #f1e9d6; --soft: #b9b29f; --gold: #e2b866; --gold2: #f4d795; --on: #1b1510;
+  /* colour, by role: the front page's night chart (docs/design/modern-site/direction.md). Daylight first; lamplight below. Both are the tent's
+     dark blue (ruling 126), a brighter and a deeper one, so seat colours read the same. Three grounds: the room, the deep HUD, the raised sheet */
+  --ground: #22364f; --ground-2: #2b4263; --lacquer: rgba(22, 37, 58, .9); --slate: #2b4263; --shade: 15, 26, 42;
+  --text: #eef1f5; --text-2: #c9d1da; --text-3: #adb8c4;
+  --edge: rgba(214, 224, 236, .5); --edge-soft: rgba(214, 224, 236, .16); --raise: rgba(214, 224, 236, .07); --sheen: rgba(214, 224, 236, .07);
+  --accent: #dfe5ec; --accent-hi: #f6f8fb; --accent-lo: #6f7f93; --accent-wash: rgba(214, 224, 236, .15); --on-accent: #0f1a2a;
+  --paper: #e9edf2; --paper-edge: #9aa7b6; --paper-ink: #142033; --paper-soft: #44526a; --paper-accent: #2b4263;
+  --danger: #f0a08c; --danger-wash: rgba(240, 160, 140, .16); --good: #9fd08a; --win: var(--accent-hi); --lose: #8ea3bd;
+  --focus: #f6f8fb; --halo: #0a121e; --seat: var(--accent); --pattern: rgba(16, 12, 10, .42);
+  /* type: a display roman for names and headings (18 px and up, never bold), a reading serif, a plain face for labels and numbers */
+  --display: "Tent Roman", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --serif: "Spectral", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --sans: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --fs-1: 13px; --fs-2: 14px; --fs-3: 16px; --fs-4: 18px; --fs-5: 22px; --fs-6: 28px; --fs-7: 40px; --caps: .14em;
+  /* space, shape, depth, motion */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px; --tap: 44px; --tap-lg: 50px;
+  --r-1: 4px; --r-2: 6px; --r-3: 10px;
+  --lift-1: 0 1px 4px rgba(0, 0, 0, .3); --lift-2: 0 6px 20px rgba(0, 0, 0, .34); --lift-3: 0 18px 50px rgba(0, 0, 0, .5); /* only for what floats over a map; elsewhere a lighter ground and a hairline do the lifting */
+  --t-1: .12s; --t-2: .2s; --t-3: .32s; --t-4: .6s; --ease: cubic-bezier(.2, .8, .2, 1);
+  --ui-scale: 1; --banner-time: .9s;
+  /* the names older rules used, kept so nothing written against them breaks */
+  --table: var(--ground); --table2: var(--ground-2); --panel: var(--lacquer); --line: var(--edge-soft); --line2: var(--edge); --soft: var(--text-3); --gold: var(--accent); --gold2: var(--accent-hi); --on: var(--on-accent);
   color-scheme: dark;
-  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif; --sans: system-ui, "Segoe UI", Roboto, sans-serif;
-  /* the shell's own: text size (set from Settings), the turn banner, the end sheet, danger, seat patterns */
-  --ui-scale: 1; --seat: var(--gold); --banner-time: .9s; --win: var(--gold2); --lose: #a9bccd; --danger: #e08a72; --pattern: rgba(16, 12, 10, .42);
 }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ground: #0f1a2a; --ground-2: #162539; --lacquer: rgba(10, 18, 30, .9); --slate: #162539; --shade: 6, 11, 19; --text: #e6eaef; --text-2: #b9c2cc; --text-3: #9ba7b4; --edge: rgba(205, 216, 229, .45); --edge-soft: rgba(205, 216, 229, .13); --accent: #d3dbe4; --accent-hi: #eef2f6; --paper: #cdd5de; --paper-edge: #8794a4 } }
+:root[data-theme="dark"] { --ground: #0f1a2a; --ground-2: #162539; --lacquer: rgba(10, 18, 30, .9); --slate: #162539; --shade: 6, 11, 19; --text: #e6eaef; --text-2: #b9c2cc; --text-3: #9ba7b4; --edge: rgba(205, 216, 229, .45); --edge-soft: rgba(205, 216, 229, .13); --accent: #d3dbe4; --accent-hi: #eef2f6; --paper: #cdd5de; --paper-edge: #8794a4 }
+
 * { box-sizing: border-box; margin: 0 }
 [hidden] { display: none !important }
 html, body { height: 100%; overflow: hidden }
-body { background: radial-gradient(120% 90% at 50% 42%, var(--table2), var(--table) 72%); color: var(--text); font: 16px/1.45 var(--sans); -webkit-tap-highlight-color: transparent }
-button, select { font: inherit; color: inherit }
+body { background: radial-gradient(120% 90% at 50% 42%, var(--ground-2), var(--ground) 72%); color: var(--text); font: var(--fs-3)/1.45 var(--sans); -webkit-tap-highlight-color: transparent }
+button, select, input, textarea { font: inherit; color: inherit }
 button { cursor: pointer; touch-action: manipulation }
-:focus-visible { outline: 3px solid var(--gold2); outline-offset: 2px }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: 0 0 0 5px var(--halo) }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap }
+
+/* ---- 2. materials ---- */
+.panel, .glass, .seat, #toast { background: var(--lacquer); border: 1px solid var(--edge-soft); border-top-color: var(--edge); border-radius: var(--r-2); box-shadow: var(--lift-2), inset 0 1px 0 var(--sheen); backdrop-filter: blur(12px) saturate(1.1); -webkit-backdrop-filter: blur(12px) saturate(1.1) }
+dialog.panel { background: var(--slate); border-color: var(--edge); box-shadow: var(--lift-3), inset 0 1px 0 var(--sheen) }
+/* paper rebinds the roles, so every component laid on it turns to ink without a rule of its own */
+.paper, #news, #coach, #hand > * {
+  --text: var(--paper-ink); --text-2: var(--paper-ink); --text-3: var(--paper-soft); --edge: rgba(20, 32, 51, .6); --edge-soft: rgba(20, 32, 51, .24); --raise: rgba(20, 32, 51, .06); --sheen: transparent;
+  --accent: var(--paper-accent); --accent-hi: var(--paper-accent); --accent-wash: rgba(43, 66, 99, .14); --focus: var(--paper-ink); --halo: var(--paper); --danger: #8f2b22;
+  background: var(--paper); color: var(--text); border: 1px solid var(--paper-edge); backdrop-filter: none; -webkit-backdrop-filter: none; color-scheme: light;
+}
+
+/* ---- 3. components ---- */
+/* buttons: one silver plate a view (.main, Capo's .go), lacquer for the rest (.quiet, .plain), words alone (.text), a mark alone (.icon, .ic) */
+.main, .quiet, button.plain, button.go, .pick button { min-height: var(--tap); border-radius: var(--r-1); border: 1px solid var(--edge); transition: background var(--t-1), border-color var(--t-1), filter var(--t-1) }
+.main, .quiet { min-height: var(--tap-lg); padding: 0 var(--sp-4); font-weight: 700; letter-spacing: .01em }
+.main, button.go { background: linear-gradient(#f8fafc, #d6dee7 55%, #b4c1cf); border-color: #6f7f93; color: #0f1a2a; font-weight: 700; box-shadow: 0 2px 0 rgba(0, 0, 0, .4), inset 0 1px 0 #fff }
+.main { flex: 1 }
+.main:hover, button.go:hover { filter: brightness(1.07) } .main:active, button.go:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3) }
+.main:disabled, button.go:disabled { background: none; border: 1px dashed var(--edge); color: var(--text-3); box-shadow: none; filter: none; transform: none; cursor: default; font-weight: 400 }
+.main small { font-weight: 400; opacity: .8 }
+.quiet, button.plain, .pick button { background: var(--raise); color: var(--text) } .quiet:hover, button.plain:hover, .pick button:hover:not(:disabled) { background: var(--accent-wash) }
+.quiet:disabled { opacity: .45; cursor: default }
+.quiet.danger { border-color: var(--danger); color: var(--danger) } .danger[data-armed] { background: var(--danger-wash) }
+a.quiet { display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; color: inherit }
+button.plain { padding: 0 var(--sp-3); font-size: var(--fs-2) } button.go { display: inline-flex; align-items: center; gap: 6px; padding: 0 var(--sp-4) }
+.text { background: none; border: 0; padding: 12px 4px; min-height: var(--tap); color: var(--text-2); text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--edge) } .text:hover { color: var(--accent-hi) }
+.icon, button.ic { flex: none; display: inline-grid; place-items: center; width: var(--tap); height: var(--tap); padding: 0; border: 0; border-radius: var(--r-1); background: none; color: var(--text) }
+button.ic { border: 1px solid var(--edge-soft); background: var(--raise) }
+.icon:hover, button.ic:hover { background: var(--accent-wash) }
+.icon svg, svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; display: block }
+/* chosen: a bright edge, a bar under it and heavier words, so it never rests on colour alone; the system's own mark when colours are forced */
+[aria-pressed=true]:is(button.plain, .pick button, .wear-row button), .pick [aria-checked=true] { border-color: var(--accent); background: var(--accent-wash); box-shadow: inset 0 0 0 1px var(--accent), inset 0 -4px 0 var(--accent); font-weight: 700 }
+@media (forced-colors: active) { [aria-checked=true], [aria-pressed=true] { outline: 3px solid Highlight; outline-offset: -3px } }
+/* a row of buttons wraps before it runs off the panel; the main one takes what is left, or a row of its own */
+.go { display: flex; flex-wrap: wrap; gap: var(--sp-2) } .go > .quiet { flex: 0 1 auto; white-space: nowrap } .go > .main { flex: 1 1 9em; padding: 4px var(--sp-3); line-height: 1.15; text-wrap: balance }
+/* choices in a row: one control, arrows move in it */
+.pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px }
+.pick.even > * { flex: 1 }
+.pick button { min-height: 46px; padding: 6px 13px; line-height: 1.15; text-align: center }
+.pick button:disabled { cursor: default; color: var(--text-3); border-style: dashed }
+.pick small { display: block; color: var(--text-3); font-size: var(--fs-1) } .pick [aria-checked=true] small { color: var(--text-2) }
+.pick.small { margin: 0 } .pick.small button { min-height: var(--tap); min-width: var(--tap) }
+.strip { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--edge) transparent; padding: 2px 2px 5px; margin-inline: -2px }
+.strip > * { flex: none; white-space: nowrap }
+.dot { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 7px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .5); transform: rotate(45deg) }
+/* tabs: words on a rule, the chosen one underlined in silver */
+.pick.tabs { flex-wrap: nowrap; gap: 0; margin-bottom: var(--sp-4); border-bottom: 1px solid var(--edge-soft) }
+.tabs button { flex: 1; padding: 6px 4px; border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; color: var(--text-3); font-weight: 700 }
+.tabs [aria-checked=true] { background: none; box-shadow: none; border-color: var(--accent); color: var(--text) }
+/* zoom, for the board (the table games) and the map (Capo): plus, minus, all of it */
+.zoom { position: fixed; z-index: 2; left: max(16px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom)); display: grid; gap: 6px } .zoom button { width: var(--tap); min-width: var(--tap); min-height: var(--tap); padding: 0; font-size: 20px; background: var(--lacquer) }
+/* fields */
+.field, .paste, select, .plain:is(select, input, textarea) { min-height: var(--tap); padding: 8px 12px; border-radius: var(--r-1); border: 1px solid var(--edge); background: rgba(var(--shade), .55); color: var(--text) }
+.paper :is(.field, .paste, select) { background: rgba(255, 255, 255, .35) }
+.paste { width: 100%; resize: vertical; font-size: var(--fs-2); word-break: break-all } textarea.plain { width: 100%; resize: vertical; line-height: 1.45 }
+input[type=range] { accent-color: var(--accent) }
+/* headings and small labels */
+h1, h2, .seat b { font-family: var(--display); font-weight: 400 } /* names and headings; its figures are old-style, so anything with a number in it is set in the plain face */
+.eyebrow, .seat dt, .ranks tr:first-child th, #turn small, .end h2, .cap { font: 700 var(--fs-1)/1.3 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent) }
+/* sheets: one at a time, lacquer for the menu and the end, paper for what is read */
+dialog { color: var(--text); margin: auto; width: min(480px, calc((100vw - 32px) / var(--ui-scale))); max-height: min(calc(84vh / var(--ui-scale)), 640px); padding: 22px; overflow-y: auto } dialog::backdrop { background: rgba(var(--shade), .66) }
+dialog h2 { font-size: var(--fs-6); line-height: 1.15; margin-bottom: var(--sp-3) } dialog p, dialog li { margin-bottom: 9px } dialog ul { padding-left: 20px; margin-bottom: 12px } dialog .stack { display: grid; gap: var(--sp-2); margin-bottom: 14px }
+dialog.paper :is(p, li) { font-family: var(--serif); font-size: 17px; line-height: 1.5 }
+dialog .stack button { min-height: 48px } dialog .go { position: sticky; bottom: -22px; padding-bottom: 4px }
+dialog .stack > button canvas { width: 22px; height: 22px; vertical-align: -5px; margin-right: 10px } dialog .stack .go { position: static; padding: 0 }
+dialog > .go { background: inherit; margin: 0 -22px -22px; padding: 10px 22px 18px !important; border-top: 1px solid var(--edge-soft) }
+dialog.paper > .go { background: var(--paper) }
+dialog hr { border: 0; border-top: 1px solid var(--edge); margin: 6px 0 } #sheet-body a { color: var(--accent-hi) }
+#sheet.wide { width: min(560px, calc((100vw - 24px) / var(--ui-scale))) }
+#log { max-height: 34vh; overflow-y: auto; padding-left: 26px; color: var(--text-2) }
+/* words over the board: one line at a time, never in the way */
+#toast { position: fixed; z-index: 2; left: 50%; top: 84px; transform: translate(-50%, -8px); max-width: min(520px, calc(100vw - 32px)); padding: 9px 18px; border-left: 3px solid var(--accent); text-align: center; font: var(--fs-3)/1.35 var(--sans); opacity: 0; transition: opacity var(--t-3), transform var(--t-3); pointer-events: none }
+#toast.on { opacity: 1; transform: translate(-50%, 0) }
+
+/* ---- 4. the table games ---- */
 #stage { position: fixed; inset: 0 }
 .board-layer { position: absolute; inset: 0 }
 #stage svg { position: absolute; inset: 0; width: 100%; height: 100% }
-.shade { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity .6s; background: linear-gradient(90deg, rgba(10, 13, 14, .93) 0, rgba(10, 13, 14, .72) 36%, rgba(10, 13, 14, .12) 72%) }
+.shade { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity var(--t-4); background: linear-gradient(90deg, rgba(var(--shade), .95) 0, rgba(var(--shade), .78) 36%, rgba(var(--shade), .1) 72%) }
 .menu .shade { opacity: 1 }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 14px 40px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 244, 214, .06); backdrop-filter: blur(14px) saturate(1.1); -webkit-backdrop-filter: blur(14px) saturate(1.1) }
 
-/* top bar */
-#bar { position: fixed; z-index: 3; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(620px, calc(100vw - 24px)); display: flex; align-items: center; gap: 8px; padding: 6px }
+/* top bar: a plate hung from the top edge. Round, the land held, the goal */
+#bar { position: fixed; z-index: 3; top: 0; left: 50%; transform: translateX(-50%); width: min(620px, calc((100vw - 24px) / var(--ui-scale))); display: flex; align-items: center; gap: var(--sp-2); padding: max(6px, env(safe-area-inset-top)) 6px 6px; border-top: 0; border-radius: 0 0 var(--r-3) var(--r-3); border-bottom-color: var(--edge) }
 #bar .mid { flex: 1; min-width: 0; padding: 2px 4px 5px }
-#round { font: 600 15px/1.3 var(--serif); text-align: center; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.icon { flex: none; width: 44px; height: 44px; border: 0; border-radius: 10px; background: none }
-.icon:hover { background: rgba(255, 244, 214, .08) }
-.icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; display: block; margin: auto }
-#land { position: relative; height: 10px; margin-top: 6px; border-radius: 5px; background: rgba(255, 244, 214, .13) }
-#fills { display: flex; height: 100%; border-radius: 5px; overflow: hidden }
+#round { font: 700 var(--fs-3)/1.3 var(--sans); letter-spacing: .04em; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+#land { position: relative; height: 10px; margin-top: 5px; border-radius: 2px; background: var(--raise); box-shadow: 0 0 0 1px var(--edge-soft) }
+#fills { display: flex; height: 100%; border-radius: 2px; overflow: hidden }
 #fills i { display: block; height: 100%; transition: width .7s cubic-bezier(.3, .7, .3, 1) }
 #fills i + i { box-shadow: inset 1px 0 0 rgba(0, 0, 0, .6) }
-#goal { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--gold2); border-radius: 1px }
+#goal { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: var(--accent-hi); box-shadow: 0 0 0 1px var(--halo) }
 
-/* seats */
+/* seats: a colour bar, the sign, the name, two or three figures. The one to move is keyed in silver */
 #seats { position: fixed; z-index: 2; list-style: none; padding: 0; left: max(16px, env(safe-area-inset-left)); top: 50%; transform: translateY(-50%); width: 208px; display: grid; gap: 10px }
-.seat { position: relative; padding: 11px 14px 11px 52px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); transition: border-color .25s, transform .25s; backdrop-filter: blur(12px) }
-.seat.now { border-color: var(--gold); transform: translateX(6px) }
+.seat { position: relative; padding: 10px 12px 10px 54px; border-left: 4px solid var(--seat); box-shadow: var(--lift-1); transition: border-color var(--t-2), transform var(--t-2) var(--ease) }
+.seat.now { border-color: var(--accent); border-left-color: var(--seat); box-shadow: 0 0 0 1px var(--accent), var(--lift-2); transform: translateX(6px) }
 .seat.out { opacity: .5 }
-.seat canvas { position: absolute; left: 12px; top: 13px; width: 30px; height: 30px }
-.seat b { font: 600 17px/1.2 var(--serif); display: block }
-.seat small { color: var(--soft); font-size: 13px }
-.seat dl { display: flex; gap: 14px; margin-top: 4px; font-variant-numeric: tabular-nums }
-.seat dt { font-size: 12px; color: var(--soft) } .seat dd { font-weight: 650; font-size: 16px }
+.seat canvas { position: absolute; left: 11px; top: 12px; width: 32px; height: 32px }
+.seat b { font-size: 19px; line-height: 1.15; display: block }
+.seat small { color: var(--text-3); font-size: var(--fs-1) }
+.seat dl { display: flex; gap: 14px; margin: 8px 0 0 -42px; font-variant-numeric: tabular-nums }
+.seat dt { color: var(--text-3); letter-spacing: .05em; font-size: 12px; white-space: nowrap } .seat dd { font-weight: 700; font-size: var(--fs-3) }
 
-/* the move */
+/* the move: what you can do now. The tray at the bottom of a phone */
 #act { position: fixed; z-index: 3; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); width: 340px; padding: 14px 16px 16px }
-#status { font: 600 18px/1.3 var(--serif); margin-bottom: 10px; min-height: 1.3em; text-wrap: balance }
-.pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px }
-.pick.even > * { flex: 1 }
-.pick button { min-height: 46px; padding: 6px 13px; border-radius: 10px; border: 1px solid var(--line2); background: rgba(255, 244, 214, .05); line-height: 1.15; text-align: center }
-.pick button:hover { border-color: var(--line2) }
-.pick button[aria-checked=true] { border-color: var(--gold); background: rgba(226, 184, 102, .17); box-shadow: inset 0 0 0 1px var(--gold) }
-.pick button:disabled { cursor: default; color: var(--soft); border-style: dashed }
-.pick small { display: block; color: var(--soft); font-size: 13px }
-.pick.small { margin: 0 } .pick.small button { min-height: 44px; min-width: 44px }
-.dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 7px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .5) }
-.go { display: flex; gap: 8px }
-.main, .quiet { min-height: 50px; padding: 0 18px; border-radius: 11px; border: 1px solid transparent; font-weight: 650 }
-.main { flex: 1; background: linear-gradient(#efcb82, #d9a851); color: var(--on); box-shadow: 0 2px 0 rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .4) }
-.go button { white-space: nowrap } #act .quiet { padding: 0 14px }
-.main:hover { filter: brightness(1.06) } .main:active { transform: translateY(1px) }
-.main:disabled { filter: grayscale(.8) brightness(.6); cursor: default }
-.quiet { background: rgba(255, 244, 214, .06); border-color: var(--line2) } .quiet:hover { background: rgba(255, 244, 214, .12) }
-.text { background: none; border: 0; padding: 12px 4px; min-height: 44px; color: var(--soft); text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--line2) } .text:hover { color: var(--text) }
-
-.strip { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 3px }
-.strip > * { flex: none; white-space: nowrap }
-.main small { font-weight: 500; opacity: .75 }
-
-/* words over the board */
-#toast { position: fixed; z-index: 2; left: 50%; top: 92px; transform: translate(-50%, -8px); max-width: min(520px, calc(100vw - 32px)); padding: 9px 18px; border-radius: 22px; background: var(--panel); border: 1px solid var(--line); text-align: center; font: 500 16px/1.35 var(--serif); opacity: 0; transition: opacity .3s, transform .3s; pointer-events: none; backdrop-filter: blur(12px) }
-#toast.on { opacity: 1; transform: translate(-50%, 0) }
-
-/* title */
-.title { position: fixed; z-index: 4; inset: 0; overflow-y: auto; padding: max(6vh, 28px) 24px 64px max(6vw, 24px); display: flex; flex-direction: column; justify-content: safe center; gap: 14px; max-width: 520px }
-.eyebrow { font: 500 14px/1.4 var(--serif); color: var(--gold); letter-spacing: .04em }
-h1 { font: 500 clamp(48px, 6vw, 84px)/.92 var(--serif); letter-spacing: -.025em; text-shadow: 0 4px 30px rgba(0, 0, 0, .6) }
-.tag { font: 400 19px/1.45 var(--serif); color: #d8cfba; max-width: 24em }
-.card { padding: 16px; width: min(420px, 100%) }
-.line { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap } .line > span { color: var(--soft) }
-#who { list-style: none; padding: 0; margin-bottom: 12px; display: grid; gap: 6px }
-#who li { display: flex; align-items: center; gap: 10px } #who canvas { width: 28px; height: 28px; flex: none } #who b { font: 600 17px/1 var(--serif) }
-.wear { flex: 1; display: flex; align-items: center; gap: 10px; min-height: 44px; border: 0; background: none; padding: 0 4px; border-radius: 10px; text-align: left } .wear:hover { background: rgba(255, 244, 214, .07) }
-#who select, .more select { min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: #20282a }
-.links { display: flex; gap: 20px; flex-wrap: wrap }
-#foot { position: fixed; z-index: 5; right: 16px; bottom: 10px; display: none; gap: 14px; font-size: 13px; color: var(--soft) } .menu #foot { display: flex } #foot a { color: inherit }
-.broken { position: fixed; inset: auto 16px 16px; z-index: 9; padding: 12px 16px; background: #5a2318; border-radius: 10px; opacity: 0; animation: late 0s 2.5s forwards } @keyframes late { to { opacity: 1 } }
-
-dialog { color: inherit; margin: auto; width: min(480px, calc(100vw - 32px)); max-height: min(80vh, 640px); padding: 22px; overflow-y: auto } dialog::backdrop { background: rgba(6, 8, 9, .6) }
-dialog h2 { font: 500 28px/1.15 var(--serif); margin-bottom: 12px } dialog p, dialog li { margin-bottom: 9px } dialog ul { padding-left: 20px; margin-bottom: 12px } dialog .stack { display: grid; gap: 8px; margin-bottom: 14px }
-dialog .stack button { min-height: 48px } dialog .go { position: sticky; bottom: -22px; padding-bottom: 4px }
-#log { max-height: 34vh; overflow-y: auto; padding-left: 26px; color: #d8cfba }
-#chart { display: block; width: 100%; height: 120px; margin-bottom: 14px; border-radius: 8px; background: rgba(255, 244, 214, .06) }
-
-@media (max-width: 820px) {
-  #seats { top: auto; bottom: auto; left: 12px; right: 12px; width: auto; transform: none; top: calc(max(12px, env(safe-area-inset-top)) + 70px); grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px }
-  .seat { padding: 7px 4px 7px 36px } .seat canvas { left: 7px; top: 9px; width: 23px; height: 23px } .seat.now { transform: none } .seat b { font-size: 15px } .seat small { display: none } .seat dl { gap: 8px; margin-top: 1px } .seat dt { font-size: 11px } .seat dd { font-size: 15px; line-height: 1.1 } .seat dl div:last-child { display: none }
-  #act { left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); width: auto; padding: 12px 12px 12px }
-  #status { font-size: 17px; margin-bottom: 8px } .pick { margin-bottom: 8px }
-  #toast { top: auto; bottom: calc(var(--act, 290px) + 16px); font-size: 15px; width: max-content }
-  .shade { background: linear-gradient(180deg, rgba(10, 13, 14, .35) 0, rgba(10, 13, 14, .82) 24%, rgba(10, 13, 14, .93) 62%) }
-  .title { padding: 26px 18px 60px; max-width: none } h1 { font-size: clamp(52px, 17vw, 84px) }
-}
-@media (max-height: 560px) and (min-width: 821px) { #seats { width: 176px } #act { width: 300px } h1 { font-size: 56px } .seat small { display: none } }
-.still * { transition: none !important } /* reduced motion: the system's wish, or the player's in Settings */
-.about { margin: -6px 0 12px; font-size: 13px; color: var(--soft) } .about span { display: block } .about span + span { margin-top: 5px } .about span:first-child { color: var(--text) }
-#info { color: #d8cfba; font-size: 14px; min-height: 2.9em; margin-bottom: 8px }
-#amount { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; min-height: 44px } #much { flex: 1; height: 44px; accent-color: var(--gold) } #many { min-width: 3.2em; text-align: right; font: 600 18px/1 var(--serif); font-variant-numeric: tabular-nums }
-#dice { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 10px } #dice div { display: flex; gap: 4px } #dice svg { width: 30px; height: 30px; display: block }
-@keyframes tumble { from { transform: rotate(-140deg) scale(.5); opacity: 0 } } #dice svg { animation: tumble .28s ease-out backwards }
-.still #dice svg { animation: none }
-@media (max-width: 820px) { #info { min-height: 1.4em; font-size: 13px } #dice svg { width: 26px; height: 26px } }
-@media (max-width: 820px) { .seat dl { margin: 7px 0 0 -24px } .seat { overflow: hidden } }
-#send p { color: #d8cfba; margin-bottom: 10px } #send + .quiet, #act > .quiet { width: 100%; margin-top: 8px }
-.field, .paste { min-height: 44px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line2); background: #20282a; color: var(--text); font: inherit } .line .field { width: 190px } .paste { width: 100%; resize: vertical; font-size: 14px; word-break: break-all }
-dialog .stack > button canvas { width: 22px; height: 22px; vertical-align: -5px; margin-right: 10px } dialog .stack .go { position: static; padding: 0 }
-dialog > .go { background: #161c1e; margin: 0 -22px -22px; padding: 10px 22px 18px !important }
-.more:empty { display: none } .more .head { display: block; color: var(--soft); margin-bottom: 6px } .more .pick { margin-bottom: 8px } .more .line { margin-bottom: 8px } .more .about { margin: 0 0 10px; min-height: 0 } .more .about:empty { display: none }
-.pick button[aria-pressed=true] { border-color: var(--gold); background: rgba(226, 184, 102, .17); box-shadow: inset 0 0 0 1px var(--gold) }
-.wear-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; margin-bottom: 14px } .wear-row button { position: relative; min-height: 52px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 244, 214, .05) } .wear-row canvas { width: 34px; height: 34px; display: block; margin: auto } .wear-row [aria-pressed=true] { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold) } .wear-row small { position: absolute; right: 5px; bottom: 2px; color: var(--soft); font-size: 12px }
-#hand { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px } #hand button, #hand span { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 2px 9px; border-radius: 8px; border: 1px solid var(--line2); background: #e8dcbd; color: #2a1d14; font-size: 13px } #hand svg { width: 16px; height: 16px } #trades { margin-bottom: 8px } #trades:empty { display: none }
-.card { max-height: none }
-@media (min-width: 821px) {
-  .atlas #seats { left: 50%; top: 84px; transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px); grid-auto-flow: column; gap: 8px }
-  .atlas .seat { padding: 7px 14px 7px 44px; min-width: 150px } .atlas .seat canvas { left: 9px; top: 9px; width: 27px; height: 27px } .atlas .seat small { display: none } .atlas .seat dl { margin: 2px 0 0 -34px; gap: 12px } .atlas .seat.now { transform: none }
-  .atlas #act { right: auto; left: 16px }
-  .atlas #toast { top: 176px }
-}
-@media (max-width: 820px) { .menu #foot { left: 0; right: 0; bottom: 0; padding: 8px 16px; background: #10161a; justify-content: center } }
-#style small { font-size: 11px }
-.goods { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px } .goods span { padding: 2px 8px; border-radius: 7px; background: rgba(255, 244, 214, .1); color: #2a1d14; font-size: 13px; font-weight: 600 } .goods span:nth-last-child(-n+2):not([style]) { color: var(--text) }
-#live .live-info { color: #d8cfba; font-size: 14px; margin-bottom: 8px } .live-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px } .live-row input { flex: 1; height: 44px; accent-color: var(--gold) } .live-row output { min-width: 3em; text-align: right; font: 600 18px/1 var(--serif) }
-#leaders { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 3px; font-size: 14px } #leaders li { display: flex; align-items: center; gap: 4px } #leaders b { flex: 1; font-weight: 600 } #leaders li.me b { color: var(--gold2) } #live .go button[aria-pressed=true] { border-color: var(--gold) }
-@media (max-width: 820px) { #leaders { grid-template-columns: 1fr 1fr; font-size: 13px } }
-#quick { min-height: 58px; font-size: 20px } #preset { margin: 10px 0 4px } #own > summary { min-height: 44px; display: flex; align-items: center; color: var(--soft); cursor: pointer } #own[open] > summary { margin-bottom: 8px } #own .go > * { flex: 1 }
-#news { position: relative; margin-bottom: 10px; padding: 8px 40px 8px 12px; border-radius: 10px; background: rgba(255, 244, 214, .08); font-size: 14px; color: #d8cfba } #news:empty { display: none } #news b { font: 600 15px var(--serif); color: var(--text) } #news ul { padding-left: 18px } #news small { color: var(--soft) }
-#news button, #dock .head { border: 0; background: none } #news button { position: absolute; top: 0; right: 0; width: 44px; height: 44px; font-size: 22px; color: var(--soft) }
-#dock { position: fixed; z-index: 2; right: max(16px, env(safe-area-inset-right)); top: 86px; width: 340px; max-height: calc(100vh - var(--ah, 300px) - 116px); display: flex; flex-direction: column; padding: 2px 4px 8px } .atlas #dock { top: 180px }
-#dock .head { min-height: 40px; padding: 0 12px; text-align: left; font: 600 15px var(--serif); color: var(--soft) } #dock .head::after { content: " \25B4" } #dock [aria-expanded=false]::after { content: " \25BE" }
-#dock ol { overflow-y: auto; padding: 0 12px 0 34px; font-size: 14px; color: #d8cfba } #dock li + li { margin-top: 3px }
+#status { font: 700 var(--fs-4)/1.25 var(--sans); margin-bottom: 10px; min-height: 1.25em; text-wrap: balance }
+#act .quiet { padding: 0 14px } #send + .quiet, #act > .quiet { width: 100%; margin-top: var(--sp-2) }
+#choice > .text { display: block; margin: 2px auto -10px; font-size: var(--fs-2) }
+#info { color: var(--text-2); font-size: var(--fs-2); min-height: 2.9em; margin-bottom: var(--sp-2) }
+#amount { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; min-height: var(--tap) } #much { flex: 1; height: var(--tap) } #many { min-width: 3.2em; text-align: right; font: 700 var(--fs-4)/1 var(--sans); font-variant-numeric: tabular-nums }
+#dice { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 10px } #dice div { display: flex; gap: 4px } #dice svg { width: 30px; height: 30px; display: block; animation: tumble .28s ease-out backwards }
+@keyframes tumble { from { transform: rotate(-140deg) scale(.5); opacity: 0 } }
+#send p { color: var(--text-2); margin-bottom: 10px }
+/* cards in the hand are paper, and big enough to tap */
+#hand { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--sp-2) } #hand:empty, #trades:empty { display: none } #hand button, #hand span { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 2px 10px; border-radius: var(--r-1); font-size: var(--fs-2); box-shadow: var(--lift-1) } #hand button { min-height: var(--tap) } #hand svg { width: 16px; height: 16px } #trades { margin-bottom: var(--sp-2) }
+.goods { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: var(--sp-2) } .goods span { padding: 3px 9px; border-radius: var(--r-1); background: var(--raise); color: #20221c; font-size: var(--fs-2); font-weight: 700 } .goods span:nth-last-child(-n+2):not([style]) { color: var(--text) }
+#live .live-info { color: var(--text-2); font-size: var(--fs-2); margin-bottom: var(--sp-2) } .live-row { display: flex; align-items: center; gap: 10px; margin-bottom: var(--sp-2) } .live-row input { flex: 1; height: var(--tap) } .live-row output { min-width: 3em; text-align: right; font: 700 var(--fs-4)/1 var(--sans) }
+#leaders { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 3px; font-size: var(--fs-2) } #leaders li { display: flex; align-items: center; gap: 4px } #leaders b { flex: 1; font-weight: 700 } #leaders li.me b { color: var(--accent-hi) } #live .go button[aria-pressed=true] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent) }
+/* since your last turn: a dispatch. One line until it is opened, so it never takes the board */
+#news { position: relative; margin-bottom: 10px; padding: 0 44px 0 12px; border-radius: var(--r-1); font-size: var(--fs-2); box-shadow: var(--lift-1) } #news:empty { display: none }
+#news .head { display: block; width: 100%; min-height: 40px; padding: 0; border: 0; background: none; text-align: left; font: 700 var(--fs-1)/1.3 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent) } #news .head::after { content: " \25BE" } #news .head[aria-expanded=true]::after { content: " \25B4" }
+#news ul { padding: 0 0 10px 18px; max-height: 26vh; overflow-y: auto; font-family: var(--serif); font-size: 15px } #news small { display: block; margin: -4px 0 10px; color: var(--text-3) }
+#news:not(.open) :is(li + li, small) { display: none } #news:not(.open) ul { list-style: none; padding-left: 0 } #news:not(.open) li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+#news .shut { position: absolute; top: 0; right: 0; width: var(--tap); height: 40px; border: 0; background: none; font-size: 22px; color: var(--text-3) }
+/* the record of the game, docked beside the board on wide screens */
+#record { position: fixed; z-index: 2; right: max(16px, env(safe-area-inset-right)); top: 78px; width: 340px; max-height: calc(100vh - var(--ah, 300px) - 108px); display: flex; flex-direction: column; padding: 2px 4px 8px } .atlas #record { top: 180px }
+#record .head { min-height: 40px; padding: 0 12px; border: 0; background: none; text-align: left; font: 700 var(--fs-1) var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent) } #record .head::after { content: " \25B4" } #record [aria-expanded=false]::after { content: " \25BE" }
+#record ol { overflow-y: auto; padding: 0 12px 0 34px; font-size: var(--fs-2); color: var(--text-2); scrollbar-width: thin; scrollbar-color: var(--edge) transparent } #record li + li { margin-top: 3px } #record li::marker { color: var(--text-3) }
 @media (min-width: 1181px) { #logs { display: none } }
 
+/* the title: the game's name over its own board, one plate to press */
+.title { position: fixed; z-index: 4; inset: 0; overflow-y: auto; padding: max(6vh, 28px) 24px 64px max(6vw, 24px); display: flex; flex-direction: column; justify-content: safe center; gap: 14px; max-width: 540px }
+.eyebrow::before { content: ""; display: inline-block; width: 28px; height: 1px; margin-right: 10px; vertical-align: .3em; background: currentColor }
+h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spacing: -.015em; text-wrap: balance; text-shadow: 0 4px 30px rgba(0, 0, 0, .6) }
+.tag { font: 19px/1.45 var(--serif); color: var(--text-2); max-width: 24em }
+.card { padding: var(--sp-4); width: min(430px, 100%) }
+.line { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap } .line > span { color: var(--text-3) } .line .field { width: 190px }
+#who { list-style: none; padding: 0; margin-bottom: 12px; display: grid; gap: 6px }
+#who li { display: flex; align-items: center; gap: 10px } #who canvas { width: 28px; height: 28px; flex: none } #who b { font: 400 19px/1 var(--display) }
+.wear { flex: 1; display: flex; align-items: center; gap: 10px; min-height: var(--tap); border: 0; background: none; padding: 0 4px; border-radius: var(--r-1); text-align: left } .wear:hover { background: var(--accent-wash) }
+.wear-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; margin-bottom: 14px } .wear-row button { position: relative; min-height: 52px; border-radius: var(--r-1); border: 1px solid var(--edge-soft); background: var(--raise) } .wear-row canvas { width: 34px; height: 34px; display: block; margin: auto } .wear-row small { position: absolute; right: 5px; bottom: 2px; color: var(--text-3); font-size: 12px }
+.links { display: flex; gap: 2px 20px; flex-wrap: wrap }
+.about { margin: -6px 0 12px; font-size: var(--fs-1); color: var(--text-3) } .about span { display: block } .about span + span { margin-top: 5px } .about span:first-child { color: var(--text) }
+.more:empty { display: none } .more .head { display: block; color: var(--text-3); margin-bottom: 6px } .more .pick { margin-bottom: var(--sp-2) } .more .line { margin-bottom: var(--sp-2) } .more .about { margin: 0 0 10px; min-height: 0 } .more .about:empty { display: none }
+#style small { font-size: 12px }
+#quick { min-height: 58px; font-size: 20px; letter-spacing: .04em } #preset { margin: 10px 0 4px } #own > summary { min-height: var(--tap); display: flex; align-items: center; color: var(--text-2); cursor: pointer } #own > summary::before { content: "+"; width: 1.2em; color: var(--accent) } #own[open] > summary::before { content: "\2212" } #own[open] > summary { margin-bottom: var(--sp-2) } #own .go > * { flex: 1 }
+.title .card > .text { display: block; margin: 2px 0 -6px; color: var(--accent-hi) }
+#foot { position: fixed; z-index: 5; right: 16px; bottom: 10px; display: none; gap: 14px; font-size: var(--fs-1); color: var(--text-3) } .menu #foot { display: flex } #foot a { color: inherit }
+.broken { position: fixed; inset: auto 16px 16px; z-index: 9; padding: 12px 16px; background: #5a2318; border-radius: var(--r-2); opacity: 0; animation: late 0s 2.5s forwards } @keyframes late { to { opacity: 1 } }
+.set .line { margin-bottom: 10px } .set .pick { margin: 0 } .set input { flex: 1; max-width: 260px; height: var(--tap) } .set .about { margin: -4px 0 10px }
+
 /* text size: the floating parts grow together, and widths are divided back so nothing leaves the screen */
-#bar, #seats, #act, #dock, #toast, #sheet, #turn, .title .card, .title .links { zoom: var(--ui-scale) }
-#bar { width: min(620px, calc((100vw - 24px) / var(--ui-scale))) }
-dialog { width: min(480px, calc((100vw - 32px) / var(--ui-scale))); max-height: min(calc(84vh / var(--ui-scale)), 640px) }
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap }
+#bar, #seats, #act, #record, #toast, #sheet, #turn, .title .card, .title .links { zoom: var(--ui-scale) }
 
 /* the turn banner: in, held, gone in under a second; a fade when motion is reduced */
-#turn { position: fixed; z-index: 6; top: max(12px, env(safe-area-inset-top)); left: 0; right: 0; margin: auto; width: max-content; max-width: calc((100vw - 24px) / var(--ui-scale)); display: grid; grid-template-columns: auto auto; column-gap: 16px; align-items: center; padding: 10px 30px 10px 14px; border-radius: 14px; background: var(--panel); border: 2px solid var(--seat); border-left-width: 12px; box-shadow: 0 14px 40px rgba(0, 0, 0, .5); backdrop-filter: blur(14px); pointer-events: none }
+#turn { position: fixed; z-index: 6; top: max(12px, env(safe-area-inset-top)); left: 0; right: 0; margin: auto; width: max-content; max-width: calc((100vw - 24px) / var(--ui-scale)); display: grid; grid-template-columns: auto auto; column-gap: var(--sp-4); align-items: center; padding: 10px 30px 10px 14px; border-radius: var(--r-2); background: var(--slate); border: 1px solid var(--accent); border-left: 12px solid var(--seat); box-shadow: var(--lift-3); pointer-events: none }
 #turn canvas { grid-row: 1 / span 3; width: 60px; height: 60px }
-#turn small { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--soft) }
-#turn b { font: 600 30px/1.05 var(--serif) } #turn span { font: 500 17px/1.3 var(--serif); color: var(--gold2) }
-#turn.go { animation: turn-in var(--banner-time) cubic-bezier(.2, .8, .2, 1) both } .still #turn.go { animation-name: turn-fade }
+#turn small { color: var(--text-3) }
+#turn b { font: 400 32px/1.05 var(--display) } #turn span { font: var(--fs-3)/1.3 var(--sans); color: var(--accent-hi) }
+#turn.go { animation: turn-in var(--banner-time) var(--ease) both } .still #turn.go { animation-name: turn-fade }
 @keyframes turn-in { from { transform: translateY(-140%) } 20%, 80% { transform: none; opacity: 1 } to { transform: none; opacity: 0 } }
 @keyframes turn-fade { from { opacity: 0 } 15%, 80% { opacity: 1 } to { opacity: 0 } }
-
-/* the menu: tabs, settings, a line between keeping and losing the game */
-#sheet.wide { width: min(560px, calc((100vw - 24px) / var(--ui-scale))) }
-.pick.tabs { flex-wrap: nowrap; margin-bottom: 16px } .tabs button { flex: 1; padding: 6px } .quiet:disabled { opacity: .45; cursor: default }
-.set .line { margin-bottom: 10px } .set .pick { margin: 0 } .set input { flex: 1; max-width: 260px; height: 44px; accent-color: var(--gold) } .set .about { margin: -4px 0 10px }
-dialog hr { border: 0; border-top: 1px solid var(--line2); margin: 6px 0 } #sheet-body a { color: var(--gold2) }
-.quiet.danger { border-color: var(--danger); color: #f3c9bb } .danger[data-armed] { background: rgba(224, 138, 114, .2) }
 
 /* the end: the winner large, places, land over time; win and loss share the layout and differ in tone */
 #sheet.end { width: min(860px, calc((100vw - 16px) / var(--ui-scale))); max-height: calc(96vh / var(--ui-scale)) }
 .end.win { --tone: var(--win) } .end.lose { --tone: var(--lose) }
-.end h2 { font: 600 14px/1.2 var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--tone) }
-.hero { display: flex; align-items: center; gap: 18px; margin-bottom: 16px; padding: 14px 16px; border-left: 6px solid var(--tone); border-radius: 10px; background: rgba(255, 244, 214, .05) }
+.end h2 { color: var(--tone); font-size: var(--fs-2); letter-spacing: .16em }
+.hero { display: flex; align-items: center; gap: 18px; margin-bottom: var(--sp-4); padding: 14px 16px; border-left: 6px solid var(--tone); border-radius: var(--r-1); background: var(--raise) }
 .hero .arms { display: flex; flex: none } .hero canvas { width: 84px; height: 84px } .hero canvas + canvas { margin-left: -22px }
-.hero b { display: block; font: 600 clamp(30px, 5vw, 46px)/1.05 var(--serif); margin-bottom: 6px } .hero p { margin: 0 0 3px; color: #d8cfba }
+.hero b { display: block; font: 400 clamp(32px, 5vw, 48px)/1.05 var(--display); margin-bottom: 6px } .hero p { margin: 0 0 3px; color: var(--text-2) }
 .ranks { overflow-x: auto; margin-bottom: 14px } .ranks table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; white-space: nowrap }
-.ranks th, .ranks td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--line) } .ranks tr:first-child th { font: 500 13px var(--sans); color: var(--soft) }
-.ranks th[scope=row] { font: 600 16px var(--serif) } .ranks canvas { width: 24px; height: 24px; vertical-align: -6px; margin-right: 8px } .ranks .won { color: var(--tone) } .ranks small { color: var(--soft); font: 400 13px var(--sans) }
-.end #chart { height: auto; aspect-ratio: 880 / 280 }
-.end .ends { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 8px; padding: 10px 0; background: #161c1e } .end .minor { position: static; justify-content: center; gap: 28px }
-a.quiet { display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; color: inherit }
+.ranks th, .ranks td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--edge-soft) } .ranks tr:first-child th { color: var(--text-3) }
+.ranks th[scope=row] { font: 400 19px var(--display) } .ranks canvas { width: 24px; height: 24px; vertical-align: -6px; margin-right: 8px } .ranks .won { color: var(--tone) } .ranks small { color: var(--text-3); font: var(--fs-1) var(--sans) }
+#chart { display: block; width: 100%; height: 120px; margin-bottom: 14px; border-radius: var(--r-1); background: var(--raise) } .end #chart { height: auto; aspect-ratio: 880 / 280 }
+.end .ends { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: var(--sp-2); padding: 10px 0; background: inherit } .end .minor { position: static; justify-content: center; gap: 28px }
 
 /* seat patterns on the score bar, for telling seats apart without colour */
 .patterns #land { height: 14px }
@@ -200,124 +242,134 @@ a.quiet { display: flex; align-items: center; justify-content: center; text-alig
 .patterns #fills i:nth-child(6n+5)::after { background-image: repeating-linear-gradient(45deg, var(--pattern) 0 2px, transparent 2px 6px) }
 .patterns #fills i:nth-child(6n)::after { background-image: repeating-linear-gradient(0deg, var(--pattern) 0 2px, transparent 2px 5px) }
 
-/* a phone: the tray folds to a handle with the main action still showing, the seats are one line, the board has the rest */
+/* the coach: a guided first game. A paper note beside what it points at, a ring on the board, an outline on a control */
+#coach { position: fixed; z-index: 7; width: min(340px, calc(100vw - 16px)); padding: 12px 14px 14px; border-radius: var(--r-1); box-shadow: var(--lift-3) }
+#coach p { margin-bottom: 10px } #coach p:first-child { font: 700 var(--fs-1)/1.3 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent); margin-bottom: 4px } #coach p:first-child small { font: var(--fs-1) var(--sans); letter-spacing: 0; text-transform: none; color: var(--text-3) }
+#coach p + p { font: 17px/1.45 var(--serif) } #coach .go > * { flex: 1 } #coach .quiet { flex: 0 1 auto }
+#coach:focus { outline: none } #coach:focus-visible { outline: 3px solid var(--focus) }
+#coach-ring { position: fixed; z-index: 1; width: 52px; height: 52px; border-radius: 50%; border: 3px solid #f6f8fb; box-shadow: 0 0 0 3px rgba(10, 18, 30, .7), 0 0 18px #cfd8e2; pointer-events: none; animation: coach 1.4s ease-in-out infinite }
+.coached { outline: 3px solid #f6f8fb !important; outline-offset: 2px }
+@keyframes coach { 50% { box-shadow: 0 0 0 3px rgba(10, 18, 30, .7), 0 0 26px 6px #cfd8e2 } }
+
+/* an atlas board (a wide map): seats along the top, the move at the left */
+@media (min-width: 821px) {
+  .atlas #seats { left: 50%; top: 74px; transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px); grid-auto-flow: column; gap: var(--sp-2) }
+  .atlas .seat { padding: 7px 14px 7px 46px; min-width: 150px } .atlas .seat canvas { left: 9px; top: 9px; width: 28px; height: 28px } .atlas .seat small { display: none } .atlas .seat b { line-height: 28px } .atlas .seat dl { margin: 3px 0 0 -36px; gap: 12px } .atlas .seat.now { transform: none }
+  .atlas #act { right: auto; left: 16px }
+  .atlas #toast { top: 168px } .atlas .zoom { left: auto; right: 16px }
+}
+@media (max-height: 560px) and (min-width: 821px) { #seats { width: 176px } #act { width: 300px } h1 { font-size: 56px } .seat small { display: none } }
+
+/* a phone: one strip on top, one tray below, the board has the rest. The tray folds to a handle with the main action still showing; sheets rise from the bottom edge */
 .tray { display: none }
 @media (max-width: 820px) {
-  .tray { display: block; width: calc(100% + 24px); height: 34px; margin: -12px -12px 0; border: 0; background: none }
-  .tray::before { content: ""; display: block; width: 48px; height: 5px; margin: auto; border-radius: 3px; background: var(--line2) } .shut .tray::before { background: var(--gold) }
-  .shut #act :is(#news, #dice, #info, #hand, #trades, .pick, #amount, #leaders, .live-info, #send > p) { display: none }
-  .shut #status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 8px }
-  #seats { display: flex; top: calc(max(12px, env(safe-area-inset-top)) + 62px); overflow-x: auto; scrollbar-width: none }
-  .seat { flex: 1 1 0; min-width: 58px; display: flex; align-items: center; gap: 6px; padding: 4px 9px 4px 4px; border-radius: 999px }
-  .seat canvas { position: static; flex: none; width: 24px; height: 24px }
-  .seat b { flex: 1 1 auto; min-width: 0; font-size: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
-  .seat dl { flex: none; margin: 0 } .seat dl div + div, .seat dt { display: none } .seat.now { box-shadow: inset 0 0 0 1px var(--gold) }
+  #seats { display: flex; gap: 6px; left: 8px; right: 8px; width: auto; transform: none; top: calc(max(6px, env(safe-area-inset-top)) + 60px); overflow-x: auto; scrollbar-width: none }
+  .seat { flex: 1 1 0; min-width: 58px; display: flex; align-items: center; gap: 6px; padding: 4px 9px 4px 4px; overflow: hidden }
+  .seat.now { transform: none } .seat canvas { position: static; flex: none; width: 24px; height: 24px }
+  .seat b { flex: 1 1 auto; min-width: 0; font-size: 17px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis } .seat small { display: none }
+  .seat dl { flex: none; margin: 0 } .seat dl div + div, .seat dt { display: none } .seat dd { font-size: 15px; line-height: 1.1 }
+  .zoom { left: auto; right: 8px; bottom: calc(var(--act, 290px) + 8px) }
+  #act { left: 0; right: 0; bottom: 0; width: auto; max-height: 56vh; overflow-y: auto; padding: 12px 12px max(12px, env(safe-area-inset-bottom)); border-radius: var(--r-3) var(--r-3) 0 0; border-bottom: 0 }
+  #status { font-size: 17px; margin-bottom: var(--sp-2) } .pick { margin-bottom: var(--sp-2) }
+  #info { min-height: 1.4em; font-size: var(--fs-1) } #dice svg { width: 26px; height: 26px } #leaders { grid-template-columns: 1fr 1fr; font-size: var(--fs-1) }
+  #toast { top: auto; bottom: calc(var(--act, 290px) + 12px); font-size: 15px; width: max-content }
+  .shade { background: linear-gradient(180deg, rgba(var(--shade), .4) 0, rgba(var(--shade), .84) 24%, rgba(var(--shade), .95) 62%) }
+  .title { padding: 26px 16px 60px; max-width: none }
+  .menu #foot { left: 0; right: 0; bottom: 0; padding: 8px 16px; background: var(--ground); justify-content: center }
+  .tray { display: block; width: calc(100% + 24px); height: var(--tap); margin: -12px -12px -8px; border: 0; background: none }
+  .tray::before { content: ""; display: block; width: 48px; height: 4px; margin: 0 auto 14px; border-radius: 2px; background: var(--edge) } .shut .tray::before { background: var(--accent) }
+  .shut #act :is(#news, #dice, #info, #hand, #trades, .pick, #amount, #leaders, .live-info, #send > p, .text) { display: none }
+  .shut #status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: var(--sp-2) }
+  dialog, #sheet.wide, #sheet.end { width: calc(100vw / var(--ui-scale)); max-width: none; margin: auto 0 0; max-height: calc(90vh / var(--ui-scale)); padding: 18px 16px; border-radius: var(--r-3) var(--r-3) 0 0; border-width: 1px 0 0 } dialog > .go { margin: 0 -16px -18px; padding: 10px 16px max(14px, env(safe-area-inset-bottom)) !important } dialog .go { bottom: -18px }
   .end .ends { grid-template-columns: 1fr 1fr } .end .ends .main { grid-column: 1 / -1; grid-row: 1 } .hero canvas { width: 60px; height: 60px }
+  #coach { padding: 10px 12px 12px } #coach p + p { font-size: 16px; margin-bottom: var(--sp-2) } #coach .main, #coach .quiet { min-height: var(--tap) }
 }
-
-/* the coach: a guided first game. One card beside what it points at, a ring on the board, an outline on a control; still when motion is reduced */
-#coach { position: fixed; z-index: 7; width: min(340px, calc(100vw - 16px)); padding: 12px 14px 14px; border-color: var(--gold) }
-#coach p { margin-bottom: 10px } #coach p:first-child { font: 600 15px/1.3 var(--serif); color: var(--gold2); margin-bottom: 4px } #coach p:first-child small { font: 13px var(--sans); color: var(--soft) }
-#coach p + p { font: 500 17px/1.4 var(--serif) } #coach .go > * { flex: 1 } #coach .quiet { flex: 0 1 auto }
-#coach:focus { outline: none } #coach:focus-visible { outline: 3px solid var(--gold2) }
-#coach-ring { position: fixed; z-index: 1; width: 52px; height: 52px; border-radius: 50%; border: 3px solid var(--gold2); box-shadow: 0 0 0 3px rgba(18, 23, 26, .7), 0 0 18px var(--gold); pointer-events: none; animation: coach 1.4s ease-in-out infinite }
-.coached { outline: 3px solid var(--gold2) !important; outline-offset: 2px }
-@keyframes coach { 50% { box-shadow: 0 0 0 3px rgba(18, 23, 26, .7), 0 0 26px 6px var(--gold) } }
-.still #coach-ring { animation: none }
+/* reduced motion: the system's wish, or the player's in Settings */
+.still * { transition: none !important } .still #dice svg, .still #coach-ring { animation: none }
 @media (prefers-reduced-motion: reduce) { #coach-ring { animation: none } }
-.title .card > .text { display: block; margin: 2px 0 -6px; color: var(--gold2) }
-@media (max-width: 820px) { #coach { padding: 10px 12px 12px } #coach p + p { font-size: 16px; margin-bottom: 8px } #coach .main, #coach .quiet { min-height: 44px } }
 </style>
 <link rel="icon" href="data:,">
 <style>
 html, body { height: 100%; margin: 0; overflow: hidden }
 #map { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; display: block }
 #map:active { cursor: grabbing }
-/* one surface for every floating panel, as in the table games */
-.glass { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 14px 40px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 244, 214, .06); backdrop-filter: blur(14px) saturate(1.1); -webkit-backdrop-filter: blur(14px) saturate(1.1) }
-button.plain { min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line2); background: rgba(255, 244, 214, .05); color: var(--text); font: inherit; font-size: 14px }
-button.plain:hover { background: rgba(255, 244, 214, .1) }
-button.plain[aria-pressed=true] { border-color: var(--gold); background: rgba(226, 184, 102, .17) }
-button.go { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--gold); background: linear-gradient(var(--gold2), var(--gold)); color: var(--on); font-weight: 700 }
-button.go:hover { filter: brightness(1.06) }
-button.ic { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 244, 214, .05); color: var(--text) }
-svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; display: block }
-select.plain, input.plain, textarea.plain { min-height: 44px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line2); background: rgba(10, 14, 16, .6); color: var(--text); font: inherit; font-size: 14px }
-textarea.plain { width: 100%; box-sizing: border-box; resize: vertical; line-height: 1.45 }
+/* surfaces, buttons, fields and marks come from table.css (.glass, .paper, .plain, .go, .ic, svg.i), as in the table games; below is only what belongs to Capo */
 
 /* top bar: who you are, when it is, and the turn's one big button */
-#top { position: fixed; top: max(8px, env(safe-area-inset-top)); left: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding: 6px 8px; z-index: 4 }
-#top .who { display: flex; gap: 10px; align-items: center; font: 500 19px/1.1 var(--serif); background: none; border: 0; color: var(--text); padding: 0 6px; min-height: 40px }
-#top .chip { width: 14px; height: 14px; border-radius: 4px; box-shadow: 0 0 0 2px rgba(226, 184, 102, .55) }
-#top .mode { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--line2); color: var(--soft) }
-#top .mode.sandbox { border-color: #c9873f; color: #f0b670 }
-#top .date { margin-left: auto; display: grid; justify-items: end; line-height: 1.15 } #top .date b { font: 500 17px/1.15 var(--serif); color: var(--text) } #top .date small { color: var(--soft); font-size: 12px }
+#top { position: fixed; top: 0; left: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding: max(6px, env(safe-area-inset-top)) 8px 6px; border-top: 0; border-radius: 0 0 var(--r-3) var(--r-3); border-bottom-color: var(--edge); z-index: 4 }
+#top .who { display: flex; gap: 10px; align-items: center; font: 400 22px/1.1 var(--display); background: none; border: 0; color: var(--text); padding: 0 6px; min-height: var(--tap) }
+#top .chip { width: 14px; height: 14px; border-radius: 2px; transform: rotate(45deg); box-shadow: 0 0 0 2px var(--edge) }
+#top .mode { font: 700 var(--fs-1)/1 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; padding: 5px 9px; border-radius: var(--r-1); border: 1px solid var(--edge); color: var(--text-2) }
+#top .mode.sandbox { border-color: var(--danger); color: var(--danger) }
+#top .date { margin-left: auto; display: grid; justify-items: end; line-height: 1.15 } #top .date b { font: 700 var(--fs-3)/1.2 var(--sans); color: var(--text) } #top .date small { color: var(--text-3); font-size: var(--fs-1) }
+#top button.go { min-height: var(--tap-lg); padding: 0 20px; font-size: 17px }
 
 /* the dock: five places, each with its own mark */
 #dock { position: fixed; left: 8px; bottom: max(10px, env(safe-area-inset-bottom)); display: flex; gap: 4px; padding: 5px; z-index: 4; max-width: calc(100vw - 70px) }
-#dock button { position: relative; display: grid; justify-items: center; gap: 2px; min-width: 70px; padding: 6px 8px 5px; border-radius: 11px; border: 1px solid transparent; background: none; color: var(--soft); font: inherit; font-size: 12px }
-#dock button:hover { color: var(--text); background: rgba(255, 244, 214, .06) }
-#dock button[aria-pressed=true] { color: var(--text); border-color: var(--line2); background: rgba(226, 184, 102, .14) }
-#dock button svg.i { width: 22px; height: 22px }
-#dock .dot { position: absolute; top: 5px; right: 16px; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 2px var(--table) }
+#dock button { position: relative; display: grid; justify-items: center; gap: 2px; min-width: 74px; min-height: var(--tap-lg); padding: 6px 8px 5px; border-radius: var(--r-1); border: 1px solid transparent; border-bottom: 3px solid transparent; background: none; color: var(--text-3); font-size: var(--fs-1) }
+#dock button:hover { color: var(--text); background: var(--raise) }
+#dock button[aria-pressed=true] { color: var(--text); border-bottom-color: var(--accent); background: var(--accent-wash) }
+#dock .dot { position: absolute; top: 5px; right: 16px; width: 9px; height: 9px; margin: 0; background: var(--accent); box-shadow: 0 0 0 2px var(--halo) }
 
 /* the open panel */
-#sheet { position: fixed; left: 8px; top: 76px; bottom: 78px; width: min(440px, calc(100vw - 16px)); padding: 0 16px 16px; overflow: auto; z-index: 5; display: none; box-sizing: border-box }
+#sheet { position: fixed; left: 8px; top: 70px; bottom: 82px; width: min(440px, calc(100vw - 16px)); padding: 0 16px 16px; overflow: auto; z-index: 5; display: none; box-sizing: border-box; background: var(--slate); scrollbar-width: thin; scrollbar-color: var(--edge) transparent }
 #sheet.open { display: block }
-#sheet .head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -16px 6px; padding: 12px 12px 8px 16px; background: linear-gradient(rgba(19, 24, 26, .97) 75%, rgba(19, 24, 26, 0)) }
-#sheet h2 { margin: 0; font: 500 23px/1.2 var(--serif) }
-#sheet h3 { margin: 18px 0 6px; font: 600 11px/1.2 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--gold) }
-.note { color: var(--soft); font-size: 14px; margin: 6px 0 }
-.warn { color: #f2a08c; font-size: 14px }
+#sheet .head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -16px 8px; padding: 10px 12px 8px 16px; background: var(--slate); border-bottom: 1px solid var(--edge-soft) }
+#sheet h2 { margin: 0; font-size: 26px; line-height: 1.2 }
+#sheet h3, #start h3 { margin: 18px 0 6px; font: 700 var(--fs-1)/1.2 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent) }
+.note { color: var(--text-3); font-size: var(--fs-2); margin: 6px 0 }
+.warn { color: var(--danger); font-size: var(--fs-2) }
 .list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px }
-.list li { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px } .list li span { flex: 1 }
-.list li.yes { border-left: 3px solid #8fbf7a } .list li.no { border-left: 3px solid #c9765f; color: var(--soft) }
-.list li .mark { flex: none; font-weight: 700 } .list li.yes .mark { color: #9fd08a } .list li.no .mark { color: #e08a72 }
+.list li { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--edge-soft); border-radius: var(--r-1) } .list li span { flex: 1 }
+.list li.yes { border-left: 3px solid var(--good) } .list li.no { border-left: 3px solid var(--danger); color: var(--text-3) }
+.list li .mark { flex: none; font-weight: 700 } .list li.yes .mark { color: var(--good) } .list li.no .mark { color: var(--danger) }
 .feed { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px }
-.feed li { padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 244, 214, .03) }
-.feed .when { display: inline-flex; align-items: center; gap: 6px; color: var(--gold); font-size: 13px; background: none; border: 0; padding: 0; cursor: pointer }
-.feed .when::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: var(--c, var(--gold)) }
-.feed p { margin: 4px 0 0 }
-.feed b { font: 500 17px/1.3 var(--serif) }
+.feed li { padding: 11px 13px; border: 1px solid var(--edge-soft); border-left: 3px solid var(--c, var(--accent)); border-radius: var(--r-1); background: var(--raise) }
+.feed .when { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: var(--fs-1); background: none; border: 0; padding: 0; cursor: pointer }
+.feed p { margin: 4px 0 0; font: 16px/1.5 var(--serif) }
+.feed b { font: 400 19px/1.3 var(--display) }
 .row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 }
-.paste { min-height: 120px; font-size: 12px; font-family: ui-monospace, Consolas, monospace }
-.steps { counter-reset: s; list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; font-size: 13px; color: var(--soft) }
-.steps li { counter-increment: s; display: flex; gap: 8px; align-items: baseline } .steps li::before { content: counter(s); flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: rgba(226, 184, 102, .2); color: var(--gold2); font-size: 12px; font-weight: 700 }
+.paste { min-height: 120px; font-size: var(--fs-1); font-family: ui-monospace, Consolas, monospace }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; font-size: var(--fs-1); color: var(--text-3) }
+.steps li { counter-increment: s; display: flex; gap: 8px; align-items: baseline } .steps li::before { content: counter(s); flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent-wash); color: var(--accent-hi); font-size: 12px; font-weight: 700 }
 
 /* the province card */
 #card { position: fixed; right: 64px; bottom: max(10px, env(safe-area-inset-bottom)); width: min(340px, calc(100vw - 80px)); padding: 13px 15px; z-index: 4; display: none }
-#card h2 { margin: 0 0 4px; font: 500 21px/1.2 var(--serif) }
-#card .near { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px } #card .near button { min-height: 44px; padding: 0 10px; font-size: 13px }
-.zoom { position: fixed; right: 8px; bottom: max(10px, env(safe-area-inset-bottom)); display: grid; gap: 6px; z-index: 4 }
-.zoom button { min-width: 44px; min-height: 44px; font-size: 18px; background: var(--panel); backdrop-filter: blur(10px) }
-#view { position: fixed; right: 8px; top: 82px; z-index: 4; background: var(--panel); backdrop-filter: blur(10px) }
+#card h2 { margin: 0 0 4px; font-size: 24px; line-height: 1.2 }
+#card .near { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px } #card .near button { padding: 0 10px; font-size: var(--fs-1) }
+.zoom { left: auto; right: 8px; bottom: max(10px, env(safe-area-inset-bottom)); z-index: 4 }
+#view { position: fixed; right: 8px; top: 74px; z-index: 4; background: var(--lacquer); backdrop-filter: blur(10px) }
 
 /* the first screen */
 #start { position: fixed; left: 8px; top: 8px; bottom: 8px; width: min(480px, calc(100vw - 16px)); display: none; z-index: 6; overflow: auto }
 #start.open { display: block }
 #start.min { top: auto; bottom: 8px; overflow: visible } #start.min .box { min-height: 0; padding: 10px 14px }
-#start .box { padding: 20px 22px; min-height: 100%; box-sizing: border-box }
-#start h1 { margin: 0 0 4px; font: 500 clamp(44px, 8vw, 64px)/1 var(--serif); letter-spacing: -.01em }
-#start h3 { margin: 18px 0 6px; font: 600 11px/1.2 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--gold) }
-#start label { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; color: var(--soft); font-size: 14px }
-.modes { display: grid; gap: 6px } #start .modes label { flex-direction: row; align-items: flex-start; gap: 10px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; color: var(--text); background: rgba(255, 244, 214, .03) }
-#start .modes label:has(input:checked) { border-color: var(--gold); background: rgba(226, 184, 102, .1) } .modes small { display: block; color: var(--soft) }
+#start .box { padding: 20px 22px; min-height: 100%; box-sizing: border-box; background: var(--slate) }
+#start h1 { margin: 6px 0 10px; font-size: clamp(48px, 8vw, 68px); line-height: 1 } #start h1 + .row { flex-wrap: nowrap } #start h1 + .row button { flex: 1 1 auto; padding: 0 6px }
+#start label { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; color: var(--text-3); font-size: var(--fs-2) }
+.modes { display: grid; gap: 6px } #start .modes label { flex-direction: row; align-items: flex-start; gap: 10px; margin: 0; padding: 10px 12px; border: 1px solid var(--edge-soft); border-radius: var(--r-1); color: var(--text); background: var(--raise) }
+#start .modes label:has(input:checked) { border-color: var(--accent); background: var(--accent-wash); box-shadow: inset 0 0 0 1px var(--accent) } .modes small { display: block; color: var(--text-3) } .modes input { accent-color: var(--accent) }
 
-/* the guide */
-#guide { position: fixed; z-index: 9; width: min(330px, calc(100vw - 24px)); padding: 14px 16px; display: none }
+/* the guide: a paper note, like the table games' coach */
+#guide { position: fixed; z-index: 9; width: min(330px, calc(100vw - 24px)); padding: 14px 16px; display: none; border-radius: var(--r-1); box-shadow: var(--lift-3) }
 #guide.open { display: block }
-#guide h2 { margin: 0 0 6px; font: 500 20px/1.2 var(--serif) } #guide p { margin: 0 0 10px; font-size: 15px }
-#guide .count { color: var(--soft); font-size: 12px; margin-right: auto }
-.lit { position: relative; z-index: 8 !important; box-shadow: 0 0 0 3px var(--gold), 0 0 0 9999px rgba(6, 9, 10, .55) !important; border-radius: 14px }
+#guide h2 { margin: 0 0 6px; font-size: 22px; line-height: 1.2 } #guide p { margin: 0 0 10px; font: 16px/1.45 var(--serif) }
+#guide .count { color: var(--text-3); font-size: var(--fs-1); margin-right: auto }
+.lit { position: relative; z-index: 8 !important; box-shadow: 0 0 0 3px #f6f8fb, 0 0 0 9999px rgba(var(--shade), .6) !important }
 
-#toast { position: fixed; left: 50%; top: 84px; transform: translateX(-50%); z-index: 7 }
-.credit { position: fixed; right: 64px; bottom: 2px; font-size: 10px; color: var(--soft); opacity: .6; z-index: 3 }
+#toast { top: 76px; z-index: 7 }
+.credit { position: fixed; right: 64px; bottom: 2px; font-size: 11px; color: var(--text-3); opacity: .7; z-index: 3 }
 @media (max-width: 640px) {
-  #top .date { margin-left: 0; justify-items: start; width: 100% } #top .who { font-size: 17px } #top select.plain { flex: 1; min-width: 0 }
-  #dock { right: 62px; max-width: none; overflow-x: auto } #dock button { flex: none; min-width: 62px; font-size: 11px }
-  #sheet { top: auto; height: 62vh; bottom: 76px } #card { right: 8px; bottom: 76px; width: calc(100vw - 16px); box-sizing: border-box }
-  #toast { top: 150px } #view { top: auto; bottom: 196px }
-  #guide { left: 12px !important; right: 12px; bottom: 84px !important; top: auto !important; width: auto }
+  #start h1 + .row button { font-size: var(--fs-1) }
+  /* two lines: who you are, the date and the menu; then how you play, the length and Advance */
+  #top { left: 0; right: 0; border-radius: 0; gap: 6px 8px } #top::before { content: ""; order: 1; flex-basis: 100%; margin-top: -6px }
+  #top .who { min-width: 0; font-size: 20px } #top :is(.mode, select, input, button.go) { order: 2 }
+  #top .mode { margin: 0 auto 0 6px } #top select.plain { flex: 0 1 auto; min-width: 0; max-width: 36vw } #top button.go { min-height: var(--tap); padding: 0 14px }
+  #dock { left: 0; right: 0; bottom: 0; max-width: none; padding: 4px 4px max(4px, env(safe-area-inset-bottom)); border-radius: 0; border-width: 1px 0 0; } #dock button { flex: 1 1 0; min-width: 0; padding: 6px 2px 5px; line-height: 1.1 }
+  #sheet { left: 0; top: auto; width: 100vw; height: 60vh; bottom: 70px; border-radius: var(--r-3) var(--r-3) 0 0 } #card { right: 8px; bottom: 78px; width: calc(100vw - 16px); box-sizing: border-box }
+  .zoom { bottom: 78px } .credit { bottom: 72px; right: 8px }
+  #toast { top: 116px } #view { top: auto; bottom: 232px }
+  #guide { left: 12px !important; right: 12px; bottom: 80px !important; top: auto !important; width: auto }
 }
 </style>
 </head>
@@ -330,7 +382,7 @@ textarea.plain { width: 100%; box-sizing: border-box; resize: vertical; line-hei
 <select id="view" class="plain" aria-label="Map view"><option value="countries">Map: countries</option><option value="relations">Map: friends and foes</option><option value="might">Map: might</option></select>
 <div class="zoom"><button type="button" class="plain" id="in" aria-label="Zoom in">+</button><button type="button" class="plain" id="out" aria-label="Zoom out">&minus;</button><button type="button" class="plain" id="home" aria-label="Back to my country">&#8962;</button></div>
 <div id="start"><div class="box glass" id="start-box"></div></div>
-<section id="guide" class="glass" role="dialog" aria-live="polite" aria-label="Guide"></section>
+<section id="guide" class="paper" role="dialog" aria-live="polite" aria-label="Guide"></section>
 <div id="toast" role="status" aria-live="polite"></div>
 <span id="homelink" hidden><a href="../site/" class="text">All games</a></span>
 <span class="credit">Made with Natural Earth</span>
@@ -1594,13 +1646,16 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.5.5";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "cdb16d4a";
+const BUILD = "d68c31d5";
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD;
 return $x; })({});
 $m[11] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
+// Daylight or lamplight, as the front page's lantern last left it; every page starts here.
+try { const t = localStorage.getItem("capo-tent-theme"); if (t === "dark" || t === "light") document.documentElement.dataset.theme = t; } catch { /* no page, or storage is off: the system's choice stands */ }
+
 function guard() {
   let framed = false;
   try { framed = window.top !== window.self; } catch { framed = true; }
@@ -1610,7 +1665,7 @@ function guard() {
   p.append("This page cannot be shown inside another site. ", a);
   p.style.cssText = "margin:40px auto;max-width:30em;font:18px/1.5 Georgia,serif;color:#f1e9d6;text-align:center";
   document.body.replaceChildren(p);
-  document.body.style.background = "#12171a";
+  document.body.style.background = "#0d1623";
 }
 
 $x.guard = guard;

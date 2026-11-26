@@ -19,6 +19,9 @@ const keyOf = (m) => (m.at !== undefined && m.from === undefined ? m.at : JSON.s
 const deal = (d) => `1 ${GOODS[d.give]} for 1 ${GOODS[d.get]}`;
 const raidText = (p) => (p.rule.roll === "sum" ? "A 7" : "Doubles");
 const held = (p) => Object.entries(AWARDS).flatMap(([k, v]) => (p[k] === NONE ? [] : [`${v}: ${NAMES[p[k]]}`]));
+/** What a hex gives, in words: its good and number; for a depot, those of the hexes around it too. */
+const yieldOf = (p, i) => (p.land[i] && p.good[i] !== WASTE ? `${GOODS[p.good[i]]} ${p.num[i]}` : "");
+const yields = (p, at, around) => [at, ...(around ? boardOf(p).near[at] : [])].map((i) => yieldOf(p, i)).filter(Boolean).join(", ") || "nothing";
 function label(p, m) {
   if (m.do === "swap") return `Give ${rateOf(p, p.seat, m.give)} ${GOODS[m.give]} for 1 ${GOODS[m.get]}`;
   if (m.do === "sell") return `Sell 1 ${GOODS[m.good]} for ${sellPrice(p, p.seat, m.good)} coin`;
@@ -135,7 +138,7 @@ createTable({
     $("sources").hidden = p.phase !== "main" || !kinds.length;
     radio($("sources"), kinds.map((k) => ({ value: k, label: KINDS[k], note: COST[k] ? costText(COST[k]) : undefined })), kind, (v) => { kind = v; where = null; T.refresh(); });
     $("wheres").hidden = !list.length;
-    radio($("wheres"), list.map((m) => ({ value: keyOf(m), label: label(p, m) })), where, (v) => { where = v; T.refresh(); });
+    radio($("wheres"), list.map((m) => ({ value: keyOf(m), label: label(p, m), note: m.at === undefined ? undefined : yields(p, m.at, m.do === "depot") })), where, (v) => { where = v; T.refresh(); });
     const m = list.find((x) => keyOf(x) === where);
     $("do").disabled = !m;
     $("do").textContent = m ? label(p, m) : p.phase === "main" ? "Nothing to do here" : "Choose a hex";
@@ -144,6 +147,7 @@ createTable({
     $("end").onclick = () => { if (T.ready()) T.play({ do: "end" }); };
     T.board.light(list.filter((x) => x.at !== undefined).map((x) => x.at), { aim: m?.at ?? -1 });
   },
+  listing: (T) => { const p = T.match.position; return { head: ["Hex", "Gives", "Built"], rows: p.land.map((l, i) => i).filter((i) => p.land[i]).map((i) => [nameOf(p, i), yieldOf(p, i) || "waste", [p.depot[i] !== NONE && `${NAMES[p.depot[i]]}'s ${p.town[i] ? "town" : "depot"}`, p.route[i].length && `routes: ${p.route[i].map((s) => NAMES[s]).join(", ")}`, p.gate === i && "the toll gate"].filter(Boolean).join("; ")]) }; },
   changed: () => { where = null; },
   keys(T, k, e) {
     if (k === "e") $("end").click();

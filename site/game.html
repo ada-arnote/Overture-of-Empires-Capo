@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#12171a">
+<meta name="theme-color" content="#0d1623">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo</title>
 <link rel="stylesheet" href="table.css">
@@ -13,91 +13,83 @@
 html, body { height: 100%; margin: 0; overflow: hidden }
 #map { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; display: block }
 #map:active { cursor: grabbing }
-/* one surface for every floating panel, as in the table games */
-.glass { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 14px 40px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 244, 214, .06); backdrop-filter: blur(14px) saturate(1.1); -webkit-backdrop-filter: blur(14px) saturate(1.1) }
-button.plain { min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line2); background: rgba(255, 244, 214, .05); color: var(--text); font: inherit; font-size: 14px }
-button.plain:hover { background: rgba(255, 244, 214, .1) }
-button.plain[aria-pressed=true] { border-color: var(--gold); background: rgba(226, 184, 102, .17) }
-button.go { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--gold); background: linear-gradient(var(--gold2), var(--gold)); color: var(--on); font-weight: 700 }
-button.go:hover { filter: brightness(1.06) }
-button.ic { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 244, 214, .05); color: var(--text) }
-svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; display: block }
-select.plain, input.plain, textarea.plain { min-height: 44px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line2); background: rgba(10, 14, 16, .6); color: var(--text); font: inherit; font-size: 14px }
-textarea.plain { width: 100%; box-sizing: border-box; resize: vertical; line-height: 1.45 }
+/* surfaces, buttons, fields and marks come from table.css (.glass, .paper, .plain, .go, .ic, svg.i), as in the table games; below is only what belongs to Capo */
 
 /* top bar: who you are, when it is, and the turn's one big button */
-#top { position: fixed; top: max(8px, env(safe-area-inset-top)); left: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding: 6px 8px; z-index: 4 }
-#top .who { display: flex; gap: 10px; align-items: center; font: 500 19px/1.1 var(--serif); background: none; border: 0; color: var(--text); padding: 0 6px; min-height: 40px }
-#top .chip { width: 14px; height: 14px; border-radius: 4px; box-shadow: 0 0 0 2px rgba(226, 184, 102, .55) }
-#top .mode { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--line2); color: var(--soft) }
-#top .mode.sandbox { border-color: #c9873f; color: #f0b670 }
-#top .date { margin-left: auto; display: grid; justify-items: end; line-height: 1.15 } #top .date b { font: 500 17px/1.15 var(--serif); color: var(--text) } #top .date small { color: var(--soft); font-size: 12px }
+#top { position: fixed; top: 0; left: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding: max(6px, env(safe-area-inset-top)) 8px 6px; border-top: 0; border-radius: 0 0 var(--r-3) var(--r-3); border-bottom-color: var(--edge); z-index: 4 }
+#top .who { display: flex; gap: 10px; align-items: center; font: 400 22px/1.1 var(--display); background: none; border: 0; color: var(--text); padding: 0 6px; min-height: var(--tap) }
+#top .chip { width: 14px; height: 14px; border-radius: 2px; transform: rotate(45deg); box-shadow: 0 0 0 2px var(--edge) }
+#top .mode { font: 700 var(--fs-1)/1 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; padding: 5px 9px; border-radius: var(--r-1); border: 1px solid var(--edge); color: var(--text-2) }
+#top .mode.sandbox { border-color: var(--danger); color: var(--danger) }
+#top .date { margin-left: auto; display: grid; justify-items: end; line-height: 1.15 } #top .date b { font: 700 var(--fs-3)/1.2 var(--sans); color: var(--text) } #top .date small { color: var(--text-3); font-size: var(--fs-1) }
+#top button.go { min-height: var(--tap-lg); padding: 0 20px; font-size: 17px }
 
 /* the dock: five places, each with its own mark */
 #dock { position: fixed; left: 8px; bottom: max(10px, env(safe-area-inset-bottom)); display: flex; gap: 4px; padding: 5px; z-index: 4; max-width: calc(100vw - 70px) }
-#dock button { position: relative; display: grid; justify-items: center; gap: 2px; min-width: 70px; padding: 6px 8px 5px; border-radius: 11px; border: 1px solid transparent; background: none; color: var(--soft); font: inherit; font-size: 12px }
-#dock button:hover { color: var(--text); background: rgba(255, 244, 214, .06) }
-#dock button[aria-pressed=true] { color: var(--text); border-color: var(--line2); background: rgba(226, 184, 102, .14) }
-#dock button svg.i { width: 22px; height: 22px }
-#dock .dot { position: absolute; top: 5px; right: 16px; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 2px var(--table) }
+#dock button { position: relative; display: grid; justify-items: center; gap: 2px; min-width: 74px; min-height: var(--tap-lg); padding: 6px 8px 5px; border-radius: var(--r-1); border: 1px solid transparent; border-bottom: 3px solid transparent; background: none; color: var(--text-3); font-size: var(--fs-1) }
+#dock button:hover { color: var(--text); background: var(--raise) }
+#dock button[aria-pressed=true] { color: var(--text); border-bottom-color: var(--accent); background: var(--accent-wash) }
+#dock .dot { position: absolute; top: 5px; right: 16px; width: 9px; height: 9px; margin: 0; background: var(--accent); box-shadow: 0 0 0 2px var(--halo) }
 
 /* the open panel */
-#sheet { position: fixed; left: 8px; top: 76px; bottom: 78px; width: min(440px, calc(100vw - 16px)); padding: 0 16px 16px; overflow: auto; z-index: 5; display: none; box-sizing: border-box }
+#sheet { position: fixed; left: 8px; top: 70px; bottom: 82px; width: min(440px, calc(100vw - 16px)); padding: 0 16px 16px; overflow: auto; z-index: 5; display: none; box-sizing: border-box; background: var(--slate); scrollbar-width: thin; scrollbar-color: var(--edge) transparent }
 #sheet.open { display: block }
-#sheet .head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -16px 6px; padding: 12px 12px 8px 16px; background: linear-gradient(rgba(19, 24, 26, .97) 75%, rgba(19, 24, 26, 0)) }
-#sheet h2 { margin: 0; font: 500 23px/1.2 var(--serif) }
-#sheet h3 { margin: 18px 0 6px; font: 600 11px/1.2 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--gold) }
-.note { color: var(--soft); font-size: 14px; margin: 6px 0 }
-.warn { color: #f2a08c; font-size: 14px }
+#sheet .head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -16px 8px; padding: 10px 12px 8px 16px; background: var(--slate); border-bottom: 1px solid var(--edge-soft) }
+#sheet h2 { margin: 0; font-size: 26px; line-height: 1.2 }
+#sheet h3, #start h3 { margin: 18px 0 6px; font: 700 var(--fs-1)/1.2 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent) }
+.note { color: var(--text-3); font-size: var(--fs-2); margin: 6px 0 }
+.warn { color: var(--danger); font-size: var(--fs-2) }
 .list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px }
-.list li { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px } .list li span { flex: 1 }
-.list li.yes { border-left: 3px solid #8fbf7a } .list li.no { border-left: 3px solid #c9765f; color: var(--soft) }
-.list li .mark { flex: none; font-weight: 700 } .list li.yes .mark { color: #9fd08a } .list li.no .mark { color: #e08a72 }
+.list li { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--edge-soft); border-radius: var(--r-1) } .list li span { flex: 1 }
+.list li.yes { border-left: 3px solid var(--good) } .list li.no { border-left: 3px solid var(--danger); color: var(--text-3) }
+.list li .mark { flex: none; font-weight: 700 } .list li.yes .mark { color: var(--good) } .list li.no .mark { color: var(--danger) }
 .feed { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px }
-.feed li { padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 244, 214, .03) }
-.feed .when { display: inline-flex; align-items: center; gap: 6px; color: var(--gold); font-size: 13px; background: none; border: 0; padding: 0; cursor: pointer }
-.feed .when::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: var(--c, var(--gold)) }
-.feed p { margin: 4px 0 0 }
-.feed b { font: 500 17px/1.3 var(--serif) }
+.feed li { padding: 11px 13px; border: 1px solid var(--edge-soft); border-left: 3px solid var(--c, var(--accent)); border-radius: var(--r-1); background: var(--raise) }
+.feed .when { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: var(--fs-1); background: none; border: 0; padding: 0; cursor: pointer }
+.feed p { margin: 4px 0 0; font: 16px/1.5 var(--serif) }
+.feed b { font: 400 19px/1.3 var(--display) }
 .row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 }
-.paste { min-height: 120px; font-size: 12px; font-family: ui-monospace, Consolas, monospace }
-.steps { counter-reset: s; list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; font-size: 13px; color: var(--soft) }
-.steps li { counter-increment: s; display: flex; gap: 8px; align-items: baseline } .steps li::before { content: counter(s); flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: rgba(226, 184, 102, .2); color: var(--gold2); font-size: 12px; font-weight: 700 }
+.paste { min-height: 120px; font-size: var(--fs-1); font-family: ui-monospace, Consolas, monospace }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; font-size: var(--fs-1); color: var(--text-3) }
+.steps li { counter-increment: s; display: flex; gap: 8px; align-items: baseline } .steps li::before { content: counter(s); flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent-wash); color: var(--accent-hi); font-size: 12px; font-weight: 700 }
 
 /* the province card */
 #card { position: fixed; right: 64px; bottom: max(10px, env(safe-area-inset-bottom)); width: min(340px, calc(100vw - 80px)); padding: 13px 15px; z-index: 4; display: none }
-#card h2 { margin: 0 0 4px; font: 500 21px/1.2 var(--serif) }
-#card .near { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px } #card .near button { min-height: 44px; padding: 0 10px; font-size: 13px }
-.zoom { position: fixed; right: 8px; bottom: max(10px, env(safe-area-inset-bottom)); display: grid; gap: 6px; z-index: 4 }
-.zoom button { min-width: 44px; min-height: 44px; font-size: 18px; background: var(--panel); backdrop-filter: blur(10px) }
-#view { position: fixed; right: 8px; top: 82px; z-index: 4; background: var(--panel); backdrop-filter: blur(10px) }
+#card h2 { margin: 0 0 4px; font-size: 24px; line-height: 1.2 }
+#card .near { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px } #card .near button { padding: 0 10px; font-size: var(--fs-1) }
+.zoom { left: auto; right: 8px; bottom: max(10px, env(safe-area-inset-bottom)); z-index: 4 }
+#view { position: fixed; right: 8px; top: 74px; z-index: 4; background: var(--lacquer); backdrop-filter: blur(10px) }
 
 /* the first screen */
 #start { position: fixed; left: 8px; top: 8px; bottom: 8px; width: min(480px, calc(100vw - 16px)); display: none; z-index: 6; overflow: auto }
 #start.open { display: block }
 #start.min { top: auto; bottom: 8px; overflow: visible } #start.min .box { min-height: 0; padding: 10px 14px }
-#start .box { padding: 20px 22px; min-height: 100%; box-sizing: border-box }
-#start h1 { margin: 0 0 4px; font: 500 clamp(44px, 8vw, 64px)/1 var(--serif); letter-spacing: -.01em }
-#start h3 { margin: 18px 0 6px; font: 600 11px/1.2 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--gold) }
-#start label { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; color: var(--soft); font-size: 14px }
-.modes { display: grid; gap: 6px } #start .modes label { flex-direction: row; align-items: flex-start; gap: 10px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; color: var(--text); background: rgba(255, 244, 214, .03) }
-#start .modes label:has(input:checked) { border-color: var(--gold); background: rgba(226, 184, 102, .1) } .modes small { display: block; color: var(--soft) }
+#start .box { padding: 20px 22px; min-height: 100%; box-sizing: border-box; background: var(--slate) }
+#start h1 { margin: 6px 0 10px; font-size: clamp(48px, 8vw, 68px); line-height: 1 } #start h1 + .row { flex-wrap: nowrap } #start h1 + .row button { flex: 1 1 auto; padding: 0 6px }
+#start label { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; color: var(--text-3); font-size: var(--fs-2) }
+.modes { display: grid; gap: 6px } #start .modes label { flex-direction: row; align-items: flex-start; gap: 10px; margin: 0; padding: 10px 12px; border: 1px solid var(--edge-soft); border-radius: var(--r-1); color: var(--text); background: var(--raise) }
+#start .modes label:has(input:checked) { border-color: var(--accent); background: var(--accent-wash); box-shadow: inset 0 0 0 1px var(--accent) } .modes small { display: block; color: var(--text-3) } .modes input { accent-color: var(--accent) }
 
-/* the guide */
-#guide { position: fixed; z-index: 9; width: min(330px, calc(100vw - 24px)); padding: 14px 16px; display: none }
+/* the guide: a paper note, like the table games' coach */
+#guide { position: fixed; z-index: 9; width: min(330px, calc(100vw - 24px)); padding: 14px 16px; display: none; border-radius: var(--r-1); box-shadow: var(--lift-3) }
 #guide.open { display: block }
-#guide h2 { margin: 0 0 6px; font: 500 20px/1.2 var(--serif) } #guide p { margin: 0 0 10px; font-size: 15px }
-#guide .count { color: var(--soft); font-size: 12px; margin-right: auto }
-.lit { position: relative; z-index: 8 !important; box-shadow: 0 0 0 3px var(--gold), 0 0 0 9999px rgba(6, 9, 10, .55) !important; border-radius: 14px }
+#guide h2 { margin: 0 0 6px; font-size: 22px; line-height: 1.2 } #guide p { margin: 0 0 10px; font: 16px/1.45 var(--serif) }
+#guide .count { color: var(--text-3); font-size: var(--fs-1); margin-right: auto }
+.lit { position: relative; z-index: 8 !important; box-shadow: 0 0 0 3px #f6f8fb, 0 0 0 9999px rgba(var(--shade), .6) !important }
 
-#toast { position: fixed; left: 50%; top: 84px; transform: translateX(-50%); z-index: 7 }
-.credit { position: fixed; right: 64px; bottom: 2px; font-size: 10px; color: var(--soft); opacity: .6; z-index: 3 }
+#toast { top: 76px; z-index: 7 }
+.credit { position: fixed; right: 64px; bottom: 2px; font-size: 11px; color: var(--text-3); opacity: .7; z-index: 3 }
 @media (max-width: 640px) {
-  #top .date { margin-left: 0; justify-items: start; width: 100% } #top .who { font-size: 17px } #top select.plain { flex: 1; min-width: 0 }
-  #dock { right: 62px; max-width: none; overflow-x: auto } #dock button { flex: none; min-width: 62px; font-size: 11px }
-  #sheet { top: auto; height: 62vh; bottom: 76px } #card { right: 8px; bottom: 76px; width: calc(100vw - 16px); box-sizing: border-box }
-  #toast { top: 150px } #view { top: auto; bottom: 196px }
-  #guide { left: 12px !important; right: 12px; bottom: 84px !important; top: auto !important; width: auto }
+  #start h1 + .row button { font-size: var(--fs-1) }
+  /* two lines: who you are, the date and the menu; then how you play, the length and Advance */
+  #top { left: 0; right: 0; border-radius: 0; gap: 6px 8px } #top::before { content: ""; order: 1; flex-basis: 100%; margin-top: -6px }
+  #top .who { min-width: 0; font-size: 20px } #top :is(.mode, select, input, button.go) { order: 2 }
+  #top .mode { margin: 0 auto 0 6px } #top select.plain { flex: 0 1 auto; min-width: 0; max-width: 36vw } #top button.go { min-height: var(--tap); padding: 0 14px }
+  #dock { left: 0; right: 0; bottom: 0; max-width: none; padding: 4px 4px max(4px, env(safe-area-inset-bottom)); border-radius: 0; border-width: 1px 0 0; } #dock button { flex: 1 1 0; min-width: 0; padding: 6px 2px 5px; line-height: 1.1 }
+  #sheet { left: 0; top: auto; width: 100vw; height: 60vh; bottom: 70px; border-radius: var(--r-3) var(--r-3) 0 0 } #card { right: 8px; bottom: 78px; width: calc(100vw - 16px); box-sizing: border-box }
+  .zoom { bottom: 78px } .credit { bottom: 72px; right: 8px }
+  #toast { top: 116px } #view { top: auto; bottom: 232px }
+  #guide { left: 12px !important; right: 12px; bottom: 80px !important; top: auto !important; width: auto }
 }
 </style>
 </head>
@@ -110,7 +102,7 @@ textarea.plain { width: 100%; box-sizing: border-box; resize: vertical; line-hei
 <select id="view" class="plain" aria-label="Map view"><option value="countries">Map: countries</option><option value="relations">Map: friends and foes</option><option value="might">Map: might</option></select>
 <div class="zoom"><button type="button" class="plain" id="in" aria-label="Zoom in">+</button><button type="button" class="plain" id="out" aria-label="Zoom out">&minus;</button><button type="button" class="plain" id="home" aria-label="Back to my country">&#8962;</button></div>
 <div id="start"><div class="box glass" id="start-box"></div></div>
-<section id="guide" class="glass" role="dialog" aria-live="polite" aria-label="Guide"></section>
+<section id="guide" class="paper" role="dialog" aria-live="polite" aria-label="Guide"></section>
 <div id="toast" role="status" aria-live="polite"></div>
 <span id="homelink" hidden><a href="./" class="text">All games</a></span>
 <span class="credit">Made with Natural Earth</span>
