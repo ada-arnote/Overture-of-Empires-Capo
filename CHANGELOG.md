@@ -2,7 +2,7 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
-## Unreleased
+## v0.9.3 (2026-11-26): Late 2026 first, and no-AI turns in one press
 
 ### Capo starts in late 2026, and the front page keeps one blue
 
