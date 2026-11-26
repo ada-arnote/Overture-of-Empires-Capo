@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-VtGRpXmGyNMJv5H2x6so+HxZ2ZfPwRHwt6+3vQRrdkI='; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ZTZvfeWva1Ny/VmI6uLLTbmVERlssPG0GWniyEvH48I='; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <title>Capo world map</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -180,7 +180,9 @@ $m[1] = (($x) => {
 // The file holds arcs (shared lines, drawn once) and provinces made of arcs, so neighbours always meet exactly.
 
 /** Fetch and unpack a world: absolute points for every arc, a path, box and middle for every province. */
-async function loadWorld(url) {
+async function loadWorld(url, disputesUrl = "") {
+  // disputed areas are drawn over the map; if their file is missing the map still works
+  const disputes = disputesUrl ? await fetch(disputesUrl).then((r) => (r.ok ? r.json() : { areas: [] })).catch(() => ({ areas: [] })) : { areas: [] };
   const res = await fetch(url);
   if (!res.ok) throw new Error(`The map could not be loaded (${res.status}).`);
   const w = await res.json();
@@ -209,7 +211,22 @@ async function loadWorld(url) {
   for (const [a, b] of w.neighbours) { neighbours.get(a).push(b); neighbours.get(b).push(a); }
   // a province on the coast has a line with nobody on the other side
   const coast = new Set(sides.filter((ids) => ids.length === 1).map((ids) => ids[0]));
-  return { width: w.width, height: w.height, countries: w.countries, source: w.source, provinces: byId, lines, sides, neighbours, coast };
+  const areas = disputes.areas.map((a) => {
+    const path = new Path2D(); let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const r of a.rings) { for (let i = 0; i < r.length; i += 2) { const x = r[i], y = r[i + 1]; if (i) path.lineTo(x, y); else path.moveTo(x, y); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } path.closePath(); }
+    return { ...a, path, box: [x0, y0, x1, y1] };
+  });
+  return { width: w.width, height: w.height, countries: w.countries, source: w.source, provinces: byId, lines, sides, neighbours, coast, disputes: areas };
+}
+
+let tile = null;
+function hatch() {
+  if (tile) return tile;
+  tile = document.createElement("canvas"); tile.width = tile.height = 8;
+  const c = tile.getContext("2d");
+  c.strokeStyle = "rgba(255,244,214,.55)"; c.lineWidth = 1.4;
+  c.beginPath(); c.moveTo(0, 8); c.lineTo(8, 0); c.moveTo(-2, 2); c.lineTo(2, -2); c.moveTo(6, 10); c.lineTo(10, 6); c.stroke();
+  return tile;
 }
 
 /** A gentle colour for every owner code, the same on every machine. */
@@ -271,6 +288,18 @@ function worldMap(canvas, world, o) {
     c.lineJoin = "round"; c.lineCap = "round";
     if (s > 0.6) { c.strokeStyle = "rgba(255,244,214,.16)"; c.lineWidth = 0.8 / s; c.stroke(layers.inner); }
     c.strokeStyle = "rgba(10,16,18,.55)"; c.lineWidth = 1.1 / s; c.stroke(layers.coast);
+    // disputed areas: hatched, with a dashed edge, so they read as unsettled whatever the colours underneath
+    if (world.disputes?.length) {
+      // the pattern is undone from the map's scale so its lines stay the same size on screen at every zoom
+      const pat = c.createPattern(hatch(), "repeat"), k = 1 / (d * s);
+      pat.setTransform(new DOMMatrix([k, 0, 0, k, 0, 0]));
+      c.fillStyle = pat; c.strokeStyle = "rgba(255,244,214,.75)"; c.lineWidth = 1 / s; c.setLineDash([4 / s, 3 / s]);
+      for (const a of world.disputes) {
+        if (a.box[2] < vx0 || a.box[0] > vx1 || a.box[3] < vy0 || a.box[1] > vy1) continue;
+        c.fill(a.path, "evenodd"); c.stroke(a.path);
+      }
+      c.setLineDash([]);
+    }
     c.strokeStyle = "rgba(255,244,214,.7)"; c.lineWidth = 1.4 / s; c.stroke(layers.outer);
     labels(c, cw, ch, layers.owners);
     drawn = { ...view };
@@ -322,11 +351,9 @@ function worldMap(canvas, world, o) {
   const redraw = () => { if (queued) return; queued = true; const run = () => { if (queued) draw(); }; requestAnimationFrame(run); setTimeout(run, 250); };
   const zoom = (f, cx, cy) => { settle = performance.now(); const [mx, my] = at(cx, cy); view.s *= f; clamp(); view.x = mx - cx / view.s; view.y = my - cy / view.s; clamp(); redraw(); };
   function pickAt(cx, cy) {
-    const [mx, my] = at(cx, cy);
-    for (const p of world.provinces.values()) {
-      const [x0, y0, x1, y1] = p.box;
-      if (mx >= x0 && mx <= x1 && my >= y0 && my <= y1 && probe.isPointInPath(p.path, mx, my, "evenodd")) return p;
-    }
+    const [mx, my] = at(cx, cy), inside = (b) => mx >= b[0] && mx <= b[2] && my >= b[1] && my <= b[3];
+    const areas = (world.disputes || []).filter((a) => inside(a.box) && probe.isPointInPath(a.path, mx, my, "evenodd"));
+    for (const p of world.provinces.values()) if (inside(p.box) && probe.isPointInPath(p.path, mx, my, "evenodd")) return { ...p, disputes: areas };
     return null;
   }
   const local = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
@@ -382,7 +409,7 @@ const el = (tag, text, cls) => { const e = document.createElement(tag); if (text
 
 async function start() {
   let world;
-  try { world = await loadWorld("../maps/world.json"); } catch (e) { $("note").textContent = `${e.message} It needs the web address, not a file opened by double-click.`; return; }
+  try { world = await loadWorld("../maps/world.json", "../maps/disputes.json"); } catch (e) { $("note").textContent = `${e.message} It needs the web address, not a file opened by double-click.`; return; }
   $("note").remove();
   let chosen = null;
   const card = $("card");
@@ -391,7 +418,7 @@ async function start() {
     if (!p) { card.style.display = "none"; return; }
     const near = el("div", undefined, "near");
     for (const id of world.neighbours.get(p.id)) { const n = world.provinces.get(id), b = el("button", n.name); b.type = "button"; b.onclick = () => { choose(n); map.show(n.id); }; near.append(b); }
-    card.replaceChildren(el("h2", p.name), el("p", `${world.countries[p.country] || p.country}. Id ${p.id}${p.members.length > 1 ? `, made of ${p.members.length} smaller provinces` : ""}.`), el("p", near.children.length ? "Borders by land:" : "No land borders: reached by sea."), near);
+    card.replaceChildren(el("h2", p.name), ...(p.disputes || []).map((a) => el("p", `${{ disputed: "Disputed", breakaway: "Breakaway", unsettled: "Unsettled" }[a.kind]}: ${a.name}. ${a.note}`)), el("p", `${world.countries[p.country] || p.country}. Id ${p.id}${p.members.length > 1 ? `, made of ${p.members.length} smaller provinces` : ""}.`), el("p", near.children.length ? "Borders by land:" : "No land borders: reached by sea."), near);
     card.style.display = "block";
   };
   const map = worldMap($("map"), world, { owner: (id) => world.provinces.get(id).country, pick: choose, picked: () => chosen });

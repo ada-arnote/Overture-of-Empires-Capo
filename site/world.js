@@ -7,7 +7,7 @@ const el = (tag, text, cls) => { const e = document.createElement(tag); if (text
 
 async function start() {
   let world;
-  try { world = await loadWorld("../maps/world.json"); } catch (e) { $("note").textContent = `${e.message} It needs the web address, not a file opened by double-click.`; return; }
+  try { world = await loadWorld("../maps/world.json", "../maps/disputes.json"); } catch (e) { $("note").textContent = `${e.message} It needs the web address, not a file opened by double-click.`; return; }
   $("note").remove();
   let chosen = null;
   const card = $("card");
@@ -16,7 +16,7 @@ async function start() {
     if (!p) { card.style.display = "none"; return; }
     const near = el("div", undefined, "near");
     for (const id of world.neighbours.get(p.id)) { const n = world.provinces.get(id), b = el("button", n.name); b.type = "button"; b.onclick = () => { choose(n); map.show(n.id); }; near.append(b); }
-    card.replaceChildren(el("h2", p.name), el("p", `${world.countries[p.country] || p.country}. Id ${p.id}${p.members.length > 1 ? `, made of ${p.members.length} smaller provinces` : ""}.`), el("p", near.children.length ? "Borders by land:" : "No land borders: reached by sea."), near);
+    card.replaceChildren(el("h2", p.name), ...(p.disputes || []).map((a) => el("p", `${{ disputed: "Disputed", breakaway: "Breakaway", unsettled: "Unsettled" }[a.kind]}: ${a.name}. ${a.note}`)), el("p", `${world.countries[p.country] || p.country}. Id ${p.id}${p.members.length > 1 ? `, made of ${p.members.length} smaller provinces` : ""}.`), el("p", near.children.length ? "Borders by land:" : "No land borders: reached by sea."), near);
     card.style.display = "block";
   };
   const map = worldMap($("map"), world, { owner: (id) => world.provinces.get(id).country, pick: choose, picked: () => chosen });
