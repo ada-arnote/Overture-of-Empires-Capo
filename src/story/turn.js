@@ -21,9 +21,22 @@ export function jumpFrom(iso, key) {
   return d.toISOString().slice(0, 10);
 }
 
-export function newWorldGame(player, mode, seed, start = "2026-12-01") {
-  return { v: 1, scenario: "today", player, mode: MODES[mode] ? mode : "nation", seed, date: start, turn: 1, owners: {}, wars: [], treaties: [], offers: [], log: [] };
+/**
+ * A new game. `extra` may carry the scenario ({id, start, opening}), a country of the player's own
+ * ({code, name, colour, history}, with `owners` giving it its starting provinces) and a character.
+ */
+export function newWorldGame(player, mode, seed, extra = {}) {
+  const sc = extra.scenario || { id: "today", start: "2026-12-01", opening: "" };
+  return { v: 1, scenario: sc.id, opening: sc.opening, player, mode: MODES[mode] ? mode : "nation", seed, date: sc.start, turn: 1,
+    owners: { ...(extra.owners || {}) }, custom: extra.custom || null, character: extra.character || null, wars: [], treaties: [], offers: [], log: [] };
 }
+
+// what each mode lets the player's actions do
+const ROLE = {
+  nation: "- The player commands the country: their actions may be MOVES for it.",
+  leader: "- The player is a person, the country's leader: their actions may be personal or of state, and only actions of state are MOVES for the country. Write their personal life, rivals and standing too.",
+  citizen: "- The player is a private person and does not command the country. Their actions are personal and are never MOVES; the country's government acts on its own, with action number 0. Write the player's own life, work and standing.",
+};
 
 /** Months a jump covers, a week counting as a quarter: how many attacks a country may make in it. */
 export const monthsOf = (key) => { const j = JUMPS.find((x) => x[0] === key) || JUMPS[1]; return j[2] + j[3] / 30; };
@@ -48,13 +61,17 @@ export function worldPrompt(g, world, actions, to) {
     "- Name every country by its three-letter ISO code, and every province by its id from PLACES.",
     "- Turn each player action that is one of the MOVES into MOVE lines with that action's number; an action that is not a move gets none. Never add a MOVE for the player that no action asked for.",
     "- Other countries may make up to 6 MOVE lines in all, with action number 0.",
+    ROLE[g.mode] || ROLE.nation,
     "- Moves are proposals. Say that wars, attacks or talks begin; never say who wins a battle, who takes a province, or that a treaty is signed. The rules decide, and you will read the results under RECEIPT next turn.",
     "- Report what people say; do not quote them. At least two events must not involve the player's country.",
     "", "MOVES", ...Object.entries(VERBS).map(([v, h]) => `- ${v}: ${h}`),
     "", "FACTS",
     `- The date is ${g.date}. This turn ends on ${to}.`,
+    ...(g.opening ? [`- Opening: ${g.opening}`] : []),
     `- The player is ${world.name(me)} (${me}), playing as ${mode}.`,
-    `- ${world.name(me)} holds ${world.size(me)} provinces and borders by land: ${near}.`,
+    ...(g.custom ? [`- ${g.custom.name} (${g.custom.code}) is a country of the player's own making, real in this story. Its history: ${g.custom.history || "not told"}`] : []),
+    ...(g.character && g.mode !== "nation" ? [`- The player's character: ${Object.entries(g.character).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join("; ")}`] : []),
+    `- ${world.name(me)} holds ${world.size(me)} province${world.size(me) === 1 ? "" : "s"} and borders by land: ${near}.`,
     ...worldFacts(g, world.geo),
     "", "RECENT (the last turns, oldest first)",
     ...(recent.length ? recent : ["- nothing yet: this is the first turn"]),

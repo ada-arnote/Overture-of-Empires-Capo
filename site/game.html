@@ -46,6 +46,7 @@ textarea.plain { width: 100%; box-sizing: border-box; resize: vertical }
 .zoom button { min-width: 44px; min-height: 44px; font-size: 18px }
 #start { position: fixed; left: 8px; top: 8px; bottom: 8px; width: min(470px, calc(100vw - 16px)); display: none; z-index: 6; overflow: auto }
 #start.open { display: block }
+#start.min { top: auto; bottom: 8px; overflow: visible } #start.min .box { min-height: 0; padding: 10px 14px }
 #start .box { padding: 18px 20px; min-height: 100%; box-sizing: border-box }
 #start h1 { margin: 0; font: 500 clamp(40px, 8vw, 60px)/1 var(--serif, Georgia, serif) }
 #start label { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; color: var(--soft); font-size: 14px }

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#12171a">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Y5aMZQ0dRS+1gHl7ERrWotO/GPHbYyZas87RyqR12MM='; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-VtGRpXmGyNMJv5H2x6so+HxZ2ZfPwRHwt6+3vQRrdkI='; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <title>Capo world map</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -265,7 +265,7 @@ function worldMap(canvas, world, o) {
     const [vx0, vy0] = at(0, 0), [vx1, vy1] = at(cw, ch);
     for (const [who, f] of layers.fills) {
       if (f.box[2] < vx0 || f.box[0] > vx1 || f.box[3] < vy0 || f.box[1] > vy1) continue;
-      c.fillStyle = ownerColour(who); c.fill(f.path, "evenodd");
+      c.fillStyle = o.colour?.(who) || ownerColour(who); c.fill(f.path, "evenodd");
     }
     // province lines faint, lines between owners stronger, the coast dark
     c.lineJoin = "round"; c.lineCap = "round";

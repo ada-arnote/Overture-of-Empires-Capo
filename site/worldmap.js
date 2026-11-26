@@ -88,7 +88,7 @@ export function worldMap(canvas, world, o) {
     const [vx0, vy0] = at(0, 0), [vx1, vy1] = at(cw, ch);
     for (const [who, f] of layers.fills) {
       if (f.box[2] < vx0 || f.box[0] > vx1 || f.box[3] < vy0 || f.box[1] > vy1) continue;
-      c.fillStyle = ownerColour(who); c.fill(f.path, "evenodd");
+      c.fillStyle = o.colour?.(who) || ownerColour(who); c.fill(f.path, "evenodd");
     }
     // province lines faint, lines between owners stronger, the coast dark
     c.lineJoin = "round"; c.lineCap = "round";

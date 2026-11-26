@@ -37,9 +37,11 @@ export function applyMoves(g, moves, geo, actions, months) {
   let rivals = 0;
   const say = (m, ok, why) => receipt.push({ ok, text: `${geo.name(m.country)}: ${why}` });
   for (const m of moves) {
-    const c = m.country, isMe = c === me, verb = m.verb;
+    // a citizen does not command the country: its government moves on its own, like any other
+    const c = m.country, citizen = g.mode === "citizen", isMe = c === me && !citizen, verb = m.verb;
     if (!VERBS[verb]) { say(m, false, `"${m.verb}" is not a move the rules know`); continue; }
     if (!geo.known(c) || geo.holds(c) === 0) { say(m, false, `${verb.toLowerCase()} refused: it holds no land`); continue; }
+    if (citizen && c === me && m.action) { say(m, false, `${verb.toLowerCase()} refused: as a citizen, your actions are your own; the government decides for the country`); continue; }
     if (isMe) {
       if (!(m.action >= 1 && m.action <= actions.length)) { say(m, false, `${verb.toLowerCase()} refused: your country moves only on your own actions`); continue; }
       used[m.action] = (used[m.action] || 0) + 1;
@@ -70,7 +72,7 @@ function war(g, m, geo) {
 function peace(g, m, geo, { isMe }) {
   const c = m.country, t = m.target;
   if (!atWar(g, c, t)) return { ok: false, why: `peace refused: not at war with ${geo.name(t)}` };
-  if (t === g.player && !isMe) { g.offers.push({ from: c, kind: "peace", date: g.date }); return { ok: false, why: `offers you peace; to accept, make peace in your actions` }; }
+  if (t === g.player && g.mode !== "citizen" && !isMe) { g.offers.push({ from: c, kind: "peace", date: g.date }); return { ok: false, why: `offers you peace; to accept, make peace in your actions` }; }
   g.wars = g.wars.filter((w) => w.pair !== pair(c, t));
   return { ok: true, why: `makes peace with ${geo.name(t)}; each keeps the land it holds` };
 }
@@ -79,7 +81,7 @@ function treaty(g, m, geo, { isMe }) {
   const c = m.country, t = m.target, kind = KINDS.find((k) => (m.detail || "").toLowerCase().includes(k)) || "trade";
   if (!geo.known(t) || t === c) return { ok: false, why: `treaty refused: "${m.target}" is not a country` };
   if (atWar(g, c, t)) return { ok: false, why: `a treaty with ${geo.name(t)} is refused while they are at war; make peace first` };
-  if (t === g.player && !isMe) { g.offers.push({ from: c, kind, date: g.date }); return { ok: false, why: `offers you a ${kind} treaty; to accept, sign it in your actions` }; }
+  if (t === g.player && g.mode !== "citizen" && !isMe) { g.offers.push({ from: c, kind, date: g.date }); return { ok: false, why: `offers you a ${kind} treaty; to accept, sign it in your actions` }; }
   const old = treatyOf(g, c, t);
   if (old && old.kind === kind) return { ok: false, why: `already has a ${kind} treaty with ${geo.name(t)}` };
   g.treaties = g.treaties.filter((x) => x.pair !== pair(c, t));
