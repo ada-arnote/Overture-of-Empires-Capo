@@ -2,6 +2,14 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.5.5 (2026-11-26): the tent, furnished
+
+**Players**
+- The front page trades its drawn placeholders for real material: a canvas weave over the tent's blue, walnut for the desk, trunk and board frame, cork for the intelligence board, aged paper for the orders and dispatches, an engraving after Paul Sandby's 1780 view from a commander's tent, printers' ornaments from 18th-century military books, woodcut-style marks on the game boxes, and a wax seal, inkstand, compass rose and pins drawn for the project. Every piece is credited on the page and in CREDITS.csv.
+
+**Contributors**
+- A textures budget of 32 kB for `site/textures/`; icons and ornaments use 24.8 of their 25 kB.
+
 ## v0.5.4 (2026-11-26): The Ink Dries
 
 **Players**
