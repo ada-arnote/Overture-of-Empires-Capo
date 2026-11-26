@@ -41,6 +41,16 @@ const andes = (() => {
     "BO-TJ": ["Tarija", "BOL", ["BO-PO", "AR-SA"]],
   };
   // Relations from -3 to +3. Pairs not listed are 0.
+  // Where each place's dot sits on the map: longitude, latitude, near the middle of the region (rounded, not a survey).
+  const spots = {
+    "BR-AC": [-70.5, -9.2], "BR-RO": [-62.8, -10.9], "BR-MT": [-55.9, -12.9], "BR-PR": [-51.6, -24.6], "AR-MI": [-54.6, -26.9],
+    "AR-SA": [-64.6, -24.9], "AR-JU": [-65.9, -22.9], "CL-AP": [-69.6, -18.6], "CL-TA": [-69.4, -20.3], "CL-AN": [-69.1, -23.6],
+    "PE-TC": [-70.6, -17.5], "PE-PU": [-70.0, -14.9], "PE-MD": [-70.6, -11.9], "PE-LO": [-75.0, -4.3], "CO-AM": [-71.5, -1.5],
+    "CO-PT": [-75.6, 0.6], "BO-PA": [-67.5, -11.2], "BO-LP": [-68.4, -15.0], "BO-OR": [-67.6, -18.4], "BO-PO": [-66.7, -20.9],
+    "BO-SC": [-61.5, -17.0], "BO-TJ": [-63.9, -21.6],
+  };
+  // Where each country's name is printed: longitude, latitude.
+  const labels = { BOL: [-64.6, -15.6], BRA: [-52, -9], ARG: [-65.5, -35], CHL: [-71.6, -31], PER: [-75.2, -8.2], COL: [-73.4, 4.2], ECU: [-78.4, -1.2], PRY: [-58.4, -22.6], URY: [-56, -32.8], VEN: [-66, 7.4] };
   const relations = { "BOL|CHL": -1, "BOL|PER": 1, "BOL|BRA": 1, "BOL|ARG": 0, "ARG|BRA": 0, "ARG|CHL": 1, "CHL|PER": 0, "COL|PER": 0 };
   // Invented people. likes and hates are moves by the player that raise or lower favour.
   const person = (id, name, traits, lean, skill, likes, hates, wants) => ({ id, name, traits, lean, skill, likes, hates, wants });
@@ -59,7 +69,7 @@ const andes = (() => {
   ];
   // Invented names for advisers of countries that have none written for them.
   const names = ["Alma Quispe Rojas", "Bruno Salazar Medina", "Carla Ventura Ossio", "Diego Arrieta Paz", "Elena Mamani Cruz", "Fabio Lacerda Nunes", "Gloria Ibáñez Sol", "Hugo Restrepo Vela", "Irene Cabral Duarte", "Joaquín Ferreyra Sosa", "Karina Llanos Toro", "Lautaro Bianchi Rey", "Mónica Saavedra Lima", "Nicolás Uribe Prado", "Olga Pacheco Vaca", "Pablo Ortega Ruiz", "Renata Souza Brandão", "Sergio Calderón Mejía"];
-  return { id: "andes", title: "South America today", note: "Six detailed countries and the border places between them. Every other country is one line.", asOf, start, player, countries, others, places, relations, seats, council, bench, councils: { BOL: { council, bench } }, names };
+  return { id: "andes", title: "South America today", note: "Six detailed countries and the border places between them. Every other country is one line.", asOf, start, player, countries, others, places, spots, labels, relations, seats, council, bench, councils: { BOL: { council, bench } }, names };
 })();
 
 export const WORLDS = { andes };

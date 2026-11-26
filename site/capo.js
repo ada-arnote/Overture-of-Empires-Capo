@@ -2,6 +2,7 @@
 // Capo, the story game, on one page: choose a country, give orders, let an AI tell what happened, and keep the facts.
 import { ADVICE, VERBS, addMonths, buildAsk_, buildPrompt_, changeCouncil_, crossesLine, factLines_, habits_, newGame, parseAsk_, runTurn_, seated_, trusted_ } from "../src/story/rules.js";
 import { WORLDS } from "../src/story/worlds.js";
+import { FRAME, OUTLINES, toMap } from "../src/story/maps/andes.js";
 import { ask, forgetKey, loadRoute, saveRoute } from "./ai.js";
 import { footer } from "./footer.js";
 
@@ -52,8 +53,45 @@ function render() {
   $("view").replaceChildren(status, tabs, body);
 }
 
+// ---- the map: outlines from the borders file; each place is a dot in the colour of whoever holds it ----
+const HUES = { BOL: "#d9b45a", BRA: "#4fa070", ARG: "#6ea6d8", CHL: "#d0675f", PER: "#b583d0", COL: "#4fb3b0" };
+let wide = false;
+function map(body) {
+  const g = game(), w = world(), ns = "http://www.w3.org/2000/svg", box = el("div", undefined, "panel map"), say = el("p", "Choose a place to see who holds it.", "note");
+  const make = (t, at, parent) => { const e = document.createElementNS(ns, t); for (const [k, v] of Object.entries(at)) e.setAttribute(k, v); parent?.append(e); return e; };
+  const svg = make("svg", { viewBox: (wide ? FRAME.whole : FRAME.near).join(" "), role: "group", "aria-label": `Map of ${w.title}: the border places and who holds them` });
+  for (const [c, d] of Object.entries(OUTLINES)) {
+    make("path", { d, fill: HUES[c] || "#56605f", "fill-opacity": HUES[c] ? (c === g.player ? 0.42 : 0.24) : 0.16, stroke: c === g.player ? "#e2b866" : "rgba(255,244,214,.35)", "stroke-width": c === g.player ? 2.5 : 1, "stroke-linejoin": "round" }, svg);
+  }
+  for (const [c, [lon, lat]] of Object.entries(w.labels)) {
+    const [x, y] = toMap(lon, lat);
+    make("text", { x, y, "text-anchor": "middle", class: "map-name" }, svg).textContent = country(c);
+  }
+  const at = (k) => toMap(...w.spots[k]), seen = new Set();
+  for (const [k, [, , next]] of Object.entries(w.places)) for (const n of next) {
+    const pair = [k, n].sort().join("|");
+    if (seen.has(pair)) continue;
+    seen.add(pair);
+    const [[x1, y1], [x2, y2]] = [at(k), at(n)];
+    make("line", { x1, y1, x2, y2, class: "map-link" }, svg);
+  }
+  for (const [k, p] of Object.entries(g.places)) {
+    const [x, y] = at(k), taken = p.holder !== p.owner, tell = `${placeName(k)}: held by ${country(p.holder)}${taken ? `, taken from ${country(p.owner)}` : ""}`;
+    const dot = make("circle", { cx: x, cy: y, r: 8, fill: HUES[p.holder] || "#9aa", class: taken ? "map-dot taken" : "map-dot", tabindex: 0, role: "button", "aria-label": tell }, svg);
+    make("title", {}, dot).textContent = tell;
+    const show = () => { say.textContent = `${tell}. Borders: ${w.places[k][2].map(placeName).join(", ")}.`; };
+    dot.onclick = show;
+    dot.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show(); } };
+  }
+  const head = el("div", undefined, "map-head");
+  head.append(el("h2", "The border places"), button(wide ? "Border region" : "Whole continent", () => { wide = !wide; render(); }, "small"));
+  box.append(head, svg, say);
+  body.append(box);
+}
+
 function story(body) {
   const last = state.log[state.log.length - 1];
+  map(body);
   if (!last) { body.append(el("p", "Nothing has happened yet. Give your first orders in the Orders tab and advance.", "note")); return; }
   body.append(el("h2", `What happened, ${fmtDate(last.from)} to ${fmtDate(last.to)}`));
   const feed = el("ol", undefined, "feed");

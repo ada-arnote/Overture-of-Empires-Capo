@@ -37,6 +37,12 @@ body.story { overflow: auto; height: auto; min-height: 100% }
 .paste { width: 100%; min-height: 160px; font-size: 13px }
 .receipt { font-size: 13px; color: var(--soft); padding-left: 18px }
 .warn { color: #f2a08c }
+.map svg { display: block; width: 100%; height: auto; max-height: 72vh; border-radius: 12px; border: 1px solid var(--line); background: rgba(120, 170, 190, .07) }
+.map-head { display: flex; justify-content: space-between; align-items: center; gap: 8px } .map-head h2 { margin: 0 0 8px }
+.map-name { font: 600 19px/1 var(--serif, serif); fill: var(--soft); stroke: #12171a; stroke-width: 4px; paint-order: stroke; pointer-events: none }
+.map-link { stroke: rgba(255, 244, 214, .3); stroke-width: 1.5 }
+.map-dot { stroke: #12171a; stroke-width: 2.5; cursor: pointer } .map-dot.taken { stroke: #fff4d6; stroke-dasharray: 3 2 }
+.map-dot:focus { outline: none; stroke: var(--gold); stroke-width: 4 }
 </style>
 </head>
 <body class="story">
