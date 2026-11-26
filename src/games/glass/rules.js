@@ -2,7 +2,8 @@
 // Grain and Glass (working name). Hexes yield goods when their number is rolled. Build routes from hex to hex,
 // depots and towns in the hexes they reach, trade, and race to a points total.
 // Traditional is the genre as it is played, on our own island, with our own goods, costs, cards and total: a raid roll
-// that spoils big hands and moves the toll gate, which takes a good; two awards; a lean opening; offers that stand.
+// that spoils big hands and moves the toll gate, which takes a good; two awards; a lean opening; offers that stand,
+// at one for one or up to three for one, and one counter-offer to each.
 // Capo adds a market with falling prices and public charters. Custom is every switch by hand.
 import { hexBoard, joined } from "../hex.js";
 
@@ -13,6 +14,8 @@ export const PLANS = ["harvest", "works", "toll", "seal"];
 export const AWARD = { road: 5, warden: 2 };
 /** The numbers that come up most, kept apart on the island. */
 export const BUSY = { sum: [6, 8], high: [5, 6] };
+/** What an offer may be: so many of one good for so many of another, one side always a single good. */
+export const TERMS = [[1, 1], [2, 1], [3, 1], [1, 2], [1, 3]];
 const SIZES = { small: { radius: 5, land: 0 }, medium: { radius: 7, land: 0 }, large: { radius: 8, land: 24 } };
 /** What the rule sets set. Custom takes each of these as it is given. */
 export const SWITCHES = {
@@ -23,10 +26,11 @@ export const SWITCHES = {
   hand: { values: [0, 9, 12, 16], normal: 12 }, // on a raid roll, a hand of more goods than this spoils by half; 0: never
   awards: { values: [false, true], normal: true }, // the Great Road and the Toll Warden
   opening: { values: ["lean", "full"], normal: "lean" }, // the second depot starts you with one of each good beside it, or one for every hex
+  spare: { values: [0, 2, 3], normal: 0 }, // the gentle gate: it takes nothing from a seat with this many points or fewer; 0: it takes from anyone
 };
 const SETS = {
-  classic: () => ({ size: "medium", roll: "sum", goal: 10, market: "fixed", charters: false, gate: true, plans: true, offers: 2, limit: 40, actions: 99, order: "fixed", hand: 12, awards: true, opening: "lean" }),
-  ours: () => ({ size: "small", roll: "high", goal: 14, market: "falling", charters: true, gate: false, plans: false, offers: 1, limit: 16, actions: 3, order: "fixed", hand: 0, awards: false, opening: "full" }),
+  classic: () => ({ size: "medium", roll: "sum", goal: 10, market: "fixed", charters: false, gate: true, plans: true, offers: 2, limit: 40, actions: 99, order: "fixed", hand: 12, awards: true, opening: "lean", spare: 0 }),
+  ours: () => ({ size: "small", roll: "high", goal: 14, market: "falling", charters: true, gate: false, plans: false, offers: 1, limit: 16, actions: 3, order: "fixed", hand: 0, awards: false, opening: "full", spare: 0 }),
 };
 export const EXPANSIONS = ["ships", "harbours", "seasons"];
 const off = { values: [false, true], normal: false };
@@ -38,6 +42,8 @@ export const goalOf = (p) => p.rule.goal;
 const add = (a, b, k = 1) => a.map((v, i) => v + k * b[i]);
 export const canPay = (hand, cost) => hand.every((v, i) => v >= cost[i]);
 export const total = (hand) => hand.reduce((n, v) => n + v, 0);
+/** A hand after a harvest plan: one more of each of the two goods it holds least of. */
+export const harvestOf = (h) => { const need = [0, 1, 2, 3].sort((a, b) => h[a] - h[b] || a - b).slice(0, 2); return h.map((v, g) => v + (need.includes(g) ? 1 : 0)); };
 /** The raid roll: a 7 when two dice are added, doubles when the higher die counts. */
 export const raidRoll = (rule, [a, b]) => (rule.roll === "sum" ? a + b === 7 : a === b);
 
@@ -89,10 +95,10 @@ export function depotSpots(p, s, opening = false) {
   const { near } = boardOf(p), mine = reachOf(p, s);
   return p.land.flatMap((l, i) => (l && p.depot[i] === NONE && near[i].every((m) => p.depot[m] === NONE) && (opening || mine.has(i)) ? [i] : []));
 }
-/** Rivals the toll gate can take from at a hex: a depot on it or beside it, and a good in hand. */
+/** Rivals the toll gate can take from at a hex: a depot on it or beside it, a good in hand, and more points than the gentle gate spares. */
 export function victims(p, s, at) {
   const { near } = boardOf(p), out = new Set();
-  for (const c of [at, ...near[at]]) { const o = p.depot[c]; if (o !== NONE && o !== s && total(p.hands[o]) > 0) out.add(o); }
+  for (const c of [at, ...near[at]]) { const o = p.depot[c]; if (o !== NONE && o !== s && total(p.hands[o]) > 0 && pointsOf(p, o) > p.rule.spare) out.add(o); }
   return [...out].sort((a, b) => a - b);
 }
 /** How many of a good a seat gives at the market for one of any other. */
@@ -111,7 +117,10 @@ export function sellPrice(p, s, good) {
   return priceOf(p, good) + extra + (p.event === "fair trade" ? 1 : 0);
 }
 
-const copy = (p) => ({ ...p, hands: p.hands.map((h) => [...h]), coin: [...p.coin], route: p.route.map((r) => [...r]), depot: [...p.depot], town: [...p.town], harbour: [...p.harbour], deck: [...p.deck], held: p.held.map((h) => [...h]), seals: [...p.seals], charted: [...p.charted], sold: [...p.sold], charter: p.charter.map((c) => [...c]), offers: p.offers, roll: p.roll && [...p.roll], ask: p.ask ? { ...p.ask } : null, deals: p.deals.map((d) => ({ ...d })), spoil: [...p.spoil], back: p.back ? { ...p.back } : null, tolls: [...p.tolls], lit: [...p.lit] });
+const dealKey = (to, give, get, n, k) => [to, give, get, n, k].join(" ");
+/** Goods change hands: n of one good from the one who offered, k of the other back. */
+function trade(p, from, to, d) { p.hands[from][d.give] -= d.n; p.hands[from][d.get] += d.k; p.hands[to][d.give] += d.n; p.hands[to][d.get] -= d.k; }
+const copy = (p) => ({ ...p, hands: p.hands.map((h) => [...h]), coin: [...p.coin], route: p.route.map((r) => [...r]), depot: [...p.depot], town: [...p.town], harbour: [...p.harbour], deck: [...p.deck], held: p.held.map((h) => [...h]), seals: [...p.seals], charted: [...p.charted], sold: [...p.sold], charter: p.charter.map((c) => [...c]), offers: p.offers, roll: p.roll && [...p.roll], ask: p.ask ? { ...p.ask } : null, rolls: [...p.rolls], gained: p.gained.map((g) => [...g]), tried: [...p.tried], deals: p.deals.map((d) => ({ ...d })), spoil: [...p.spoil], back: p.back ? { ...p.back } : null, tolls: [...p.tolls], lit: [...p.lit] });
 
 /** The harvest. Every hex with the number gives one good to each depot on it or beside it, two to a town. */
 function harvest(p, n, double, events) {
@@ -121,7 +130,7 @@ function harvest(p, n, double, events) {
     hexes.push(i);
     for (const c of [i, ...near[i]]) if (p.depot[c] !== NONE) got[p.depot[c]][p.good[i]] += (p.town[c] ? 2 : 1) * (double ? 2 : 1);
   });
-  got.forEach((g, s) => { p.hands[s] = add(p.hands[s], g); });
+  got.forEach((g, s) => { p.hands[s] = add(p.hands[s], g); p.gained[s] = add(p.gained[s], g); });
   p.lit = hexes;
   events.push({ kind: "harvest", n, got, hexes, gate: p.gate !== NONE && p.num[p.gate] === n ? p.gate : NONE });
 }
@@ -136,9 +145,11 @@ function begin(p, dice, events) {
   p.offers = p.rule.offers;
   p.played = 0;
   p.free = 0;
+  p.tried = [];
   p.sold = p.sold.map((v) => Math.max(0, v - 1));
   const a = dice.die(), b = dice.die(), n = p.rule.roll === "sum" ? a + b : Math.max(a, b), raid = raidRoll(p.rule, [a, b]);
   p.roll = [a, b];
+  p.rolls[n]++;
   events.push({ kind: "roll", seat: p.seat, dice: [a, b], n, raid });
   harvest(p, n, p.rule.roll === "high" && a === b, events);
   p.phase = "main";
@@ -250,7 +261,7 @@ function island(rule, dice, seats) {
 }
 
 export const glass = {
-  id: "glass", version: "4",
+  id: "glass", version: "5",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -262,7 +273,7 @@ export const glass = {
       hands: Array.from({ length: o.seats }, () => [0, 0, 0, 0]), coin: Array(o.seats).fill(rule.market === "falling" ? 2 : 0), route: Array.from({ length: n }, () => []), depot: Array(n).fill(NONE), town: zero(), harbour: zero(),
       deck: rule.plans ? dice.shuffle([...Array(6).fill("harvest"), ...Array(5).fill("works"), ...(rule.gate ? Array(5).fill("toll") : []), ...Array(5).fill("seal")]) : [], held: Array.from({ length: o.seats }, () => []), seals: Array(o.seats).fill(0), charted: Array(o.seats).fill(0),
       sold: [0, 0, 0, 0], charter: rule.charters ? [0, 1, 2].map(() => dice.shuffle([0, 0, 1, 1, 2, 2, 3, 3]).slice(0, 6)) : [], first, seat: first, step: 0, round: 1, rounds: rule.limit, phase: "open", opened: 0, left: 0, offers: 0, played: 0, free: 0, roll: null, ask: null, over: null,
-      deals: [], spoil: Array(o.seats).fill(0), back: null, tolls: Array(o.seats).fill(0), road: NONE, warden: NONE, lit: [] };
+      rolls: Array(13).fill(0), gained: Array.from({ length: o.seats }, () => [0, 0, 0, 0]), tried: [], deals: [], spoil: Array(o.seats).fill(0), back: null, tolls: Array(o.seats).fill(0), road: NONE, warden: NONE, lit: [] };
     if (o.seasons) p.event = "fair";
     return p;
   },
@@ -270,7 +281,13 @@ export const glass = {
 
   moves(p) {
     const s = p.seat, h = p.hands[s], out = [];
-    if (p.phase === "answer") return [{ do: "accept" }, { do: "refuse" }, { do: "hold" }]; // the asked player answers for themselves
+    if (p.phase === "answer") { // the asked player answers for themselves, or counters once: the same good, for another of theirs or on other terms
+      const a = p.ask;
+      if (a.countered) return [{ do: "accept" }, { do: "refuse" }];
+      const list = [{ do: "accept" }, { do: "refuse" }, { do: "hold" }];
+      for (let g = 0; g < 4; g++) if (g !== a.give) for (const [n, k] of TERMS) if (p.hands[a.from][a.give] >= n && h[g] >= k && !(g === a.get && n === a.n && k === a.k)) list.push({ do: "counter", get: g, n, k });
+      return list;
+    }
     if (p.phase === "spoil") return [0, 1, 2, 3].flatMap((good) => (h[good] > 0 ? [{ do: "spoil", good }] : []));
     if (p.phase === "open") {
       const spots = p.opened % 2 ? routeSpots(p, s).filter((i) => p.land[i]) : depotSpots(p, s, true), any = p.land.flatMap((l, i) => (l && p.depot[i] === NONE && !p.route[i].includes(s) ? [i] : [])); // a crowded island: anywhere free
@@ -284,8 +301,8 @@ export const glass = {
     if (p.phase === "works") return routeSpots(p, s).map((at) => ({ do: "route", at, free: true }));
     out.push({ do: "end" });
     for (const d of p.deals) {
-      if (d.from === s) out.push({ do: "withdraw", to: d.to, give: d.give, get: d.get });
-      else if ((d.to === s || d.to === NONE) && h[d.get] > 0 && p.hands[d.from][d.give] > 0) out.push({ do: "take", from: d.from, to: d.to, give: d.give, get: d.get });
+      if (d.from === s) out.push({ do: "withdraw", to: d.to, give: d.give, get: d.get, n: d.n, k: d.k });
+      else if ((d.to === s || d.to === NONE) && h[d.get] >= d.k && p.hands[d.from][d.give] >= d.n) out.push({ do: "take", from: d.from, to: d.to, give: d.give, get: d.get, n: d.n, k: d.k });
     }
     if (p.left <= 0) return out;
     for (const at of routeSpots(p, s)) if (canPay(h, p.land[at] ? COST.route : COST.ship)) out.push({ do: "route", at });
@@ -301,8 +318,10 @@ export const glass = {
         if (h[g] > 0) out.push({ do: "sell", good: g });
         if (p.coin[s] >= 4) out.push({ do: "buy", good: g });
       }
-      // an offer to one player, who answers now; or to anyone, which stands until taken, withdrawn or the round ends
-      if (open && h[g] > 0) for (let o = NONE; o < p.seats; o++) if (o !== s) for (let w = 0; w < 4; w++) if (w !== g && (o === NONE || p.hands[o][w] > 0) && !mine.some((d) => d.to === o && d.give === g && d.get === w)) out.push({ do: "offer", to: o, give: g, get: w });
+      // an offer to one player, who answers now; or to anyone, which stands until taken, withdrawn or the round ends.
+      // n of yours for k of theirs. One turned down is not made again the same turn.
+      if (open && h[g] > 0) for (let o = NONE; o < p.seats; o++) if (o !== s) for (let w = 0; w < 4; w++) if (w !== g) for (const [n, k] of TERMS)
+        if (h[g] >= n && (o === NONE || p.hands[o][w] >= k) && !mine.some((d) => d.to === o && d.give === g && d.get === w) && !p.tried.includes(dealKey(o, g, w, n, k))) out.push({ do: "offer", to: o, give: g, get: w, n, k });
     }
     if (p.rule.charters) p.charter.forEach((c, k) => { const need = [0, 1, 2, 3].map((g) => c.filter((x) => x === g).length); if (canPay(h, need)) out.push({ do: "charter", k }); });
     return out;
@@ -349,7 +368,7 @@ export const glass = {
     else if (m.do === "use") {
       p.held[s].splice(p.held[s].indexOf(m.plan), 1);
       p.played = 1;
-      if (m.plan === "harvest") { const need = [0, 1, 2, 3].sort((a, b) => p.hands[s][a] - p.hands[s][b] || a - b).slice(0, 2); for (const g of need) p.hands[s][g]++; }
+      if (m.plan === "harvest") p.hands[s] = harvestOf(p.hands[s]);
       if (m.plan === "works") { p.free = 2; if (routeSpots(p, s).length) p.phase = "works"; }
       if (m.plan === "toll" && p.gate !== NONE) { p.phase = "toll"; p.tolls[s]++; }
       events.push({ kind: "use", seat: s, plan: m.plan });
@@ -359,26 +378,33 @@ export const glass = {
     else if (m.do === "buy") { p.coin[s] -= 4; p.hands[s][m.good]++; events.push({ kind: "buy", seat: s, good: m.good }); }
     else if (m.do === "offer") {
       p.offers--;
-      if (m.to === NONE) { p.deals.push({ from: s, to: NONE, give: m.give, get: m.get }); events.push({ kind: "post", seat: s, to: NONE, give: m.give, get: m.get }); }
+      if (m.to === NONE) { p.deals.push({ from: s, to: NONE, give: m.give, get: m.get, n: m.n, k: m.k }); events.push({ kind: "post", seat: s, to: NONE, give: m.give, get: m.get, n: m.n, k: m.k }); }
       else {
         // an offer to one player is a question: the turn goes to them, they take it, turn it down or leave it open, and it comes back
-        p.ask = { from: s, to: m.to, give: m.give, get: m.get, phase: p.phase };
+        p.ask = { from: s, to: m.to, give: m.give, get: m.get, n: m.n, k: m.k, phase: p.phase, countered: false };
         p.phase = "answer"; p.seat = m.to;
-        events.push({ kind: "ask", seat: s, to: m.to, give: m.give, get: m.get });
+        events.push({ kind: "ask", seat: s, to: m.to, give: m.give, get: m.get, n: m.n, k: m.k });
         return { position: p, events };
       }
+    } else if (m.do === "counter") { // the asked player names other terms; the one who offered says yes or no, and that is the end of it
+      const a = p.ask;
+      p.ask = { ...a, get: m.get, n: m.n, k: m.k, countered: true, was: dealKey(a.to, a.give, a.get, a.n, a.k) };
+      p.seat = a.from;
+      events.push({ kind: "counter", seat: a.to, to: a.from, give: a.give, get: m.get, n: m.n, k: m.k });
+      return { position: p, events };
     } else if (m.do === "accept" || m.do === "refuse" || m.do === "hold") {
-      const a = p.ask, yes = m.do === "accept" && p.hands[a.from][a.give] > 0 && p.hands[a.to][a.get] > 0;
-      if (yes) { p.hands[a.from][a.give]--; p.hands[a.from][a.get]++; p.hands[a.to][a.give]++; p.hands[a.to][a.get]--; }
-      if (m.do === "hold") { p.deals.push({ from: a.from, to: a.to, give: a.give, get: a.get }); events.push({ kind: "post", seat: a.from, to: a.to, give: a.give, get: a.get }); }
-      else events.push({ kind: "offer", seat: a.from, to: a.to, give: a.give, get: a.get, yes });
+      const a = p.ask, yes = m.do === "accept" && p.hands[a.from][a.give] >= a.n && p.hands[a.to][a.get] >= a.k;
+      if (yes) trade(p, a.from, a.to, a);
+      if (m.do === "hold") { p.deals.push({ from: a.from, to: a.to, give: a.give, get: a.get, n: a.n, k: a.k }); events.push({ kind: "post", seat: a.from, to: a.to, give: a.give, get: a.get, n: a.n, k: a.k }); }
+      else events.push({ kind: "offer", seat: a.from, to: a.to, give: a.give, get: a.get, n: a.n, k: a.k, yes, countered: a.countered });
+      if (m.do === "refuse") p.tried.push(dealKey(a.to, a.give, a.get, a.n, a.k), ...(a.was ? [a.was] : [])); // neither is asked again this turn
       p.seat = a.from; p.phase = a.phase; p.ask = null;
       return { position: p, events };
     } else if (m.do === "take" || m.do === "withdraw") {
-      const k = p.deals.findIndex((d) => d.from === (m.do === "take" ? m.from : s) && d.to === m.to && d.give === m.give && d.get === m.get), d = p.deals[k];
-      p.deals.splice(k, 1);
-      if (m.do === "take") { p.hands[d.from][d.give]--; p.hands[d.from][d.get]++; p.hands[s][d.give]++; p.hands[s][d.get]--; }
-      events.push({ kind: m.do, seat: s, from: d.from, to: d.to, give: d.give, get: d.get });
+      const at = p.deals.findIndex((d) => d.from === (m.do === "take" ? m.from : s) && d.to === m.to && d.give === m.give && d.get === m.get), d = p.deals[at];
+      p.deals.splice(at, 1);
+      if (m.do === "take") trade(p, d.from, s, d);
+      events.push({ kind: m.do, seat: s, from: d.from, to: d.to, give: d.give, get: d.get, n: d.n, k: d.k });
     } else if (m.do === "charter") {
       const c = p.charter[m.k];
       spend([0, 1, 2, 3].map((g) => c.filter((x) => x === g).length));
@@ -400,9 +426,8 @@ export const glass = {
   result: (p) => p.over,
 };
 
-/** Does a seat take a one-for-one swap? Plainly, so that a player can see why: it gives what it has most of, for what it has least of. */
-export function answer(p, seat, give, get) {
+/** Does a seat take a swap, by the plain rule? It gives what it has more of for what it has less of, keeps one, and never gives more goods than it gets. The easy bot answers by this alone. */
+export function answer(p, seat, give, get, n = 1, k = 1) {
   const h = p.hands[seat];
-  if (h[get] < 1) return false;
-  return h[get] >= 2 && h[give] <= h[get] - 1;
+  return h[get] >= k + 1 && h[give] <= h[get] - k && k <= n;
 }

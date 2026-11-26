@@ -2,6 +2,26 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.8.2 (2026-11-26): Grain and Glass trades like the best
+
+### Grain and Glass: a trade desk, counter-offers, rolls in view, sharper bots
+
+**Players**
+- **A trade desk.** Trade now opens a desk in place of a long list: choose whom to trade with (the bank, a player, anyone), what you give, what you get, and the terms. The bank row shows your own rate for each good, ports counted. Press T to open it.
+- **Offers beyond one for one.** Offer two or three of a good for one, or one for two or three. An offer turned down cannot be made again that turn.
+- **Counter-offers.** The player you ask can take it, turn it down, leave it open, or name other terms once: another good of theirs, or other amounts. You then agree or turn it down.
+- **Bots that trade for a reason.** A bot takes a swap when it brings its next build closer and costs less than the bank would, or when it is plain profit that will not spoil. It never trades with a player two points from winning, asks the leader for two for one, and counters when it wants your good but not your terms. The easy bot still simply gives what it has more of. How to play says all of this.
+- **Bots use plans.** Bots draw a plan when the price is goods their next build can spare, when a toll would win the Toll Warden, or when one more point would win, and they keep a harvest plan until its two goods finish a build.
+- **Rolls and goods.** A small chart of every roll so far sits on the table on a wide screen, with a line on each bar where the long run would put it. The Rolls button (or L) opens the full sheet: the chart, how often the raid roll came, and what each player has gathered from the harvest. The end screen adds goods gathered. The dice come from the seed and are never adjusted.
+- **Awards in view.** Your goods row shows where each award stands: your count, the holder and theirs, and a ring when a rival is one short of taking yours.
+- **Placing with the numbers.** Each place for a depot says how many goods it would gather in 36 rolls; the board list gives the same for every hex. A message says what you gathered on each roll and what the toll gate took.
+- **The gentle gate**, a Custom switch: the toll gate takes nothing from a player on 2 (or 3) points or fewer.
+
+**Contributors**
+- Glass rules are version 5: offers carry `n` and `k` (so many for so many, from `TERMS`), the `counter` move and `ask.countered`, `tried` (offers turned down this turn), the tallies `rolls` and `gained`, and the `spare` switch. Saves from version 4 do not open as version 5.
+- Fairness, 1,000 Traditional bot games a seat count: wins by seat 49.9/50.1 at two seats, 31.5/32.8/35.7 at three, 25.7/24.4/25.8/24.1 at four, 19.6/18.4/21.4/19.5/21.1 at five, 16/16.9/16.8/18.2/16/16.1 at six. The widest gap is 4.2 points (three seats); every game ended on points.
+- Token pieces now carry `pips` for the board painter to draw when it is ready; nothing draws them yet.
+
 ## v0.8.1 (2026-11-26): home politics, fog of war, scenes and map views
 
 ### Capo's missing features, round two: home politics, fog, scenes, scale, debate, map views, pacts
