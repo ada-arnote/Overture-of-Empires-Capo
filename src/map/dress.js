@@ -3,7 +3,7 @@
 // land's dressing. Looks only: no rule reads any of it. Dressing is cheap by design: spots lie on a grid of cells that halve
 // as the map comes closer (each level keeps the spots of the levels above, so nothing jumps), each spot is worked out once
 // and kept, and only the spots in view are stood, up to a cap. What a spot shows comes from the province under it: its
-// terrain word (an invented world), or the heights and ice of the real one.
+// terrain word (an invented world), or the heights and ice of the real one, then what grows there (maps/cover.webp).
 import { bake, box, lathe, move, prism } from "./kit.js";
 import { SLOT } from "./style.js";
 
@@ -27,6 +27,7 @@ const RECIPES = {
   grass(o) { for (const [x, y] of [[-0.18, 0.05], [0.06, -0.12], [0.2, 0.1]]) move(o, lathe([], [[0.07, 0], [0.04, 0.05], [0, 0.08]], 5, c("field", 118), 0, true), x, y); return o; },
   floe(o) { for (const [x, y, s, t] of [[-0.1, 0.02, 1, 0.3], [0.16, -0.08, 0.7, 1.4]]) move(o, prism([], [[-0.16, -0.1], [0.12, -0.14], [0.18, 0.06], [-0.04, 0.14], [-0.2, 0.04]], 0, 0.07, c("snow"), 0, 0.03), x, y, 0, s, t); return o; },
   ridge: (o) => { const r = lathe([], [[0.56, 0], [0.44, 0.05], [0.24, 0.1], [0, 0.12]], 9, c("leaf"), 3, true); for (let i = 0; i < r.length; i += 10) r[i] *= 1.6; return move(o, r); }, // a long low hill, in the ground's own colour
+  tundra(o) { for (const [x, y, s] of [[-0.16, 0.06, 1], [0.12, -0.1, 0.8], [0.2, 0.12, 0.6]]) move(o, lathe([], [[0.08, 0], [0.06, 0.025], [0, 0.035]], 6, c("leaf", 96), 0, true), x, y, 0, s); return move(o, lathe([], [[0.05, 0], [0.045, 0.03], [0, 0.045]], 5, c("metal", 120)), -0.02, -0.12); }, // mapdata hook: moss and a stone
   hamlet(o) { for (const [x, y, w, h] of [[-0.08, 0.03, 0.08, 0.12], [0.09, -0.05, 0.065, 0.16]]) { box(o, x - w, y - w, 0, x + w, y + w, h, c("wall")); move(o, prism([], [[-w - 0.01, 0], [w + 0.01, 0], [0, 0.07]], -w - 0.01, w + 0.01, c("roof"), 0), x, y, h, 1, 0, Math.PI / 2); } return o; },
 };
 for (let n = 1; n <= 10; n++) { RECIPES[`pips${n}`] = (o) => pips(o, n, 0.25); RECIPES[`fpips${n}`] = (o) => pips(o, n, 0.17); }
@@ -39,13 +40,19 @@ const WORDS = {
   forest: [["tree", 0.5, 0.44], ["oak", 0.25, 0.42]], hills: [["ridge", 0.3, 0.24]], mountain: [["peak", 0.4, 0.4]], desert: [["dune", 0.45, 0.5]],
   steppe: [["grass", 0.4, 0.45]], marsh: [["reeds", 0.5, 0.45]], plain: [["oak", 0.06, 0.4]], coast: [],
 };
+// mapdata hook: what each class of maps/cover.webp stands (the biomes of RESOLVE Ecoregions 2017 by their own numbers; 15 rock and ice stands nothing)
+const COVER = [null,
+  [["oak", 0.45, 0.46], ["tree", 0.2, 0.44]], [["oak", 0.3, 0.42], ["grass", 0.15, 0.4]], [["tree", 0.5, 0.44]], // tropical forests: moist, dry, conifer
+  [["oak", 0.4, 0.42], ["tree", 0.2, 0.42]], [["tree", 0.55, 0.44]], [["tree", 0.55, 0.4]], // temperate broadleaf, temperate conifer, boreal
+  [["grass", 0.35, 0.45], ["oak", 0.06, 0.38]], [["grass", 0.4, 0.45]], [["reeds", 0.5, 0.45]], [["grass", 0.3, 0.4]], // savanna, steppe, flooded grassland, montane grassland
+  [["tundra", 0.35, 0.45]], [["oak", 0.18, 0.36], ["grass", 0.15, 0.4]], [["dune", 0.45, 0.5]], [["reeds", 0.3, 0.45], ["oak", 0.25, 0.36]], null]; // tundra, Mediterranean, desert, mangrove
 const hash = (a, b, c) => { let h = (a * 374761393 + b * 668265263 + c * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 const inside = (x, y, rings) => { let n = false; for (const r of rings) for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const a = r[i], b = r[j]; if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) n = !n; } return n; };
 
 export class Dressing {
   /** world: the unpacked map (provinces with poly, n and, for an invented world, terrain; lake outlines, if it has them). */
   constructor(world) {
-    this.world = world; this.lakes = (world.lakeRings || []).map((ring) => ({ ring, box: ring.reduce((b, [x, y]) => [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)], [Infinity, Infinity, -Infinity, -Infinity]) })); this.list = [...world.provinces.values()].sort((a, b) => a.n - b.n); this.kept = new Map(); this.heights = null;
+    this.world = world; this.lakes = (world.lakeRings || []).map((ring) => ({ ring, box: ring.reduce((b, [x, y]) => [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)], [Infinity, Infinity, -Infinity, -Infinity]) })); this.list = [...world.provinces.values()].sort((a, b) => a.n - b.n); this.kept = new Map(); this.heights = null; this.covers = null;
     // which province each small square of the map belongs to, filled row by row from the outlines; -1 for the sea, -2 where two meet
     const G = this.G = 4, w = this.w = Math.ceil(world.width / G), h = this.h = Math.ceil(world.height / G), of = this.of = new Int16Array(w * h).fill(-1);
     const xs = [];
@@ -61,6 +68,8 @@ export class Dressing {
   }
   /** The real world's heights and ice, read once from its picture at a smaller size: {w, h, r: heights, a: ice}. */
   relief(r) { this.heights = r; this.kept.clear(); }
+  /** mapdata hook: what grows on the real world, one class a point: {w, h, k}. */
+  cover(k) { this.covers = k; this.kept.clear(); }
   /** What stands at one spot: null, or [model, size, turn]. Worked out once a spot. */
   at(x, y, seed) {
     const col = Math.floor(x / this.G), row = Math.floor(y / this.G);
@@ -82,6 +91,9 @@ export class Dressing {
       const m = metres(H.r[cy * H.w + cx]), rough = metres(hi) - metres(lo);
       pick = H.a[cy * H.w + cx] < 200 ? [["floe", 0.4, 0.45]] : rough > 1300 || (m > 3200 && rough > 500) ? [["peak", 0.36, 0.4]] : m > 600 && rough > 800 ? [["ridge", 0.14, 0.24]] : null;
     }
+    const K = this.covers; // mapdata hook: then what grows there
+    const grows = K && !p.terrain ? COVER[K.k[Math.min(K.h - 1, Math.floor((y / this.world.height) * K.h)) * K.w + Math.min(K.w - 1, Math.floor((x / this.world.width) * K.w))]] : null;
+    if (grows) pick = !pick ? grows : pick[0][0] === "ridge" ? [...pick, ...grows.map(([m, n, s]) => [m, n * 0.6, s])] : pick; // hills keep some of their wood or grass
     if (!pick) return null;
     let roll = hash(Math.floor(x * 7), Math.floor(y * 7), 91);
     for (const [m, chance, size] of pick) { if (roll < chance) return [m, size * (0.85 + 0.3 * seed), turn]; roll -= chance; }

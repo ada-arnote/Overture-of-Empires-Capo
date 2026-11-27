@@ -146,10 +146,11 @@ export function check(root, { release = false } = {}) {
     // fonts, and OFL, MIT and ISC things, are named in NOTICES.md by file or folder; MIT and ISC also keep their maker and permission text there
     if ((font || TEXT[r[3]]) && !notices.includes(r[0]) && !notices.includes(dir + "/")) bad.push(`${r[0]}: NOTICES.md must name it or ${dir}/ (${r[3]})`);
     if (["MIT", "ISC"].includes(r[3]) && !(TEXT[r[3]].test(notices) && notices.includes(r[2]))) bad.push(`${r[0]}: NOTICES.md must keep the ${r[3]} notice text and the copyright line for ${r[2]}`);
-    if (r[0].startsWith("site/models/") && r[3].startsWith("CC-BY") && !notices.includes(r[0])) bad.push(`${r[0]}: NOTICES.md must name it with its credit line (CC BY, ruling 146)`);
+    if ((r[0].startsWith("site/models/") || r[0].startsWith("maps/")) && r[3].startsWith("CC-BY") && !notices.includes(r[0])) bad.push(`${r[0]}: NOTICES.md must name it with its credit line (CC BY, ruling 146)`); // mapdata hook: maps/ too
   }
   for (const r of A) if (!existsSync(path.join(root, r[0]))) bad.push(`ADAPTED.csv: ${r[0]} does not exist`);
   const credited = new Set(C.map((r) => r[0])), known = new Set(A.map((r) => r[0]));
+  for (const f of walk(path.join(root, "maps"))) if (path.extname(f) === ".webp" && !credited.has(rel(f))) bad.push(`${rel(f)}: a baked picture in maps/ needs its row in CREDITS.csv`); // mapdata hook
   for (const f of files) {
     const name = rel(f), ext = path.extname(f).toLowerCase();
     if (MEDIA.has(ext) && !credited.has(name)) bad.push(`${name}: has no row in CREDITS.csv`);

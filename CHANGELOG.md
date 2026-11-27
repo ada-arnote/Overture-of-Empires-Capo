@@ -2,6 +2,21 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.10.6 (2026-11-27): real land and real cities on Capo's map
+
+### The real world's land cover and cities on Capo's map (ruling 157)
+
+**Players**
+- **What grows on the land.** Close in on the real world, the ground is coloured by what grows there, and the dressing stands it: forests (broadleaf and conifer, tropical, temperate and boreal), grassland and savanna, desert dunes, tundra (moss and stones, a new small model), and reeds in flooded grassland and mangrove. Mountains, hills and ice keep their own look; hills keep some of their wood or grass. Culled and capped as before; a style's own model rules still apply (Campaign map and Modern command stand no hills or peaks).
+- **Real cities.** On the real map, the guessed great cities give way to real ones, named in italic under their pieces: each country's keep stands in its real capital while it holds it (and goes home if it falls), other capitals show always, cities of a million and a half or more from the region zoom, and others of 300,000 or more from the country zoom. A town still stands in every province with no city. A name already printed close by is not printed again. Invented worlds and alternate histories keep their own cities and towns.
+- The map's credit line and the front page's credits name the land cover: Ecoregions 2017 © RESOLVE, CC BY 4.0.
+
+**Contributors**
+- `tools/mapdata.py` (new, offline, beside `tools/relief.py`; NumPy and Pillow, as relief.py, never shipped): reads RESOLVE Ecoregions 2017 and Natural Earth 1:10m populated places (simple, 5.1.2) and writes `maps/cover.webp` (2048 by 1500 on the relief's grid and projection, one class a point as grey 16 a class, lossless, 43.1 kB) and `maps/cities.json` (1,425 cities: 200 capitals, 490 major, 735 other; name, position in tenths of a map unit, rank and province; 53.3 kB, 23.3 kB compressed). Cities in the sea are snapped onto their province's land; a capital stands in its own country however small.
+- `src/map/world.js`: the ground reads the cover (texture unit 5, `cover(img)`), blends a colour a biome between points along a wavering line, and fades it out above about 1,000 to 2,800 m. `src/map/dress.js`: `cover(k)`, a table of what each biome stands, and the `tundra` model. `site/worldmap.js`: loads both files beside the relief, and names the cities. `site/mappieces.js`: `mapPieces({ cities })`. `site/game.js`: passes the cities on the real map only. All marked "mapdata hook".
+- `tools/check.mjs`: a CC BY file in `maps/` must be named in NOTICES.md with its credit line, and a baked picture in `maps/` needs its row in CREDITS.csv. CREDITS.csv and NOTICES.md: rows and lines for both files.
+- `test/mapdata.test.mjs` (3 tests). Code 2.6 kB larger compressed; the two map files add 96.4 kB (66.4 kB compressed), fetched only by the map pages. Frame times in headless Edge on the GPU, median ms over 50 frames, two runs each, before then after: desktop 1440 by 900 world 5.6 to 5.9 then 4.7 to 6.8, region 5.3 to 6.9 then 5.4 to 5.5, country 4.6 to 5.0 then 4.9 to 5.3, close 5.4 to 6.5 then 4.8 to 5.8; phone 375 by 812 world 4.2 to 5.9 then 4.7 to 6.6, region 4.1 to 4.5 then 3.5 to 5.2, country 3.7 to 6.9 then 3.4 to 5.5, close 5.3 to 7.0 then 4.8 to 5.2. No change beyond the noise of a busy machine. The flat layer's paint once the view is still stays 20 to 30 ms at the region zoom; the first such paint after entering a zoom band can take 50 to 230 ms once.
+
 ## v0.10.5 (2026-11-27): a guide to choosing an AI, real-time Inch with a friend, and Margins of Trust keeps its word
 
 ### An Inch of Ink in real time, live between two browsers
