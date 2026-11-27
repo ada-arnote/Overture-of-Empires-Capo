@@ -54,13 +54,13 @@ export const stageLeft = () => Math.max(0, ends - performance.now());
  * The camera drifts to a rival's move, gently, if that place is out of the comfortable middle of the view; never while the
  * player is touching the map or has moved it in the last few seconds, and never at the whole-board zoom.
  */
-function follow(b, at) {
+function follow(b, at, T) {
   if (at < 0 || performance.now() - touched < 6000 || !b.zoomed) return;
   const v = b.middle, p = b.place(at);
   if (Math.abs(p.x - v.x) < v.w * 0.3 && Math.abs(p.y - v.y) < v.h * 0.3) return;
   const mine = glide = { at, t: performance.now() };
   layer.add({ ms: 1100, draw(c, k, now) {
-    if (glide !== mine) return;
+    if (glide !== mine || T?.human?.()) { if (glide === mine) glide = null; return; } // p12: once a person's turn begins, the board's own come-home glide has the camera
     const q = b.place(at), dx = v.x - q.x, dy = v.y - q.y, dt = Math.min(50, now - mine.t);
     mine.t = now;
     if (Math.hypot(dx, dy) < 2) { glide = null; return; }
@@ -175,7 +175,7 @@ const PLANS = {
       } else if (e.kind === "place" || e.kind === "claim") { layer.add(pulse(where, e.at, { rgb: rgbOf(e.seat) })); } // placing is followed by the camera only when it comes to a fight
       else if (e.kind === "fort") { layer.add(build(where, e.at, {})); focus = e.at; }
     }
-    if (!person) follow(b, focus);
+    if (!person) follow(b, focus, T);
   },
   fable(T, events, move, b, where, f, person) {
     const p = T.match.position, to = move?.to ?? -1;
@@ -190,7 +190,7 @@ const PLANS = {
       layer.add(took?.was >= 0 ? capture(where, to, { rgb: rgbOf(took.seat), icon: ICONS[took.seat] ?? -1, ms: 560 }) : build(where, to, { rgb: rgbOf(p.owner[to]), small: true, ms: 520 }));
     } else if (move?.do === "fort" || move?.do === "farm") layer.add(build(where, to, {}));
     for (const e of events) if (e.kind === "starve") for (const c of e.cells) layer.add(pulse(where, c, { rgb: [70, 62, 56], out: true, ms: 520 }));
-    if (!person) follow(b, to);
+    if (!person) follow(b, to, T);
   },
   glass(T, events, move, b, where, f, person, told) {
     const p = T.match.position, hint = T.motionHints || {}, tile = hint.tile || GOODS, names = hint.goods || [];
@@ -243,7 +243,7 @@ const PLANS = {
       } else if (["depot", "town", "harbour"].includes(e.kind)) { layer.add(build(where, e.at, { rgb: rgbOf(e.seat) })); focus = e.at; }
       else if (e.kind === "route") { layer.add(pulse(where, e.at, { rgb: rgbOf(e.seat), out: true, ms: 420 })); focus = e.at; }
     }
-    if (!person) follow(b, focus);
+    if (!person) follow(b, focus, T);
   },
   inch(T, events) {
     if (events.some((e) => e.kind === "age")) layer.add(sweep());

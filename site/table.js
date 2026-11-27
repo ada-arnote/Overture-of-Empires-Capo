@@ -253,7 +253,6 @@ export function createTable(G) {
   document.body.append(banner, say);
   $("title").querySelector(".links").append(setButton);
   const KEY = `capo-${G.key}-2`, LOOK = `capo-${G.key}-look`, many = G.seats || [2, 3], setup = { seats: G.normal || 2, style: G.style || "classic" /* stacking hook: a game with one rule set names it */, rounds: G.lengths[1]?.[0], who: ["you", "normal", "normal", "normal", "normal", "normal"], look: LOOK0.map((x) => [...x]), extra: Object.fromEntries([...(G.choices || []), ...(G.switches || [])].map((c) => [c.key, c.normal])), on: {} };
-  let fitted = 0; // where the phone's tray began when the board was last fitted
   let resting = false; // the title's board was held still
   let sureEnd = 0, log = [], land = [], board = null, run = 0, mark = 0, drawn = -1, fell = [], heralded = "", tab = "game";
   const T = {
@@ -284,6 +283,10 @@ export function createTable(G) {
    * Narrow, a phone held upright: the seats in a strip on top, the move panel a tray below.
    */
   const side = () => innerWidth > innerHeight * 1.15 && (innerHeight < 600 || innerWidth <= 1100);
+  // layout hook (p12-layout): a phone, either way up, asks the board for places it can read at the opening view. Held upright, the
+  // move sheet has a set height and floats over the foot of the screen: the board keeps at least BOARD of the height above it, with a
+  // band for the zoom row and the toasts, and is never moved or resized by what the sheet holds, by a selection or by folding it.
+  const phone = () => Math.min(innerWidth, innerHeight) <= 500, BOARD = 0.56, BAND = 54;
   let room = "", homed = false; // homed: a wide map has been centred on your own land
   const place = () => {
     document.body.classList.toggle("side", side());
@@ -294,16 +297,22 @@ export function createTable(G) {
     if (T.demo) free = wide ? { left: Math.min(innerWidth / 2, $("title").querySelector(".card").getBoundingClientRect().right), right: 0, top: 20, bottom: 20 } : { left: 0, right: 0, top: 10, bottom: innerHeight * 0.5 };
     // the move panel (with the lesson and the news in it) keeps a column of its own, so nothing floats on the board
     else if (side()) free = { left: 0, right: innerWidth - r("act").left + 4, top: r("seats").bottom + 2, bottom: 2 };
-    // a wide map opens as tall as the screen allows, centred on your own land; the panels float over its far edges
-    else if (wide && atlas) free = { left: 372 * z, right: dock.hidden || list.hidden ? 16 : 360 * z, top: r("seats").bottom + 2, bottom: 4 };
+    // layout hook (p12-layout): a wide map opens whole, right of the move panel; the record of what happened floats above it (below)
+    else if (wide && atlas) free = { left: 372 * z, right: 16, top: r("seats").bottom + 2, bottom: 4 };
     else if (wide) free = { left: 232 * z, right: 372 * z, top: 12 + 74 * z, bottom: 6 };
-    else { fitted = r("act").top; document.body.style.setProperty("--act", `${innerHeight - fitted}px`); free = { left: 0, right: 0, top: r("seats").bottom + 2, bottom: innerHeight - fitted + 34 }; }
-    if (atlas && !T.demo) Object.assign(free, { fill: wide || side(), at: focus() }); // a phone held upright keeps the board's own closer opening
+    else { const top = r("seats").bottom + 2, sheet = Math.round(Math.max(innerHeight * 0.26, innerHeight - top - innerHeight * BOARD)); document.body.style.setProperty("--act", `${sheet}px`); free = { left: 0, right: 0, top, bottom: sheet + BAND }; }
+    if (!T.demo) Object.assign(free, { at: focus(), phone: phone() }); // the opening view centres on your land when it is zoomed in
     // the same room as last time is left alone, so a summary opening or a tray settling does not move a board you have moved
-    const key = JSON.stringify([innerWidth, innerHeight, free.left, free.right, free.top, free.bottom, !!free.fill, T.demo]);
+    const key = JSON.stringify([innerWidth, innerHeight, free.left, free.right, free.top, free.bottom, !!free.phone, T.demo, wide && atlas && !dock.hidden && !list.hidden]);
     if (key === room) return;
     room = key;
     board.layout(free);
+    // the record, open beside a wide map, keeps to the table above the map; where there is too little room there it takes a column
+    if (wide && atlas && !T.demo && !dock.hidden && !list.hidden) {
+      const b = board.bounds, above = b ? b.top - dock.getBoundingClientRect().top - 10 : 0;
+      if (above >= 150) dock.style.maxHeight = `${Math.round(above / z)}px`;
+      else { dock.style.maxHeight = ""; board.layout({ ...free, right: 360 * z }); }
+    } else dock.style.maxHeight = "";
     homed = free.at >= 0;
   };
   function makeBoard() {
@@ -393,6 +402,7 @@ export function createTable(G) {
     const p = T.match.position, s = T.match.turn, k = T.demo || T.catching || !T.human() || realtime(p) ? "" : turnKey(T.match.seed, p.round, s, T.solo());
     if (!k || k === heralded) return;
     heralded = k;
+    board?.come?.(focus()); // layout hook (p12-layout): the camera comes back to your land, gently, unless you moved the map just now
     say.textContent = `${T.solo() ? "Your turn" : `${NAMES[s]}, your turn`}. Round ${p.round}.`;
     sfx("turn");
     if (settings.speed !== "normal") return;
@@ -989,8 +999,8 @@ export function createTable(G) {
   logs.onclick = showLog;
   list.hidden = read("capo-log") === "shut";
   fold.onclick = () => { list.hidden = !list.hidden; store("capo-log", list.hidden ? "shut" : null); drawn = -1; place(); };
-  // on a phone the board is fitted again when the tray grows or shrinks by more than a little, so the tray never sits on it and small changes do not make it jump
-  new ResizeObserver(() => { document.body.style.setProperty("--ah", `${$("act").offsetHeight}px`); if (innerWidth <= 820 && !$("act").hidden && Math.abs($("act").getBoundingClientRect().top - fitted) > 16) place(); }).observe($("act"));
+  // layout hook (p12-layout): on a phone held upright the sheet keeps a set height (place) and the board does not follow it
+  new ResizeObserver(() => { document.body.style.setProperty("--ah", `${$("act").offsetHeight}px`); document.body.style.setProperty("--tray", `${Math.round($("act").getBoundingClientRect().height)}px`); }).observe($("act"));
   // shell hook p10: the bar's foot, so the seats under it follow it down when the round takes two lines at larger text (table.css --bar-b)
   new ResizeObserver(() => { const r = $("bar").getBoundingClientRect(); if (!r.height) return; document.body.style.setProperty("--bar-b", `${Math.round(r.bottom)}px`); place(); }).observe($("bar"));
   $("how").onclick = rules;

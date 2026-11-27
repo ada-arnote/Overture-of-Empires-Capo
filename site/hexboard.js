@@ -37,11 +37,12 @@ function stillLines(list) {
  * A board opens tilted, as a model on a table, unless the player chose a look, or this device was found too slow for it (then Flat, which stays one tap away in Settings).
  */
 export function hexBoard(T, stage, o) {
-  let b = null, svg = null, pat = false, room = {};
+  let b = null, svg = null, pat = false, room = {}, given = {}; // layout hook: given, the free part as the shell gave it
   // reading hook (p10-reading): the key to the symbols on the board, at the foot of the free part of the screen
   const key = o.reading?.key ? legend(o.reading.key) : null;
   if (key) { key.classList.add("paper"); Object.assign(key.style, { position: "absolute", zIndex: 1, padding: "4px 8px", borderRadius: "var(--r-2)", boxShadow: "var(--lift-1)", font: "600 var(--fs-1)/1.2 var(--sans)", pointerEvents: "none" }); }
-  const placeKey = () => { if (!key) return; const low = innerWidth > 700; Object.assign(key.style, { left: `${(room.left || 0) + 10}px`, bottom: low ? `${(room.bottom || 0) + 10}px` : "auto", top: low ? "auto" : `${(room.top || 0) + 6}px` }); if (key.parentNode !== stage || key !== stage.lastChild) stage.append(key); }; // a phone: under the seats, clear of the move sheet and its notes
+  // layout hook (p12-layout): beside a zoom row at the foot (a phone on its side, a small window) the key stands beside it, on its line
+  const placeKey = (at = given) => { if (!key) return; const low = innerWidth > 700, aside = document.body.classList.contains("side") ? 160 : 0; Object.assign(key.style, { left: `${(at.left || 0) + 10 + aside}px`, bottom: low ? `${(at.bottom || 0) + (aside ? 12 : 10)}px` : "auto", top: low ? "auto" : `${(at.top || 0) + 6}px` }); if (key.parentNode !== stage || key !== stage.lastChild) stage.append(key); }; // a phone: under the seats, clear of the move sheet and its notes
   /** The still picture keeps to the free part of the screen too, clear of the panels. */
   const fit = () => { if (svg) Object.assign(svg.style, { left: `${room.left || 0}px`, top: `${room.top || 0}px`, width: `calc(100% - ${(room.left || 0) + (room.right || 0)}px)`, height: `calc(100% - ${(room.top || 0) + (room.bottom || 0)}px)` }); };
   const kept = T.read(), SLOW = "capo-3d-slow", get = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -101,11 +102,19 @@ export function hexBoard(T, stage, o) {
     setLook: (k) => b?.setLook(k),
     patterns(on) { pat = !!on; if (b) b.patterns(pat); else if (svg) still(); },
     motion: (mode) => b?.motion(mode),
-    layout(free) { room = free; if (b) b.layout(free); else fit(); placeKey(); },
-    zoom: (f) => b?.zoom(f), pan: (x, y) => b?.pan(x, y), centre: (i) => b?.centre?.(i),
+    // layout hook (p12-layout): places it can read at the opening view, a hex or a province 36 px across on a phone and 24 px on a
+    // wider screen (a map of fine cells, Inch's world, opens whole, or as tall as the free part on a phone, and its game frames your
+    // land); a phone's key is kept off the board
+    layout({ phone = false, ...free }) {
+      given = free; placeKey();
+      const top = key && innerWidth <= 700 && key.offsetHeight ? key.offsetHeight + 10 : 0, fine = (o.fine?.mid?.length || 0) > 300, least = fine ? 0 : phone ? 36 : 24;
+      room = { ...free, top: (free.top || 0) + top };
+      if (b) b.layout({ ...room, least, tall: phone && fine }); else fit();
+    },
+    zoom: (f) => b?.zoom(f), pan: (x, y) => b?.pan(x, y), centre: (i) => b?.centre?.(i), come: (i) => !!b?.come?.(i), get bounds() { return b?.bounds || null; },
     /** The cell of a seat's nearest the middle of its land: where a map opens and goes home to. */
     focus(seat) {
-      const mid = o.picture?.mid, owner = o.owner();
+      const mid = o.picture?.mid || o.cells?.map(([q, r]) => [q + r / 2, r * 0.866]), owner = o.owner(); // layout hook (p12-layout): a board of hexes too
       if (!mid || !(seat >= 0)) return -1;
       const mine = owner.flatMap((s, i) => (s === seat && mid[i] ? [i] : []));
       if (!mine.length) return -1;

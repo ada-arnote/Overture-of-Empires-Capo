@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-R06sDJUiGLcfsnccBZNMR95NItqay7CFUmpRjfLq+5I='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; worker-src blob:; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-KzgAQDHEQYkRi8obq6oQ4tvPMwLWjgNHsrpWi2gQtGM='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; worker-src blob:; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>The stacking game (early) · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -310,6 +310,11 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
   #sheet.tabbed { height: calc(90vh / var(--ui-scale)) }
   dialog, #sheet.wide, #sheet.end { width: calc(100vw / var(--ui-scale)); max-width: none; margin: auto 0 0; max-height: calc(90vh / var(--ui-scale)); padding: 18px 16px; border-radius: var(--r-3) var(--r-3) 0 0; border-width: 1px 0 0 } dialog > .go { margin: 0 -16px -18px; padding: 10px 16px max(14px, env(safe-area-inset-bottom)) !important } dialog .go { bottom: -18px }
   .end .ends { grid-template-columns: 1fr 1fr } .end .ends .main { grid-column: 1 / -1; grid-row: 1 } .hero canvas { width: 60px; height: 60px }
+  /* layout hook (p12-layout): held upright, the sheet has a set height (--act, from table.js) and floats over the foot of the screen; the
+     board keeps the rest. The zoom row and the toasts share the band just above the sheet, side by side, and follow a folded sheet down */
+  body:not(.side) #act { max-height: calc(var(--act, 40vh) / var(--ui-scale)) }
+  body:not(.side) #toast, body:not(.side) #toast.on { left: 8px; transform: none; max-width: calc(100vw - 3 * var(--tap) - 44px); text-align: left }
+  body.shut:not(.side) :is(.zoom, #toast) { bottom: calc(var(--tray, 120px) + 8px) }
   #coach { padding: 10px 12px 12px } #coach p + p { font-size: 16px; line-height: 1.4; margin-bottom: var(--sp-2) } #coach .main, #coach .quiet { min-height: var(--tap) }
   #act #coach { top: -12px; margin: 0 0 10px }
 }
@@ -3457,13 +3462,19 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       }
       tops[i + 1] = c.top;
     });
-    if (swing && zoom !== 1) { zoom = 1; }
+    if (swing && zoom !== 1 && !swing.keep) { zoom = 1; }
     if (swing) {
       const k = Math.min(1, (t - swing.t) / 420), e = ease(k);
       cam.set({ tilt: swing.a.tilt + (L.tilt - swing.a.tilt) * e, yaw: swing.a.yaw + (L.yaw - swing.a.yaw) * e, q: swing.a.q + (near() - swing.a.q) * e });
       cam.fit(ends, 14);
       base = cam.s;
-      if (k >= 1) { swing = null; layout(asked); } else moving = true; // shell hook (p8-shell): a new look settles at the home zoom, not the whole board
+      if (swing.keep) { cam.s = base * swing.keep.zoom; cam.cx = swing.keep.cx; cam.cy = swing.keep.cy; } // layout hook (p12-layout): a change of look keeps the view
+      if (k >= 1) { const keep = swing.keep; swing = null; layout(asked); restore(keep); } else moving = true; // shell hook (p8-shell): a new look settles at the home zoom, not the whole board
+    }
+    if (glide) { // layout hook (p12-layout): the camera on its way to a place, gently
+      const k = Math.max(0, Math.min(1, (t - glide.t) / 650)), e = ease(k);
+      cam.cx = glide.from[0] + (glide.to[0] - glide.from[0]) * e; cam.cy = glide.from[1] + (glide.to[1] - glide.from[1]) * e;
+      if (k >= 1) glide = null; else moving = true;
     }
     const beat = calm() || !lit ? 0 : Math.max(0, 1.5 - (t - lit) / 1000); // a preview pulses briefly, then the board is still
     if (beat > 0) moving = true;
@@ -3677,31 +3688,83 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   }
 
   const near = () => L.near / Math.max(cam.H, cam.W * 0.8);
-  // shell hook (site/table.js, p8-shell): `rest` is the zoom the board opens at and goes home to (the home button, the 0 key, a resize).
-  // free.fill asks for a wide map to open as tall as the free part of the screen, but no wider than a quarter more than the whole stage;
-  // free.at is a cell to centre at that zoom (the player's own land).
-  let rest = 1, asked = {};
+  // layout hook (p12-layout): one camera policy for every table game (site/table.js gives the free part of the screen).
+  // 1. Home (the opening view, the home button, the 0 key, a new size): the whole board, fitted to the free part of the screen.
+  //    Where a place would then be under `least` pixels across (a phone), the view comes in until it is not, centred on `at`, your land.
+  // 2. Your turn starts: come(at) glides to your land when it is out of the middle of the view; never at the whole-board view and
+  //    never within HAND ms of your own pan, drag, wheel, pinch or zoom button. The motion layer follows a rival only when zoomed (ruling 154).
+  // 3. A change of look keeps the view; a change of the panels' size keeps a zoomed view's middle; anything else stays where you put it.
+  const HAND = 6000;
+  let rest = 1, asked = {}, hand = -1e9, glide = null, apart = 0;
+  /** How far apart neighbouring places are, in the board's own units: a hex across, or the usual gap between provinces' middles. */
+  function spacing() {
+    if (apart) return apart;
+    if (!picture) return (apart = Math.sqrt(3) * m.R);
+    const pts = m.mid.filter((p) => p && Number.isFinite(p[0])), step = Math.max(1, Math.floor(pts.length / 120)), gaps = [];
+    for (let k = 0; k < pts.length; k += step) { let d = Infinity; for (const q of pts) { const e = Math.hypot(q[0] - pts[k][0], q[1] - pts[k][1]); if (e > 1e-6 && e < d) d = e; } if (d < Infinity) gaps.push(d); }
+    gaps.sort((a, b) => a - b);
+    return (apart = gaps[gaps.length >> 1] || m.R * 2);
+  }
   function layout(free = {}) {
-    const { fill = false, at = -1, ...room } = (asked = free);
+    const { least = 0, tall = false, at = -1, phone, ...room } = (asked = free); // phone: the shell's word to a game's own board, not the camera's
     const kept = zoom > 1 && zoom !== rest ? [cam.cx, cam.cy] : null; // hook (Inch lane, p8): a view zoomed away from its opening keeps its middle when the panels change size
     cam.set({ W: host.clientWidth || 1, H: host.clientHeight || 1, left: 0, right: 0, top: 0, bottom: 0, ...room });
     cam.set({ tilt: L.tilt, yaw: L.yaw, q: near() });
     cam.fit(ends, 14);
     base = cam.s; staged = false;
-    const tall = (cam.H - cam.top - cam.bottom) / (m.h * cam.s), was = rest; // a wide map on a narrow screen starts closer in
-    rest = fill ? Math.max(1, Math.min(3, tall / Math.max(0.3, cam.ct), (1.25 * cam.W) / (m.w * cam.s))) : picture && cam.W < 821 && tall > 1.6 ? Math.min(2.6, tall) : 1;
+    const was = rest, fx = cam.cx, fy = cam.cy, clamp = (z) => Math.max(1, Math.min(7, z));
+    rest = 1;
+    if (least > 0) { // measured on the screen as the tilt and the perspective draw it, at the far edge of the view, and tried again until it holds
+      let z = clamp(least / (spacing() * cam.s));
+      for (let k = 0; k < 3; k++) { cam.s = base * z; if (at >= 0 && at < m.mid.length) [cam.cx, cam.cy] = aim(at); const px = across(); if (!(px > 0)) break; z = clamp(z * least / px); }
+      rest = z;
+    } else if (tall) { const b = extent(); rest = clamp(Math.min(3, (cam.H - cam.top - cam.bottom) / Math.max(1, b.bottom - b.top))); } // a map of fine cells: as tall as the free part
+    cam.s = base; cam.cx = fx; cam.cy = fy;
     zoomed(zoom === 1 || zoom === was ? rest : zoom);
     if (zoom === rest) centre(at); else if (kept) { cam.cx = kept[0]; cam.cy = kept[1]; }
     under.style.width = over.style.width = cam.W + "px";
     under.style.height = over.style.height = cam.H + "px";
     redraw();
   }
+  /** How many pixels apart two neighbouring places are drawn at the far (top) edge of the free part, where they are smallest. */
+  function across() {
+    cam.unprojectTo(cam.left + (cam.W - cam.left - cam.right) / 2, cam.top, 0);
+    const x = cam.ox, y = cam.oy, h = spacing() / 2;
+    cam.projectTo(x - h, y, 0); const ax = cam.px, ay = cam.py; cam.projectTo(x + h, y, 0);
+    return Math.hypot(cam.px - ax, cam.py - ay);
+  }
+  /** Where the whole board lies on the screen, at the camera as it is. */
+  function extent() {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of ends) { cam.projectTo(x, y, 0); x0 = Math.min(x0, cam.px); x1 = Math.max(x1, cam.px); y0 = Math.min(y0, cam.py); y1 = Math.max(y1, cam.py); }
+    return { left: x0, right: x1, top: y0, bottom: y1 };
+  }
+  /** Where the camera's middle goes to put a cell in the middle of the free part of the screen, as far as the map's edges allow. */
+  function aim(i) {
+    const hw = (cam.W - cam.left - cam.right) / 2 / cam.s, hh = (cam.H - cam.top - cam.bottom) / 2 / cam.s / Math.max(0.3, cam.ct), keep = (v, h, n) => (n > 2 * h ? Math.max(h, Math.min(n - h, v)) : n / 2);
+    return [keep(m.mid[i][0], hw, m.w), keep(m.mid[i][1], hh, m.h)];
+  }
   /** shell hook (p8-shell): put a cell in the middle of the free part of the screen, as far as the map's edges allow, when zoomed in. */
   function centre(i) {
     if (!(i >= 0 && i < m.mid.length) || zoom <= 1) return;
-    const hw = (cam.W - cam.left - cam.right) / 2 / cam.s, hh = (cam.H - cam.top - cam.bottom) / 2 / cam.s / Math.max(0.3, cam.ct), keep = (v, h, n) => (n > 2 * h ? Math.max(h, Math.min(n - h, v)) : n / 2);
-    cam.cx = keep(m.mid[i][0], hw, m.w); cam.cy = keep(m.mid[i][1], hh, m.h); redraw();
+    glide = null;
+    [cam.cx, cam.cy] = aim(i); redraw();
   }
+  /** layout hook (p12-layout): rule 2, the camera comes back to a cell (your land) at the start of your turn. True if it moves. */
+  function come(i) {
+    if (!(i >= 0 && i < m.mid.length) || zoom <= 1 || swing || performance.now() - hand < HAND) return false;
+    cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit());
+    const w = cam.W - cam.left - cam.right, h = cam.H - cam.top - cam.bottom;
+    if (Math.abs(cam.px - cam.mx) < w * 0.3 && Math.abs(cam.py - cam.my) < h * 0.3) return false; // in the comfortable middle already
+    const to = aim(i);
+    if (calm()) { glide = null; [cam.cx, cam.cy] = to; redraw(); return true; } // reduced motion: there at once, without travel
+    glide = { t: performance.now(), from: [cam.cx, cam.cy], to }; redraw();
+    return true;
+  }
+  /** The player's own hand on the map: it stops a glide, and holds off the next for a while. */
+  const touched = () => { hand = performance.now(); glide = null; };
+  /** A change of look puts back the zoom and middle it had (rule 3). */
+  function restore(keep) { if (!keep) return; zoomed(keep.zoom); cam.cx = keep.cx; cam.cy = keep.cy; redraw(); }
   // Zoom with the wheel or two fingers, then drag. At the widest the whole board is in view.
   let base = 1, zoom = 1, dragged = false;
   const fingers = new Map();
@@ -3718,7 +3781,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   function slide(dx, dy) { cam.cx = Math.max(0, Math.min(m.w, cam.cx + dx)); cam.cy = Math.max(0, Math.min(m.h, cam.cy + dy)); redraw(); }
   const spot = (e) => { const r = under.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   under.style.touchAction = "none";
-  under.addEventListener("wheel", (e) => { e.preventDefault(); zoomed(zoom * Math.exp(-e.deltaY * 0.0016), ...spot(e)); }, { passive: false });
+  under.addEventListener("wheel", (e) => { e.preventDefault(); touched(); zoomed(zoom * Math.exp(-e.deltaY * 0.0016), ...spot(e)); }, { passive: false });
   under.addEventListener("pointerdown", (e) => { if (!fingers.size) dragged = false; fingers.set(e.pointerId, spot(e)); });
   addEventListener("pointerup", (e) => fingers.delete(e.pointerId));
   addEventListener("pointercancel", (e) => fingers.delete(e.pointerId));
@@ -3727,12 +3790,12 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     if (!was) return;
     if (fingers.size === 2) {
       const other = [...fingers].find(([k]) => k !== e.pointerId)[1], d = (p) => Math.hypot(p[0] - other[0], p[1] - other[1]) || 1;
-      dragged = true;
+      dragged = true; touched();
       zoomed((zoom * d(now)) / d(was), (now[0] + other[0]) / 2, (now[1] + other[1]) / 2);
     } else {
       if (!dragged && Math.hypot(now[0] - was[0], now[1] - was[1]) < 6) return; // a tap may wobble
       if (zoom === 1) return;
-      dragged = true;
+      dragged = true; touched();
       cam.unprojectTo(...was, 0);
       const x = cam.ox, y = cam.oy;
       cam.unprojectTo(...now, 0);
@@ -3754,9 +3817,10 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   return {
     layout, get look() { return lookName; },
     /** Zoom and move without a wheel, a pinch or a drag: by a factor about the middle (0 shows the whole board), by a share of the board. */
-    zoom(f) { zoomed(f ? zoom * f : rest); if (!f) centre(asked.at ?? -1); }, pan(dx, dy) { if (zoom > 1) slide((dx * m.w) / zoom, (dy * m.h) / zoom); }, on(what, f) { (listeners[what] ||= []).push(f); },
-    centre,
-    setLook(name) { if (!LOOKS[name]) return; const a = { tilt: cam.tilt, yaw: cam.yaw, q: cam.q }; lookName = name; L = LOOKS[name]; if (calm()) { layout(asked); for (const c of [under, over]) c.animate?.([{ opacity: 0.25 }, { opacity: 1 }], { duration: 180, easing: "ease-out" }); return; } swing = { t: performance.now(), a }; redraw(); },
+    zoom(f) { touched(); zoomed(f ? zoom * f : rest); if (!f) centre(asked.at ?? -1); }, pan(dx, dy) { touched(); if (zoom > 1) slide((dx * m.w) / zoom, (dy * m.h) / zoom); }, on(what, f) { (listeners[what] ||= []).push(f); },
+    centre, come, // layout hook (p12-layout): rule 2 of the camera policy; bounds, where the whole board lies on the screen now
+    get bounds() { return extent(); },
+    setLook(name) { if (!LOOKS[name]) return; const a = { tilt: cam.tilt, yaw: cam.yaw, q: cam.q }, keep = zoom > 1 ? { zoom, cx: cam.cx, cy: cam.cy } : null; lookName = name; L = LOOKS[name]; glide = null; if (calm()) { layout(asked); restore(keep); for (const c of [under, over]) c.animate?.([{ opacity: 0.25 }, { opacity: 1 }], { duration: 180, easing: "ease-out" }); return; } swing = { t: performance.now(), a, keep }; redraw(); }, // layout hook (p12-layout): keep, the view it had
     /** Seat patterns over owned land, so colour is never the only sign of whose it is. */
     patterns(on) { pat = !!on; redraw(); },
     /** "system" (the default) follows the system's reduced-motion wish, "reduced" and "full" override it. */
@@ -3836,9 +3900,9 @@ $m[27] = (($x) => {
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-const VERSION = "0.10.9";
+const VERSION = "0.10.10";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "d0027ca9";
+const BUILD = "57f9259d";
 // guide hook (ruling 153.8): each AI service's own pages, for links in the Choose an AI guide (site/aiguide.js). A player
 // follows them in a new tab; the page never fetches them, and its rule does not reach them. Kept above the list of services
 // the page may call, because the gate reads every address after that list's name as one the page calls.
@@ -4744,13 +4808,13 @@ const stageLeft = () => Math.max(0, ends - performance.now());
  * The camera drifts to a rival's move, gently, if that place is out of the comfortable middle of the view; never while the
  * player is touching the map or has moved it in the last few seconds, and never at the whole-board zoom.
  */
-function follow(b, at) {
+function follow(b, at, T) {
   if (at < 0 || performance.now() - touched < 6000 || !b.zoomed) return;
   const v = b.middle, p = b.place(at);
   if (Math.abs(p.x - v.x) < v.w * 0.3 && Math.abs(p.y - v.y) < v.h * 0.3) return;
   const mine = glide = { at, t: performance.now() };
   layer.add({ ms: 1100, draw(c, k, now) {
-    if (glide !== mine) return;
+    if (glide !== mine || T?.human?.()) { if (glide === mine) glide = null; return; } // p12: once a person's turn begins, the board's own come-home glide has the camera
     const q = b.place(at), dx = v.x - q.x, dy = v.y - q.y, dt = Math.min(50, now - mine.t);
     mine.t = now;
     if (Math.hypot(dx, dy) < 2) { glide = null; return; }
@@ -4763,10 +4827,11 @@ function follow(b, at) {
  * Dice thrown on the table: from one place, landing at points beside another. sets: [{ faces, rgb, lose }]; land(set, i) -> point.
  * size: a die's side in pixels; total: the number held under them. Returns the time they take to settle.
  */
-function throwDice(T, from, sets, land, { person = T.human?.(), hold = -1, size = 22, total = null, roll = 640, linger = 1100 } = {}) {
+function throwDice(T, from, sets, land, { person = T.human?.(), hold = -1, size = 22, total = null, roll = 640, linger = 1100, tag } = {}) {
   if (!moving(T, person)) return 0;
   const b = T.board.moving, f = pace(person), r = Math.round(roll * f);
-  ready().add(dice(sets.map((x, j) => ({ ...x, from: () => from(), land: x.faces.map((_, i) => () => land(j, i)) })), { roll: r, linger: Math.round(linger * f), size, total }));
+  if (tag) ready().drop(tag); // a new throw takes the last one's place
+  ready().add(Object.assign(dice(sets.map((x, j) => ({ ...x, from: () => from(), land: x.faces.map((_, i) => () => land(j, i)) })), { roll: r, linger: Math.round(linger * f), size, total }), { tag }));
   // the dice that lie on the table as models wait until the thrown ones are gone
   if (b.solid && hold >= 0) queueMicrotask(() => b.hold([hold], r + linger * f, ["model"]));
   return r;
@@ -4864,7 +4929,7 @@ const PLANS = {
       } else if (e.kind === "place" || e.kind === "claim") { layer.add(pulse(where, e.at, { rgb: rgbOf(e.seat) })); } // placing is followed by the camera only when it comes to a fight
       else if (e.kind === "fort") { layer.add(build(where, e.at, {})); focus = e.at; }
     }
-    if (!person) follow(b, focus);
+    if (!person) follow(b, focus, T);
   },
   fable(T, events, move, b, where, f, person) {
     const p = T.match.position, to = move?.to ?? -1;
@@ -4879,7 +4944,7 @@ const PLANS = {
       layer.add(took?.was >= 0 ? capture(where, to, { rgb: rgbOf(took.seat), icon: ICONS[took.seat] ?? -1, ms: 560 }) : build(where, to, { rgb: rgbOf(p.owner[to]), small: true, ms: 520 }));
     } else if (move?.do === "fort" || move?.do === "farm") layer.add(build(where, to, {}));
     for (const e of events) if (e.kind === "starve") for (const c of e.cells) layer.add(pulse(where, c, { rgb: [70, 62, 56], out: true, ms: 520 }));
-    if (!person) follow(b, to);
+    if (!person) follow(b, to, T);
   },
   glass(T, events, move, b, where, f, person, told) {
     const p = T.match.position, hint = T.motionHints || {}, tile = hint.tile || GOODS, names = hint.goods || [];
@@ -4890,7 +4955,7 @@ const PLANS = {
         // two big dice come in from the near edge of the board, settle in its middle and hold the number thrown; a raid darkens the edges
         const seen = room(b), v = () => seen, S = clamp(Math.min(seen.w, seen.h) * 0.11, 48, 84);
         wait = throwDice(T, () => ({ x: v().x - v().w * 0.2, y: v().y + v().h * 0.42, r: 40 }), [{ faces: e.dice, rgb: rgbOf(e.seat) }], (_, i) => ({ x: v().x + (i ? 0.62 : -0.62) * S, y: v().y + (i ? 0.08 : -0.06) * S, r: 50 }),
-          { person, size: S, roll: 700, linger: 1100, total: { text: String(e.n), sub: e.raid ? "raid" : "", red: e.raid } });
+          { person, size: S, roll: 700, linger: 1100, tag: "roll", total: { text: String(e.n), sub: e.raid ? "raid" : "", red: e.raid } });
         if (e.raid) { layer.add(raid({ ms: Math.round(1300 * f) }), wait); told.at.raid = wait / 1000; }
         mark(wait + 900 * f);
       } else if (e.kind === "harvest") {
@@ -4932,7 +4997,7 @@ const PLANS = {
       } else if (["depot", "town", "harbour"].includes(e.kind)) { layer.add(build(where, e.at, { rgb: rgbOf(e.seat) })); focus = e.at; }
       else if (e.kind === "route") { layer.add(pulse(where, e.at, { rgb: rgbOf(e.seat), out: true, ms: 420 })); focus = e.at; }
     }
-    if (!person) follow(b, focus);
+    if (!person) follow(b, focus, T);
   },
   inch(T, events) {
     if (events.some((e) => e.kind === "age")) layer.add(sweep());
@@ -5799,7 +5864,6 @@ function createTable(G) {
   document.body.append(banner, say);
   $("title").querySelector(".links").append(setButton);
   const KEY = `capo-${G.key}-2`, LOOK = `capo-${G.key}-look`, many = G.seats || [2, 3], setup = { seats: G.normal || 2, style: G.style || "classic" /* stacking hook: a game with one rule set names it */, rounds: G.lengths[1]?.[0], who: ["you", "normal", "normal", "normal", "normal", "normal"], look: LOOK0.map((x) => [...x]), extra: Object.fromEntries([...(G.choices || []), ...(G.switches || [])].map((c) => [c.key, c.normal])), on: {} };
-  let fitted = 0; // where the phone's tray began when the board was last fitted
   let resting = false; // the title's board was held still
   let sureEnd = 0, log = [], land = [], board = null, run = 0, mark = 0, drawn = -1, fell = [], heralded = "", tab = "game";
   const T = {
@@ -5830,6 +5894,10 @@ function createTable(G) {
    * Narrow, a phone held upright: the seats in a strip on top, the move panel a tray below.
    */
   const side = () => innerWidth > innerHeight * 1.15 && (innerHeight < 600 || innerWidth <= 1100);
+  // layout hook (p12-layout): a phone, either way up, asks the board for places it can read at the opening view. Held upright, the
+  // move sheet has a set height and floats over the foot of the screen: the board keeps at least BOARD of the height above it, with a
+  // band for the zoom row and the toasts, and is never moved or resized by what the sheet holds, by a selection or by folding it.
+  const phone = () => Math.min(innerWidth, innerHeight) <= 500, BOARD = 0.56, BAND = 54;
   let room = "", homed = false; // homed: a wide map has been centred on your own land
   const place = () => {
     document.body.classList.toggle("side", side());
@@ -5840,16 +5908,22 @@ function createTable(G) {
     if (T.demo) free = wide ? { left: Math.min(innerWidth / 2, $("title").querySelector(".card").getBoundingClientRect().right), right: 0, top: 20, bottom: 20 } : { left: 0, right: 0, top: 10, bottom: innerHeight * 0.5 };
     // the move panel (with the lesson and the news in it) keeps a column of its own, so nothing floats on the board
     else if (side()) free = { left: 0, right: innerWidth - r("act").left + 4, top: r("seats").bottom + 2, bottom: 2 };
-    // a wide map opens as tall as the screen allows, centred on your own land; the panels float over its far edges
-    else if (wide && atlas) free = { left: 372 * z, right: dock.hidden || list.hidden ? 16 : 360 * z, top: r("seats").bottom + 2, bottom: 4 };
+    // layout hook (p12-layout): a wide map opens whole, right of the move panel; the record of what happened floats above it (below)
+    else if (wide && atlas) free = { left: 372 * z, right: 16, top: r("seats").bottom + 2, bottom: 4 };
     else if (wide) free = { left: 232 * z, right: 372 * z, top: 12 + 74 * z, bottom: 6 };
-    else { fitted = r("act").top; document.body.style.setProperty("--act", `${innerHeight - fitted}px`); free = { left: 0, right: 0, top: r("seats").bottom + 2, bottom: innerHeight - fitted + 34 }; }
-    if (atlas && !T.demo) Object.assign(free, { fill: wide || side(), at: focus() }); // a phone held upright keeps the board's own closer opening
+    else { const top = r("seats").bottom + 2, sheet = Math.round(Math.max(innerHeight * 0.26, innerHeight - top - innerHeight * BOARD)); document.body.style.setProperty("--act", `${sheet}px`); free = { left: 0, right: 0, top, bottom: sheet + BAND }; }
+    if (!T.demo) Object.assign(free, { at: focus(), phone: phone() }); // the opening view centres on your land when it is zoomed in
     // the same room as last time is left alone, so a summary opening or a tray settling does not move a board you have moved
-    const key = JSON.stringify([innerWidth, innerHeight, free.left, free.right, free.top, free.bottom, !!free.fill, T.demo]);
+    const key = JSON.stringify([innerWidth, innerHeight, free.left, free.right, free.top, free.bottom, !!free.phone, T.demo, wide && atlas && !dock.hidden && !list.hidden]);
     if (key === room) return;
     room = key;
     board.layout(free);
+    // the record, open beside a wide map, keeps to the table above the map; where there is too little room there it takes a column
+    if (wide && atlas && !T.demo && !dock.hidden && !list.hidden) {
+      const b = board.bounds, above = b ? b.top - dock.getBoundingClientRect().top - 10 : 0;
+      if (above >= 150) dock.style.maxHeight = `${Math.round(above / z)}px`;
+      else { dock.style.maxHeight = ""; board.layout({ ...free, right: 360 * z }); }
+    } else dock.style.maxHeight = "";
     homed = free.at >= 0;
   };
   function makeBoard() {
@@ -5939,6 +6013,7 @@ function createTable(G) {
     const p = T.match.position, s = T.match.turn, k = T.demo || T.catching || !T.human() || realtime(p) ? "" : turnKey(T.match.seed, p.round, s, T.solo());
     if (!k || k === heralded) return;
     heralded = k;
+    board?.come?.(focus()); // layout hook (p12-layout): the camera comes back to your land, gently, unless you moved the map just now
     say.textContent = `${T.solo() ? "Your turn" : `${NAMES[s]}, your turn`}. Round ${p.round}.`;
     sfx("turn");
     if (settings.speed !== "normal") return;
@@ -6535,8 +6610,8 @@ function createTable(G) {
   logs.onclick = showLog;
   list.hidden = read("capo-log") === "shut";
   fold.onclick = () => { list.hidden = !list.hidden; store("capo-log", list.hidden ? "shut" : null); drawn = -1; place(); };
-  // on a phone the board is fitted again when the tray grows or shrinks by more than a little, so the tray never sits on it and small changes do not make it jump
-  new ResizeObserver(() => { document.body.style.setProperty("--ah", `${$("act").offsetHeight}px`); if (innerWidth <= 820 && !$("act").hidden && Math.abs($("act").getBoundingClientRect().top - fitted) > 16) place(); }).observe($("act"));
+  // layout hook (p12-layout): on a phone held upright the sheet keeps a set height (place) and the board does not follow it
+  new ResizeObserver(() => { document.body.style.setProperty("--ah", `${$("act").offsetHeight}px`); document.body.style.setProperty("--tray", `${Math.round($("act").getBoundingClientRect().height)}px`); }).observe($("act"));
   // shell hook p10: the bar's foot, so the seats under it follow it down when the round takes two lines at larger text (table.css --bar-b)
   new ResizeObserver(() => { const r = $("bar").getBoundingClientRect(); if (!r.height) return; document.body.style.setProperty("--bar-b", `${Math.round(r.bottom)}px`); place(); }).observe($("bar"));
   $("how").onclick = rules;
