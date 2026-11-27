@@ -132,7 +132,7 @@ export function clauseMove(g, m, geo, { isMe }) {
     if (a.no) return { ok: false, why: `would offer you a pact of non-aggression, but cannot (${a.no})` };
     if (!a.ok) return { ok: false, why: `would offer you a pact of non-aggression, but does not (${a.why})` };
     if (!g.offers.some((o) => o.from === c && o.kind === "pact")) g.offers.push({ from: c, kind: "pact", date: g.date });
-    return { ok: false, why: "offers you a pact of non-aggression; accept it from your actions" };
+    return { ok: false, offer: true, why: "offers you a pact of non-aggression; accept it from your actions" };
   }
   // the player's own order by card for the same clause is this move: it is not asked twice
   if (isMe) g.plans = (g.plans || []).filter((p) => !(p.kind === "pact" && p.sub === kind && p.target === t));

@@ -80,7 +80,7 @@ export function peaceAnswer(g, from, to, date = g.date) {
 export function truceUntil(g, a, b) {
   const at = g.truce?.[pair(a, b)];
   if (!at || monthsApart(at, g.date) >= WAR.truce) return "";
-  return `${Number(at.slice(0, 4)) + WAR.truce / 12}${at.slice(4, 7)}`;
+  return `${String(Number(at.slice(0, 4)) + WAR.truce / 12).padStart(4, "0")}${at.slice(4, 7)}`;
 }
 
 /** End a war on a date: each keeps the land it holds, a truce begins, and a peace offer between them is spent. */

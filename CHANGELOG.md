@@ -2,6 +2,35 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.10.8 (2026-11-27): the third cold review's bugs, fixed
+
+### Fixes from the third cold review (30 November)
+
+**Players**
+- **Capo: crises and missions before the year 1000.** In a world that starts before the year 1000 (The Vacant Throne, 912), a crisis said "to be answered by Invalid Date" and never came due, so "A crisis is already open" blocked every later demand. Its day now keeps a four-digit year ("0912-06-01"), prints, and comes: the demand is answered on its day. Mission dates (a watch known, a sabotage) and the end of a truce in those worlds were wrong the same way and are mended with it.
+- **Grain and Glass: take back stops at a drawn plan.** A plan, once drawn and seen, is no longer taken back (it could be read and then drawn again: a peek at the deck). Take back says the move stands, as it does for a roll.
+- **The Island Fable: the voyage asks first.** Starting a voyage island with a game in progress asks "Replace your game?" (Continue that game, or Start the new game), as Play does. Once a game is over, Next island and Sail again just sail.
+- **Every sheet opens at its top.** How to play, the end of a game and every other sheet opened scrolled part-way down (about 318 px on How to play), to the button at its foot.
+- **End of a game: the button row is solid.** The row of All games, Change setup and Rematch at the foot of the end sheet no longer lets the chart, the figures or Inch's "Try Normal rivals" show through it.
+- **An Inch of Ink: no empty button under Start in.** The truce button, empty before anyone has land, no longer shows on the start panel.
+- **An Inch of Ink: your ink and your share are kept.** The ink you chose before your start and the share on the slider are kept in this browser, so a reload and Continue keep them; before, the ink was drawn afresh and the slider went back to 40%.
+- **Seat names in the log follow the seats.** Changing the board style or the seat colours (Modern command names the seats Sky and Orange) now writes the log again in the new names, so the cards and the log agree.
+- **Grain and Glass on a phone: every answer to an offer.** With the move panel folded, a bot's offer showed only Take it; now Turn it down, Leave it open and Counter-offer show too.
+- **Grain and Glass: the Rolls card and the goods key.** At 1440 by 900 the Rolls card covered the left end of the goods key; the key now starts clear of it.
+- **Grain and Glass: the lesson says how it differs.** It says that its second depot gives a richer start than a Traditional game (one good for every hex around it, not one of each good beside it) and that it plays to 8 points where a Traditional game plays to 10.
+- **The Island Fable: Concede disarms.** Pressed once, Concede waits four seconds for the second press; any other press, key or wheel puts it back.
+- **Capo: an offer made to you is news, not a failure.** "Offers you a trade treaty" and the like are marked with a dot, not the red cross of a refused move. The wall on a scene with no AI connected now reads "Connect an AI to play this scene". The map view and the turn length are kept in this browser across a reload.
+- **The front page.** News runs to v0.10.6 (three cards: real land and cities, Ink with a friend, play live and the shelf). A `favicon.ico`, the compass mark drawn again at 16, 32 and 48 px (our own work), for browsers and tools that ask for one.
+
+**Contributors**
+- `src/story/crisis.js` `addMonths` pads the year to four digits (whole-number arithmetic, never a Date); `src/story/war.js` `truceUntil` the same. Dates in a game are always four-digit years (no years BC: the save checks ask for `\d{4}`). `test/story.test.mjs`: a crisis in 912 opened, kept by a save, answered on its day, and a truce in 912.
+- `src/core/match.js`: a game may say `draws(move)`, a move that shows something hidden without dice; `rolled` is then true, so take back (and a link's floor) stops there. `src/games/glass/rules.js`: `draws` is true for `{ do: "plan" }`. `test/shell.test.mjs`: a drawn plan is "chance".
+- `site/table.js`: `T.replacing(go, what)` for a game's own ladder (used by `site/fable.js` `sail`); `sheet()` scrolls a new sheet to its top, now and after a frame (callers focus a button below); `relog()` writes the log again on a change of seat names. `site/table.css`: `.end .ends` has a solid background.
+- `site/inchlive.js`: `capo-inch-choice` keeps `{ ink, pct }`; the truce button is hidden in the start phase. `site/glass.js` and `site/glass.html`: `#wheres.answers` stays shown in a folded phone panel; the goods key gets a left margin past the Rolls card when they meet. `site/fable.js`: `disarm`.
+- `src/story/worldrules.js` and `src/story/pacts.js`: a result that is an offer to the player says `offer: true`, kept on its receipt line; `site/game.js` marks such a line as news. `site/game.js`: `capo-story-prefs` keeps `{ view, jump }`.
+- `site/icons/tent/favicon.ico` (new, own work, in CREDITS.csv), linked from `site/index.html` and the root `index.html`; `tools/check.mjs` and `tools/serve.mjs` know `.ico`.
+- No rules version changes: Glass's moves and their outcomes are as they were (take back is the page's, not the rules'); Capo's crisis and mission rules are unchanged, only the date they were given, so the games that hit this were the broken ones. Saves holding a broken date (a crisis due "912-06-01") drop it on load, as before.
+
 ## v0.10.7 (2026-11-27): the stacking game grows a quick set, stronger bots and a lesson (early, unlisted)
 
 ### The stacking game: the quick Capo set, bots that attack, a lesson, puzzles and a lit table (still early and unlisted)
