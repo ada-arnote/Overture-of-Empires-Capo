@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-mnsvx0S84eAiqwG2uyJ8anmDLckWDWxWuASKEkETkEo='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-wNYUx3Wak8Cwt6/iAtwkB8/k3nnvm7bnakkNikBhX14='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>The world map · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -248,7 +248,7 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
 .ranks th, .ranks td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--edge-soft) } .ranks tr:first-child th { color: var(--text-3) }
 .ranks th[scope=row] { font: 400 19px var(--display) } .ranks canvas { width: 24px; height: 24px; vertical-align: -6px; margin-right: 8px } .ranks .won { color: var(--tone) } .ranks small { color: var(--text-3); font: var(--fs-1) var(--sans) }
 #chart { display: block; width: 100%; height: 120px; margin-bottom: 14px; border-radius: var(--r-1); background: var(--raise) } .end #chart { height: auto; aspect-ratio: 880 / 280 }
-.end .ends { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: var(--sp-2); padding: 10px 0; background: inherit } .end .minor { position: static; justify-content: center; gap: 28px }
+.end .ends { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: var(--sp-2); padding: 10px 0; background: var(--slate); box-shadow: 0 -10px 12px -6px var(--slate); z-index: 1 } /* the sticky row is solid: nothing in the sheet shows through it */ .end .minor { position: static; justify-content: center; gap: 28px }
 
 /* seat patterns on the score bar, for telling seats apart without colour */
 .patterns #land { height: 14px }
@@ -2069,7 +2069,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     return (apart = gaps[gaps.length >> 1] || m.R * 2);
   }
   function layout(free = {}) {
-    const { least = 0, tall = false, at = -1, ...room } = (asked = free);
+    const { least = 0, tall = false, at = -1, phone, ...room } = (asked = free); // phone: the shell's word to a game's own board, not the camera's
     const kept = zoom > 1 && zoom !== rest ? [cam.cx, cam.cy] : null; // hook (Inch lane, p8): a view zoomed away from its opening keeps its middle when the panels change size
     cam.set({ W: host.clientWidth || 1, H: host.clientHeight || 1, left: 0, right: 0, top: 0, bottom: 0, ...room });
     cam.set({ tilt: L.tilt, yaw: L.yaw, q: near() });
@@ -2236,6 +2236,8 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     get solid() { return solid(); },
     /** A style's pack of sculpted models, once fetched: they take the place of the code-made ones of the same names. */
     pack(buffer) { if (meshes) { meshes.add(unpack(buffer)); staged = false; redraw(); } },
+    /** stacking hook: models of a game's own, made in code (src/map/stones.js); false when this board draws no models. */
+    add(more) { if (!meshes) return false; meshes.add(more); staged = false; redraw(); return true; },
     get style() { return look3; }, get styleName() { return styleName; },
     /** Another style: the same board and pieces, in other materials. */
     setStyle(name) { if (!STYLES[name]) return; const kit = models(look3.kit); styleName = name; look3 = wear(name, light); if (meshes && models(look3.kit) !== kit) meshes.add(models(look3.kit)); staged = false; dirty = true; redraw(); },
@@ -2781,13 +2783,15 @@ function worldMap(canvas, world, o) {
       f.box = [Math.min(f.box[0], p.box[0]), Math.min(f.box[1], p.box[1]), Math.max(f.box[2], p.box[2]), Math.max(f.box[3], p.box[3])];
     }
     const inner = new Path2D(), outer = new Path2D(), coast = new Path2D(), mine = new Path2D(), front = new Path2D(), me = o.mine?.(), wars = new Set((o.wars?.() || []).flatMap(([x, y]) => [`${x}|${y}`, `${y}|${x}`]));
+    const ally = new Path2D(), friends = new Set(o.allies?.() || []); // keyless hook: the outer edge of the countries pledged to the player
     world.sides.forEach((ids, k) => {
       if (ids.length === 2 && wars.has(`${owners.get(ids[0])}|${owners.get(ids[1])}`)) front.addPath(world.lines[k]); // a front: where two countries at war meet
       (ids.length < 2 ? coast : owners.get(ids[0]) === owners.get(ids[1]) ? inner : outer).addPath(world.lines[k]);
       // the edge of the player's land, coast included, outlined in silver
       if (me && ids.some((id) => owners.get(id) === me) && !(ids.length === 2 && owners.get(ids[0]) === owners.get(ids[1]))) mine.addPath(world.lines[k]);
+      if (friends.size && ids.some((id) => friends.has(owners.get(id))) && !(ids.length === 2 && owners.get(ids[0]) === owners.get(ids[1]))) ally.addPath(world.lines[k]); // keyless hook
     });
-    layers = { owners, fills, inner, outer, coast, mine, front };
+    layers = { owners, fills, inner, outer, coast, mine, front, ally };
     if (lit) { // the lit map's colours: one texel a province
       const bytes = new Uint8Array(world.provinces.size * 4);
       for (const p of world.provinces.values()) { const c = rgbOf(o.colour?.(owners.get(p.id)) || ownerColour(owners.get(p.id))); bytes.set([c[0], c[1], c[2], 255], p.n * 4); }
@@ -2849,7 +2853,7 @@ function worldMap(canvas, world, o) {
   // and the map is painted again once things are still.
   function paint() {
     const t0 = performance.now(), d = devicePixelRatio || 1, cw = base.width / d, ch = base.height / d, s = view.s, c = bctx;
-    const sig = `${o.mine?.() || ""}:${o.wars?.() || ""}:${[...world.provinces.keys()].map((id) => o.owner(id)).join()}`;
+    const sig = `${o.mine?.() || ""}:${o.wars?.() || ""}:${o.allies?.() || ""}:${[...world.provinces.keys()].map((id) => o.owner(id)).join()}`;
     if (!layers || sig !== signature) { build(); signature = sig; pieces = null; }
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.clearRect(0, 0, base.width, base.height);
@@ -2888,6 +2892,7 @@ function worldMap(canvas, world, o) {
     if (lit) { c.strokeStyle = "rgba(24,18,14,.5)"; c.lineWidth = 3 / s; c.stroke(layers.outer); } // a firm border: ink under a pale line
     c.strokeStyle = lit ? "rgba(250,242,220,.86)" : "rgba(255,244,214,.7)"; c.lineWidth = (lit ? 1.2 : 1.4) / s; c.stroke(layers.outer);
     c.strokeStyle = "rgba(196,58,48,.95)"; c.lineWidth = 2.6 / s; c.setLineDash([5 / s, 3 / s]); c.stroke(layers.front); c.setLineDash([]);
+    if (o.allies) { c.strokeStyle = "rgba(8,34,20,.7)"; c.lineWidth = 4.6 / s; c.stroke(layers.ally); c.strokeStyle = "#84f2ae"; c.lineWidth = 2.4 / s; c.stroke(layers.ally); } // keyless hook: pledged partners in green
     if (o.mine?.()) { c.strokeStyle = "#dfe5ec"; c.lineWidth = 2.2 / s; c.stroke(layers.mine); }
     threads(c, s);
     labels(c, cw, ch, layers.owners);
@@ -3037,9 +3042,9 @@ $m[17] = (($x) => {
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-const VERSION = "0.10.6";
+const VERSION = "0.10.9";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "05afc994";
+const BUILD = "918b7e88";
 // guide hook (ruling 153.8): each AI service's own pages, for links in the Choose an AI guide (site/aiguide.js). A player
 // follows them in a new tab; the page never fetches them, and its rule does not reach them. Kept above the list of services
 // the page may call, because the gate reads every address after that list's name as one the page calls.

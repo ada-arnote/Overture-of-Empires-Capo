@@ -74,9 +74,10 @@ export function page(html, css, js, home = "", fetches = false, from = path.join
   const talk = fetches && reach ? ` connect-src ${reach};` : home ? ` connect-src 'self'${named ? ` ${named}` : ""};` : named ? ` connect-src ${named};` : "";
   // served pages load fonts, pictures and sounds from their own site; the double-click page carries them inside, as data:
   const own = home ? "'self'" : "data:", img = home ? "'self' data:" : "data:";
+  const workers = /worker-src/.test(html) ? " worker-src blob:;" : ""; // stacking hook: a page whose helper runs in a worker starts it from its own code, as a blob
   return assets(html, home, from)
     .replace(/<script src="source\.js"><\/script>\n?/, "") // the source pages' way to the built ones (site/source.js): not wanted in a built page
-    .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, () => `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src ${img}; font-src ${own}; media-src ${own};${talk} base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">`)
+    .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, () => `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src ${img}; font-src ${own}; media-src ${own};${talk}${workers} base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">`)
     .replace(/<link rel="stylesheet"[^>]*>/, () => `<style>\n${assets(css, home, from)}</style>`)
     .replace(/<a href="\.\/" class="text">All games<\/a>/, home ? `<a href="${home}" class="text">All games</a>` : "")
     .replace(/<script type="module"[^>]*><\/script>/, () => `<script>\n${safe}\n</script>`);
@@ -89,7 +90,9 @@ if (process.argv[1]?.endsWith("bundle.mjs")) {
   pages.push("garden", "stacking", "tile", "margins"); // new-game hooks (garden, stacking, tile, margins): the garden game (early), built like the others but reached only by its own address
   for (const name of pages) {
     // each page is stamped with a short fingerprint of its own code, so the footer says exactly which build is live
-    const raw = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`, stamp = createHash("sha256").update(raw).digest("hex").slice(0, 8);
+    let raw = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`;
+    if (name === "stacking") raw = raw.replace('const BOT_CODE = "";', () => `const BOT_CODE = ${JSON.stringify(`"use strict";\n(() => {\n${bundle(path.join(root, "site", "stackbot.js"))}\n})();`)};`); // stacking hook: the helper's code inside its page
+    const stamp = createHash("sha256").update(raw).digest("hex").slice(0, 8);
     const fetches = ["world", "game"].includes(name), js = raw.replace('const BUILD = "dev";', `const BUILD = "${stamp}";`), text = page(at(`${name}.html`), at("table.css"), js, "", fetches);
     mkdirSync(path.join(root, "play"), { recursive: true });
     writeFileSync(path.join(root, "play", `${name}.html`), page(at(`${name}.html`), at("table.css"), js, "../site/", true)); // shelf hook: a served page may read its own site (the community shelf); the double-click page reaches nothing

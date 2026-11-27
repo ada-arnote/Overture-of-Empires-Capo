@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jMy6WI8JlUTXPBuudMbJcYzchWVitCynmsDUM933WuM='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' stun://stun.cloudflare.com:3478; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-D0RFes3eXKC4ZrBzK9TLBY5IUFLtsE3mOAyUoM9pp4Y='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' stun://stun.cloudflare.com:3478; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Grain and Glass · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -248,7 +248,7 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
 .ranks th, .ranks td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--edge-soft) } .ranks tr:first-child th { color: var(--text-3) }
 .ranks th[scope=row] { font: 400 19px var(--display) } .ranks canvas { width: 24px; height: 24px; vertical-align: -6px; margin-right: 8px } .ranks .won { color: var(--tone) } .ranks small { color: var(--text-3); font: var(--fs-1) var(--sans) }
 #chart { display: block; width: 100%; height: 120px; margin-bottom: 14px; border-radius: var(--r-1); background: var(--raise) } .end #chart { height: auto; aspect-ratio: 880 / 280 }
-.end .ends { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: var(--sp-2); padding: 10px 0; background: inherit } .end .minor { position: static; justify-content: center; gap: 28px }
+.end .ends { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: var(--sp-2); padding: 10px 0; background: var(--slate); box-shadow: 0 -10px 12px -6px var(--slate); z-index: 1 } /* the sticky row is solid: nothing in the sheet shows through it */ .end .minor { position: static; justify-content: center; gap: 28px }
 
 /* seat patterns on the score bar, for telling seats apart without colour */
 .patterns #land { height: 14px }
@@ -383,6 +383,7 @@ dialog .hist { height: 150px; gap: 5px; margin: 6px 0 18px } dialog .hist small,
 #info span:not([style]) { color: var(--text) }
 .goods span.close { outline: 2px solid var(--accent); outline-offset: -2px }
 @media (max-width: 820px), (max-height: 640px) { #costs { display: none } }
+.shut:not(.side) #act #wheres.answers { display: flex } /* a folded phone panel still shows every answer to an offer, not only Take it */
 .side #costs { display: none } .side #rolls { left: calc(max(8px, env(safe-area-inset-left)) + 148px); bottom: 8px } /* beside the zoom row, clear of the seats strip */
 @media (max-width: 820px) { #round { font-size: var(--fs-2) } } /* room for the goal beside the round */
 </style>
@@ -744,6 +745,8 @@ function island(rule, dice, seats) {
 
 const glass = {
   id: "glass", version: "6",
+  /** A plan comes off a deck shuffled at setup, with no dice thrown: once seen, it is not taken back. */
+  draws: (m) => m.do === "plan",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -1103,6 +1106,8 @@ $m[9] = (($x) => {
 //   apply(position, move, dice) -> { position, events }
 //   result(position)     { winners: [seat], why } when over, else null
 //   allows(position, move) optional: a quick yes or no, for games whose list of moves is long
+//   draws(move)          optional: true when the move shows something hidden without throwing dice (a card from a
+//                        deck shuffled at setup). Such a move counts as rolled, so take back stops at it.
 const { canon, deepFreeze } = $m[6];
 const { fingerprint } = $m[8];
 const { chance, seedState } = $m[10];
@@ -1197,8 +1202,8 @@ function createMatch(game, { options = {}, seed = "", salts = [] } = {}) {
       mixed.push(used ? salt : "");
       return now().events;
     },
-    /** Whether the last move rolled any dice. In a game between people such a move is not taken back. */
-    get rolled() { const n = steps.length; return n > 1 && steps[n - 1].dice.join() !== steps[n - 2].dice.join(); },
+    /** Whether the last move rolled any dice, or drew something hidden (game.draws). In a game between people such a move is not taken back. */
+    get rolled() { const n = steps.length; return n > 1 && (steps[n - 1].dice.join() !== steps[n - 2].dice.join() || !!game.draws?.(played[n - 2])); },
     /** Take back the last move. Playing it again rolls the same dice. */
     undo() {
       if (!played.length) return false;
@@ -3796,7 +3801,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     return (apart = gaps[gaps.length >> 1] || m.R * 2);
   }
   function layout(free = {}) {
-    const { least = 0, tall = false, at = -1, ...room } = (asked = free);
+    const { least = 0, tall = false, at = -1, phone, ...room } = (asked = free); // phone: the shell's word to a game's own board, not the camera's
     const kept = zoom > 1 && zoom !== rest ? [cam.cx, cam.cy] : null; // hook (Inch lane, p8): a view zoomed away from its opening keeps its middle when the panels change size
     cam.set({ W: host.clientWidth || 1, H: host.clientHeight || 1, left: 0, right: 0, top: 0, bottom: 0, ...room });
     cam.set({ tilt: L.tilt, yaw: L.yaw, q: near() });
@@ -3963,6 +3968,8 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     get solid() { return solid(); },
     /** A style's pack of sculpted models, once fetched: they take the place of the code-made ones of the same names. */
     pack(buffer) { if (meshes) { meshes.add(unpack(buffer)); staged = false; redraw(); } },
+    /** stacking hook: models of a game's own, made in code (src/map/stones.js); false when this board draws no models. */
+    add(more) { if (!meshes) return false; meshes.add(more); staged = false; redraw(); return true; },
     get style() { return look3; }, get styleName() { return styleName; },
     /** Another style: the same board and pieces, in other materials. */
     setStyle(name) { if (!STYLES[name]) return; const kit = models(look3.kit); styleName = name; look3 = wear(name, light); if (meshes && models(look3.kit) !== kit) meshes.add(models(look3.kit)); staged = false; dirty = true; redraw(); },
@@ -3983,9 +3990,9 @@ $m[27] = (($x) => {
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-const VERSION = "0.10.6";
+const VERSION = "0.10.9";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "16a6e50b";
+const BUILD = "834bcc4c";
 // guide hook (ruling 153.8): each AI service's own pages, for links in the Choose an AI guide (site/aiguide.js). A player
 // follows them in a new tab; the page never fetches them, and its rule does not reach them. Kept above the list of services
 // the page may call, because the gate reads every address after that list's name as one the page calls.
@@ -5497,9 +5504,9 @@ const $ = (id) => document.getElementById(id);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const THEME = "capo-tent-theme";
-const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["hard", "Hard bot"], ["away", "A friend, by link"]];
+const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["hard", "Hard bot"], ["master", "Strongest bot"], ["away", "A friend, by link"]]; // stacking hook: master, only where G.master
 // gentle is the lessons' bot, not offered in the setup
-const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", hard: "Hard bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
+const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", hard: "Hard bot", master: "Strongest bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
 // what each table game grew from, named by its family of games only: no titles, characters or art of anyone else's
 const FAMILY = {
   banners: "classic world-conquest board games, where armies spread over a map and battles are fought with dice",
@@ -5576,12 +5583,15 @@ function toast(t, spoken = true) { const b = $("toast"); b.setAttribute("aria-li
 /** One sheet at a time. `kind` widens it (the menu, the end); no `close` leaves the closing to the sheet's own buttons and Escape. */
 function sheet(title, body, close = "Close", kind = "") {
   $("sheet").className = kind === "paper" ? kind : `panel ${kind}`; // paper for what is read, lacquer for the rest
+  const fresh = !$("sheet").open || $("sheet-body").firstChild !== body;
   $("sheet-title").textContent = title;
   $("sheet-body").replaceChildren(body);
   $("sheet-close").parentNode.hidden = !close;
   $("sheet-close").textContent = close;
   $("sheet-close").className = close === "Close" || close === "Resume" ? "main" : "quiet";
   if (!$("sheet").open) { opener ||= document.activeElement; $("sheet").showModal(); }
+  // a sheet opens at its top: showModal, and a caller's focus on a button below, would scroll it down to that button
+  if (fresh) { $("sheet").scrollTop = 0; requestAnimationFrame(() => { $("sheet").scrollTop = 0; }); }
 }
 /** What had the keyboard when the first of a run of sheets opened: given back when the last one closes. */
 let opener = null;
@@ -5720,6 +5730,7 @@ function createTable(G) {
     ready: () => !T.demo && T.human() && !T.busy,
     solo: () => T.kinds.filter((k) => k === "you" || k === "away").length === 1 || (!!T.link && T.kinds.filter((k) => k === "you").length === 1),
     play, refresh: panel, realtime: () => realtime(), begin: (m, kinds) => begin(m, kinds), // begin: a game's own ladder starts its next step
+    replacing: (go, what) => replacing(go, what), // a game's own ladder asks first, as Play does, before it replaces a game in progress
   };
   const live = liveLink({ T, G, begin, sheet, closeSheet, toast, el, names: NAMES, send }); // livelink hook: sets T.live
   /** Is this game played on a clock? Then there are no turns: no turn keys, no taking back, no turn banner. */
@@ -5884,6 +5895,12 @@ function createTable(G) {
     if (resting && T.demo && !still()) next();
   }
   const tally = (p) => Array.from({ length: T.kinds.length }, (_, s) => G.cellsOf(p, s));
+  /** The log written again from the moves, in the seats' names as they are now: a change of seat colours renames the seats, and the log follows. */
+  const relog = () => {
+    const again = createMatch(G.game, { seed: T.match.seed, options: T.match.options, salts: T.match.salts }), out = [];
+    for (const mv of T.match.list) out.push(...again.play(mv).map((e) => G.line(e, again.position)).filter(Boolean));
+    if (out.length === log.length) { log = out; drawn = -1; }
+  };
   const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, look: T.look, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo && !lesson?.owns()) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds, look: T.look })); };
 
   /** A tick of a real-time game: played at once, drawn without waiting, saved now and then. */
@@ -5949,6 +5966,7 @@ function createTable(G) {
       for (let slice = performance.now(); ;) {
         const s = t.next();
         if (s.done) { move = s.value; break; }
+        if (typeof s.value?.then === "function") { await s.value; if (mine !== run) return; slice = performance.now(); continue; } // stacking hook: a bot thinking in a worker hands over a promise
         if (performance.now() - slice > 7) { await sleep(0); if (mine !== run) return; slice = performance.now(); }
       }
       if (!T.hurry) await sleep(Math.max(0, G.pace(T.match.position) * PACE[settings.speed] - (performance.now() - from)));
@@ -6293,7 +6311,7 @@ function createTable(G) {
     if (!clock) row("Bot speed", ...bind("speed"), CHOICES.speed);
     row("Motion", ...bind("motion"), CHOICES.motion);
     if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
-    const reseat = () => { dress(); board?.recolour?.(); board?.show([], true); if (T.match && !T.demo) score(); }; // styles hook: seat colours follow the style until chosen
+    const reseat = () => { dress(); board?.recolour?.(); board?.show([], true); if (T.match && !T.demo) { relog(); score(); } }; // styles hook: seat colours follow the style until chosen
     if (board?.styles?.length) row("Board style", () => board.style, (v) => { board.setStyle(v); reseat(); }, board.styles); // 3D hook: styles are data (src/map/style.js)
     for (const s of G.settings || []) { row(s.label, s.get, s.set, s.values); if (s.note) box.append(el("p", s.note, "about")); } // era hook: a game's own looks (Banners' era)
     row("Seat colours", () => seatSet(read(SEATS_KEY), read(STYLE_KEY)), (v) => { store(SEATS_KEY, v); reseat(); }, Object.entries(SEATS).map(([k, v]) => [k, v.name]));
@@ -6351,7 +6369,7 @@ function createTable(G) {
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
       const li = el("li"), k = el("select");
-      k.append(...KINDS.filter(([v]) => (v !== "hard" || G.hard) && (v !== "away" || G.links !== false)).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one; links hook: no friend by link where links: false
+      k.append(...KINDS.filter(([v]) => (v !== "hard" || G.hard) && (v !== "master" || G.master) && (v !== "away" || G.links !== false)).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one; links hook: no friend by link where links: false; stacking hook: master
       k.value = setup.who[s];
       k.setAttribute("aria-label", NAMES[s]);
       k.onchange = () => { setup.who[s] = k.value; passLine(); };
@@ -6762,6 +6780,8 @@ $("seats").after(costs, rolls);
 function card(T) {
   const p = T.match.position, me = T.human() ? p.seat : T.kinds.indexOf("you");
   costs.hidden = T.demo || me < 0 || T.match.turn === null;
+  const key = document.querySelector(".board-key"); // the board's goods key, at the foot of the stage (hexboard.js)
+  if (key) key.style.marginLeft = "";
   if (costs.hidden) { rolls.hidden = true; return; }
   costs.replaceChildren(el("h2", "Costs"), ...buildsOf(p).map((k) => {
     const short = p.phase === "open" ? "" : missing(p.hands[me], k), row = el("p", undefined, short ? "short" : ""); // the opening is free
@@ -6779,6 +6799,9 @@ function card(T) {
   rolls.replaceChildren(el("h2", "Rolls"), histogram(p));
   const at = rolls.getBoundingClientRect();
   if (at.height && seats.height && seats.bottom + 8 > at.top) rolls.hidden = true;
+  // the rolls card stands beside the zoom row; the goods key moves along to start clear of it, never under it
+  const k = key?.getBoundingClientRect();
+  if (k?.width && !rolls.hidden && at.width && k.left < at.right && k.right > at.left && k.top < at.bottom && k.bottom > at.top) key.style.marginLeft = `${Math.ceil(at.right + 8 - k.left)}px`;
 }
 
 /** The rolls so far as bars, one for each number, with a line on each where the long run would put it. */
@@ -6824,7 +6847,7 @@ const LESSON = {
     { at: (T) => (pos(T).opened % 2 ? $("wheres") : richest(T)), or: () => $("wheres"), done: (T, ev) => has(ev, "route"),
       say: (T) => (pos(T).opened % 2 ? "Now a route, on a hex beside your depot. Routes are how you reach new hexes to build on." : "Place your first depot, on the board or in the list. It gathers from its own hex and the six around it. A hex's number is the roll that makes it yield; red 6 and 8 come up most.") },
     { when: (T) => pos(T).phase === "open", at: (T) => (pos(T).opened % 2 ? $("wheres") : richest(T)), or: () => $("wheres"), done: (T) => pos(T).phase !== "open",
-      say: (T) => (pos(T).opened % 2 ? "And its route. Then the game begins." : "The bot has placed twice. Now your second depot: it starts you with one good for every hex around it.") },
+      say: (T) => (pos(T).opened % 2 ? "And its route. Then the game begins." : "The bot has placed twice. Now your second depot: in this lesson it starts you with one good for every hex around it, a richer start than a Traditional game, where it gives one of each good beside it.") },
     { when: (T) => pos(T).phase === "main", at: (T) => pos(T).lit[0] ?? $("status"), or: () => $("info"), next: true,
       say: (T) => { const p = pos(T), [a, b] = p.roll || [0, 0]; return `Each turn starts with a roll: ${a} and ${b} make ${a + b}. Every hex with that number gives its good to each depot on it or beside it, two to a town. Your goods are counted in the panel.`; } },
     { when: (T) => pos(T).phase === "main", at: () => tab("trade"), next: true, done: (T, ev) => has(ev, "swap", "ask", "post", "take", "sell", "buy"),
@@ -6838,7 +6861,7 @@ const LESSON = {
     { when: (T) => pos(T).round > 1 && pos(T).phase === "main", at: () => $("info"), next: true,
       say: `Awards are 2 points each, for whoever leads: the Great Road for ${AWARD.road} routes joined, the Toll Warden for ${AWARD.warden} tolls played. A plan costs ${costText(COST.plan)}: free routes, goods, a toll, or a point.` },
     { at: () => $("round"), next: true,
-      say: (T) => `The first to ${goalOf(pos(T))} points wins: a depot is 1, a town 2, an award 2, a seal 1. The goal stays at the top of the screen. That is the lesson; play on.` },
+      say: (T) => `The first to ${goalOf(pos(T))} points wins: a depot is 1, a town 2, an award 2, a seal 1. The lesson is a short game on a small island; a Traditional game plays to 10. The goal stays at the top of the screen. That is the lesson; play on.` },
   ],
 };
 
@@ -6991,6 +7014,7 @@ createTable({
     if (places && !m && where === null) none = "Choose a hex, on the board or in the list";
     const rank = (x) => (x.do === "depot" && x.at !== undefined ? -worth(p, x.at) : 0);
     $("wheres").hidden = !values.length;
+    $("wheres").classList.toggle("answers", p.phase === "answer");
     radio($("wheres"), [...[...list].sort((x, y) => rank(x) - rank(y)).map((x) => ({ value: keyOf(x), label: label(p, x), note: x.at === undefined ? undefined : `${yields(p, x.at, x.do === "depot")}${x.do === "depot" ? `: ${worth(p, x.at)} goods in 36 rolls` : ""}` })), ...extra], where, (v) => { where = v; T.refresh(); });
     $("desk").hidden = !rows.length;
     $("desk").replaceChildren(...rows);

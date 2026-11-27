@@ -238,7 +238,7 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
 .ranks th, .ranks td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--edge-soft) } .ranks tr:first-child th { color: var(--text-3) }
 .ranks th[scope=row] { font: 400 19px var(--display) } .ranks canvas { width: 24px; height: 24px; vertical-align: -6px; margin-right: 8px } .ranks .won { color: var(--tone) } .ranks small { color: var(--text-3); font: var(--fs-1) var(--sans) }
 #chart { display: block; width: 100%; height: 120px; margin-bottom: 14px; border-radius: var(--r-1); background: var(--raise) } .end #chart { height: auto; aspect-ratio: 880 / 280 }
-.end .ends { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: var(--sp-2); padding: 10px 0; background: inherit } .end .minor { position: static; justify-content: center; gap: 28px }
+.end .ends { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: var(--sp-2); padding: 10px 0; background: var(--slate); box-shadow: 0 -10px 12px -6px var(--slate); z-index: 1 } /* the sticky row is solid: nothing in the sheet shows through it */ .end .minor { position: static; justify-content: center; gap: 28px }
 
 /* seat patterns on the score bar, for telling seats apart without colour */
 .patterns #land { height: 14px }

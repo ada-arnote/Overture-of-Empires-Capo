@@ -407,7 +407,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     return (apart = gaps[gaps.length >> 1] || m.R * 2);
   }
   function layout(free = {}) {
-    const { least = 0, tall = false, at = -1, ...room } = (asked = free);
+    const { least = 0, tall = false, at = -1, phone, ...room } = (asked = free); // phone: the shell's word to a game's own board, not the camera's
     const kept = zoom > 1 && zoom !== rest ? [cam.cx, cam.cy] : null; // hook (Inch lane, p8): a view zoomed away from its opening keeps its middle when the panels change size
     cam.set({ W: host.clientWidth || 1, H: host.clientHeight || 1, left: 0, right: 0, top: 0, bottom: 0, ...room });
     cam.set({ tilt: L.tilt, yaw: L.yaw, q: near() });
@@ -574,6 +574,8 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     get solid() { return solid(); },
     /** A style's pack of sculpted models, once fetched: they take the place of the code-made ones of the same names. */
     pack(buffer) { if (meshes) { meshes.add(unpack(buffer)); staged = false; redraw(); } },
+    /** stacking hook: models of a game's own, made in code (src/map/stones.js); false when this board draws no models. */
+    add(more) { if (!meshes) return false; meshes.add(more); staged = false; redraw(); return true; },
     get style() { return look3; }, get styleName() { return styleName; },
     /** Another style: the same board and pieces, in other materials. */
     setStyle(name) { if (!STYLES[name]) return; const kit = models(look3.kit); styleName = name; look3 = wear(name, light); if (meshes && models(look3.kit) !== kit) meshes.add(models(look3.kit)); staged = false; dirty = true; redraw(); },

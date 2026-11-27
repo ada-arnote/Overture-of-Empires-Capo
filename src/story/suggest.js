@@ -14,6 +14,8 @@ const NEXT = { "": "trade", trade: "defence", defence: "alliance" };
 export function suggest(g, geo) {
   if (g.mode === "citizen") return [];
   const me = g.player, out = [], taken = (verb, target) => (g.orders || []).some((o) => (o.verb || "ATTACK") === verb && o.target === target);
+  // keyless hook: a partner's call to arms comes first (pressure.js)
+  if (g.call && !taken("WAR", g.call.on)) out.push({ text: `Join ${geo.name(g.call.from)}: declare war on ${geo.name(g.call.on)}.`, verb: "WAR", target: g.call.on, detail: "", note: `${geo.name(g.call.from)} has called you to its war, by your treaty` });
   for (const foe of warsOf(g, me).slice(0, 2)) {
     const offered = g.offers.some((o) => o.from === foe && o.kind === "peace"), a = peaceAnswer(g, me, foe);
     if (!offered && !taken("PEACE", foe)) out.push({ text: `Propose peace to ${geo.name(foe)} (${foe}).`, verb: "PEACE", target: foe, detail: "", note: `${geo.name(foe)} would ${a.ok ? "agree" : "refuse"} (${a.why})` });
