@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-g0tEcRqf2k+0eACS9vHygqwFAgRZ/jekbOfr0JeCdnw='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-pMlFEe00gkD2MSMrO/EB43BqzmhCXxdUpyz5H14IfDE='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>An Inch of Ink</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -2750,6 +2750,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   }
   const tops = new Float32Array(m.n + 1), listeners = { pick: [], hover: [] };
   let L = LOOKS[look], lookName = look, motion = "system", pat = false, queued = false, dirty = true, alive = true, spots = [], hovering = -1, swing = null, until = 0, lit = 0, marks = [], point = null;
+  let holds = []; // motion hook (src/map/motion.js): standing pieces held off the board while a travelling one is on its way to them
 
   /** Reduced motion is the player's choice, or the system's when they follow it. Changes then fade quickly in place instead of moving. */
   const calm = () => motion === "reduced" || (motion === "system" && system.matches);
@@ -2760,6 +2761,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     queued = false;
     if (!alive) return;
     let moving = t < until;
+    if (holds.length) { for (const h of holds.filter((x) => t >= x.until)) { holds.splice(holds.indexOf(h), 1); spots = spots.concat(h.list.filter((x) => !spots.some((y) => y.at === x.at && y.kind === x.kind))); staged = false; } moving = true; } // motion hook
     if (timed && L.rise) { // the first frames, timed: a device that drags is told so, and the page can open flat instead
       timed.push(t);
       if (timed.length < 16 && !document.hidden) moving = true;
@@ -3064,6 +3066,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       });
       owner.forEach((o, i) => { if (marks[i]) marks[i].home = held.has(i); });
       spots = spots.filter((s) => s.kind === "dot" || s.kind === "ring").concat(pieces);
+      holds = []; // motion hook: a new position puts every piece where it stands
       staged = false;
       until = t + last;
       dirty = true;
@@ -3080,6 +3083,11 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       dirty = true;
       redraw();
     },
+    // motion hook (src/map/motion.js): a piece held back for `ms` (it is on its way), a point by a cell in pieces' own units with the size of a piece there, and a pan by screen pixels
+    hold(cells, ms, kinds) { const list = spots.filter((x) => cells.includes(x.at) && kinds.includes(x.kind)); if (!list.length) return; spots = spots.filter((x) => !list.includes(x)); holds.push({ until: performance.now() + ms, list }); staged = false; redraw(); },
+    place(i, dx = 0, dy = 0) { const k = m.R * grown(); cam.projectTo(m.mid[i][0] + dx * k, m.mid[i][1] + dy * k, show[i].top * unit()); return { x: cam.px, y: cam.py, r: k * cam.s * cam.pk }; },
+    nudge(dx, dy) { if (zoom <= 1) return; cam.unprojectTo(cam.mx, cam.my, 0); const x = cam.ox, y = cam.oy; cam.unprojectTo(cam.mx + dx, cam.my + dy, 0); slide(x - cam.ox, y - cam.oy); },
+    get zoomed() { return zoom > 1; }, get middle() { return { x: cam.mx, y: cam.my, w: cam.W - cam.left - cam.right, h: cam.H - cam.top - cam.bottom }; },
     screenOf(i) { cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit()); return { x: cam.px, y: cam.py }; },
     destroy() { alive = false; painter.destroy(); under.remove(); over.remove(); },
     get solid() { return solid(); },
@@ -3101,7 +3109,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.9.3";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "08cef9b0";
+const BUILD = "11c3e63b";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -3428,6 +3436,8 @@ let ctx = null;
 function wake() {
   try { ctx ||= new AudioContext(); if (ctx.state === "suspended") ctx.resume(); } catch { ctx = null; }
 }
+/** motion hook (site/sound.js): the sounds' context once a press has woken it, for the game cues made there. */
+const audio = () => (ctx && ctx.state === "running" && settings.sound === "on" && settings.volume ? ctx : null);
 // [hertz, start, length, loudness, wave]
 const TUNES = {
   tick: [[1900, 0, 0.03, 0.12, "square"]],
@@ -3464,7 +3474,468 @@ function cue(events) {
   if (events.some((e) => e.kind === "take" || (e.kind === "pour" && e.taken?.length))) sfx("capture", 0.2);
 }
 
-$x.SETTINGS_KEY = SETTINGS_KEY; $x.CHOICES = CHOICES; $x.DEFAULTS = DEFAULTS; $x.SETTINGS_V = SETTINGS_V; $x.PACE = PACE; $x.SCALE = SCALE; $x.parseSettings = parseSettings; $x.settings = settings; $x.saveSettings = saveSettings; $x.takeBack = takeBack; $x.turnKey = turnKey; $x.ranked = ranked; $x.resultText = resultText; $x.wake = wake; $x.sfx = sfx; $x.cue = cue;
+$x.SETTINGS_KEY = SETTINGS_KEY; $x.CHOICES = CHOICES; $x.DEFAULTS = DEFAULTS; $x.SETTINGS_V = SETTINGS_V; $x.PACE = PACE; $x.SCALE = SCALE; $x.parseSettings = parseSettings; $x.settings = settings; $x.saveSettings = saveSettings; $x.takeBack = takeBack; $x.turnKey = turnKey; $x.ranked = ranked; $x.resultText = resultText; $x.wake = wake; $x.audio = audio; $x.sfx = sfx; $x.cue = cue;
+return $x; })({});
+$m[28] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Motion over a board: dice that tumble and settle, pieces that travel, a ring where land changes hands, a flourish where
+// something is built, pennants for a win. Drawn on one canvas above the board, and only while something moves.
+// It never changes a game and never holds one up: the board already shows the new position, and motion only follows it.
+// Places are asked for every frame (where(i, dx, dy) gives a point and a piece's size there), so a board that pans keeps them.
+const { emblem } = $m[13];
+
+const out3 = (k) => 1 - (1 - k) ** 3, smooth = (k) => k * k * (3 - 2 * k), clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k, shade = (rgb, f, add = 0) => `rgb(${rgb.map((v) => Math.round(clamp(v * f + add, 0, 255)))})`;
+const INK = "#1a1411", CREAM = "#fdf6e4", GOLD = [226, 184, 92];
+
+/**
+ * One canvas over the whole window, drawn only while an effect runs; then it is cleared and the loop stops.
+ * An effect is { ms, draw(c, k, t), end() }, with k from 0 to 1. Frame gaps are kept while it runs, to judge smoothness.
+ */
+function createMotion(parent = document.body) {
+  const cv = document.createElement("canvas"), c = cv.getContext("2d"), own = parent !== document.body; // own: inside a box of the page, not over the window
+  cv.className = "motion-layer";
+  cv.setAttribute("aria-hidden", "true");
+  Object.assign(cv.style, { position: own ? "absolute" : "fixed", inset: "0", width: "100%", height: "100%", zIndex: "1", pointerEvents: "none" });
+  parent.append(cv);
+  let list = [], queued = false, prev = 0, wiped = true;
+  const gaps = [], work = [];
+  const loop = (t) => {
+    queued = false;
+    const t0 = performance.now(), d = Math.min(2, devicePixelRatio || 1), W = own ? parent.clientWidth : innerWidth, H = own ? parent.clientHeight : innerHeight;
+    if (cv.width !== Math.round(W * d) || cv.height !== Math.round(H * d)) { cv.width = Math.round(W * d); cv.height = Math.round(H * d); }
+    c.setTransform(d, 0, 0, d, 0, 0);
+    c.clearRect(0, 0, W, H);
+    if (prev && !document.hidden) { gaps.push(t - prev); if (gaps.length > 900) gaps.shift(); }
+    prev = t;
+    const now = performance.now();
+    list = list.filter((e) => {
+      const k = (now - e.t0) / e.ms;
+      if (k >= 1) { e.end?.(); return false; }
+      if (k >= 0) { c.save(); try { e.draw(c, k, now); } catch { e.ms = 0; } c.restore(); } // a place that is gone ends its effect
+      return true;
+    });
+    wiped = !list.length;
+    work.push(performance.now() - t0); if (work.length > 900) work.shift();
+    if (list.length) { queued = true; requestAnimationFrame(loop); } else prev = 0;
+  };
+  const kick = () => { if (!queued) { queued = true; requestAnimationFrame(loop); } };
+  return {
+    /** Start an effect after `delay` ms. */
+    add(e, delay = 0) { e.t0 = performance.now() + delay; list.push(e); kick(); return e; },
+    clear() { list = []; if (!wiped) kick(); },
+    get busy() { return list.length > 0; },
+    /** While something moved, in ms: the gaps between frames (the whole page), and this layer's own work in each frame. Each: how many, the middle one, the slowest in twenty, the slowest. */
+    frames() { const sum = (list) => { const s = [...list].sort((a, b) => a - b); return s.length ? { n: s.length, median: +s[s.length >> 1].toFixed(2), p95: +s[Math.floor(s.length * 0.95)].toFixed(2), worst: +s[s.length - 1].toFixed(2) } : null; }; return { gaps: sum(gaps), work: sum(work) }; },
+    destroy() { list = []; cv.remove(); },
+  };
+}
+
+// ---- the things that are drawn ----
+
+const PIPS = { 1: [[0, 0]], 2: [[-1, -1], [1, 1]], 3: [[-1, -1], [0, 0], [1, 1]], 4: [[-1, -1], [1, -1], [-1, 1], [1, 1]], 5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]], 6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]] };
+function die(c, x, y, s, face, rgb, turn, alpha) {
+  c.save(); c.translate(x, y); c.rotate(turn); c.globalAlpha = alpha;
+  const h = s / 2, r = s * 0.2;
+  c.beginPath(); c.roundRect(-h, -h, s, s, r);
+  const g = c.createLinearGradient(-h, -h, h, h); g.addColorStop(0, shade(rgb, 1.2, 24)); g.addColorStop(1, shade(rgb, 0.78));
+  c.fillStyle = g; c.fill(); c.lineWidth = Math.max(1.2, s * 0.07); c.strokeStyle = INK; c.stroke();
+  const light = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255 > 0.3;
+  c.fillStyle = light ? INK : CREAM;
+  for (const [u, v] of PIPS[face] || PIPS[1]) { c.beginPath(); c.arc(u * s * 0.26, v * s * 0.26, s * 0.085, 0, 7); c.fill(); }
+  c.restore();
+}
+function shadow(c, x, y, rx, a) { c.beginPath(); c.ellipse(x, y, rx, rx * 0.42, 0, 0, 7); c.fillStyle = `rgba(12,9,7,${a})`; c.fill(); }
+/** A piece on its way: a disc with its number (an army), or a standing pawn with its rank (a unit). */
+function token(c, x, y, r, rgb, label, kind) {
+  if (kind === "unit") {
+    c.save(); c.translate(x, y + r * 0.9); c.scale(r * 1.6, r * 1.6);
+    c.beginPath(); c.moveTo(-0.27, 0); c.quadraticCurveTo(-0.25, -0.34, -0.17, -0.58); c.lineTo(-0.1, -0.62); c.arc(0, -0.8, 0.19, 2.1, 7.32); c.lineTo(0.17, -0.58); c.quadraticCurveTo(0.25, -0.34, 0.27, 0); c.closePath();
+    const g = c.createLinearGradient(-0.28, 0, 0.3, 0); g.addColorStop(0, shade(rgb, 1.45, 30)); g.addColorStop(1, shade(rgb, 0.62));
+    c.lineWidth = 3 / (r * 1.6); c.lineJoin = "round"; c.strokeStyle = INK; c.stroke(); c.fillStyle = g; c.fill();
+    c.fillStyle = CREAM; c.strokeStyle = INK; c.lineWidth = 1.2 / (r * 1.6);
+    for (let i = 0; i < Math.min(3, +label || 0); i++) { c.beginPath(); c.rect(-0.14, -0.2 - i * 0.14, 0.28, 0.085); c.fill(); c.stroke(); }
+    c.restore();
+    return;
+  }
+  c.beginPath(); c.arc(x, y, r, 0, 7);
+  const g = c.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r); g.addColorStop(0, shade(rgb, 1.3, 30)); g.addColorStop(1, shade(rgb, 0.72));
+  c.fillStyle = g; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
+  if (label !== "" && label !== undefined) {
+    c.font = `700 ${Math.round(r * (String(label).length > 2 ? 0.8 : 1.05))}px system-ui,"Segoe UI",sans-serif`; c.textAlign = "center"; c.textBaseline = "middle";
+    c.lineWidth = 3; c.strokeStyle = "rgba(20,15,12,.85)"; c.strokeText(String(label), x, y + 0.5); c.fillStyle = CREAM; c.fillText(String(label), x, y + 0.5);
+  }
+}
+function star(c, x, y, s) { c.beginPath(); c.moveTo(x, y - s); c.lineTo(x + s * 0.28, y - s * 0.28); c.lineTo(x + s, y); c.lineTo(x + s * 0.28, y + s * 0.28); c.lineTo(x, y + s); c.lineTo(x - s * 0.28, y + s * 0.28); c.lineTo(x - s, y); c.lineTo(x - s * 0.28, y - s * 0.28); c.closePath(); }
+
+// ---- effects: each returns { ms, draw } for createMotion().add ----
+
+/** A piece travels from one cell to another in a low arc, its shadow on the ground under it. */
+function travel(where, from, to, { rgb, label = "", kind = "army", ms = 420 }) {
+  return {
+    ms,
+    draw(c, k) {
+      const a = where(from), b = where(to), e = smooth(k), x = lerp(a.x, b.x, e), y = lerp(a.y, b.y, e), long = Math.hypot(b.x - a.x, b.y - a.y);
+      const r = clamp(lerp(a.r, b.r, e) * 0.34, 9, 18), lift = Math.sin(Math.PI * k) * clamp(long * 0.22, 8, 54);
+      c.globalAlpha = Math.min(1, k * 8, (1 - k) * 30);
+      shadow(c, x, y + r * 0.3, r * (1 - lift / 160), 0.34);
+      token(c, x, y - lift - r * 0.35, r, rgb, label, kind);
+    },
+  };
+}
+
+/**
+ * Dice thrown from one place to where they come to rest: they tumble and bounce, show changing faces, then settle on the real
+ * ones; the losing dice dim. sets: [{ from: () => point, land: [() => point], faces, rgb, lose: [bool] }]. linger: ms they stay.
+ */
+function dice(sets, { roll = 640, linger = 1000, size = 22 }) {
+  const ms = roll + linger, spin = sets.map((s) => s.faces.map((_, i) => (i % 2 ? -1 : 1) * (5 + ((s.faces[i] * 7 + i * 3) % 5))));
+  return {
+    ms,
+    draw(c, k, now) {
+      const t = k * ms, f = Math.min(1, t / roll), fade = t > ms - 260 ? (ms - t) / 260 : 1;
+      sets.forEach((s, j) => {
+        const a = s.from();
+        s.faces.forEach((face, i) => {
+          const b = s.land[i](), x = lerp(a.x, b.x, out3(f)), y = lerp(a.y, b.y, out3(f)), hop = Math.abs(Math.sin(Math.PI * f * 2.6)) * (1 - f) ** 1.6 * 46;
+          const shown = f < 0.82 ? 1 + ((Math.floor(now / 70) * 5 + i * 3 + j * 2 + face) % 6) : face, dim = f >= 1 && s.lose?.[i] ? Math.max(0.45, 1 - (t - roll - 120) / 300 * 0.55) : 1;
+          shadow(c, x + 2, y + size * 0.42, size * 0.5 * (1 - hop / 120), 0.3 * fade);
+          die(c, x, y - hop, size * (1 + hop / 300), shown, s.rgb, spin[j][i] * (1 - f) ** 2 + (face - 3.5) * 0.06, fade * Math.min(1, dim));
+        });
+      });
+    },
+  };
+}
+
+/** Land changes hands: a ring in the taker's colour opens out from the cell, and the taker's emblem rises from it. */
+function capture(where, at, { rgb, icon = -1, ms = 700 }) {
+  return {
+    ms,
+    draw(c, k) {
+      const p = where(at), R = clamp(p.r, 14, 60), e = out3(k);
+      for (const [lag, w] of [[0, 4], [0.18, 2]]) {
+        const q = clamp((k - lag) / (1 - lag), 0, 1); if (!q) continue;
+        c.globalAlpha = (1 - q) * 0.9; c.beginPath(); c.ellipse(p.x, p.y, R * (0.35 + out3(q) * 1.1), R * (0.35 + out3(q) * 1.1) * 0.55, 0, 0, 7);
+        c.lineWidth = w + 3; c.strokeStyle = "rgba(20,15,12,.6)"; c.stroke(); c.lineWidth = w; c.strokeStyle = shade(rgb, 1.15, 20); c.stroke();
+      }
+      if (icon >= 0) {
+        const s = clamp(R * 0.42, 9, 20) * (k < 0.25 ? out3(k / 0.25) * 1.15 : 1.15 - Math.min(0.15, (k - 0.25) * 0.6));
+        c.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
+        emblem(c, icon, p.x, p.y - R * 0.5 - e * R * 0.35, s); c.lineWidth = 2.5; c.strokeStyle = INK; c.stroke(); c.fillStyle = shade(rgb, 1); c.fill("evenodd");
+      }
+    },
+  };
+}
+
+/** Something built: a ring settles onto the cell and a few sparks rise from it. */
+function build(where, at, { rgb = GOLD, ms = 760, small = false }) {
+  const sparks = Array.from({ length: small ? 4 : 7 }, (_, i) => ({ a: (i / (small ? 4 : 7)) * Math.PI * 2 + 0.4, v: 0.7 + ((i * 37) % 10) / 22 }));
+  return {
+    ms,
+    draw(c, k) {
+      const p = where(at), R = clamp(p.r, 12, 54) * (small ? 0.7 : 1), e = out3(k);
+      c.globalAlpha = Math.min(1, (1 - k) * 2.2);
+      c.beginPath(); c.ellipse(p.x, p.y, R * (1.5 - e * 0.8), R * (1.5 - e * 0.8) * 0.55, 0, 0, 7); c.lineWidth = 3; c.strokeStyle = shade(rgb, 1.2, 40); c.stroke();
+      c.fillStyle = "#fff3cf"; c.strokeStyle = "rgba(60,40,20,.7)"; c.lineWidth = 1;
+      for (const s of sparks) { const d = R * (0.3 + e * 0.75 * s.v); star(c, p.x + Math.cos(s.a) * d, p.y - R * 0.2 + Math.sin(s.a) * d * 0.5 - e * R * 0.9 * s.v, clamp(R * 0.12, 3, 6) * (1 - k * 0.6)); c.fill(); c.stroke(); }
+    },
+  };
+}
+
+/** A small mark where something was put down, or gathered: one ring that draws in. */
+function pulse(where, at, { rgb, ms = 340, out = false }) {
+  return {
+    ms,
+    draw(c, k) {
+      const p = where(at), R = clamp(p.r, 10, 44), e = out3(k), s = out ? 0.4 + e * 0.8 : 1.2 - e * 0.6;
+      c.globalAlpha = (1 - k) * 0.95; c.beginPath(); c.ellipse(p.x, p.y, R * s, R * s * 0.55, 0, 0, 7);
+      c.lineWidth = 4; c.strokeStyle = "rgba(20,15,12,.5)"; c.stroke(); c.lineWidth = 2.2; c.strokeStyle = shade(rgb, 1.2, 30); c.stroke();
+    },
+  };
+}
+
+/** A new age: one soft band of light crosses the board. */
+function sweep({ ms = 1500 } = {}) {
+  return {
+    ms,
+    draw(c, k) {
+      const W = innerWidth, H = innerHeight, x = lerp(-W * 0.3, W * 1.3, smooth(k)), g = c.createLinearGradient(x - W * 0.25, 0, x + W * 0.25, 0);
+      g.addColorStop(0, "rgba(255,236,190,0)"); g.addColorStop(0.5, `rgba(255,236,190,${0.16 * Math.sin(Math.PI * k)})`); g.addColorStop(1, "rgba(255,236,190,0)");
+      c.fillStyle = g; c.fillRect(0, 0, W, H);
+    },
+  };
+}
+
+/** Pennants that fall and sway across a box, in the winners' colours with gold: the moment of a win. */
+function pennants(colours, box, { ms = 2600, many = 34 } = {}) {
+  const all = [...colours, GOLD, [244, 236, 214]], bits = Array.from({ length: many }, (_, i) => {
+    const r = (n) => { const v = Math.sin((i + 1) * 12.9898 + n * 78.233) * 43758.5453; return v - Math.floor(v); };
+    return { x: r(1), d: r(2) * 0.35, v: 0.55 + r(3) * 0.6, sw: 8 + r(4) * 18, ph: r(5) * 6.3, s: 6 + r(6) * 7, rgb: all[i % all.length], spin: (r(7) - 0.5) * 4 };
+  });
+  return {
+    ms,
+    draw(c, k) {
+      const { x: X, y: Y, w: W, h: H } = box(), t = k * ms;
+      c.globalAlpha = k > 0.75 ? (1 - k) / 0.25 : 1;
+      for (const b of bits) {
+        const q = (t / ms - b.d) / (1 - b.d); if (q <= 0) continue;
+        const x = X + b.x * W + Math.sin(q * 6 + b.ph) * b.sw, y = Y - 20 + q * b.v * (H + 40), a = Math.sin(q * 5 + b.ph) * 0.6 + b.spin * q;
+        c.save(); c.translate(x, y); c.rotate(a); c.scale(1, 0.6 + 0.4 * Math.abs(Math.cos(q * 7 + b.ph)));
+        c.beginPath(); c.moveTo(-b.s, -b.s * 0.55); c.lineTo(b.s, 0); c.lineTo(-b.s, b.s * 0.55); c.closePath();
+        c.fillStyle = shade(b.rgb, 1.05, 10); c.fill(); c.lineWidth = 1; c.strokeStyle = "rgba(20,15,12,.55)"; c.stroke();
+        c.restore();
+      }
+    },
+  };
+}
+
+$x.createMotion = createMotion; $x.travel = travel; $x.dice = dice; $x.capture = capture; $x.build = build; $x.pulse = pulse; $x.sweep = sweep; $x.pennants = pennants;
+return $x; })({});
+$m[29] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The table games' cues, made here with the Web Audio API as they are needed: no sound files. Short and quiet, under the
+// player's sound switch and volume (site/shell.js), and silent until a press has woken them.
+const { audio, settings } = $m[26];
+
+const last = new Map();
+/** One voice: a tone that swells and dies away, gliding to `to` hertz if given. */
+function tone(a, bus, hz, at, len, peak, wave = "sine", to = 0) {
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = wave; o.frequency.setValueAtTime(hz, at); if (to) o.frequency.exponentialRampToValueAtTime(to, at + len);
+  g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(peak, at + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, at + len);
+  o.connect(g).connect(bus); o.start(at); o.stop(at + len + 0.05);
+}
+/** A short burst of noise through a filter: a die on wood, a drum skin, a knock. */
+function noise(a, bus, at, len, hz, q, peak, type = "bandpass") {
+  const n = Math.max(1, Math.floor(a.sampleRate * len)), buf = a.createBuffer(1, n, a.sampleRate), d = buf.getChannelData(0), src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) ** 3;
+  f.type = type; f.frequency.value = hz; f.Q.value = q; g.gain.value = peak;
+  src.buffer = buf; src.connect(f).connect(g).connect(bus); src.start(at);
+}
+// Each cue: (context, bus, start). Kept well under a second, and under the volume of the turn chime.
+const CUES = {
+  dice: (a, b, t) => { [0, 0.07, 0.15, 0.24, 0.36, 0.5].forEach((at, i) => noise(a, b, t + at + Math.random() * 0.02, 0.04, 1400 + Math.random() * 1800, 3.5, 0.9 - i * 0.12)); noise(a, b, t, 0.06, 300, 1, 0.5, "lowpass"); },
+  march: (a, b, t) => [0, 0.14, 0.28].forEach((at, i) => { tone(a, b, 120, t + at, 0.16, 0.32 - i * 0.06, "triangle", 70); noise(a, b, t + at, 0.05, 500, 0.8, 0.35, "lowpass"); }),
+  capture: (a, b, t) => { tone(a, b, 110, t, 0.3, 0.55, "triangle", 62); tone(a, b, 196, t + 0.05, 0.38, 0.16, "triangle"); tone(a, b, 294, t + 0.09, 0.42, 0.12, "triangle"); },
+  build: (a, b, t) => { noise(a, b, t, 0.03, 760, 6, 1.2); noise(a, b, t + 0.1, 0.03, 680, 6, 1); tone(a, b, 1047, t + 0.19, 0.55, 0.1); tone(a, b, 1568, t + 0.19, 0.4, 0.04); },
+  attacked: (a, b, t) => { tone(a, b, 330, t, 0.22, 0.2, "triangle"); tone(a, b, 247, t + 0.15, 0.34, 0.2, "triangle"); },
+  finished: (a, b, t) => { for (const [hz, p] of [[196, 0.22], [392, 0.1], [588, 0.05]]) tone(a, b, hz, t, 1, p); },
+  truce: (a, b, t) => { tone(a, b, 523, t, 0.4, 0.14); tone(a, b, 784, t + 0.13, 0.55, 0.12); },
+  truceEnd: (a, b, t) => { tone(a, b, 784, t, 0.4, 0.12); tone(a, b, 523, t + 0.13, 0.55, 0.12); },
+  age: (a, b, t) => { [392, 494, 587, 784].forEach((hz, i) => tone(a, b, hz, t + i * 0.05, 1.5, i === 3 ? 0.04 : 0.09)); },
+  out: (a, b, t) => { tone(a, b, 220, t, 0.7, 0.24, "triangle", 140); tone(a, b, 110, t + 0.05, 0.8, 0.14); },
+};
+/** How long a cue waits before it may sound again, so a busy moment is not a din. */
+const GAP = { dice: 0.25, march: 0.35, capture: 0.3, build: 0.3, attacked: 1.5, finished: 0.5, truce: 0.5, truceEnd: 0.5, age: 2, out: 2 };
+
+/** Play a cue `later` seconds from now. */
+function play(name, later = 0) {
+  const a = audio();
+  if (!a || !CUES[name]) return;
+  const t = a.currentTime + 0.01 + later;
+  if (t - (last.get(name) ?? -9) < GAP[name]) return;
+  last.set(name, t);
+  try {
+    const bus = a.createGain();
+    bus.gain.value = 0.5 * (settings.volume / 100) ** 2;
+    bus.connect(a.destination);
+    CUES[name](a, bus, t);
+  } catch { /* a sound is never needed to play */ }
+}
+
+/**
+ * The cues a move makes, by game and by what happened in it. moving: motion is shown, so a capture waits for the piece to arrive.
+ * Returns the names played, for tests and checks.
+ */
+function cuesOf(key, events, move, p) {
+  const out = [], add = (n, at = 0) => out.push([n, at]), has = (k) => events.some((e) => e.kind === k);
+  const me = p?.human;
+  if (key === "banners") {
+    if (has("fight")) add("dice");
+    if (has("take")) add("capture", 0.75);
+    if (has("move") || has("occupy")) add("march");
+    if (has("fort")) add("build");
+  } else if (key === "fable") {
+    if (move?.do === "move") add("march");
+    if (events.some((e) => e.kind === "take" && e.was >= 0)) add("capture", move?.do === "move" ? 0.3 : 0);
+    if (has("fort") || has("farm")) add("build");
+  } else if (key === "glass") {
+    if (has("roll")) add("dice");
+    if (events.some((e) => ["depot", "town", "harbour", "route"].includes(e.kind))) add("build");
+  } else if (key === "inch") {
+    if (p?.live) {
+      if (events.some((e) => e.kind === "attack" && e.seat === me)) add("march");
+      if (events.some((e) => e.kind === "city" && e.seat === me)) add("build");
+      if (events.some((e) => e.to === me && e.kind === "attacked")) add("attacked");
+      if (events.some((e) => e.kind === "out" && e.by === me && e.seat !== me)) add("finished");
+      if (has("pact")) add("truce");
+      if (has("pactend")) add("truceEnd");
+      if (has("age")) add("age");
+      if (events.some((e) => e.kind === "out" && e.seat === me) && !has("end")) add("out");
+    } else {
+      if (has("pour")) add("march");
+      if (events.some((e) => e.kind === "pour" && e.taken?.length)) add("capture", 0.2);
+    }
+  }
+  return out;
+}
+function voice(key, events, move, p, moving) {
+  for (const [n, at] of cuesOf(key, events, move, p)) play(n, moving ? at : Math.min(at, 0.15));
+}
+
+$x.CUES = CUES; $x.play = play; $x.cuesOf = cuesOf; $x.voice = voice;
+return $x; })({});
+$m[27] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Motion and sound for the table games: what each game's events look like as they happen, played over the board.
+// The rules have already moved when this is called, and the board already shows where things stand: nothing here waits for an
+// animation, holds up a move or changes a position. With motion reduced (the setting, or the system's wish) nothing moves;
+// with the sound off nothing sounds. The camera follows a rival's move only while the player has not moved the map lately.
+const { build, capture, createMotion, dice, pennants, pulse, sweep, travel } = $m[28];
+const { settings } = $m[26];
+const { voice } = $m[29];
+
+let layer = null, touched = -1e9, fight = null, glide = null, RGB = [], ICONS = []; // the seats' colours and emblems, as the table dressed them
+const PALE = [206, 196, 170], GOODS = [[226, 196, 96], [176, 208, 216], [196, 120, 82], [228, 226, 214]];
+const still = () => document.documentElement.classList.contains("still");
+const rgbOf = (s) => (s >= 0 && RGB[s]) || PALE;
+
+/** Will motion play for a move? Not with motion reduced, not behind the title, not when bots are hurried or set to instant. */
+function moving(T, person = T.human?.()) {
+  if (still() || T.demo || T.hurry || T.catching) return false;
+  if (!person && settings.speed === "instant") return false;
+  return !!T.board?.moving;
+}
+const pace = (person) => (!person && settings.speed === "fast" ? 0.6 : 1);
+function ready() {
+  if (layer) return layer;
+  layer = createMotion();
+  // the player's own hand on the map (a drag, a wheel, a zoom button, a map key) stops the camera following for a while
+  const mine = () => { touched = performance.now(); glide = null; };
+  addEventListener("wheel", mine, { capture: true, passive: true });
+  addEventListener("pointerdown", (e) => { if (e.target?.closest?.("#stage, .zoom")) mine(); }, true);
+  addEventListener("keydown", (e) => { if (/^(Arrow\w+|\+|-|=|0)$/.test(e.key) && !e.target?.closest?.("input, textarea, select")) mine(); }, true);
+  return layer;
+}
+/** Frame gaps while motion played (ms): for checking smoothness on a slow phone. */
+const frames = () => layer?.frames() || null;
+
+/**
+ * The camera drifts to a rival's move, gently, if that place is out of the comfortable middle of the view; never while the
+ * player is touching the map or has moved it in the last few seconds, and never at the whole-board zoom.
+ */
+function follow(b, at) {
+  if (at < 0 || performance.now() - touched < 6000 || !b.zoomed) return;
+  const v = b.middle, p = b.place(at);
+  if (Math.abs(p.x - v.x) < v.w * 0.3 && Math.abs(p.y - v.y) < v.h * 0.3) return;
+  const mine = glide = { at, t: performance.now() };
+  layer.add({ ms: 1100, draw(c, k, now) {
+    if (glide !== mine) return;
+    const q = b.place(at), dx = v.x - q.x, dy = v.y - q.y, dt = Math.min(50, now - mine.t);
+    mine.t = now;
+    if (Math.hypot(dx, dy) < 2) { glide = null; return; }
+    const f = 1 - Math.exp(-dt / 160);
+    b.nudge(dx * f, dy * f);
+  } });
+}
+
+/** Dice thrown on the table: from one place, landing at points beside another. sets: [{ faces, rgb, lose }]; land(set, i) -> point. Returns the time they take to settle. */
+function throwDice(T, from, sets, land, { person = T.human?.(), hold = -1 } = {}) {
+  if (!moving(T, person)) return 0;
+  const b = T.board.moving, size = (p) => Math.max(12, Math.min(26, p.r * 0.4)), f = pace(person), roll = Math.round(640 * f);
+  const solid = b.solid, linger = solid && hold >= 0 ? 220 : Math.round(1100 * f);
+  const s = size(land(0, 0));
+  ready().add(dice(sets.map((x, j) => ({ ...x, from: () => from(), land: x.faces.map((_, i) => () => land(j, i)) })), { roll, linger, size: s }));
+  // the dice that lie on the table as models wait until the thrown ones come down on their places
+  if (solid && hold >= 0) queueMicrotask(() => b.hold([hold], roll, ["model"]));
+  return roll;
+}
+
+/** Banners: a fight's dice from the attacker to the dice's place beside the defender (where the board lays them as models). */
+function bannersDice(T, e, tieBoth) {
+  const b = T.board?.moving;
+  RGB = T.RGB || RGB;
+  if (!b) return false;
+  const [A, D] = e.rolls[e.rolls.length - 1], lose = (mine, theirs, tie) => mine.map((n, i) => i < theirs.length && (n < theirs[i] || (n === theirs[i] && tie)));
+  const sets = [{ faces: A, rgb: rgbOf(e.seat), lose: lose(A, D, true) }, { faces: D, rgb: rgbOf(e.was), lose: lose(D, A, tieBoth) }];
+  return throwDice(T, () => b.place(e.from), sets, (k, i) => b.place(e.to, (i - 1) * 0.5 + k * 0.2, 0.95 + k * 0.5), { hold: e.to }) > 0;
+}
+
+const PLANS = {
+  banners(T, events, move, b, where, f, person) {
+    const p = T.match.position;
+    let focus = -1;
+    for (const e of events) {
+      if (e.kind === "fight") {
+        fight = e; focus = e.to;
+        if (!e.won) continue;
+        const go = Math.round(360 * f), ms = Math.round(440 * f);
+        layer.add(travel(where, e.from, e.to, { rgb: rgbOf(e.seat), label: p.str[e.to], ms }), go);
+        queueMicrotask(() => b.hold([e.to], go + ms, ["army"]));
+        layer.add(capture(where, e.to, { rgb: rgbOf(e.seat), icon: ICONS[e.seat] ?? -1 }), go + ms - 40);
+      } else if (e.kind === "move" || (e.kind === "occupy" && fight?.to === e.to)) {
+        const from = e.kind === "move" ? e.from : fight.from, ms = Math.round(420 * f);
+        layer.add(travel(where, from, e.to, { rgb: rgbOf(e.seat), label: e.kind === "occupy" && move?.n !== undefined ? move.n : e.n, ms })); // what moves in, not the total
+        queueMicrotask(() => b.hold([e.to], ms, ["army"]));
+        focus = e.to;
+      } else if (e.kind === "place" || e.kind === "claim") { layer.add(pulse(where, e.at, { rgb: rgbOf(e.seat) })); } // placing is followed by the camera only when it comes to a fight
+      else if (e.kind === "fort") { layer.add(build(where, e.at, {})); focus = e.at; }
+    }
+    if (!person) follow(b, focus);
+  },
+  fable(T, events, move, b, where, f, person) {
+    const p = T.match.position, to = move?.to ?? -1;
+    const took = events.find((e) => e.kind === "take" && e.at === to);
+    if (move?.do === "move" && move.from >= 0) {
+      const ms = Math.round((move.sea ? 520 : 320) * f);
+      layer.add(travel(where, move.from, to, { rgb: rgbOf(p.owner[to]), label: p.unit[to], kind: "unit", ms }));
+      queueMicrotask(() => b.hold([to], ms, ["unit"]));
+      if (took) layer.add(took.was >= 0 ? capture(where, to, { rgb: rgbOf(took.seat), icon: ICONS[took.seat] ?? -1, ms: 560 }) : pulse(where, to, { rgb: rgbOf(took.seat), out: true }), ms - 30);
+    } else if (move?.do === "raise") {
+      layer.add(took?.was >= 0 ? capture(where, to, { rgb: rgbOf(took.seat), icon: ICONS[took.seat] ?? -1, ms: 560 }) : build(where, to, { rgb: rgbOf(p.owner[to]), small: true, ms: 520 }));
+    } else if (move?.do === "fort" || move?.do === "farm") layer.add(build(where, to, {}));
+    for (const e of events) if (e.kind === "starve") for (const c of e.cells) layer.add(pulse(where, c, { rgb: [70, 62, 56], out: true, ms: 520 }));
+    if (!person) follow(b, to);
+  },
+  glass(T, events, move, b, where, f, person) {
+    let wait = 0, focus = -1;
+    for (const e of events) {
+      if (e.kind === "roll") {
+        // two dice come in from the near edge of the board and settle in its middle, then the yielding hexes answer
+        const v = () => b.middle, rgb = rgbOf(e.seat);
+        wait = throwDice(T, () => ({ x: v().x - v().w * 0.18, y: v().y + v().h * 0.36, r: 40 }), [{ faces: e.dice, rgb }], (_, i) => ({ x: v().x + (i ? 22 : -22), y: v().y + (i ? 6 : -4), r: 50 }), { person });
+      } else if (e.kind === "harvest") e.hexes.forEach((at, i) => layer.add(build(where, at, { rgb: GOODS[T.match.position.good[at]] || [230, 210, 150], small: true, ms: 640 }), wait + 80 + i * 60));
+      else if (["depot", "town", "harbour"].includes(e.kind)) { layer.add(build(where, e.at, { rgb: rgbOf(e.seat) })); focus = e.at; }
+      else if (e.kind === "route") { layer.add(pulse(where, e.at, { rgb: rgbOf(e.seat), out: true, ms: 420 })); focus = e.at; }
+    }
+    if (!person) follow(b, focus);
+  },
+  inch(T, events) {
+    if (events.some((e) => e.kind === "age")) layer.add(sweep());
+  },
+};
+
+/** After a move is shown: its sound, then its motion. G.key names the game; move is what was played; person: the seat to move was a person's. */
+function stir(T, key, events, move, person, speed, icons = ICONS) {
+  RGB = T.RGB || RGB; ICONS = icons;
+  const go = moving(T, person);
+  if (!T.demo && !T.hurry && speed === "normal") voice(key, events, move, T.match.position, go);
+  if (!go || !PLANS[key]) return;
+  ready();
+  const b = T.board.moving;
+  try { PLANS[key](T, events, move, b, (i, dx, dy) => b.place(i, dx, dy), pace(person), person); } catch (e) { console.warn("A moment of motion was skipped:", e); }
+}
+
+/** The end: pennants fall across the winner's card, in the winners' colours. Nothing with motion reduced, or for a loss. */
+function hail(box, colours) {
+  if (still() || !colours.length || !box) return;
+  box.style.position = "relative"; box.style.overflow = "hidden";
+  const own = createMotion(box);
+  own.add({ ...pennants(colours, () => ({ x: 0, y: 0, w: box.clientWidth, h: box.clientHeight })), end: () => setTimeout(() => own.destroy(), 50) });
+  box.querySelector(".arms")?.animate?.([{ transform: "scale(.6) rotate(-8deg)", opacity: 0 }, { transform: "scale(1.08)", opacity: 1, offset: 0.6 }, { transform: "none", opacity: 1 }], { duration: 620, easing: "ease-out" });
+}
+
+$x.moving = moving; $x.frames = frames; $x.throwDice = throwDice; $x.bannersDice = bannersDice; $x.stir = stir; $x.hail = hail;
 return $x; })({});
 $m[12] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -3476,7 +3947,9 @@ const { footer } = $m[21];
 const { canLock, linkGames, makeLink, newId, readLink } = $m[24];
 const { BUILD, SOURCE_URL, VERSION } = $m[22];
 const { coach } = $m[25];
-const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } = $m[26];
+const { CHOICES, PACE, SCALE, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } = $m[26];
+// motion hook: motion and sound that follow each move (site/motion.js, site/sound.js)
+const { hail, stir } = $m[27];
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -3833,6 +4306,7 @@ function createTable(G) {
     if (T.match.list.length % 10 === 0 || T.match.turn === null) { land.push(tally(T.match.position)); keep(); }
     G.seen?.(T, events);
     board.show([], false);
+    stir(T, G.key, events, move, true, "normal", ICONS); // motion hook
     if (words.length) toast(words.slice(0, 2).join(" "));
     score(); panel();
     if (T.match.turn === null) { land.push(tally(T.match.position)); keep(); finish(); }
@@ -3855,7 +4329,7 @@ function createTable(G) {
     keep();
     if (!T.demo) { score(); panel(); }
     G.seen?.(T, events);
-    if (!T.demo && !T.hurry && speed === "normal") cue(events);
+    stir(T, G.key, events, move, person, speed, ICONS); // motion hook: its sound (as the old cue, by game) and its motion
     const rush = T.hurry || speed === "instant", took = board.show(G.order(events), rush);
     if (!T.demo && !rush && words.length && (!person || T.match.turn !== seat)) toast(words.slice(0, 2).join(" "), person);
     if (T.human()) T.hurry = false;
@@ -4126,6 +4600,7 @@ function createTable(G) {
     go.append(all, change, again); minor.append(look, ...(T.match.list.length ? [steps] : []), copyIt);
     body.append(hero, scroll, c, ...[G.report?.(T)].filter(Boolean), go, minor); // G.report: the figures a game adds to the end
     sheet(lost ? "Defeat" : people ? "Victory" : "The end", body, null, `end ${lost ? "lose" : "win"}`);
+    hail(hero, lost || !people ? [] : r.winners.map((s) => (names ? [212, 146, 0] : RGB[s]))); // motion hook: the moment of a win
     again.focus();
   }
   /** Show the finished game after its first n moves; n at the last move is the end itself. The match keeps every position, so the rules are not asked again. */
@@ -4420,7 +4895,7 @@ function createTable(G) {
 
 $x.COLOURS = COLOURS; $x.NAMES = NAMES; $x.RGB = RGB; $x.ICONS = ICONS; $x.PAPER = PAPER; $x.dress = dress; $x.$ = $; $x.el = el; $x.sleep = sleep; $x.sign = sign; $x.radio = radio; $x.toast = toast; $x.sheet = sheet; $x.createTable = createTable;
 return $x; })({});
-$m[27] = (($x) => {
+$m[30] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The hex board for a game's screen: the moving one when the device can draw it, else a still picture that can be tapped.
 const { LOOKS, canDraw, createBoard } = $m[13];
@@ -4509,13 +4984,14 @@ function hexBoard(T, stage, o) {
     light: (cells, chosen) => b?.preview(cells, chosen),
     clear: () => b?.preview([]),
     at: (i) => b?.screenOf(i), // where a cell is on the screen, for the coach
+    get moving() { return b; }, // motion hook (site/motion.js): the moving board itself, or null for the still picture
     destroy: () => b?.destroy(),
   };
 }
 
 $x.hexBoard = hexBoard;
 return $x; })({});
-$m[29] = (($x) => {
+$m[32] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Turns provinces made of small hexes into what the painter needs. Borders are bent a little so they look drawn,
 // never enough to make two provinces touch that did not, or part two that did.
@@ -4567,7 +5043,7 @@ function areaPicture(cells, of, mids, size = 26, flat = false) {
 
 $x.areaPicture = areaPicture;
 return $x; })({});
-$m[30] = (($x) => {
+$m[33] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // An Inch of Ink's ledger: a record of your real-time games, kept in this browser only, and titles for what you have done.
 // Words only: nothing here changes a later game. Export, import and wipe are yours.
@@ -4642,7 +5118,7 @@ function ledger(again) {
 
 $x.title = title; $x.note = note; $x.ledger = ledger;
 return $x; })({});
-$m[28] = (($x) => {
+$m[31] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // An Inch of Ink in real time, on the table: a clock, a share to send, a click on where it goes, and a leaderboard.
 // Traditional adds an ink to choose at the start, places on the map, and a mark and a card that wait in gold.
@@ -4656,9 +5132,9 @@ const { inch, liveBoardFor } = $m[1];
 const { createMatch } = $m[3];
 const { $, RGB, el, radio, sheet, toast } = $m[12];
 const { settings } = $m[26];
-const { hexBoard } = $m[27];
-const { areaPicture } = $m[29];
-const { ledger, note, title } = $m[30];
+const { hexBoard } = $m[30];
+const { areaPicture } = $m[32];
+const { ledger, note, title } = $m[33];
 
 const SEA = [64, 104, 128], DRY = [238, 232, 216], LAND = [[214, 204, 170], [206, 198, 162], [220, 210, 178]], HILL = [178, 160, 128], GLYPH = ["well", "quay", "watch", "archive"];
 const SPEEDS = [0.5, 1, 2, 4], STEPS = [[0.25, "A quarter of the way to the goal"], [0.5, "Halfway to the goal"], [0.75, "Three quarters of the way to the goal"], [0.9, "Nearly at the goal"]];
@@ -5413,8 +5889,8 @@ $m[0] = (($x) => {
 const { NONE, boardOf, cellsOf, goalOf, growth, inch, liveBoardFor, poolLimit, sharesOf } = $m[1];
 const { choose, thinking } = $m[11];
 const { $, NAMES, PAPER, RGB, createTable, radio, toast } = $m[12];
-const { hexBoard } = $m[27];
-const { board: liveBoard, continueText, ending: liveEnding, hold: liveHold, key: liveKey, leave: liveLeave, lineOf: liveLine, liveGoal, liveLand, nudge, panel: livePanel, record, rules: liveRules, seen: liveSeen, stats: liveStats, summary: liveSummary, time: liveTime } = $m[28];
+const { hexBoard } = $m[30];
+const { board: liveBoard, continueText, ending: liveEnding, hold: liveHold, key: liveKey, leave: liveLeave, lineOf: liveLine, liveGoal, liveLand, nudge, panel: livePanel, record, rules: liveRules, seen: liveSeen, stats: liveStats, summary: liveSummary, time: liveTime } = $m[31];
 
 const SHARE = { quarter: "Quarter", third: "A third", half: "Half", most: "Most", all: "All" }, HILL = [201, 178, 140];
 const cells = (n) => `${n} ${n === 1 ? "cell" : "cells"}`, place = (to) => (to === NONE ? "empty land" : NAMES[to]);

@@ -8,6 +8,8 @@ import { settings } from "./shell.js";
 import { areaPicture } from "../src/map/areas.js";
 import { $, ICONS, NAMES, RGB, createTable, el, radio, sheet, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
+// motion hook
+import { bannersDice } from "./motion.js";
 
 const SEA = [68, 108, 122], LAND = [[222, 190, 150], [206, 206, 150], [228, 200, 180], [190, 206, 178], [214, 190, 200], [226, 214, 158], [196, 200, 214], [210, 180, 150], [178, 204, 200], [224, 206, 190]];
 const SUITS = ["Drum", "Horn", "Banner", "Crown"];
@@ -109,7 +111,7 @@ function onMap(T, e) {
   const row = (list, other, rgb, loses) => { const r = el("div"); Object.assign(r.style, { display: "flex", gap: "2px", justifyContent: "center" }); list.forEach((n, i) => { const s = die(n, rgb, i < other.length && (n < other[i] || (n === other[i] && loses))); s.style.width = s.style.height = "20px"; r.append(s); }); return r; };
   Object.assign(box.style, { display: "grid", gap: "2px", padding: "4px", borderRadius: "8px", background: "rgba(13,22,35,.82)", boxShadow: "0 2px 10px rgba(0,0,0,.5)" });
   box.append(row(A, D, RGB[e.seat], true), row(D, A, e.was === NONE ? pale : RGB[e.was], shownTie));
-  put(box, { x: (a.x + d.x) / 2, y: (a.y + d.y) / 2 }, 1100, 30);
+  if (!bannersDice(T, e, shownTie)) put(box, { x: (a.x + d.x) / 2, y: (a.y + d.y) / 2 }, 1100, 30); // motion hook: the dice are thrown on the table instead
   lost(e.lost.attacker, a, RGB[e.seat]);
   lost(e.lost.defender, d, e.was === NONE ? pale : RGB[e.was]);
 }

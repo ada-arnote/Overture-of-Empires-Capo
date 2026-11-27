@@ -7,7 +7,9 @@ import { footer } from "./footer.js";
 import { canLock, linkGames, makeLink, newId, readLink } from "./link.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
 import { coach } from "./coach.js";
-import { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } from "./shell.js";
+import { CHOICES, PACE, SCALE, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } from "./shell.js";
+// motion hook: motion and sound that follow each move (site/motion.js, site/sound.js)
+import { hail, stir } from "./motion.js";
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -364,6 +366,7 @@ export function createTable(G) {
     if (T.match.list.length % 10 === 0 || T.match.turn === null) { land.push(tally(T.match.position)); keep(); }
     G.seen?.(T, events);
     board.show([], false);
+    stir(T, G.key, events, move, true, "normal", ICONS); // motion hook
     if (words.length) toast(words.slice(0, 2).join(" "));
     score(); panel();
     if (T.match.turn === null) { land.push(tally(T.match.position)); keep(); finish(); }
@@ -386,7 +389,7 @@ export function createTable(G) {
     keep();
     if (!T.demo) { score(); panel(); }
     G.seen?.(T, events);
-    if (!T.demo && !T.hurry && speed === "normal") cue(events);
+    stir(T, G.key, events, move, person, speed, ICONS); // motion hook: its sound (as the old cue, by game) and its motion
     const rush = T.hurry || speed === "instant", took = board.show(G.order(events), rush);
     if (!T.demo && !rush && words.length && (!person || T.match.turn !== seat)) toast(words.slice(0, 2).join(" "), person);
     if (T.human()) T.hurry = false;
@@ -657,6 +660,7 @@ export function createTable(G) {
     go.append(all, change, again); minor.append(look, ...(T.match.list.length ? [steps] : []), copyIt);
     body.append(hero, scroll, c, ...[G.report?.(T)].filter(Boolean), go, minor); // G.report: the figures a game adds to the end
     sheet(lost ? "Defeat" : people ? "Victory" : "The end", body, null, `end ${lost ? "lose" : "win"}`);
+    hail(hero, lost || !people ? [] : r.winners.map((s) => (names ? [212, 146, 0] : RGB[s]))); // motion hook: the moment of a win
     again.focus();
   }
   /** Show the finished game after its first n moves; n at the last move is the end itself. The match keeps every position, so the rules are not asked again. */

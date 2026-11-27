@@ -123,6 +123,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   }
   const tops = new Float32Array(m.n + 1), listeners = { pick: [], hover: [] };
   let L = LOOKS[look], lookName = look, motion = "system", pat = false, queued = false, dirty = true, alive = true, spots = [], hovering = -1, swing = null, until = 0, lit = 0, marks = [], point = null;
+  let holds = []; // motion hook (src/map/motion.js): standing pieces held off the board while a travelling one is on its way to them
 
   /** Reduced motion is the player's choice, or the system's when they follow it. Changes then fade quickly in place instead of moving. */
   const calm = () => motion === "reduced" || (motion === "system" && system.matches);
@@ -133,6 +134,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     queued = false;
     if (!alive) return;
     let moving = t < until;
+    if (holds.length) { for (const h of holds.filter((x) => t >= x.until)) { holds.splice(holds.indexOf(h), 1); spots = spots.concat(h.list.filter((x) => !spots.some((y) => y.at === x.at && y.kind === x.kind))); staged = false; } moving = true; } // motion hook
     if (timed && L.rise) { // the first frames, timed: a device that drags is told so, and the page can open flat instead
       timed.push(t);
       if (timed.length < 16 && !document.hidden) moving = true;
@@ -437,6 +439,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       });
       owner.forEach((o, i) => { if (marks[i]) marks[i].home = held.has(i); });
       spots = spots.filter((s) => s.kind === "dot" || s.kind === "ring").concat(pieces);
+      holds = []; // motion hook: a new position puts every piece where it stands
       staged = false;
       until = t + last;
       dirty = true;
@@ -453,6 +456,11 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       dirty = true;
       redraw();
     },
+    // motion hook (src/map/motion.js): a piece held back for `ms` (it is on its way), a point by a cell in pieces' own units with the size of a piece there, and a pan by screen pixels
+    hold(cells, ms, kinds) { const list = spots.filter((x) => cells.includes(x.at) && kinds.includes(x.kind)); if (!list.length) return; spots = spots.filter((x) => !list.includes(x)); holds.push({ until: performance.now() + ms, list }); staged = false; redraw(); },
+    place(i, dx = 0, dy = 0) { const k = m.R * grown(); cam.projectTo(m.mid[i][0] + dx * k, m.mid[i][1] + dy * k, show[i].top * unit()); return { x: cam.px, y: cam.py, r: k * cam.s * cam.pk }; },
+    nudge(dx, dy) { if (zoom <= 1) return; cam.unprojectTo(cam.mx, cam.my, 0); const x = cam.ox, y = cam.oy; cam.unprojectTo(cam.mx + dx, cam.my + dy, 0); slide(x - cam.ox, y - cam.oy); },
+    get zoomed() { return zoom > 1; }, get middle() { return { x: cam.mx, y: cam.my, w: cam.W - cam.left - cam.right, h: cam.H - cam.top - cam.bottom }; },
     screenOf(i) { cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit()); return { x: cam.px, y: cam.py }; },
     destroy() { alive = false; painter.destroy(); under.remove(); over.remove(); },
     get solid() { return solid(); },
