@@ -2,6 +2,26 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.9.6 (2026-11-27): Capo's world map, closer in
+
+### Capo's lit map: pips, mission pins, cities and towns, dressing, sharper relief, lit lakes
+
+**Players**
+- **Strength pips** stand on a dark tray in front of every army, armour and gun block, and beside every fleet, from the region zoom in: one pip a point of might as the rules count it now (war weariness, lost land and sabotage included), five to a row, ten at most.
+- **Mission pins.** A mission ordered this turn puts a pin on the target country's capital (blue to scout, orange to sabotage, gold to rescue) with the agent standing beside it, and a dotted thread from your capital. Someone held stands under a dark red pin where they are held, with a thread home. A country you scouted (its watch known) and one you sabotaged keep a small pin while it lasts. Threads show on the flat map too.
+- **Cities and towns by zoom.** Every capital is shown at every zoom (the smaller countries' as a small keep on the whole world). From the region zoom, each country's two great cities (the provinces far smaller than its usual one, as Berlin, Moscow or Delhi are); from the country zoom, its other cities and a town in every province once the province is large enough on screen to hold one, with the province's name just above it.
+- **The land dressed close in.** At the country zoom forests, hills, peaks, dunes, marsh, grass and ice stand on the land: on an invented world from each province's terrain, on the real one from its heights (peaks where the ground is rough and high, a few long hills, ice where the map marks it). They keep their places as you zoom, and more come in between. The Campaign map style, which stands no hills or peaks, stands no hills or peaks here either.
+- **Sharper relief at the country zoom.** The heights are read smoothly instead of in facets, and fine relief is added where the 2048 picture runs out, strongest in rough country, so mountains stay crisp and plains stay calm.
+- **Lakes are part of the lit ground**: water on the land's top, with the lamp's gloss and the pieces' shadows on them, and a fine shore line. The flat map keeps its lake fills.
+
+**Contributors**
+- `src/map/dress.js` (new): Capo's own models (`pips1` to `pips10`, `fpips1` to `fpips10`, `agent`, `dune`, `reeds`, `grass`, `floe`, `ridge`, `hamlet`) and `Dressing`, which fills a province raster once a world, works out each spot once (a grid of cells that halve with the zoom, each level keeping the levels above) and stands only the spots in view, up to a cap (520 on desktop, 260 on a phone).
+- `src/map/world.js`: `WorldGround.lakes(rings)` and a lake program drawn on the land's top with a polygon offset; `draw()` takes `detail` (0 to 1) and `octaves` (3 on a phone, 4 elsewhere) for the fine relief (a cubic read of the heights and value noise with its slope, turned each wave).
+- `site/mappieces.js`: `townsOf(world)`; pieces carry `pips`; `mapPieces` takes `strength` and `g` (read only) and returns `threads`. `site/worldmap.js`: pieces culled to the view, pips and dressing staged, threads painted, province names lifted above their towns, lakes kept as outlines (`world.lakeRings`). One marked hook in `site/game.js` ("capomap hook") passes the strength and the game.
+- Sizes, compressed: `src/map` 56.4 to 61.7 kB, site code 233.2 to 236.1 kB, everything shipped 743.0 to 751.3 kB. `test/capomap.test.mjs` (4 tests).
+- No new data and no download: towns come from the province shapes, dressing from the terrain words and the relief already shipped.
+- Frame times, headless Edge on the GPU (RTX 3080, ANGLE D3D11), whole frame callback plus a one-pixel read, median / 90th percentile in ms, before and after, second of two interleaved runs (the machine was shared, so runs vary by 1 to 2 ms): 1440 x 900 panning the world 2.2 / 2.9 then 2.6 / 3.1, a region 3.2 / 4.1 then 2.8 / 3.5, a country 2.5 / 3.0 then 3.3 / 3.9, close in 2.5 / 3.1 then 4.0 / 4.7. The page's own code alone (no read back) 0.5 to 1.4 before, 0.9 to 1.3 after. Phone size (390 x 844 at 3x) with the CPU slowed 4x: medians 2.4 to 7.5 before, 2.3 to 6.1 after; 90th percentiles 6.8 to 12.6 before, 8.0 to 17.6 after. An invented world close in, 1440 x 900: 1.7 to 3.6 before, 1.9 to 2.2 after. One-off costs, the first time the country zoom is reached: the province raster for the dressing, about 30 ms on the real world, and reading back the relief, a few ms.
+
 ## v0.9.5 (2026-11-27): dice that roll, armies that march, and sound
 
 ### The table games move and sound

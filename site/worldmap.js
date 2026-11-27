@@ -6,6 +6,7 @@
 // province. Where it cannot, or the player chooses Flat, the whole map is drawn here in 2D as before.
 import { canDraw } from "../src/map/board.js";
 import { Camera } from "../src/map/camera.js";
+import { Dressing, capoModels } from "../src/map/dress.js";
 import { Meshes } from "../src/map/mesh.js";
 import { models } from "../src/map/models.js";
 import { STYLE_KEY, styleOf } from "../src/map/style.js";
@@ -23,9 +24,9 @@ export async function loadWorld(url, disputesUrl = "") {
   const waters = await fetch(url.replace(/[^/]+$/, "waters.json")).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   if (waters) {
     const line = (d, path, close) => { let x = 0, y = 0; for (let i = 0; i < d.length; i += 2) { x += d[i]; y += d[i + 1]; if (i) path.lineTo(x / 10, y / 10); else path.moveTo(x / 10, y / 10); } if (close) path.closePath(); };
-    world.rivers = [0, 1, 2, 3].map(() => new Path2D()); world.lakes = new Path2D();
+    world.rivers = [0, 1, 2, 3].map(() => new Path2D()); world.lakes = new Path2D(); world.lakeRings = [];
     for (const [rank, ...d] of waters.rivers) line(d, world.rivers[rank]);
-    for (const d of waters.lakes) line(d, world.lakes, true);
+    for (const d of waters.lakes) { line(d, world.lakes, true); const ring = []; let x = 0, y = 0; for (let i = 0; i < d.length; i += 2) { x += d[i]; y += d[i + 1]; ring.push([x / 10, y / 10]); } world.lakeRings.push(ring); } // capomap: lakes as outlines too, for the lit ground
   }
   return world;
 }
@@ -109,7 +110,7 @@ export function worldMap(canvas, world, o) {
     try {
       under.setAttribute("aria-hidden", "true");
       Object.assign(under.style, { position: "fixed", inset: "0", width: "100%", height: "100%", display: "block" });
-      const ground = new WorldGround(under), meshes = new Meshes(ground.g, models());
+      const ground = new WorldGround(under), meshes = new Meshes(ground.g, { ...models(), ...capoModels() }); // capomap: Capo's own models beside the shared ones
       canvas.before(under);
       lit = { under, ground, meshes, rgb: new Map(), key: "" };
       under.addEventListener("webglcontextlost", (e) => { e.preventDefault(); dark(); });
@@ -123,8 +124,8 @@ export function worldMap(canvas, world, o) {
     const list = [...world.provinces.values()].sort((a, b) => a.n - b.n), num = new Map(list.map((p) => [p.id, p.n]));
     const coast = world.sides.flatMap((ids, k) => (ids.length === 1 ? [[num.get(ids[0]), world.arcs[k]]] : []));
     lit.ground.load([world.width, world.height], list.map((p) => ({ rings: p.poly })), coast, (world.arcs.length % 97) / 7);
-    lit.ground.relief(null); lit.key = "";
-    if (world.relief) { const img = new Image(), w = world; img.onload = () => { if (lit && world === w) { lit.ground.relief(img); redraw(); } }; img.src = world.relief; }
+    lit.ground.relief(null); lit.key = ""; lit.ground.lakes(world.lakeRings); lit.dress = null; lit.heights = null; // capomap: lakes; the dressing is made when first needed
+    if (world.relief) { const img = new Image(), w = world; img.onload = () => { if (lit && world === w) { lit.ground.relief(img); lit.heights = img; redraw(); } }; img.src = world.relief; }
   }
   /** A colour as three numbers, whatever way it was written. */
   const rgbOf = (text) => {
@@ -178,24 +179,43 @@ export function worldMap(canvas, world, o) {
     }
   }
   /** What stands on the lit map: the page's pieces, each the same size on the screen whatever the zoom (a little larger close in). */
-  function stage() {
-    const b = band(), k = ((canvas.clientWidth < 600 ? 28 : 36) / view.s) * Math.pow(view.s / wide, 0.22), list = [];
+  function stage(box) {
+    const b = band(), phone = canvas.clientWidth < 600, k = ((phone ? 28 : 36) / view.s) * Math.pow(view.s / wide, 0.22), list = [], pad = k * 2;
     for (const p of (pieces ||= o.pieces?.() || [])) {
       if ((p.band || 0) > b || (p.until ?? 9) < b) continue;
+      if (p.fit) { const r = world.provinces.get(p.at)?.box; if (!r || Math.max(r[2] - r[0], r[3] - r[1]) * view.s < p.fit) continue; } // capomap: a town waits until its province is large enough to hold it
       const q = Array.isArray(p.at) ? p.at : world.provinces.get(p.at)?.label;
-      if (!q) continue;
-      list.push({ m: p.m, x: q[0] + (p.dx || 0) * k, y: q[1] + (p.dy || 0) * k, z: p.sea ? 0 : 1, s: k * (p.size || 1) * style.scale, t: p.turn || 0, rgb: p.owner ? rgbOf(o.colour?.(p.owner) || ownerColour(p.owner)) : p.rgb || null });
+      if (!q || q[0] < box[0] - pad || q[0] > box[2] + pad || q[1] < box[1] - pad || q[1] > box[3] + pad) continue; // capomap: only what is in view
+      const one = { m: p.m, x: q[0] + (p.dx || 0) * k, y: q[1] + (p.dy || 0) * k, z: p.sea ? 0 : 1, s: k * (p.size || 1) * style.scale, t: p.turn || 0, rgb: p.owner ? rgbOf(o.colour?.(p.owner) || ownerColour(p.owner)) : p.rgb || null };
+      list.push(one);
+      if (p.pips && b > 0) list.push({ ...one, m: `${p.sea ? "f" : ""}pips${p.pips}`, rgb: null }); // capomap: strength pips, from the region band
+    }
+    // capomap: the land's dressing, close in: forest, hills, peaks, dunes, marsh, grass and ice, from the province's terrain or the real heights
+    if (b === 2) {
+      if (!lit.dress) lit.dress = new Dressing(world);
+      if (lit.heights && !lit.dress.heights) lit.dress.relief(heightsOf(lit.heights));
+      list.push(...lit.dress.stand([box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad], view.s, k, phone ? 260 : 520, phone ? 66 : 76, style.models || {}));
     }
     lit.meshes.set(list);
     return k;
+  }
+  /** capomap: the relief picture read back at a smaller size, heights and ice only, for the dressing. */
+  function heightsOf(img) {
+    const c = document.createElement("canvas"), w = 1024, h = Math.round((1024 * img.height) / img.width), x = c.getContext("2d", { willReadFrequently: true });
+    c.width = w; c.height = h; x.drawImage(img, 0, 0, w, h);
+    const d = x.getImageData(0, 0, w, h).data, r = new Uint8Array(w * h), a = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) { r[i] = d[i * 4]; a[i] = d[i * 4 + 3]; }
+    return { w, h, r, a };
   }
   /** One frame of the lit map. */
   function shine() {
     const d = Math.min(2, devicePixelRatio || 1), cw = canvas.clientWidth, ch = canvas.clientHeight, t = tilt(), [x0, y0] = at(0, 0), [x1, y1] = at(cw, ch);
     cam.set({ W: cw, H: ch, s: view.s, cx: view.x + cw / 2 / view.s, cy: view.y + ch / 2 / view.s, tilt: t, yaw: 0, q: 0 });
-    const k = stage(), pad = k * 2;
+    const k = stage([x0, y0, x1, y1]), pad = k * 2;
     lit.meshes.cast([x0 - pad, y0 - pad, x1 - x0 + pad * 2, y1 - y0 + pad * 2], rise(), style.sun, k * 1.4);
-    lit.ground.draw(cam, d, { style, relief: Math.max(0.2, Math.min(1, (wide * 2.4) / view.s)), rise: rise(), tint: o.tint?.() ?? style.map.tint, lamp: (u) => lit.meshes.lamp(u, true, style.sun) });
+    // capomap: close in, fine relief takes over where the picture runs out, so the heights stay lit more strongly than before
+    const detail = Math.max(0, Math.min(1, (view.s / wide - 3.5) / 5));
+    lit.ground.draw(cam, d, { style, relief: Math.max(0.2 + 0.25 * detail, Math.min(1, (wide * 2.4) / view.s)), detail, octaves: cw < 600 ? 3 : 4, rise: rise(), tint: o.tint?.() ?? style.map.tint, lamp: (u) => lit.meshes.lamp(u, true, style.sun) });
     lit.meshes.draw(cam, rise(), style);
   }
 
@@ -217,7 +237,7 @@ export function worldMap(canvas, world, o) {
     if (o.tint) for (const p of world.provinces.values()) { const t = !(p.box[2] < vx0 || p.box[0] > vx1 || p.box[3] < vy0 || p.box[1] > vy1) && o.tint(p.id); if (t) { c.fillStyle = t; c.fill(p.path, "evenodd"); } } // features hook: a map view may tint single provinces
     // lakes, and rivers by rank: the great ones always, the lesser as the map comes close
     if (world.lakes) {
-      c.fillStyle = lit ? "#4b7186" : "#16242b"; c.fill(world.lakes);
+      if (lit) { c.strokeStyle = "rgba(30,52,64,.55)"; c.lineWidth = 0.7 / s; c.stroke(world.lakes); } else { c.fillStyle = "#16242b"; c.fill(world.lakes); } // capomap: the lit ground draws its own lakes; a fine shore line here
       c.strokeStyle = lit ? "rgba(62,104,128,.9)" : "rgba(22,36,43,.9)"; c.lineJoin = "round"; c.lineCap = "round";
       world.rivers.forEach((path, rank) => { if (rank <= near + (s > wide * 1.4 ? 1 : 0)) { c.lineWidth = Math.max(0.5, 1.9 - rank * 0.45) / s; c.stroke(path); } });
     }
@@ -243,9 +263,22 @@ export function worldMap(canvas, world, o) {
     c.strokeStyle = lit ? "rgba(250,242,220,.86)" : "rgba(255,244,214,.7)"; c.lineWidth = (lit ? 1.2 : 1.4) / s; c.stroke(layers.outer);
     c.strokeStyle = "rgba(196,58,48,.95)"; c.lineWidth = 2.6 / s; c.setLineDash([5 / s, 3 / s]); c.stroke(layers.front); c.setLineDash([]);
     if (o.mine?.()) { c.strokeStyle = "#dfe5ec"; c.lineWidth = 2.2 / s; c.stroke(layers.mine); }
+    threads(c, s);
     labels(c, cw, ch, layers.owners);
     drawn = { ...view };
     canvas.dataset.paintMs = Math.round(performance.now() - t0); // how long a full paint takes, for checking on slow phones
+  }
+
+  /** capomap: a mission's thread, home to where it goes: a dotted arc in the pin's colour, on the lit map and the flat one. */
+  function threads(c, s) {
+    const list = (pieces ||= o.pieces?.() || []).threads || [];
+    c.setLineDash([4 / s, 4 / s]);
+    for (const [a, b, rgb] of list) {
+      const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      c.beginPath(); c.moveTo(a[0], a[1]); c.quadraticCurveTo(mx, my - d * 0.22, b[0], b[1]);
+      c.strokeStyle = "rgba(14,20,22,.6)"; c.lineWidth = 3.4 / s; c.stroke(); c.strokeStyle = `rgb(${rgb.join(",")})`; c.lineWidth = 1.8 / s; c.stroke(); // dark under the colour, so it reads on any land
+    }
+    c.setLineDash([]);
   }
 
   function draw(now) {
@@ -278,8 +311,8 @@ export function worldMap(canvas, world, o) {
     const d = devicePixelRatio || 1, s = view.s, taken = [], near = band(), chosen = o.picked?.();
     ctx.setTransform(d, 0, 0, d, 0, 0);
     ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
-    const put = (text, mx, my, px, weight, sure) => {
-      const [x, y] = spot(mx, my);
+    const put = (text, mx, my, px, weight, sure, lift = 0) => {
+      const [x, y0] = spot(mx, my), y = y0 - lift;
       if (x < -40 || y < -20 || x > cw + 40 || y > ch + 20) return false;
       ctx.font = `${weight} ${px}px Georgia, serif`;
       const w = ctx.measureText(text).width, box = [x - w / 2 - 3, y - px / 2 - 2, x + w / 2 + 3, y + px / 2 + 2];
@@ -291,7 +324,7 @@ export function worldMap(canvas, world, o) {
     };
     // the chosen province is always named; then countries by size; then provinces, as the zoom allows
     const hit = chosen && world.provinces.get(chosen);
-    if (hit && near > 0) put(hit.name, hit.label[0], hit.label[1], 12, 600, true);
+    if (hit && near > 0) put(hit.name, hit.label[0], hit.label[1], 12, 600, true, lit ? 13 : 0);
     const biggest = new Map();
     for (const p of world.provinces.values()) {
       const who = owners.get(p.id), [x0, y0, x1, y1] = p.box, a = (x1 - x0) * (y1 - y0), b = biggest.get(who);
@@ -301,7 +334,7 @@ export function worldMap(canvas, world, o) {
     for (const [who, { a, p }] of [...biggest].sort((m, n) => n[1].a - m[1].a)) if (left > 0 && a * s * s > (near ? 700 : 1500) && put(o.name?.(who) || world.countries[who] || who, p.label[0], p.label[1], near > 1 ? 14 : 12, 600)) left--;
     if (near > 0) {
       const least = near > 1 ? 46 : 110; // a region names only its large provinces
-      for (const p of world.provinces.values()) { const [x0, y0, x1, y1] = p.box; if ((x1 - x0) * s > least && (y1 - y0) * s > 14) put(p.name, p.label[0], p.label[1], 11, 500); }
+      for (const p of world.provinces.values()) { const [x0, y0, x1, y1] = p.box; if ((x1 - x0) * s > least && (y1 - y0) * s > 14) put(p.name, p.label[0], p.label[1], 11, 500, false, lit ? 13 : 0); } // capomap: above the town that stands there
     }
   }
 
