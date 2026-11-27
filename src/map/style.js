@@ -11,6 +11,7 @@ const WAR = {
   name: "War table",
   set: "code", // which models: the ones made in code
   pack: "", // a sculpted set to fetch on top of them (a file in site/models/), or none
+  sculpt: ["figures", "ships", "buildings"], // figures hook: which sorts of sculpted pieces it wears in 3D, fetched when first shown (src/map/figures.js); [] keeps to the code-made set
   models: {}, // one model in place of another, by name: { foot: "army" } stands a block where a soldier would be; "" stands nothing
   kit: { base: 1, cast: 0 }, // the recipes' own settings: how wide a piece's base is; cast 1: figures in plain metal, the owner's enamel on base, shield and flag
   scale: 1, // pieces larger or smaller
@@ -58,6 +59,7 @@ export const STYLES = {
   clear: from(WAR, {
     name: "Clear",
     scale: 1.15, outline: 1.6,
+    sculpt: ["ships", "buildings"], // figures hook: the code-made figures read more clearly at a glance than slender sculpted ones
     fin: [[0.3, 0, 10, 0], [0.3, 0, 10, 0], [0.3, 0.06, 12, 0], [0.3, 0, 10, 0]],
     amb: [0.82, 0.06, 0.25], tone: [1, 0], ground: 0.14,
     surface: { grain: 0, relief: 0.3, bevel: 0.7, gloss: 0, edge: 1.45 },

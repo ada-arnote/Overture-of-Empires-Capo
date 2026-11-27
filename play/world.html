@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-bxqFauxWwrvG33VTCI1KsG+4U+ErYjDCLBV2m4wjQzo='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-cqCD7OhUapsNmJab+LP/Jg7kEIdmlK+lVexHHKqhctE='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>The world map · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -788,6 +788,7 @@ const WAR = {
   name: "War table",
   set: "code", // which models: the ones made in code
   pack: "", // a sculpted set to fetch on top of them (a file in site/models/), or none
+  sculpt: ["figures", "ships", "buildings"], // figures hook: which sorts of sculpted pieces it wears in 3D, fetched when first shown (src/map/figures.js); [] keeps to the code-made set
   models: {}, // one model in place of another, by name: { foot: "army" } stands a block where a soldier would be; "" stands nothing
   kit: { base: 1, cast: 0 }, // the recipes' own settings: how wide a piece's base is; cast 1: figures in plain metal, the owner's enamel on base, shield and flag
   scale: 1, // pieces larger or smaller
@@ -835,6 +836,7 @@ const STYLES = {
   clear: from(WAR, {
     name: "Clear",
     scale: 1.15, outline: 1.6,
+    sculpt: ["ships", "buildings"], // figures hook: the code-made figures read more clearly at a glance than slender sculpted ones
     fin: [[0.3, 0, 10, 0], [0.3, 0, 10, 0], [0.3, 0.06, 12, 0], [0.3, 0, 10, 0]],
     amb: [0.82, 0.06, 0.25], tone: [1, 0], ground: 0.14,
     surface: { grain: 0, relief: 0.3, bevel: 0.7, gloss: 0, edge: 1.45 },
@@ -1066,18 +1068,19 @@ for (let n = 1; n <= 6; n++) RECIPES[`die${n}`] = (o) => die(o, n);
  */
 function unpack(buffer) {
   const d = new DataView(buffer), out = {};
-  if (d.getUint32(0) !== 0x4341504d || d.getUint8(4) !== 1) throw new Error("not a model pack this version reads");
+  const ver = d.getUint8(4), step = ver === 2 ? 9 : 8; // figures hook: version 2 adds a shade a triangle, the painted wash
+  if (d.getUint32(0) !== 0x4341504d || (ver !== 1 && ver !== 2)) throw new Error("not a model pack this version reads");
   let at = 6;
   for (let k = d.getUint8(5); k > 0; k--) {
     const long = d.getUint8(at), name = String.fromCharCode(...new Uint8Array(buffer, at + 1, long)); at += 1 + long;
     const scale = d.getFloat32(at, true), V = d.getUint16(at + 4, true), T = d.getUint16(at + 6, true), pts = at + 8, tris = pts + V * 6, v = [];
     const p = (i) => [0, 2, 4].map((o) => d.getInt16(pts + i * 6 + o, true) * scale);
     for (let t = 0; t < T; t++) {
-      const o = tris + t * 8, a = p(d.getUint16(o, true)), b = p(d.getUint16(o + 2, true)), c3 = p(d.getUint16(o + 4, true)), col = [d.getUint8(o + 6), 128, 0], fin = d.getUint8(o + 7);
+      const o = tris + t * step, a = p(d.getUint16(o, true)), b = p(d.getUint16(o + 2, true)), c3 = p(d.getUint16(o + 4, true)), col = [d.getUint8(o + 6), ver === 2 ? d.getUint8(o + 8) : 128, 0], fin = d.getUint8(o + 7);
       const n = [(b[1] - a[1]) * (c3[2] - a[2]) - (b[2] - a[2]) * (c3[1] - a[1]), (b[2] - a[2]) * (c3[0] - a[0]) - (b[0] - a[0]) * (c3[2] - a[2]), (b[0] - a[0]) * (c3[1] - a[1]) - (b[1] - a[1]) * (c3[0] - a[0])], l = Math.hypot(...n) || 1;
       for (const q of [a, b, c3]) v.push(...q, n[0] / l, n[1] / l, n[2] / l, ...col, fin);
     }
-    out[name] = bake(v); at = tris + T * 8;
+    out[name] = bake(v); at = tris + T * step;
   }
   return out;
 }
@@ -1092,7 +1095,90 @@ function models(kit = {}) {
 
 $x.unpack = unpack; $x.models = models;
 return $x; })({});
+$m[10] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Made by tools/models.mjs from tools/figures.json; do not edit by hand. The sculpted models on the shelf (site/models/), each
+// fetched only when a board in 3D shows it, with its licence and the credit line the credits panel shows players.
+const SHELF = {
+  knight: { file: "knight.bin", tris: 2433, licence: "CC-BY-4.0", credit: "\"Knight Hospitaller - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/7975ee5c47a94d35abf98070bfdd1ea8), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
+  legionary: { file: "legionary.bin", tris: 2415, licence: "CC-BY-4.0", credit: "\"Roman Soldier - fighting pose - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/5c29ca5803ad475eaaae12714e8f1dab), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
+  redcoat: { file: "redcoat.bin", tris: 2448, licence: "CC-BY-4.0", credit: "\"Waterloo British Infantry - for animation\" by Andy Woodhead (sketchfab.com/3d-models/85a1a8205b2c447fb8d0419978f17b75), CC BY 4.0, modified (posed, cut down, repainted, re-encoded)." },
+  general: { file: "general.bin", tris: 3980, licence: "CC-BY-4.0", credit: "\"Roman General - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/70d18b0518344b7bad3cd0979072a1c2), CC BY 4.0, modified (remeshed, cut down, painted as pewter, re-encoded)." },
+  horse: { file: "horse.bin", tris: 2946, licence: "CC-BY-4.0", credit: "\"Galloping Horse - free download - 3d-printable\" by Andy Woodhead (sketchfab.com/3d-models/dfc6f5596aba48a0b08a44c31b97b368), CC BY 4.0, modified (base removed, cut down, repainted, re-encoded)." },
+  cannon: { file: "cannon.bin", tris: 2309, licence: "CC-BY-4.0", credit: "\"British field cannon - 1815 - free download\" by Andy Woodhead (sketchfab.com/3d-models/c027cb2e6e764f4196f27c94b5f770d5), CC BY 4.0, modified (low-poly version, cut down, repainted, re-encoded)." },
+  longboat: { file: "longboat.bin", tris: 2868, licence: "CC-BY-4.0", credit: "\"Gislinge Viking Boat\" by Opus Poly (sketchfab.com/3d-models/01098ad7973647a9b558f41d2ebc5193), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
+  liner: { file: "liner.bin", tris: 4961, licence: "CC-BY-4.0", credit: "\"Ship of the line, c. 1700\", Swedish National Maritime and Transport Museums (sketchfab.com/3d-models/3afea352a40045b0a638c9900f669ed4), CC BY 4.0, modified (remeshed, cut down, repainted, re-encoded)." },
+  torpedo: { file: "torpedo.bin", tris: 3639, licence: "CC-BY-4.0", credit: "\"Swedish 2nd class Torpedo Boat (1908)\", Swedish National Maritime and Transport Museums (sketchfab.com/3d-models/d71822cc900b43dfa76b014c250e9e7f), CC BY 4.0, modified (remeshed, cut down, repainted, re-encoded)." },
+  destroyer: { file: "destroyer.bin", tris: 3520, licence: "CC-BY-4.0", credit: "\"1:1 Low poly US NAVY DDG-51 USS Arleigh Burke.\" by Yi Tsung Lee, model and texture by WTigerTw (sketchfab.com/3d-models/17be09c31c6047e4a5969b68c29eba03), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
+  cottage: { file: "cottage.bin", tris: 1499, licence: "CC0-1.0" },
+  townhouse: { file: "townhouse.bin", tris: 1497, licence: "CC0-1.0" },
+  adobe: { file: "adobe.bin", tris: 1000, licence: "CC0-1.0" },
+};
+
+$x.SHELF = SHELF;
+return $x; })({});
 $m[9] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Sculpted pieces in place of the recipes made in code, where they are better: which model stands for a piece in each era and
+// region, and fetching each one only when a board in 3D first shows it. Looks only: no rule ever reads a model. The recipes stay
+// as the fallback (Flat, a page with no shelf, a style that keeps to its own set, a model not yet arrived) and nothing waits on one.
+const { SHELF } = $m[10];
+const { unpack } = $m[6];
+
+/** Which shelf model takes a recipe's place, by era. A name missing here, or from the shelf, keeps its recipe. */
+const ERAS = {
+  ancient: { foot: "legionary", unit2: "legionary", gun: "ballista", horse: "horse", unit4: "general", leader: "general", ship: "longboat", fleet: "longboat" },
+  medieval: { unit3: "knight", foot: "knight", horse: "horse", ship: "longboat", fleet: "longboat", town: "townhouse", depot: "cottage" },
+  early: { foot: "redcoat", gun: "cannon", horse: "horse", ship: "liner", fleet: "liner", town: "townhouse", depot: "cottage" },
+  industrial: { foot: "fusilier", gun: "cannon", ship: "torpedo", fleet: "torpedo", town: "block", depot: "townhouse" },
+  fable: { unit2: "legionary", unit3: "knight", unit4: "general", horse: "horse", town: "townhouse", depot: "cottage" }, // The Island Fable's guard, knight and marshal
+  modern: { foot: "marine", ship: "destroyer", fleet: "destroyer", town: "block", depot: "block" },
+};
+/** Buildings by region: on sand (terrain 4) a town is a flat-roofed desert house, in any era but the modern. */
+const REGIONS = { 4: { town: "adobe", depot: "adobe" } };
+/** What sort each shelf model is, so a style can wear sculpted ships and houses but keep its own figures (style.sculpt). */
+const SORT = { knight: "figures", legionary: "figures", redcoat: "figures", fusilier: "figures", marine: "figures", general: "figures", horse: "figures", ballista: "figures", cannon: "figures",
+  longboat: "ships", liner: "ships", torpedo: "ships", destroyer: "ships", cottage: "buildings", townhouse: "buildings", block: "buildings", adobe: "buildings" };
+
+/** The era of a year, for Capo's map. */
+const eraOf = (year) => (year < 500 ? "ancient" : year < 1500 ? "medieval" : year < 1850 ? "early" : year < 1945 ? "industrial" : "modern");
+
+/**
+ * The figures for one board. era: a key of ERAS. fetch(file) -> a promise of the file's bytes, or nothing (then only recipes stand).
+ * got(models): called with each model as it arrives, to send to the mesh layer and stand the pieces again.
+ * pick(name, kind, style, on) -> the model to stand: the sculpted one if it is here, else the recipe (asking for the sculpted one if on).
+ */
+function figures(era, fetch, got) {
+  const have = new Set(), asked = new Set();
+  let table = ERAS[era] || {};
+  const want = (name, kind, style) => {
+    const s = (era !== "modern" && REGIONS[kind]?.[name]) || table[name];
+    return s && SHELF[s] && (style.sculpt || []).includes(SORT[s]) ? s : "";
+  };
+  return {
+    get era() { return era; },
+    set era(e) { era = e; table = ERAS[e] || {}; },
+    pick(name, kind, style, on) {
+      const s = fetch ? want(name, kind, style) : "";
+      if (!s) return name;
+      if (have.has(s)) return s;
+      if (on && !asked.has(s)) {
+        asked.add(s);
+        Promise.resolve(fetch(SHELF[s].file)).then((buf) => {
+          if (!buf) return;
+          const m = unpack(buf);
+          if (!m[s]) return;
+          have.add(s); got(m);
+        }).catch(() => { /* the recipe stays */ });
+      }
+      return name;
+    },
+  };
+}
+
+$x.ERAS = ERAS; $x.REGIONS = REGIONS; $x.SORT = SORT; $x.eraOf = eraOf; $x.figures = figures;
+return $x; })({});
+$m[11] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The painter: WebGL2 by hand. One full-screen triangle; the shader undoes the camera and walks down to the first cell top.
 // It writes the depth of what it found, so that the mesh layer's real shapes are hidden by raised cells, and it takes their shadows.
@@ -1299,7 +1385,7 @@ class Painter {
 
 $x.Painter = Painter;
 return $x; })({});
-$m[10] = (($x) => {
+$m[12] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Reading a board at a glance: the goods' own symbols and their key, pips under a number, a port's rate on a plate by its flag,
 // a seat's routes as links between hexes, and flags on what can still act. Our own simple shapes, drawn in code.
@@ -1463,7 +1549,7 @@ function legend(items, title = "Goods") {
 
 $x.GLYPHS = GLYPHS; $x.glyph = glyph; $x.stamp = stamp; $x.pips = pips; $x.portPlate = portPlate; $x.flag = flag; $x.linkModels = linkModels; $x.linkEnds = linkEnds; $x.stageLinks = stageLinks; $x.drawLinks = drawLinks; $x.legend = legend;
 return $x; })({});
-$m[11] = (($x) => {
+$m[13] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Names on the map and number plates that keep out of each other's way. A plate that would cover another is moved to the
 // nearest free place and tied back to its piece by a thin line; a name that has no room, or no room in its province, is left out.
@@ -1563,11 +1649,13 @@ const { Camera, pick } = $m[3];
 const { hexPicture } = $m[4];
 const { Meshes } = $m[5];
 const { models, unpack } = $m[6];
-const { Painter } = $m[9];
+// figures hook
+const { figures } = $m[9];
+const { Painter } = $m[11];
 const { STYLES, styleOf, wear } = $m[8];
 // reading hook (p10-reading): the goods, pips, ports, links and flags; names and plates that keep clear of each other
-const { drawLinks, flag, linkModels, pips, portPlate, stageLinks, stamp } = $m[10];
-const { drawNames, spread, tie } = $m[11];
+const { drawLinks, flag, linkModels, pips, portPlate, stageLinks, stamp } = $m[12];
+const { drawNames, spread, tie } = $m[13];
 
 const DEG = Math.PI / 180;
 const LOOKS = {
@@ -1636,7 +1724,7 @@ function canDraw() {
  * reading (p10-reading): goods(i) the good a cell yields (its symbol is drawn on it), colours the goods' own colours (for a port's plate),
  * places [{ at, text }] names printed where there is room, rim: an owner's colour as each tile's rim and sides rather than a flood.
  */
-function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false, style = "painted", reading = {} }) {
+function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false, style = "painted", reading = {}, era = "", shelf = null }) {
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
@@ -1651,13 +1739,14 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   const lift = () => 9 * L.rise;
   let meshes = null, staged = false;
   try { meshes = new Meshes(painter.g, { ...models(look3.kit), ...linkModels() }); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); } // reading hook (p10-reading): the links between hexes
+  const fig = figures(era, shelf, (got) => { if (meshes && alive) { meshes.add(got); staged = false; redraw(); } }); // figures hook: sculpted pieces, fetched when first shown in 3D
   const solid = () => L.rise > 0 && !!meshes;
   /** Pieces on a map of small cells are made larger, so that they read when the whole board is in view (they still grow as you zoom in). */
   const grown = () => Math.max(1, Math.min(picture ? 3.2 : 1.25, 24 / (m.R * base))); // on a board of hexes a piece must still fit its own hex
   /** What stands on the board, as models: scenery from what the land is, then the pieces the game lists. Sizes are in cell radii. */
   function stage() {
     const out = [], R = m.R, big = grown(), rnd = (i, k) => { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
-    const put = (name, at, dx = 0, dy = 0, s = 1, rgb = null, t = 0, dim = 1) => (look3.models[name] ?? name) && out.push({ m: look3.models[name] ?? name, x: m.mid[at][0] + dx * R * big, y: m.mid[at][1] + dy * R * big, z: show[at].top, s: s * R * big * look3.scale, rgb, t, dim });
+    const put = (name, at, dx = 0, dy = 0, s = 1, rgb = null, t = 0, dim = 1) => (look3.models[name] ?? name) && out.push({ m: fig.pick(look3.models[name] ?? name, show[at].kind, look3, solid()), x: m.mid[at][0] + dx * R * big, y: m.mid[at][1] + dy * R * big, z: show[at].top, s: s * R * big * look3.scale, rgb, t, dim });
     show.forEach((c, i) => {
       if (c.kind === 7) put("hill", i, 0, 0, (R < 20 ? 0.62 : 0.9) / big, c.rgb.map((v) => v * 0.94), rnd(i, 1) * 6);
       else if (c.kind === 6 || c.kind === 10) put("peak", i, 0, -0.05, c.kind === 6 ? 0.62 : 1, null, rnd(i, 2) * 6);
@@ -2082,7 +2171,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
 
 $x.LOOKS = LOOKS; $x.EMBLEMS = EMBLEMS; $x.emblem = emblem; $x.seatPattern = seatPattern; $x.canDraw = canDraw; $x.createBoard = createBoard;
 return $x; })({});
-$m[12] = (($x) => {
+$m[14] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's map, close in: the models only Capo stands (strength pips, an agent, dunes, reeds, grass, ice, a hamlet), and the
 // land's dressing. Looks only: no rule reads any of it. Dressing is cheap by design: spots lie on a grid of cells that halve
@@ -2201,7 +2290,7 @@ class Dressing {
 
 $x.capoModels = capoModels; $x.Dressing = Dressing;
 return $x; })({});
-$m[13] = (($x) => {
+$m[15] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The second ground: a world of provinces as a lit relief map on the table. Capo's map, real or invented.
 // The table games' ground is a picture of cell numbers; that cannot hold thousands of provinces sharply, so here the
@@ -2382,6 +2471,35 @@ class WorldGround {
 
 $x.WorldGround = WorldGround;
 return $x; })({});
+$m[16] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The model shelf as the pages reach it: a sculpted piece is fetched from site/models/ only when a board in 3D first shows it,
+// and the credits players can read from every game's About (CC BY asks for a credit line they can reach).
+const { SHELF } = $m[10];
+
+// the built pages point this at the site's own shelf when served, and at nothing when a page is opened by double-click (no fetching there)
+const SHELF_URL = "../site/models/";
+const kept = new Map(); // each file once a page, shared by every board on it (the title's board and the game's)
+/** The fetcher a board takes, or none: then only the pieces made in code stand. */
+const shelf = SHELF_URL ? (file) => { if (!kept.has(file)) kept.set(file, fetch(SHELF_URL + file).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null)); return kept.get(file); } : null;
+
+/** Makers whose models need no credit, thanked all the same: shown once one of their models is on the shelf. */
+const COURTESY = [["cottage townhouse", "Houses built from the Medieval Village MegaKit by Quaternius (quaternius.com), CC0."], ["block", "City blocks from the Downtown City MegaKit by Quaternius (quaternius.com), CC0."],["adobe", "Desert houses from Low Poly Desert Buildings by Anker's Assets (ankersassets.itch.io), CC0."]];
+
+/** The credits for the sculpted pieces, for an About panel: one line a model, as its licence asks. Plain text only. */
+function shelfCredits() {
+  const box = document.createElement("div"), h = document.createElement("h3"), note = document.createElement("p"), list = document.createElement("ul");
+  h.textContent = "Sculpted pieces";
+  note.textContent = "In 3D, some pieces are open models by other makers, cut down, repainted in the board's colours and re-encoded for this game. Each is used under its licence:";
+  for (const m of Object.values(SHELF)) if (m.credit) { const li = document.createElement("li"); li.textContent = m.credit; list.append(li); }
+  for (const [names, line] of COURTESY) if (names.split(" ").some((n) => SHELF[n])) { const li = document.createElement("li"); li.textContent = line; list.append(li); }
+  if (!list.children.length) return box;
+  box.append(h, note, list);
+  return box;
+}
+
+$x.shelf = shelf; $x.shelfCredits = shelfCredits;
+return $x; })({});
 $m[1] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The province map for Capo's story worlds: maps/world.json drawn on one canvas, with drag, wheel, pinch and tap.
@@ -2391,11 +2509,14 @@ $m[1] = (($x) => {
 // province. Where it cannot, or the player chooses Flat, the whole map is drawn here in 2D as before.
 const { canDraw } = $m[2];
 const { Camera } = $m[3];
-const { Dressing, capoModels } = $m[12];
+const { Dressing, capoModels } = $m[14];
 const { Meshes } = $m[5];
 const { models } = $m[6];
 const { STYLE_KEY, wear } = $m[8];
-const { WorldGround } = $m[13];
+const { WorldGround } = $m[15];
+// figures hook
+const { eraOf, figures } = $m[9];
+const { shelf } = $m[16];
 
 /** Fetch and unpack a world: absolute points for every arc, a path, box and middle for every province. */
 async function loadWorld(url, disputesUrl = "") {
@@ -2497,7 +2618,7 @@ function worldMap(canvas, world, o) {
       Object.assign(under.style, { position: "fixed", inset: "0", width: "100%", height: "100%", display: "block" });
       const ground = new WorldGround(under), meshes = new Meshes(ground.g, { ...models(style.kit), ...capoModels() }); // capomap: Capo's own models beside the shared ones;
       canvas.before(under);
-      lit = { under, ground, meshes, rgb: new Map(), key: "" };
+      lit = { under, ground, meshes, rgb: new Map(), key: "", fig: figures(eraOf(o.year?.() ?? 9999), shelf, (got) => { if (lit?.meshes === meshes) { meshes.add(got); redraw(); } }) }; // figures hook: sculpted ships by the year
       under.addEventListener("webglcontextlost", (e) => { e.preventDefault(); dark(); });
       const wood = new Image(); wood.onload = () => { if (lit) { lit.ground.wood(wood); redraw(); } }; wood.src = "../site/textures/walnut.webp";
       shape();
@@ -2565,13 +2686,14 @@ function worldMap(canvas, world, o) {
   }
   /** What stands on the lit map: the page's pieces, each the same size on the screen whatever the zoom (a little larger close in). */
   function stage(box) {
+    lit.fig.era = eraOf(o.year?.() ?? 9999); // figures hook
     const b = band(), phone = canvas.clientWidth < 600, k = ((phone ? 28 : 36) / view.s) * Math.pow(view.s / wide, 0.22), list = [], pad = k * 2;
     for (const p of (pieces ||= o.pieces?.() || [])) {
       if ((p.band || 0) > b || (p.until ?? 9) < b) continue;
       if (p.fit) { const r = world.provinces.get(p.at)?.box; if (!r || Math.max(r[2] - r[0], r[3] - r[1]) * view.s < p.fit) continue; } // capomap: a town waits until its province is large enough to hold it
       const q = Array.isArray(p.at) ? p.at : world.provinces.get(p.at)?.label;
       if (!q || q[0] < box[0] - pad || q[0] > box[2] + pad || q[1] < box[1] - pad || q[1] > box[3] + pad) continue; // capomap: only what is in view
-      const one = { m: p.m, x: q[0] + (p.dx || 0) * k, y: q[1] + (p.dy || 0) * k, z: p.sea ? 0 : 1, s: k * (p.size || 1) * style.scale, t: p.turn || 0, rgb: p.owner ? rgbOf(o.colour?.(p.owner) || ownerColour(p.owner)) : p.rgb || null };
+      const one = { m: lit.fig.pick(p.m, 0, style, true), x: q[0] + (p.dx || 0) * k, y: q[1] + (p.dy || 0) * k, z: p.sea ? 0 : 1, s: k * (p.size || 1) * style.scale, t: p.turn || 0, rgb: p.owner ? rgbOf(o.colour?.(p.owner) || ownerColour(p.owner)) : p.rgb || null };
       list.push(one);
       if (p.pips && b > 0) list.push({ ...one, m: `${p.sea ? "f" : ""}pips${p.pips}`, rgb: null }); // capomap: strength pips, from the region band
     }
@@ -2785,7 +2907,7 @@ function worldMap(canvas, world, o) {
 
 $x.loadWorld = loadWorld; $x.unpackWorld = unpackWorld; $x.ownerColour = ownerColour; $x.worldMap = worldMap;
 return $x; })({});
-$m[14] = (($x) => {
+$m[17] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Where this copy's source code can be read. Anyone who runs a changed copy puts their own address here.
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
@@ -2793,7 +2915,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.10.0";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "a650c1bf";
+const BUILD = "23708998";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -2813,7 +2935,7 @@ const AI_BASES = {
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_BASES = AI_BASES;
 return $x; })({});
-$m[15] = (($x) => {
+$m[18] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
 // Daylight or lamplight, as the table games' Light setting last left it; every page starts here. The front page has one theme.
@@ -2837,8 +2959,8 @@ $m[0] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A first look at the world province map that Capo's story worlds will be played on.
 const { loadWorld, worldMap } = $m[1];
-const { BUILD, SOURCE_URL, VERSION } = $m[14];
-const { guard } = $m[15];
+const { BUILD, SOURCE_URL, VERSION } = $m[17];
+const { guard } = $m[18];
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };

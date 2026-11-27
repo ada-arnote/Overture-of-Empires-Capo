@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jSvUDD1IvVzJ1OeE384UUefxrTceZUNHKo8+g5ajXYg='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-pwscX/exHQdEWgZVjQqtOe1mrMUCZGOCPhNVDx+vJYI='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Grain and Glass · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -2293,6 +2293,7 @@ const WAR = {
   name: "War table",
   set: "code", // which models: the ones made in code
   pack: "", // a sculpted set to fetch on top of them (a file in site/models/), or none
+  sculpt: ["figures", "ships", "buildings"], // figures hook: which sorts of sculpted pieces it wears in 3D, fetched when first shown (src/map/figures.js); [] keeps to the code-made set
   models: {}, // one model in place of another, by name: { foot: "army" } stands a block where a soldier would be; "" stands nothing
   kit: { base: 1, cast: 0 }, // the recipes' own settings: how wide a piece's base is; cast 1: figures in plain metal, the owner's enamel on base, shield and flag
   scale: 1, // pieces larger or smaller
@@ -2340,6 +2341,7 @@ const STYLES = {
   clear: from(WAR, {
     name: "Clear",
     scale: 1.15, outline: 1.6,
+    sculpt: ["ships", "buildings"], // figures hook: the code-made figures read more clearly at a glance than slender sculpted ones
     fin: [[0.3, 0, 10, 0], [0.3, 0, 10, 0], [0.3, 0.06, 12, 0], [0.3, 0, 10, 0]],
     amb: [0.82, 0.06, 0.25], tone: [1, 0], ground: 0.14,
     surface: { grain: 0, relief: 0.3, bevel: 0.7, gloss: 0, edge: 1.45 },
@@ -2571,18 +2573,19 @@ for (let n = 1; n <= 6; n++) RECIPES[`die${n}`] = (o) => die(o, n);
  */
 function unpack(buffer) {
   const d = new DataView(buffer), out = {};
-  if (d.getUint32(0) !== 0x4341504d || d.getUint8(4) !== 1) throw new Error("not a model pack this version reads");
+  const ver = d.getUint8(4), step = ver === 2 ? 9 : 8; // figures hook: version 2 adds a shade a triangle, the painted wash
+  if (d.getUint32(0) !== 0x4341504d || (ver !== 1 && ver !== 2)) throw new Error("not a model pack this version reads");
   let at = 6;
   for (let k = d.getUint8(5); k > 0; k--) {
     const long = d.getUint8(at), name = String.fromCharCode(...new Uint8Array(buffer, at + 1, long)); at += 1 + long;
     const scale = d.getFloat32(at, true), V = d.getUint16(at + 4, true), T = d.getUint16(at + 6, true), pts = at + 8, tris = pts + V * 6, v = [];
     const p = (i) => [0, 2, 4].map((o) => d.getInt16(pts + i * 6 + o, true) * scale);
     for (let t = 0; t < T; t++) {
-      const o = tris + t * 8, a = p(d.getUint16(o, true)), b = p(d.getUint16(o + 2, true)), c3 = p(d.getUint16(o + 4, true)), col = [d.getUint8(o + 6), 128, 0], fin = d.getUint8(o + 7);
+      const o = tris + t * step, a = p(d.getUint16(o, true)), b = p(d.getUint16(o + 2, true)), c3 = p(d.getUint16(o + 4, true)), col = [d.getUint8(o + 6), ver === 2 ? d.getUint8(o + 8) : 128, 0], fin = d.getUint8(o + 7);
       const n = [(b[1] - a[1]) * (c3[2] - a[2]) - (b[2] - a[2]) * (c3[1] - a[1]), (b[2] - a[2]) * (c3[0] - a[0]) - (b[0] - a[0]) * (c3[2] - a[2]), (b[0] - a[0]) * (c3[1] - a[1]) - (b[1] - a[1]) * (c3[0] - a[0])], l = Math.hypot(...n) || 1;
       for (const q of [a, b, c3]) v.push(...q, n[0] / l, n[1] / l, n[2] / l, ...col, fin);
     }
-    out[name] = bake(v); at = tris + T * 8;
+    out[name] = bake(v); at = tris + T * step;
   }
   return out;
 }
@@ -2597,7 +2600,90 @@ function models(kit = {}) {
 
 $x.unpack = unpack; $x.models = models;
 return $x; })({});
+$m[21] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Made by tools/models.mjs from tools/figures.json; do not edit by hand. The sculpted models on the shelf (site/models/), each
+// fetched only when a board in 3D shows it, with its licence and the credit line the credits panel shows players.
+const SHELF = {
+  knight: { file: "knight.bin", tris: 2433, licence: "CC-BY-4.0", credit: "\"Knight Hospitaller - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/7975ee5c47a94d35abf98070bfdd1ea8), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
+  legionary: { file: "legionary.bin", tris: 2415, licence: "CC-BY-4.0", credit: "\"Roman Soldier - fighting pose - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/5c29ca5803ad475eaaae12714e8f1dab), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
+  redcoat: { file: "redcoat.bin", tris: 2448, licence: "CC-BY-4.0", credit: "\"Waterloo British Infantry - for animation\" by Andy Woodhead (sketchfab.com/3d-models/85a1a8205b2c447fb8d0419978f17b75), CC BY 4.0, modified (posed, cut down, repainted, re-encoded)." },
+  general: { file: "general.bin", tris: 3980, licence: "CC-BY-4.0", credit: "\"Roman General - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/70d18b0518344b7bad3cd0979072a1c2), CC BY 4.0, modified (remeshed, cut down, painted as pewter, re-encoded)." },
+  horse: { file: "horse.bin", tris: 2946, licence: "CC-BY-4.0", credit: "\"Galloping Horse - free download - 3d-printable\" by Andy Woodhead (sketchfab.com/3d-models/dfc6f5596aba48a0b08a44c31b97b368), CC BY 4.0, modified (base removed, cut down, repainted, re-encoded)." },
+  cannon: { file: "cannon.bin", tris: 2309, licence: "CC-BY-4.0", credit: "\"British field cannon - 1815 - free download\" by Andy Woodhead (sketchfab.com/3d-models/c027cb2e6e764f4196f27c94b5f770d5), CC BY 4.0, modified (low-poly version, cut down, repainted, re-encoded)." },
+  longboat: { file: "longboat.bin", tris: 2868, licence: "CC-BY-4.0", credit: "\"Gislinge Viking Boat\" by Opus Poly (sketchfab.com/3d-models/01098ad7973647a9b558f41d2ebc5193), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
+  liner: { file: "liner.bin", tris: 4961, licence: "CC-BY-4.0", credit: "\"Ship of the line, c. 1700\", Swedish National Maritime and Transport Museums (sketchfab.com/3d-models/3afea352a40045b0a638c9900f669ed4), CC BY 4.0, modified (remeshed, cut down, repainted, re-encoded)." },
+  torpedo: { file: "torpedo.bin", tris: 3639, licence: "CC-BY-4.0", credit: "\"Swedish 2nd class Torpedo Boat (1908)\", Swedish National Maritime and Transport Museums (sketchfab.com/3d-models/d71822cc900b43dfa76b014c250e9e7f), CC BY 4.0, modified (remeshed, cut down, repainted, re-encoded)." },
+  destroyer: { file: "destroyer.bin", tris: 3520, licence: "CC-BY-4.0", credit: "\"1:1 Low poly US NAVY DDG-51 USS Arleigh Burke.\" by Yi Tsung Lee, model and texture by WTigerTw (sketchfab.com/3d-models/17be09c31c6047e4a5969b68c29eba03), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
+  cottage: { file: "cottage.bin", tris: 1499, licence: "CC0-1.0" },
+  townhouse: { file: "townhouse.bin", tris: 1497, licence: "CC0-1.0" },
+  adobe: { file: "adobe.bin", tris: 1000, licence: "CC0-1.0" },
+};
+
+$x.SHELF = SHELF;
+return $x; })({});
 $m[20] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Sculpted pieces in place of the recipes made in code, where they are better: which model stands for a piece in each era and
+// region, and fetching each one only when a board in 3D first shows it. Looks only: no rule ever reads a model. The recipes stay
+// as the fallback (Flat, a page with no shelf, a style that keeps to its own set, a model not yet arrived) and nothing waits on one.
+const { SHELF } = $m[21];
+const { unpack } = $m[17];
+
+/** Which shelf model takes a recipe's place, by era. A name missing here, or from the shelf, keeps its recipe. */
+const ERAS = {
+  ancient: { foot: "legionary", unit2: "legionary", gun: "ballista", horse: "horse", unit4: "general", leader: "general", ship: "longboat", fleet: "longboat" },
+  medieval: { unit3: "knight", foot: "knight", horse: "horse", ship: "longboat", fleet: "longboat", town: "townhouse", depot: "cottage" },
+  early: { foot: "redcoat", gun: "cannon", horse: "horse", ship: "liner", fleet: "liner", town: "townhouse", depot: "cottage" },
+  industrial: { foot: "fusilier", gun: "cannon", ship: "torpedo", fleet: "torpedo", town: "block", depot: "townhouse" },
+  fable: { unit2: "legionary", unit3: "knight", unit4: "general", horse: "horse", town: "townhouse", depot: "cottage" }, // The Island Fable's guard, knight and marshal
+  modern: { foot: "marine", ship: "destroyer", fleet: "destroyer", town: "block", depot: "block" },
+};
+/** Buildings by region: on sand (terrain 4) a town is a flat-roofed desert house, in any era but the modern. */
+const REGIONS = { 4: { town: "adobe", depot: "adobe" } };
+/** What sort each shelf model is, so a style can wear sculpted ships and houses but keep its own figures (style.sculpt). */
+const SORT = { knight: "figures", legionary: "figures", redcoat: "figures", fusilier: "figures", marine: "figures", general: "figures", horse: "figures", ballista: "figures", cannon: "figures",
+  longboat: "ships", liner: "ships", torpedo: "ships", destroyer: "ships", cottage: "buildings", townhouse: "buildings", block: "buildings", adobe: "buildings" };
+
+/** The era of a year, for Capo's map. */
+const eraOf = (year) => (year < 500 ? "ancient" : year < 1500 ? "medieval" : year < 1850 ? "early" : year < 1945 ? "industrial" : "modern");
+
+/**
+ * The figures for one board. era: a key of ERAS. fetch(file) -> a promise of the file's bytes, or nothing (then only recipes stand).
+ * got(models): called with each model as it arrives, to send to the mesh layer and stand the pieces again.
+ * pick(name, kind, style, on) -> the model to stand: the sculpted one if it is here, else the recipe (asking for the sculpted one if on).
+ */
+function figures(era, fetch, got) {
+  const have = new Set(), asked = new Set();
+  let table = ERAS[era] || {};
+  const want = (name, kind, style) => {
+    const s = (era !== "modern" && REGIONS[kind]?.[name]) || table[name];
+    return s && SHELF[s] && (style.sculpt || []).includes(SORT[s]) ? s : "";
+  };
+  return {
+    get era() { return era; },
+    set era(e) { era = e; table = ERAS[e] || {}; },
+    pick(name, kind, style, on) {
+      const s = fetch ? want(name, kind, style) : "";
+      if (!s) return name;
+      if (have.has(s)) return s;
+      if (on && !asked.has(s)) {
+        asked.add(s);
+        Promise.resolve(fetch(SHELF[s].file)).then((buf) => {
+          if (!buf) return;
+          const m = unpack(buf);
+          if (!m[s]) return;
+          have.add(s); got(m);
+        }).catch(() => { /* the recipe stays */ });
+      }
+      return name;
+    },
+  };
+}
+
+$x.ERAS = ERAS; $x.REGIONS = REGIONS; $x.SORT = SORT; $x.eraOf = eraOf; $x.figures = figures;
+return $x; })({});
+$m[22] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The painter: WebGL2 by hand. One full-screen triangle; the shader undoes the camera and walks down to the first cell top.
 // It writes the depth of what it found, so that the mesh layer's real shapes are hidden by raised cells, and it takes their shadows.
@@ -2804,7 +2890,7 @@ class Painter {
 
 $x.Painter = Painter;
 return $x; })({});
-$m[21] = (($x) => {
+$m[23] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Reading a board at a glance: the goods' own symbols and their key, pips under a number, a port's rate on a plate by its flag,
 // a seat's routes as links between hexes, and flags on what can still act. Our own simple shapes, drawn in code.
@@ -2968,7 +3054,7 @@ function legend(items, title = "Goods") {
 
 $x.GLYPHS = GLYPHS; $x.glyph = glyph; $x.stamp = stamp; $x.pips = pips; $x.portPlate = portPlate; $x.flag = flag; $x.linkModels = linkModels; $x.linkEnds = linkEnds; $x.stageLinks = stageLinks; $x.drawLinks = drawLinks; $x.legend = legend;
 return $x; })({});
-$m[22] = (($x) => {
+$m[24] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Names on the map and number plates that keep out of each other's way. A plate that would cover another is moved to the
 // nearest free place and tied back to its piece by a thin line; a name that has no room, or no room in its province, is left out.
@@ -3068,11 +3154,13 @@ const { Camera, pick } = $m[14];
 const { hexPicture } = $m[15];
 const { Meshes } = $m[16];
 const { models, unpack } = $m[17];
-const { Painter } = $m[20];
+// figures hook
+const { figures } = $m[20];
+const { Painter } = $m[22];
 const { STYLES, styleOf, wear } = $m[19];
 // reading hook (p10-reading): the goods, pips, ports, links and flags; names and plates that keep clear of each other
-const { drawLinks, flag, linkModels, pips, portPlate, stageLinks, stamp } = $m[21];
-const { drawNames, spread, tie } = $m[22];
+const { drawLinks, flag, linkModels, pips, portPlate, stageLinks, stamp } = $m[23];
+const { drawNames, spread, tie } = $m[24];
 
 const DEG = Math.PI / 180;
 const LOOKS = {
@@ -3141,7 +3229,7 @@ function canDraw() {
  * reading (p10-reading): goods(i) the good a cell yields (its symbol is drawn on it), colours the goods' own colours (for a port's plate),
  * places [{ at, text }] names printed where there is room, rim: an owner's colour as each tile's rim and sides rather than a flood.
  */
-function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false, style = "painted", reading = {} }) {
+function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false, style = "painted", reading = {}, era = "", shelf = null }) {
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
@@ -3156,13 +3244,14 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   const lift = () => 9 * L.rise;
   let meshes = null, staged = false;
   try { meshes = new Meshes(painter.g, { ...models(look3.kit), ...linkModels() }); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); } // reading hook (p10-reading): the links between hexes
+  const fig = figures(era, shelf, (got) => { if (meshes && alive) { meshes.add(got); staged = false; redraw(); } }); // figures hook: sculpted pieces, fetched when first shown in 3D
   const solid = () => L.rise > 0 && !!meshes;
   /** Pieces on a map of small cells are made larger, so that they read when the whole board is in view (they still grow as you zoom in). */
   const grown = () => Math.max(1, Math.min(picture ? 3.2 : 1.25, 24 / (m.R * base))); // on a board of hexes a piece must still fit its own hex
   /** What stands on the board, as models: scenery from what the land is, then the pieces the game lists. Sizes are in cell radii. */
   function stage() {
     const out = [], R = m.R, big = grown(), rnd = (i, k) => { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
-    const put = (name, at, dx = 0, dy = 0, s = 1, rgb = null, t = 0, dim = 1) => (look3.models[name] ?? name) && out.push({ m: look3.models[name] ?? name, x: m.mid[at][0] + dx * R * big, y: m.mid[at][1] + dy * R * big, z: show[at].top, s: s * R * big * look3.scale, rgb, t, dim });
+    const put = (name, at, dx = 0, dy = 0, s = 1, rgb = null, t = 0, dim = 1) => (look3.models[name] ?? name) && out.push({ m: fig.pick(look3.models[name] ?? name, show[at].kind, look3, solid()), x: m.mid[at][0] + dx * R * big, y: m.mid[at][1] + dy * R * big, z: show[at].top, s: s * R * big * look3.scale, rgb, t, dim });
     show.forEach((c, i) => {
       if (c.kind === 7) put("hill", i, 0, 0, (R < 20 ? 0.62 : 0.9) / big, c.rgb.map((v) => v * 0.94), rnd(i, 1) * 6);
       else if (c.kind === 6 || c.kind === 10) put("peak", i, 0, -0.05, c.kind === 6 ? 0.62 : 1, null, rnd(i, 2) * 6);
@@ -3587,7 +3676,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
 
 $x.LOOKS = LOOKS; $x.EMBLEMS = EMBLEMS; $x.emblem = emblem; $x.seatPattern = seatPattern; $x.canDraw = canDraw; $x.createBoard = createBoard;
 return $x; })({});
-$m[24] = (($x) => {
+$m[26] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Where this copy's source code can be read. Anyone who runs a changed copy puts their own address here.
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
@@ -3595,7 +3684,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.10.0";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "6c2bca07";
+const BUILD = "37e346c8";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -3615,7 +3704,7 @@ const AI_BASES = {
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_BASES = AI_BASES;
 return $x; })({});
-$m[25] = (($x) => {
+$m[27] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
 // Daylight or lamplight, as the table games' Light setting last left it; every page starts here. The front page has one theme.
@@ -3635,10 +3724,10 @@ function guard() {
 
 $x.guard = guard;
 return $x; })({});
-$m[23] = (($x) => {
+$m[25] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-const { BUILD, SOURCE_URL, VERSION } = $m[24];
-const { guard } = $m[25];
+const { BUILD, SOURCE_URL, VERSION } = $m[26];
+const { guard } = $m[27];
 
 /** Every page shows its version and where its source can be read. */
 function footer() {
@@ -3654,12 +3743,12 @@ function footer() {
 
 $x.footer = footer;
 return $x; })({});
-$m[26] = (($x) => {
+$m[28] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Games played by pasting a link. The whole game is in the part after #, which browsers do not send to the host.
 // With a password the game is locked (AES-GCM, the key made from the password by PBKDF2) before it goes in the link.
 const { Refusal } = $m[5];
-const { SITE_URL } = $m[24];
+const { SITE_URL } = $m[26];
 
 const ID = 6, SALT = 16, IV = 12, ROUNDS = 250000, PLACE = "capo-link-";
 const broken = () => new Refusal("link", "that link is broken or not complete");
@@ -3719,7 +3808,7 @@ const linkGames = {
 
 $x.canLock = canLock; $x.newId = newId; $x.makeLink = makeLink; $x.readLink = readLink; $x.linkGames = linkGames;
 return $x; })({});
-$m[27] = (($x) => {
+$m[29] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The coach: a guided first game. A game gives a fixed seed, a short preset and a few steps. Each step points at a place
 // on the board or a control, says one plain sentence, and goes on when the player does the thing (or presses Next, for a step
@@ -3861,7 +3950,36 @@ function coach(T, L, key, go) {
 
 $x.coach = coach;
 return $x; })({});
-$m[28] = (($x) => {
+$m[30] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The model shelf as the pages reach it: a sculpted piece is fetched from site/models/ only when a board in 3D first shows it,
+// and the credits players can read from every game's About (CC BY asks for a credit line they can reach).
+const { SHELF } = $m[21];
+
+// the built pages point this at the site's own shelf when served, and at nothing when a page is opened by double-click (no fetching there)
+const SHELF_URL = "../site/models/";
+const kept = new Map(); // each file once a page, shared by every board on it (the title's board and the game's)
+/** The fetcher a board takes, or none: then only the pieces made in code stand. */
+const shelf = SHELF_URL ? (file) => { if (!kept.has(file)) kept.set(file, fetch(SHELF_URL + file).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null)); return kept.get(file); } : null;
+
+/** Makers whose models need no credit, thanked all the same: shown once one of their models is on the shelf. */
+const COURTESY = [["cottage townhouse", "Houses built from the Medieval Village MegaKit by Quaternius (quaternius.com), CC0."], ["block", "City blocks from the Downtown City MegaKit by Quaternius (quaternius.com), CC0."],["adobe", "Desert houses from Low Poly Desert Buildings by Anker's Assets (ankersassets.itch.io), CC0."]];
+
+/** The credits for the sculpted pieces, for an About panel: one line a model, as its licence asks. Plain text only. */
+function shelfCredits() {
+  const box = document.createElement("div"), h = document.createElement("h3"), note = document.createElement("p"), list = document.createElement("ul");
+  h.textContent = "Sculpted pieces";
+  note.textContent = "In 3D, some pieces are open models by other makers, cut down, repainted in the board's colours and re-encoded for this game. Each is used under its licence:";
+  for (const m of Object.values(SHELF)) if (m.credit) { const li = document.createElement("li"); li.textContent = m.credit; list.append(li); }
+  for (const [names, line] of COURTESY) if (names.split(" ").some((n) => SHELF[n])) { const li = document.createElement("li"); li.textContent = line; list.append(li); }
+  if (!list.children.length) return box;
+  box.append(h, note, list);
+  return box;
+}
+
+$x.shelf = shelf; $x.shelfCredits = shelfCredits;
+return $x; })({});
+$m[31] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What the table games' screen keeps for the player: settings, sounds made in code, and the order of places at the end.
 // No page is touched when this is loaded, so its plain parts are tested in Node (test/shell.test.mjs).
@@ -3963,7 +4081,7 @@ function cue(events) {
 
 $x.SETTINGS_KEY = SETTINGS_KEY; $x.CHOICES = CHOICES; $x.DEFAULTS = DEFAULTS; $x.SETTINGS_V = SETTINGS_V; $x.PACE = PACE; $x.SCALE = SCALE; $x.parseSettings = parseSettings; $x.settings = settings; $x.saveSettings = saveSettings; $x.takeBack = takeBack; $x.turnKey = turnKey; $x.ranked = ranked; $x.resultText = resultText; $x.wake = wake; $x.audio = audio; $x.sfx = sfx; $x.cue = cue;
 return $x; })({});
-$m[30] = (($x) => {
+$m[33] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Motion over a board: dice that tumble and settle, pieces that travel, a ring where land changes hands, a flourish where
 // something is built, pennants for a win. Drawn on one canvas above the board, and only while something moves.
@@ -4178,11 +4296,11 @@ function pennants(colours, box, { ms = 2600, many = 34 } = {}) {
 
 $x.createMotion = createMotion; $x.travel = travel; $x.dice = dice; $x.capture = capture; $x.build = build; $x.pulse = pulse; $x.sweep = sweep; $x.pennants = pennants;
 return $x; })({});
-$m[31] = (($x) => {
+$m[34] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The table games' cues, made here with the Web Audio API as they are needed: no sound files. Short and quiet, under the
 // player's sound switch and volume (site/shell.js), and silent until a press has woken them.
-const { audio, settings } = $m[28];
+const { audio, settings } = $m[31];
 
 const last = new Map();
 /** One voice: a tone that swells and dies away, gliding to `to` hertz if given. */
@@ -4272,15 +4390,15 @@ function voice(key, events, move, p, moving) {
 
 $x.CUES = CUES; $x.play = play; $x.cuesOf = cuesOf; $x.voice = voice;
 return $x; })({});
-$m[29] = (($x) => {
+$m[32] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Motion and sound for the table games: what each game's events look like as they happen, played over the board.
 // The rules have already moved when this is called, and the board already shows where things stand: nothing here waits for an
 // animation, holds up a move or changes a position. With motion reduced (the setting, or the system's wish) nothing moves;
 // with the sound off nothing sounds. The camera follows a rival's move only while the player has not moved the map lately.
-const { build, capture, createMotion, dice, pennants, pulse, sweep, travel } = $m[30];
-const { settings } = $m[28];
-const { voice } = $m[31];
+const { build, capture, createMotion, dice, pennants, pulse, sweep, travel } = $m[33];
+const { settings } = $m[31];
+const { voice } = $m[34];
 
 let layer = null, touched = -1e9, fight = null, glide = null, RGB = [], ICONS = []; // the seats' colours and emblems, as the table dressed them
 const PALE = [206, 196, 170], GOODS = [[226, 196, 96], [176, 208, 216], [196, 120, 82], [228, 226, 214]];
@@ -4431,13 +4549,15 @@ $m[12] = (($x) => {
 const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } = $m[5];
 const { EMBLEMS, emblem } = $m[13];
 const { SEATS, SEATS_KEY, STYLE_KEY, seatSet, seatsOf } = $m[19];
-const { footer } = $m[23];
-const { canLock, linkGames, makeLink, newId, readLink } = $m[26];
-const { BUILD, SOURCE_URL, VERSION } = $m[24];
-const { coach } = $m[27];
-const { CHOICES, PACE, SCALE, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } = $m[28];
+const { footer } = $m[25];
+const { canLock, linkGames, makeLink, newId, readLink } = $m[28];
+const { BUILD, SOURCE_URL, VERSION } = $m[26];
+const { coach } = $m[29];
+// figures hook
+const { shelfCredits } = $m[30];
+const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } = $m[31];
 // motion hook: motion and sound that follow each move (site/motion.js, site/sound.js)
-const { hail, stir } = $m[29];
+const { hail, stir } = $m[32];
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -5254,7 +5374,8 @@ function createTable(G) {
       ...(G.family || familyLine(G.key) ? [el("p", G.family || familyLine(G.key))] : []),
       where,
       el("p", "Free software under the GNU Affero General Public License, version 3 or later (AGPL-3.0-or-later): you may read, change and share it, and a changed copy that others use over a network must offer them its source."),
-      el("p", "Credits: the rules, maps, pieces, emblems and sounds are the project's own work; the sounds are made in code as the game runs. The coastlines are drawn from Natural Earth, which is in the public domain. Anything borrowed is listed with its licence in CREDITS.csv, ADAPTED.csv and NOTICES.md beside the source."),
+      el("p", "Credits: the rules, maps, emblems and sounds are the project's own work, and so are the pieces made in code; the sounds are made in code as the game runs. The coastlines are drawn from Natural Earth, which is in the public domain. Anything borrowed is listed with its licence in CREDITS.csv, ADAPTED.csv and NOTICES.md beside the source."),
+      shelfCredits(), // figures hook: the sculpted pieces' credit lines
     );
     if (/^https:\/\//.test(SOURCE_URL)) where.append(src);
     return box;
@@ -5445,14 +5566,16 @@ function createTable(G) {
 
 $x.COLOURS = COLOURS; $x.NAMES = NAMES; $x.RGB = RGB; $x.ICONS = ICONS; $x.PAPER = PAPER; $x.dress = dress; $x.$ = $; $x.el = el; $x.sleep = sleep; $x.sign = sign; $x.radio = radio; $x.toast = toast; $x.sheet = sheet; $x.createTable = createTable;
 return $x; })({});
-$m[32] = (($x) => {
+$m[35] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The hex board for a game's screen: the moving one when the device can draw it, else a still picture that can be tapped.
 const { LOOKS, canDraw, createBoard } = $m[13];
 const { STYLES, STYLE_KEY } = $m[19];
 const { ICONS, RGB } = $m[12];
 // reading hook (p10-reading)
-const { legend } = $m[21];
+const { legend } = $m[23];
+// figures hook
+const { shelf } = $m[30];
 
 /** The seats' patterns for the still board, the same six as on the moving board and the score bar: /, dots, |, x, \, -. */
 function patterns(make, f) {
@@ -5528,7 +5651,7 @@ function hexBoard(T, stage, o) {
   seen.observe(root, { attributes: true, attributeFilter: ["data-theme"] }); night.addEventListener("change", relight);
   if (canDraw()) {
     try {
-      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, fit: o.fit, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, terrain: o.terrain, style: get(STYLE_KEY) || "war", reading: o.reading, wood: "../site/textures/walnut.webp", probe: !LOOKS[kept] && !weak, look: LOOKS[kept] ? kept : weak ? "flat" : "relief" });
+      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, fit: o.fit, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, terrain: o.terrain, style: get(STYLE_KEY) || "war", reading: o.reading, wood: "../site/textures/walnut.webp", probe: !LOOKS[kept] && !weak, look: LOOKS[kept] ? kept : weak ? "flat" : "relief", era: o.era || "", shelf }); // figures hook: era, and the sculpted pieces' shelf
       if (b.style.pack) fetch(`models/${b.style.pack}`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((buf) => { if (buf) b?.pack(buf); }).catch(() => {}); // a style's sculpted models come after the board is up; the code-made ones stand meanwhile
       b.setLight(lamp()); // styles hook: the board's lighting follows the page's Daylight or Lamplight
       b.on("slow", () => { try { localStorage.setItem(SLOW, "1"); } catch { /* it will be timed again next time */ } b?.setLook("flat"); });
@@ -5577,7 +5700,7 @@ $m[0] = (($x) => {
 const { AWARD, BUSY, COST, EXPANSIONS, GOODS, NONE, SWITCHES, TERMS, WASTE, boardOf, glass, goalOf, pointsOf, rateOf, roadOf, sellPrice, total } = $m[1];
 const { choose, thinking } = $m[3];
 const { $, NAMES, RGB, createTable, el, radio, sheet, toast } = $m[12];
-const { hexBoard } = $m[32];
+const { hexBoard } = $m[35];
 const { hexPicture } = $m[15];
 
 const SEA = [70, 116, 140], TILE = [[226, 196, 96], [176, 206, 214], [196, 120, 82], [228, 226, 214]], WASTEG = [150, 140, 120];
@@ -5825,6 +5948,7 @@ createTable({
     document.body.classList.remove("atlas");
     card(T);
     return hexBoard(T, stage, {
+      era: "medieval", // figures hook: which sculpted pieces stand in 3D (src/map/figures.js)
       cells: b.cells, rough: none, sea, picture, terrain: (i) => (sea[i] ? 1 : p.good[i] === WASTE ? 6 : [2, 4, 3, 5][p.good[i]]), ground: (i) => (sea[i] ? SEA : p.good[i] === WASTE ? WASTEG : TILE[p.good[i]]),
       owner: () => b.cells.map(() => NONE),
       reading: { goods: (i) => (p.land[i] && p.good[i] !== WASTE ? p.good[i] : -1), colours: TILE, key: GOODS.map((name, k) => ({ name, rgb: TILE[k] })) }, // reading hook (p10-reading)

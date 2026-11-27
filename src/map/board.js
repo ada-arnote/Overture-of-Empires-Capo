@@ -5,6 +5,8 @@ import { Camera, pick } from "./camera.js";
 import { hexPicture } from "./hexes.js";
 import { Meshes } from "./mesh.js";
 import { models, unpack } from "./models.js";
+// figures hook
+import { figures } from "./figures.js";
 import { Painter } from "./paint.js";
 import { STYLES, styleOf, wear } from "./style.js";
 // reading hook (p10-reading): the goods, pips, ports, links and flags; names and plates that keep clear of each other
@@ -78,7 +80,7 @@ export function canDraw() {
  * reading (p10-reading): goods(i) the good a cell yields (its symbol is drawn on it), colours the goods' own colours (for a port's plate),
  * places [{ at, text }] names printed where there is room, rim: an owner's colour as each tile's rim and sides rather than a flood.
  */
-export function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false, style = "painted", reading = {} }) {
+export function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false, style = "painted", reading = {}, era = "", shelf = null }) {
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
@@ -93,13 +95,14 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   const lift = () => 9 * L.rise;
   let meshes = null, staged = false;
   try { meshes = new Meshes(painter.g, { ...models(look3.kit), ...linkModels() }); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); } // reading hook (p10-reading): the links between hexes
+  const fig = figures(era, shelf, (got) => { if (meshes && alive) { meshes.add(got); staged = false; redraw(); } }); // figures hook: sculpted pieces, fetched when first shown in 3D
   const solid = () => L.rise > 0 && !!meshes;
   /** Pieces on a map of small cells are made larger, so that they read when the whole board is in view (they still grow as you zoom in). */
   const grown = () => Math.max(1, Math.min(picture ? 3.2 : 1.25, 24 / (m.R * base))); // on a board of hexes a piece must still fit its own hex
   /** What stands on the board, as models: scenery from what the land is, then the pieces the game lists. Sizes are in cell radii. */
   function stage() {
     const out = [], R = m.R, big = grown(), rnd = (i, k) => { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
-    const put = (name, at, dx = 0, dy = 0, s = 1, rgb = null, t = 0, dim = 1) => (look3.models[name] ?? name) && out.push({ m: look3.models[name] ?? name, x: m.mid[at][0] + dx * R * big, y: m.mid[at][1] + dy * R * big, z: show[at].top, s: s * R * big * look3.scale, rgb, t, dim });
+    const put = (name, at, dx = 0, dy = 0, s = 1, rgb = null, t = 0, dim = 1) => (look3.models[name] ?? name) && out.push({ m: fig.pick(look3.models[name] ?? name, show[at].kind, look3, solid()), x: m.mid[at][0] + dx * R * big, y: m.mid[at][1] + dy * R * big, z: show[at].top, s: s * R * big * look3.scale, rgb, t, dim });
     show.forEach((c, i) => {
       if (c.kind === 7) put("hill", i, 0, 0, (R < 20 ? 0.62 : 0.9) / big, c.rgb.map((v) => v * 0.94), rnd(i, 1) * 6);
       else if (c.kind === 6 || c.kind === 10) put("peak", i, 0, -0.05, c.kind === 6 ? 0.62 : 1, null, rnd(i, 2) * 6);

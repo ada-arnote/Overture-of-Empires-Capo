@@ -2,14 +2,17 @@
 // The 3D layer's parts that run without a graphics card: the geometry kit, the recipes, styles as data, the model pack and its converter.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { deflateSync } from "node:zlib";
+import { deflateRawSync, deflateSync } from "node:zlib";
+import { fileURLToPath } from "node:url";
 import { bake, box, ears, lathe, move, prism } from "../src/map/kit.js";
 import { models, unpack } from "../src/map/models.js";
 import { SLOT, STYLES } from "../src/map/style.js";
-import { pack, png, shape, triangles } from "../tools/models.mjs";
+import { cleared, pack, png, records, shape, triangles, unzip } from "../tools/models.mjs";
+import { ERAS, SORT, eraOf, figures } from "../src/map/figures.js";
+import { SHELF } from "../src/map/shelf.js";
 import { mapPieces } from "../site/mappieces.js";
 
 const area = (pts, t) => { let s = 0; for (let i = 0; i < t.length; i += 3) { const [a, b, c] = [pts[t[i]], pts[t[i + 1]], pts[t[i + 2]]]; s += Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) / 2; } return s; };
@@ -107,4 +110,83 @@ test("Capo's pieces are read off the state the same way every time: capitals, bl
   assert.equal(count("wing"), 1); assert.equal(count("guns"), 2); assert.equal(count("leader"), 2);
   assert.ok(a.some((p) => p.m === "armour" && p.at === "A-2") && a.some((p) => p.m === "army" && p.at === "B-1"), "blocks face each other across the front");
   assert.ok(a.every((p) => (p.band || 0) <= 2));
+});
+
+/** A zip of the given files, deflated, as a zip tool writes one: local entries, a central directory, its end. */
+function zipOf(files) {
+  const local = [], central = [];
+  let at = 0;
+  for (const [name, body] of Object.entries(files)) {
+    const data = deflateRawSync(body), n = Buffer.from(name), head = Buffer.alloc(30), dir = Buffer.alloc(46);
+    head.writeUInt32LE(0x04034b50, 0); head.writeUInt16LE(8, 8); head.writeUInt32LE(data.length, 18); head.writeUInt32LE(body.length, 22); head.writeUInt16LE(n.length, 26);
+    dir.writeUInt32LE(0x02014b50, 0); dir.writeUInt16LE(8, 10); dir.writeUInt32LE(data.length, 20); dir.writeUInt32LE(body.length, 24); dir.writeUInt16LE(n.length, 28); dir.writeUInt32LE(at, 42);
+    local.push(head, n, data); central.push(dir, n); at += 30 + n.length + data.length;
+  }
+  const cd = Buffer.concat(central), end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(central.length / 2, 8); end.writeUInt16LE(central.length / 2, 10); end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(at, 16);
+  return Buffer.concat([...local, cd, end]);
+}
+
+test("the converter reads a glTF inside a zip, keeps the painted wash as a shade, and refuses a model it may not ship or credit", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "capo-zip-"));
+  try {
+    const P = new Float32Array([0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]), C = new Float32Array([0.8, 0.1, 0.1, 0.8, 0.1, 0.1, 0.8, 0.1, 0.1, 0.2, 0.02, 0.02, 0.2, 0.02, 0.02, 0.2, 0.02, 0.02]); // a bright red triangle and a dark one
+    const bin = Buffer.concat([Buffer.from(P.buffer), Buffer.from(C.buffer)]);
+    const gltf = { asset: { version: "2.0" }, scenes: [{ nodes: [0] }], nodes: [{ mesh: 0 }], buffers: [{ uri: "m.bin", byteLength: bin.length }], bufferViews: [{ buffer: 0, byteLength: 72 }, { buffer: 0, byteOffset: 72, byteLength: 72 }],
+      accessors: [{ bufferView: 0, componentType: 5126, count: 6, type: "VEC3" }, { bufferView: 1, componentType: 5126, count: 6, type: "VEC3" }], meshes: [{ primitives: [{ attributes: { POSITION: 0, COLOR_0: 1 } }] }] };
+    writeFileSync(path.join(dir, "m.zip"), zipOf({ "model/scene.gltf": Buffer.from(JSON.stringify(gltf)), "model/m.bin": bin }));
+    assert.deepEqual([...unzip(readFileSync(path.join(dir, "m.zip"))).keys()], ["model/scene.gltf", "model/m.bin"]);
+    const tris = triangles(path.join(dir, "m.zip"));
+    assert.equal(tris.length, 2);
+    const m = shape(tris, { tall: 1, paint: [{ hue: [340, 20], sat: 0.4, slot: "cloth", fin: 1 }], base: 0.3 });
+    const red = m.faces.filter((f) => f[4] === 1);
+    assert.equal(red.length, 2, "both reds are the owner's enamel, by hue");
+    assert.ok(Math.abs(red[0][5] - red[1][5]) > 40, "the lighter keeps a lighter shade than the darker");
+    assert.ok(m.faces.some((f) => f[3] === SLOT.metal && f[4] === 2), "a metal base under it");
+    const bytes = pack({ knight: m }), back = unpack(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length)), v = new Uint8Array(back.knight.buf);
+    assert.ok([...Array(back.knight.n).keys()].some((i) => v[i * 20 + 17] !== 128), "the page reads the shade back");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+  const ok = { name: "a", licence: "CC-BY-4.0", credit: "line", title: "t", maker: "m", source: "s" };
+  assert.equal(cleared(ok), ok);
+  assert.throws(() => cleared({ ...ok, credit: "" }), /credit/);
+  assert.throws(() => cleared({ ...ok, licence: "CC-BY-NC-4.0" }), /may not ship/);
+  assert.equal(cleared({ name: "b", licence: "CC0-1.0" }).name, "b");
+  const r = records([ok, { name: "b", licence: "CC0-1.0", title: "t", maker: "Q", source: "s" }], "file,title\nsite/models/old.bin,x\nsite/fonts/f.woff2,y\n", "# Notices\n", "2026-11-27");
+  assert.ok(!r.credits.includes("old.bin") && r.credits.includes("site/fonts/f.woff2") && r.credits.includes("site/models/a.bin") && r.credits.includes("site/models/b.bin"));
+  assert.ok(r.notices.includes("site/models/a.bin: line") && records([ok], "", r.notices, "x").notices.split("<!-- models").length === 2, "the notices block is written once, and replaced after");
+});
+
+test("sculpted pieces stand in by era and region, fetched once, only in a style that wears them; the recipes stay otherwise", async () => {
+  assert.equal(eraOf(-50), "ancient"); assert.equal(eraOf(1200), "medieval"); assert.equal(eraOf(1700), "early"); assert.equal(eraOf(1900), "industrial"); assert.equal(eraOf(2026), "modern");
+  for (const t of Object.values(ERAS)) for (const s of Object.values(t)) assert.ok(SORT[s], s);
+  const war = { sculpt: ["figures", "ships", "buildings"] }, plain = { sculpt: [] }, asked = [], got = [];
+  const one = pack({ cannon: { points: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], faces: [[0, 1, 2, 0, 2, 128]] } }), buf = one.buffer.slice(one.byteOffset, one.byteOffset + one.length);
+  const f = figures("early", (file) => { asked.push(file); return Promise.resolve(buf); }, (m) => got.push(...Object.keys(m)));
+  assert.equal(f.pick("gun", 0, plain, true), "gun"); assert.equal(asked.length, 0, "a style that keeps to its own set asks for nothing");
+  assert.equal(f.pick("gun", 0, war, false), "gun"); assert.equal(asked.length, 0, "nothing is fetched until the board is in 3D");
+  assert.equal(f.pick("tree", 0, war, true), "tree"); assert.equal(asked.length, 0, "a piece with no sculpted model keeps its recipe");
+  if (SHELF.cannon) {
+    assert.equal(f.pick("gun", 0, war, true), "gun", "the recipe stands while the model comes");
+    f.pick("gun", 0, war, true);
+    assert.deepEqual(asked, ["cannon.bin"], "fetched once");
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(got, ["cannon"]); assert.equal(f.pick("gun", 0, war, true), "cannon");
+  }
+  assert.equal(figures("early", null, () => {}).pick("gun", 0, war, true), "gun", "no shelf (a page opened by double-click): the recipes");
+  const wanted = [], desert = figures("medieval", (file) => { wanted.push(file); return new Promise(() => {}); }, () => {});
+  desert.pick("town", 4, war, true); desert.pick("town", 0, war, true);
+  assert.deepEqual(wanted, [SHELF.adobe && "adobe.bin", SHELF.townhouse && "townhouse.bin"].filter(Boolean), "a town on sand is a desert house; elsewhere a town house");
+});
+
+test("the shelf ships only what it credits: every model has its file, CC BY ones a credit line without an outside address, and no Jaca scan is on it", () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), ".."), shelf = path.join(root, "site", "models");
+  const credits = readFileSync(path.join(root, "CREDITS.csv"), "utf8"), notices = readFileSync(path.join(root, "NOTICES.md"), "utf8");
+  for (const [name, m] of Object.entries(SHELF)) {
+    assert.ok(existsSync(path.join(shelf, m.file)), m.file);
+    assert.ok(credits.includes(`site/models/${m.file}`), `${m.file} in CREDITS.csv`);
+    if (m.licence.startsWith("CC-BY")) { assert.ok(m.credit && !/https?:/.test(m.credit), `${name}: a credit line`); assert.ok(notices.includes(`site/models/${m.file}`), `${name} in NOTICES.md`); }
+  }
+  const files = existsSync(shelf) ? readdirSync(shelf) : [];
+  assert.ok(!files.some((f) => /jaca/i.test(f)), "the Jaca scans wait for the museum's word (ruling 150)");
+  assert.deepEqual(files.filter((f) => f.endsWith(".bin")).sort(), Object.values(SHELF).map((m) => m.file).sort(), "nothing on the shelf without its index entry");
 });

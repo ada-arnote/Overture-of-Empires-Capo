@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-DuXa9p41GqpR2XUR6h/NYxvmtnUFQGQOYWPMjMMUKOI='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https://openrouter.ai https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.mistral.ai https://api.deepseek.com https://api.together.xyz https://api.cerebras.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-kWg3b0z2kvZ7JYp9RLm/D8vfltodqoJJcbUdxu67jj0='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https://openrouter.ai https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.mistral.ai https://api.deepseek.com https://api.together.xyz https://api.cerebras.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo, the story game · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -5188,6 +5188,7 @@ const WAR = {
   name: "War table",
   set: "code", // which models: the ones made in code
   pack: "", // a sculpted set to fetch on top of them (a file in site/models/), or none
+  sculpt: ["figures", "ships", "buildings"], // figures hook: which sorts of sculpted pieces it wears in 3D, fetched when first shown (src/map/figures.js); [] keeps to the code-made set
   models: {}, // one model in place of another, by name: { foot: "army" } stands a block where a soldier would be; "" stands nothing
   kit: { base: 1, cast: 0 }, // the recipes' own settings: how wide a piece's base is; cast 1: figures in plain metal, the owner's enamel on base, shield and flag
   scale: 1, // pieces larger or smaller
@@ -5235,6 +5236,7 @@ const STYLES = {
   clear: from(WAR, {
     name: "Clear",
     scale: 1.15, outline: 1.6,
+    sculpt: ["ships", "buildings"], // figures hook: the code-made figures read more clearly at a glance than slender sculpted ones
     fin: [[0.3, 0, 10, 0], [0.3, 0, 10, 0], [0.3, 0.06, 12, 0], [0.3, 0, 10, 0]],
     amb: [0.82, 0.06, 0.25], tone: [1, 0], ground: 0.14,
     surface: { grain: 0, relief: 0.3, bevel: 0.7, gloss: 0, edge: 1.45 },
@@ -5466,18 +5468,19 @@ for (let n = 1; n <= 6; n++) RECIPES[`die${n}`] = (o) => die(o, n);
  */
 function unpack(buffer) {
   const d = new DataView(buffer), out = {};
-  if (d.getUint32(0) !== 0x4341504d || d.getUint8(4) !== 1) throw new Error("not a model pack this version reads");
+  const ver = d.getUint8(4), step = ver === 2 ? 9 : 8; // figures hook: version 2 adds a shade a triangle, the painted wash
+  if (d.getUint32(0) !== 0x4341504d || (ver !== 1 && ver !== 2)) throw new Error("not a model pack this version reads");
   let at = 6;
   for (let k = d.getUint8(5); k > 0; k--) {
     const long = d.getUint8(at), name = String.fromCharCode(...new Uint8Array(buffer, at + 1, long)); at += 1 + long;
     const scale = d.getFloat32(at, true), V = d.getUint16(at + 4, true), T = d.getUint16(at + 6, true), pts = at + 8, tris = pts + V * 6, v = [];
     const p = (i) => [0, 2, 4].map((o) => d.getInt16(pts + i * 6 + o, true) * scale);
     for (let t = 0; t < T; t++) {
-      const o = tris + t * 8, a = p(d.getUint16(o, true)), b = p(d.getUint16(o + 2, true)), c3 = p(d.getUint16(o + 4, true)), col = [d.getUint8(o + 6), 128, 0], fin = d.getUint8(o + 7);
+      const o = tris + t * step, a = p(d.getUint16(o, true)), b = p(d.getUint16(o + 2, true)), c3 = p(d.getUint16(o + 4, true)), col = [d.getUint8(o + 6), ver === 2 ? d.getUint8(o + 8) : 128, 0], fin = d.getUint8(o + 7);
       const n = [(b[1] - a[1]) * (c3[2] - a[2]) - (b[2] - a[2]) * (c3[1] - a[1]), (b[2] - a[2]) * (c3[0] - a[0]) - (b[0] - a[0]) * (c3[2] - a[2]), (b[0] - a[0]) * (c3[1] - a[1]) - (b[1] - a[1]) * (c3[0] - a[0])], l = Math.hypot(...n) || 1;
       for (const q of [a, b, c3]) v.push(...q, n[0] / l, n[1] / l, n[2] / l, ...col, fin);
     }
-    out[name] = bake(v); at = tris + T * 8;
+    out[name] = bake(v); at = tris + T * step;
   }
   return out;
 }
@@ -5492,7 +5495,90 @@ function models(kit = {}) {
 
 $x.unpack = unpack; $x.models = models;
 return $x; })({});
+$m[44] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Made by tools/models.mjs from tools/figures.json; do not edit by hand. The sculpted models on the shelf (site/models/), each
+// fetched only when a board in 3D shows it, with its licence and the credit line the credits panel shows players.
+const SHELF = {
+  knight: { file: "knight.bin", tris: 2433, licence: "CC-BY-4.0", credit: "\"Knight Hospitaller - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/7975ee5c47a94d35abf98070bfdd1ea8), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
+  legionary: { file: "legionary.bin", tris: 2415, licence: "CC-BY-4.0", credit: "\"Roman Soldier - fighting pose - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/5c29ca5803ad475eaaae12714e8f1dab), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
+  redcoat: { file: "redcoat.bin", tris: 2448, licence: "CC-BY-4.0", credit: "\"Waterloo British Infantry - for animation\" by Andy Woodhead (sketchfab.com/3d-models/85a1a8205b2c447fb8d0419978f17b75), CC BY 4.0, modified (posed, cut down, repainted, re-encoded)." },
+  general: { file: "general.bin", tris: 3980, licence: "CC-BY-4.0", credit: "\"Roman General - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/70d18b0518344b7bad3cd0979072a1c2), CC BY 4.0, modified (remeshed, cut down, painted as pewter, re-encoded)." },
+  horse: { file: "horse.bin", tris: 2946, licence: "CC-BY-4.0", credit: "\"Galloping Horse - free download - 3d-printable\" by Andy Woodhead (sketchfab.com/3d-models/dfc6f5596aba48a0b08a44c31b97b368), CC BY 4.0, modified (base removed, cut down, repainted, re-encoded)." },
+  cannon: { file: "cannon.bin", tris: 2309, licence: "CC-BY-4.0", credit: "\"British field cannon - 1815 - free download\" by Andy Woodhead (sketchfab.com/3d-models/c027cb2e6e764f4196f27c94b5f770d5), CC BY 4.0, modified (low-poly version, cut down, repainted, re-encoded)." },
+  longboat: { file: "longboat.bin", tris: 2868, licence: "CC-BY-4.0", credit: "\"Gislinge Viking Boat\" by Opus Poly (sketchfab.com/3d-models/01098ad7973647a9b558f41d2ebc5193), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
+  liner: { file: "liner.bin", tris: 4961, licence: "CC-BY-4.0", credit: "\"Ship of the line, c. 1700\", Swedish National Maritime and Transport Museums (sketchfab.com/3d-models/3afea352a40045b0a638c9900f669ed4), CC BY 4.0, modified (remeshed, cut down, repainted, re-encoded)." },
+  torpedo: { file: "torpedo.bin", tris: 3639, licence: "CC-BY-4.0", credit: "\"Swedish 2nd class Torpedo Boat (1908)\", Swedish National Maritime and Transport Museums (sketchfab.com/3d-models/d71822cc900b43dfa76b014c250e9e7f), CC BY 4.0, modified (remeshed, cut down, repainted, re-encoded)." },
+  destroyer: { file: "destroyer.bin", tris: 3520, licence: "CC-BY-4.0", credit: "\"1:1 Low poly US NAVY DDG-51 USS Arleigh Burke.\" by Yi Tsung Lee, model and texture by WTigerTw (sketchfab.com/3d-models/17be09c31c6047e4a5969b68c29eba03), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
+  cottage: { file: "cottage.bin", tris: 1499, licence: "CC0-1.0" },
+  townhouse: { file: "townhouse.bin", tris: 1497, licence: "CC0-1.0" },
+  adobe: { file: "adobe.bin", tris: 1000, licence: "CC0-1.0" },
+};
+
+$x.SHELF = SHELF;
+return $x; })({});
 $m[43] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Sculpted pieces in place of the recipes made in code, where they are better: which model stands for a piece in each era and
+// region, and fetching each one only when a board in 3D first shows it. Looks only: no rule ever reads a model. The recipes stay
+// as the fallback (Flat, a page with no shelf, a style that keeps to its own set, a model not yet arrived) and nothing waits on one.
+const { SHELF } = $m[44];
+const { unpack } = $m[40];
+
+/** Which shelf model takes a recipe's place, by era. A name missing here, or from the shelf, keeps its recipe. */
+const ERAS = {
+  ancient: { foot: "legionary", unit2: "legionary", gun: "ballista", horse: "horse", unit4: "general", leader: "general", ship: "longboat", fleet: "longboat" },
+  medieval: { unit3: "knight", foot: "knight", horse: "horse", ship: "longboat", fleet: "longboat", town: "townhouse", depot: "cottage" },
+  early: { foot: "redcoat", gun: "cannon", horse: "horse", ship: "liner", fleet: "liner", town: "townhouse", depot: "cottage" },
+  industrial: { foot: "fusilier", gun: "cannon", ship: "torpedo", fleet: "torpedo", town: "block", depot: "townhouse" },
+  fable: { unit2: "legionary", unit3: "knight", unit4: "general", horse: "horse", town: "townhouse", depot: "cottage" }, // The Island Fable's guard, knight and marshal
+  modern: { foot: "marine", ship: "destroyer", fleet: "destroyer", town: "block", depot: "block" },
+};
+/** Buildings by region: on sand (terrain 4) a town is a flat-roofed desert house, in any era but the modern. */
+const REGIONS = { 4: { town: "adobe", depot: "adobe" } };
+/** What sort each shelf model is, so a style can wear sculpted ships and houses but keep its own figures (style.sculpt). */
+const SORT = { knight: "figures", legionary: "figures", redcoat: "figures", fusilier: "figures", marine: "figures", general: "figures", horse: "figures", ballista: "figures", cannon: "figures",
+  longboat: "ships", liner: "ships", torpedo: "ships", destroyer: "ships", cottage: "buildings", townhouse: "buildings", block: "buildings", adobe: "buildings" };
+
+/** The era of a year, for Capo's map. */
+const eraOf = (year) => (year < 500 ? "ancient" : year < 1500 ? "medieval" : year < 1850 ? "early" : year < 1945 ? "industrial" : "modern");
+
+/**
+ * The figures for one board. era: a key of ERAS. fetch(file) -> a promise of the file's bytes, or nothing (then only recipes stand).
+ * got(models): called with each model as it arrives, to send to the mesh layer and stand the pieces again.
+ * pick(name, kind, style, on) -> the model to stand: the sculpted one if it is here, else the recipe (asking for the sculpted one if on).
+ */
+function figures(era, fetch, got) {
+  const have = new Set(), asked = new Set();
+  let table = ERAS[era] || {};
+  const want = (name, kind, style) => {
+    const s = (era !== "modern" && REGIONS[kind]?.[name]) || table[name];
+    return s && SHELF[s] && (style.sculpt || []).includes(SORT[s]) ? s : "";
+  };
+  return {
+    get era() { return era; },
+    set era(e) { era = e; table = ERAS[e] || {}; },
+    pick(name, kind, style, on) {
+      const s = fetch ? want(name, kind, style) : "";
+      if (!s) return name;
+      if (have.has(s)) return s;
+      if (on && !asked.has(s)) {
+        asked.add(s);
+        Promise.resolve(fetch(SHELF[s].file)).then((buf) => {
+          if (!buf) return;
+          const m = unpack(buf);
+          if (!m[s]) return;
+          have.add(s); got(m);
+        }).catch(() => { /* the recipe stays */ });
+      }
+      return name;
+    },
+  };
+}
+
+$x.ERAS = ERAS; $x.REGIONS = REGIONS; $x.SORT = SORT; $x.eraOf = eraOf; $x.figures = figures;
+return $x; })({});
+$m[45] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The painter: WebGL2 by hand. One full-screen triangle; the shader undoes the camera and walks down to the first cell top.
 // It writes the depth of what it found, so that the mesh layer's real shapes are hidden by raised cells, and it takes their shadows.
@@ -5699,7 +5785,7 @@ class Painter {
 
 $x.Painter = Painter;
 return $x; })({});
-$m[44] = (($x) => {
+$m[46] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Reading a board at a glance: the goods' own symbols and their key, pips under a number, a port's rate on a plate by its flag,
 // a seat's routes as links between hexes, and flags on what can still act. Our own simple shapes, drawn in code.
@@ -5863,7 +5949,7 @@ function legend(items, title = "Goods") {
 
 $x.GLYPHS = GLYPHS; $x.glyph = glyph; $x.stamp = stamp; $x.pips = pips; $x.portPlate = portPlate; $x.flag = flag; $x.linkModels = linkModels; $x.linkEnds = linkEnds; $x.stageLinks = stageLinks; $x.drawLinks = drawLinks; $x.legend = legend;
 return $x; })({});
-$m[45] = (($x) => {
+$m[47] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Names on the map and number plates that keep out of each other's way. A plate that would cover another is moved to the
 // nearest free place and tied back to its piece by a thin line; a name that has no room, or no room in its province, is left out.
@@ -5963,11 +6049,13 @@ const { Camera, pick } = $m[37];
 const { hexPicture } = $m[38];
 const { Meshes } = $m[39];
 const { models, unpack } = $m[40];
-const { Painter } = $m[43];
+// figures hook
+const { figures } = $m[43];
+const { Painter } = $m[45];
 const { STYLES, styleOf, wear } = $m[42];
 // reading hook (p10-reading): the goods, pips, ports, links and flags; names and plates that keep clear of each other
-const { drawLinks, flag, linkModels, pips, portPlate, stageLinks, stamp } = $m[44];
-const { drawNames, spread, tie } = $m[45];
+const { drawLinks, flag, linkModels, pips, portPlate, stageLinks, stamp } = $m[46];
+const { drawNames, spread, tie } = $m[47];
 
 const DEG = Math.PI / 180;
 const LOOKS = {
@@ -6036,7 +6124,7 @@ function canDraw() {
  * reading (p10-reading): goods(i) the good a cell yields (its symbol is drawn on it), colours the goods' own colours (for a port's plate),
  * places [{ at, text }] names printed where there is room, rim: an owner's colour as each tile's rim and sides rather than a flood.
  */
-function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false, style = "painted", reading = {} }) {
+function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false, style = "painted", reading = {}, era = "", shelf = null }) {
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
@@ -6051,13 +6139,14 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   const lift = () => 9 * L.rise;
   let meshes = null, staged = false;
   try { meshes = new Meshes(painter.g, { ...models(look3.kit), ...linkModels() }); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); } // reading hook (p10-reading): the links between hexes
+  const fig = figures(era, shelf, (got) => { if (meshes && alive) { meshes.add(got); staged = false; redraw(); } }); // figures hook: sculpted pieces, fetched when first shown in 3D
   const solid = () => L.rise > 0 && !!meshes;
   /** Pieces on a map of small cells are made larger, so that they read when the whole board is in view (they still grow as you zoom in). */
   const grown = () => Math.max(1, Math.min(picture ? 3.2 : 1.25, 24 / (m.R * base))); // on a board of hexes a piece must still fit its own hex
   /** What stands on the board, as models: scenery from what the land is, then the pieces the game lists. Sizes are in cell radii. */
   function stage() {
     const out = [], R = m.R, big = grown(), rnd = (i, k) => { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
-    const put = (name, at, dx = 0, dy = 0, s = 1, rgb = null, t = 0, dim = 1) => (look3.models[name] ?? name) && out.push({ m: look3.models[name] ?? name, x: m.mid[at][0] + dx * R * big, y: m.mid[at][1] + dy * R * big, z: show[at].top, s: s * R * big * look3.scale, rgb, t, dim });
+    const put = (name, at, dx = 0, dy = 0, s = 1, rgb = null, t = 0, dim = 1) => (look3.models[name] ?? name) && out.push({ m: fig.pick(look3.models[name] ?? name, show[at].kind, look3, solid()), x: m.mid[at][0] + dx * R * big, y: m.mid[at][1] + dy * R * big, z: show[at].top, s: s * R * big * look3.scale, rgb, t, dim });
     show.forEach((c, i) => {
       if (c.kind === 7) put("hill", i, 0, 0, (R < 20 ? 0.62 : 0.9) / big, c.rgb.map((v) => v * 0.94), rnd(i, 1) * 6);
       else if (c.kind === 6 || c.kind === 10) put("peak", i, 0, -0.05, c.kind === 6 ? 0.62 : 1, null, rnd(i, 2) * 6);
@@ -6482,7 +6571,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
 
 $x.LOOKS = LOOKS; $x.EMBLEMS = EMBLEMS; $x.emblem = emblem; $x.seatPattern = seatPattern; $x.canDraw = canDraw; $x.createBoard = createBoard;
 return $x; })({});
-$m[46] = (($x) => {
+$m[48] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's map, close in: the models only Capo stands (strength pips, an agent, dunes, reeds, grass, ice, a hamlet), and the
 // land's dressing. Looks only: no rule reads any of it. Dressing is cheap by design: spots lie on a grid of cells that halve
@@ -6601,7 +6690,7 @@ class Dressing {
 
 $x.capoModels = capoModels; $x.Dressing = Dressing;
 return $x; })({});
-$m[47] = (($x) => {
+$m[49] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The second ground: a world of provinces as a lit relief map on the table. Capo's map, real or invented.
 // The table games' ground is a picture of cell numbers; that cannot hold thousands of provinces sharply, so here the
@@ -6782,6 +6871,35 @@ class WorldGround {
 
 $x.WorldGround = WorldGround;
 return $x; })({});
+$m[50] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The model shelf as the pages reach it: a sculpted piece is fetched from site/models/ only when a board in 3D first shows it,
+// and the credits players can read from every game's About (CC BY asks for a credit line they can reach).
+const { SHELF } = $m[44];
+
+// the built pages point this at the site's own shelf when served, and at nothing when a page is opened by double-click (no fetching there)
+const SHELF_URL = "../site/models/";
+const kept = new Map(); // each file once a page, shared by every board on it (the title's board and the game's)
+/** The fetcher a board takes, or none: then only the pieces made in code stand. */
+const shelf = SHELF_URL ? (file) => { if (!kept.has(file)) kept.set(file, fetch(SHELF_URL + file).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null)); return kept.get(file); } : null;
+
+/** Makers whose models need no credit, thanked all the same: shown once one of their models is on the shelf. */
+const COURTESY = [["cottage townhouse", "Houses built from the Medieval Village MegaKit by Quaternius (quaternius.com), CC0."], ["block", "City blocks from the Downtown City MegaKit by Quaternius (quaternius.com), CC0."],["adobe", "Desert houses from Low Poly Desert Buildings by Anker's Assets (ankersassets.itch.io), CC0."]];
+
+/** The credits for the sculpted pieces, for an About panel: one line a model, as its licence asks. Plain text only. */
+function shelfCredits() {
+  const box = document.createElement("div"), h = document.createElement("h3"), note = document.createElement("p"), list = document.createElement("ul");
+  h.textContent = "Sculpted pieces";
+  note.textContent = "In 3D, some pieces are open models by other makers, cut down, repainted in the board's colours and re-encoded for this game. Each is used under its licence:";
+  for (const m of Object.values(SHELF)) if (m.credit) { const li = document.createElement("li"); li.textContent = m.credit; list.append(li); }
+  for (const [names, line] of COURTESY) if (names.split(" ").some((n) => SHELF[n])) { const li = document.createElement("li"); li.textContent = line; list.append(li); }
+  if (!list.children.length) return box;
+  box.append(h, note, list);
+  return box;
+}
+
+$x.shelf = shelf; $x.shelfCredits = shelfCredits;
+return $x; })({});
 $m[35] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The province map for Capo's story worlds: maps/world.json drawn on one canvas, with drag, wheel, pinch and tap.
@@ -6791,11 +6909,14 @@ $m[35] = (($x) => {
 // province. Where it cannot, or the player chooses Flat, the whole map is drawn here in 2D as before.
 const { canDraw } = $m[36];
 const { Camera } = $m[37];
-const { Dressing, capoModels } = $m[46];
+const { Dressing, capoModels } = $m[48];
 const { Meshes } = $m[39];
 const { models } = $m[40];
 const { STYLE_KEY, wear } = $m[42];
-const { WorldGround } = $m[47];
+const { WorldGround } = $m[49];
+// figures hook
+const { eraOf, figures } = $m[43];
+const { shelf } = $m[50];
 
 /** Fetch and unpack a world: absolute points for every arc, a path, box and middle for every province. */
 async function loadWorld(url, disputesUrl = "") {
@@ -6897,7 +7018,7 @@ function worldMap(canvas, world, o) {
       Object.assign(under.style, { position: "fixed", inset: "0", width: "100%", height: "100%", display: "block" });
       const ground = new WorldGround(under), meshes = new Meshes(ground.g, { ...models(style.kit), ...capoModels() }); // capomap: Capo's own models beside the shared ones;
       canvas.before(under);
-      lit = { under, ground, meshes, rgb: new Map(), key: "" };
+      lit = { under, ground, meshes, rgb: new Map(), key: "", fig: figures(eraOf(o.year?.() ?? 9999), shelf, (got) => { if (lit?.meshes === meshes) { meshes.add(got); redraw(); } }) }; // figures hook: sculpted ships by the year
       under.addEventListener("webglcontextlost", (e) => { e.preventDefault(); dark(); });
       const wood = new Image(); wood.onload = () => { if (lit) { lit.ground.wood(wood); redraw(); } }; wood.src = "../site/textures/walnut.webp";
       shape();
@@ -6965,13 +7086,14 @@ function worldMap(canvas, world, o) {
   }
   /** What stands on the lit map: the page's pieces, each the same size on the screen whatever the zoom (a little larger close in). */
   function stage(box) {
+    lit.fig.era = eraOf(o.year?.() ?? 9999); // figures hook
     const b = band(), phone = canvas.clientWidth < 600, k = ((phone ? 28 : 36) / view.s) * Math.pow(view.s / wide, 0.22), list = [], pad = k * 2;
     for (const p of (pieces ||= o.pieces?.() || [])) {
       if ((p.band || 0) > b || (p.until ?? 9) < b) continue;
       if (p.fit) { const r = world.provinces.get(p.at)?.box; if (!r || Math.max(r[2] - r[0], r[3] - r[1]) * view.s < p.fit) continue; } // capomap: a town waits until its province is large enough to hold it
       const q = Array.isArray(p.at) ? p.at : world.provinces.get(p.at)?.label;
       if (!q || q[0] < box[0] - pad || q[0] > box[2] + pad || q[1] < box[1] - pad || q[1] > box[3] + pad) continue; // capomap: only what is in view
-      const one = { m: p.m, x: q[0] + (p.dx || 0) * k, y: q[1] + (p.dy || 0) * k, z: p.sea ? 0 : 1, s: k * (p.size || 1) * style.scale, t: p.turn || 0, rgb: p.owner ? rgbOf(o.colour?.(p.owner) || ownerColour(p.owner)) : p.rgb || null };
+      const one = { m: lit.fig.pick(p.m, 0, style, true), x: q[0] + (p.dx || 0) * k, y: q[1] + (p.dy || 0) * k, z: p.sea ? 0 : 1, s: k * (p.size || 1) * style.scale, t: p.turn || 0, rgb: p.owner ? rgbOf(o.colour?.(p.owner) || ownerColour(p.owner)) : p.rgb || null };
       list.push(one);
       if (p.pips && b > 0) list.push({ ...one, m: `${p.sea ? "f" : ""}pips${p.pips}`, rgb: null }); // capomap: strength pips, from the region band
     }
@@ -7185,7 +7307,7 @@ function worldMap(canvas, world, o) {
 
 $x.loadWorld = loadWorld; $x.unpackWorld = unpackWorld; $x.ownerColour = ownerColour; $x.worldMap = worldMap;
 return $x; })({});
-$m[48] = (($x) => {
+$m[51] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What stands on Capo's lit map: sober blocks with map symbols, not toy soldiers. Looks only: every piece is read off
 // the state the rules already keep (who holds what, might, wars, the people seated in command, missions); nothing here changes a game.
@@ -7303,7 +7425,7 @@ function missionPins(out, g, world, homes, owner, land, player) {
 
 $x.townsOf = townsOf; $x.mapPieces = mapPieces;
 return $x; })({});
-$m[50] = (($x) => {
+$m[53] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Where this copy's source code can be read. Anyone who runs a changed copy puts their own address here.
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
@@ -7311,7 +7433,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.10.0";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "7f4c8a04";
+const BUILD = "3296fad1";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -7331,7 +7453,7 @@ const AI_BASES = {
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_BASES = AI_BASES;
 return $x; })({});
-$m[51] = (($x) => {
+$m[54] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The shape of Capo's replies, apart from how they travel: a reply as a structured tool call and back to its lines,
 // and a sample turn Capo writes itself. Whatever service a reply comes from, the same reader reads its lines and the
@@ -7394,7 +7516,7 @@ function sampleReply(g, to, auto, nameOf, near) {
 
 $x.formatOf = formatOf; $x.toolOf = toolOf; $x.linesFrom = linesFrom; $x.sampleReply = sampleReply;
 return $x; })({});
-$m[52] = (($x) => {
+$m[55] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The three shapes AI services speak (the common chat-completions form, Anthropic's and Gemini's): where a request
 // goes, what it carries, and how a reply, or one streamed piece of it, is read into progress { text, args, thinking,
@@ -7461,7 +7583,7 @@ function splitEvents(buf, final = false) {
 
 $x.SHAPES = SHAPES; $x.splitEvents = splitEvents;
 return $x; })({});
-$m[54] = (($x) => {
+$m[57] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The pure parts the MCP bridge (tools/capo-mcp.mjs) and the page (site/aimore.js) share: the read-only digest of a
 // game an AI app may see, whether a reply has the shape its prompt asked for, and the rules' answer to an order an AI
@@ -7469,7 +7591,7 @@ $m[54] = (($x) => {
 // accept it, and the rules carry it out at the turn as they would any other.
 const { oddsLine } = $m[7];
 const { NEED, treatyAnswer, treatyName } = $m[5];
-const { formatOf } = $m[51];
+const { formatOf } = $m[54];
 const { peaceAnswer, strengthOf } = $m[8];
 const { APPROACHES, atWar, attackPlan, commanders, treatiesOf, treatyOf, warsOf } = $m[2];
 
@@ -7545,7 +7667,7 @@ const APPROACH_NAMES = Object.keys(APPROACHES);
 
 $x.BRIDGE_PORT = BRIDGE_PORT; $x.ORDER_VERBS = ORDER_VERBS; $x.digest = digest; $x.shapeOf = shapeOf; $x.judgeOrder = judgeOrder; $x.APPROACH_NAMES = APPROACH_NAMES;
 return $x; })({});
-$m[55] = (($x) => {
+$m[58] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Plugins are data, never code: JSON files the player opens, checked like a save before anything uses them. Known
 // fields only, every text flattened to one line and clipped, no web address in any text, the hard line applied, and
@@ -7681,7 +7803,7 @@ function voice(style, tone) {
 
 $x.PLUGIN_KINDS = PLUGIN_KINDS; $x.LIMITS = LIMITS; $x.DIALS = DIALS; $x.STYLES = STYLES; $x.TONES = TONES; $x.plain = plain; $x.checkStyle = checkStyle; $x.checkTone = checkTone; $x.within = within; $x.checkService = checkService; $x.checkPack = checkPack; $x.checkPlugin = checkPlugin; $x.keepPlugins = keepPlugins; $x.toneWords = toneWords; $x.voice = voice;
 return $x; })({});
-$m[53] = (($x) => {
+$m[56] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Two additions to how Capo reaches an AI, kept apart from site/ai.js so its own lines stay few:
 // 1. The MCP bridge: a service called "Your AI app (MCP bridge)". The player runs tools/capo-mcp.mjs themselves and
@@ -7691,9 +7813,9 @@ $m[53] = (($x) => {
 // 2. Plugins: files of data the player opens (a prose style, a tone, a service preset), checked by
 //    src/story/plugins.js like a save and kept in this browser. Never code: nothing in a plugin is run.
 // The page parts are built from elements and text, never markup.
-const { AI_BASES } = $m[50];
-const { BRIDGE_PORT, digest, judgeOrder } = $m[54];
-const { PLUGIN_KINDS, STYLES, TONES, checkPlugin, keepPlugins, toneWords, voice } = $m[55];
+const { AI_BASES } = $m[53];
+const { BRIDGE_PORT, digest, judgeOrder } = $m[57];
+const { PLUGIN_KINDS, STYLES, TONES, checkPlugin, keepPlugins, toneWords, voice } = $m[58];
 
 const ORIGINS = [...new Set(Object.values(AI_BASES).map((b) => new URL(b).origin).filter((o) => o.startsWith("https:")))];
 const fail = (kind, message) => Object.assign(new Error(message), { kind });
@@ -7927,18 +8049,18 @@ function pluginPart(r, ui) {
 
 $x.aiMore = aiMore; $x.BRIDGE = BRIDGE; $x.bridgeBase = bridgeBase; $x.bridgeAsk = bridgeAsk; $x.bridgeCheck = bridgeCheck; $x.aiHost = aiHost; $x.hear = hear; $x.unhear = unhear; $x.proposals = proposals; $x.bridgePart = bridgePart; $x.openPlugin = openPlugin; $x.dropPlugin = dropPlugin; $x.choosePlugin = choosePlugin; $x.pluginsNow = pluginsNow; $x.voiceNow = voiceNow; $x.pluginPart = pluginPart;
 return $x; })({});
-$m[49] = (($x) => {
+$m[52] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // How Capo reaches an AI: a service the player connects with their own key, or a server on the player's computer
 // (addresses in config.js; the page's rule reaches only those and this computer). There is no copy-and-paste route
 // (ruling 142). A key is kept apart from the settings, in this tab only or on this device if
 // asked, and never goes in a save, a file, a web address, a message shown or the console, nor to another service.
 // The page parts at the end (settings, waiting box, connect box) are built from elements and text, never markup.
-const { AI_BASES } = $m[50];
-const { formatOf, linesFrom, toolOf } = $m[51];
-const { SHAPES, splitEvents } = $m[52];
+const { AI_BASES } = $m[53];
+const { formatOf, linesFrom, toolOf } = $m[54];
+const { SHAPES, splitEvents } = $m[55];
 // mcp and plugins hook: the bridge to the player's own AI app, and data-only plugins (site/aimore.js)
-const { aiMore, bridgeAsk, bridgePart, pluginPart, voiceNow } = $m[53];
+const { aiMore, bridgeAsk, bridgePart, pluginPart, voiceNow } = $m[56];
 
 /** The reply allowance in tokens for each kind of call (lane 2 review). A thinking model gets four times as much. */
 const BUDGET = { turn: 1800, chat: 400, council: 500, ask: 500, character: 300, check: 300 };
@@ -8318,7 +8440,7 @@ aiMore({ PRESETS, keyOf, setKey, setKeep }); // mcp and plugins hook: adds the b
 
 $x.BUDGET = BUDGET; $x.thinks = thinks; $x.allowance = allowance; $x.PRESETS = PRESETS; $x.NEEDS_PROXY = NEEDS_PROXY; $x.WORKS = WORKS; $x.CONNECT = CONNECT; $x.reachable = reachable; $x.connected = connected; $x.loadRoute = loadRoute; $x.saveRoute = saveRoute; $x.keyOf = keyOf; $x.setKey = setKey; $x.setKeep = setKeep; $x.forgetKeys = forgetKeys; $x.scrub = scrub; $x.presetOf = presetOf; $x.baseOf = baseOf; $x.explain = explain; $x.ask = ask; $x.check = check; $x.watch = watch; $x.waitBox = waitBox; $x.connectBox = connectBox; $x.aiPanel = aiPanel;
 return $x; })({});
-$m[56] = (($x) => {
+$m[59] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
 // Daylight or lamplight, as the table games' Light setting last left it; every page starts here. The front page has one theme.
@@ -8338,7 +8460,7 @@ function guard() {
 
 $x.guard = guard;
 return $x; })({});
-$m[59] = (($x) => {
+$m[62] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The council convened: two or three advisers argue one decision in front of the player. Words only.
 // The rules choose who argues: the member the state of the country pleases most, the one it pleases least (their
@@ -8396,7 +8518,7 @@ function readDebate(text, members) {
 
 $x.debaters = debaters; $x.debatePrompt = debatePrompt; $x.readDebate = readDebate;
 return $x; })({});
-$m[60] = (($x) => {
+$m[63] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What the map views show, read from what the rules keep: no drawing here, so any map (flat or 3D) can paint it.
 // Each gives, for a province or a country, a short word the page turns into a colour and a legend line.
@@ -8470,7 +8592,7 @@ const knownView = (g, c, near) => knowledge(g, c, near).tier;
 
 $x.fronts = fronts; $x.changed = changed; $x.claims = claims; $x.sphereView = sphereView; $x.pactView = pactView; $x.clauseWords = clauseWords; $x.knownView = knownView;
 return $x; })({});
-$m[58] = (($x) => {
+$m[61] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's page for the second round of what the rules keep: home politics and unrest, what you know of others,
 // scenes, the scale of play and your own means, the council convened, pacts and spheres, a scenario's own beats,
@@ -8482,9 +8604,9 @@ const { CARES, moodOf, quellPlan, termsFor } = $m[22];
 const { fogLines, knowledge, seenGauge, seenWords, setFog } = $m[24];
 const { chooseScene, openScene, readScene, scenePlan, sceneProblem, scenePrompt, sceneWith } = $m[25];
 const { MEANS, SCALES, meansOf, meansTarget, scaleProblem, switchScale } = $m[20];
-const { debatePrompt, debaters, readDebate } = $m[59];
+const { debatePrompt, debaters, readDebate } = $m[62];
 const { PACT, pactAnswer, pactOf, spheres, tributeOf } = $m[9];
-const { changed, claims, clauseWords, fronts, knownView, pactView, sphereView } = $m[60];
+const { changed, claims, clauseWords, fronts, knownView, pactView, sphereView } = $m[63];
 const { PACE, paceOf, setPace } = $m[14];
 const { landsOf, rebelLand } = $m[23];
 const { WHEN, keepScript } = $m[21];
@@ -8764,7 +8886,7 @@ function viewsInit(select, x, shown) {
 
 $x.knownLine = knownLine; $x.reads = reads; $x.knownFor = knownFor; $x.dimBox = dimBox; $x.realmMore = realmMore; $x.sceneSheet = sceneSheet; $x.councilMore = councilMore; $x.gameMore = gameMore; $x.cardMore = cardMore; $x.VIEWS = VIEWS; $x.viewFill = viewFill; $x.viewTint = viewTint; $x.viewsInit = viewsInit;
 return $x; })({});
-$m[57] = (($x) => {
+$m[60] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's page for what the rules keep about your country: its three gauges, your ambition, an open crisis, causes
 // for war, the press, the reckoning, and every past turn in full. The rules live in src/story (state.js,
@@ -8777,9 +8899,9 @@ const { ambitionsFor, chooseAmbition, progress, reckoning } = $m[19];
 const { papers } = $m[21];
 const { NOTE, NOTE2 } = $m[18];
 const { pactAnswer } = $m[9];
-const { cardMore, reads, realmMore, sceneSheet } = $m[58];
+const { cardMore, reads, realmMore, sceneSheet } = $m[61];
 $x.backMore = $m[18].backMore; $x.keepMore = $m[18].keepMore;
-$x.councilMore = $m[58].councilMore; $x.dimBox = $m[58].dimBox; $x.gameMore = $m[58].gameMore; $x.knownFor = $m[58].knownFor; $x.viewFill = $m[58].viewFill; $x.viewTint = $m[58].viewTint; $x.viewsInit = $m[58].viewsInit;
+$x.councilMore = $m[61].councilMore; $x.dimBox = $m[61].dimBox; $x.gameMore = $m[61].gameMore; $x.knownFor = $m[61].knownFor; $x.viewFill = $m[61].viewFill; $x.viewTint = $m[61].viewTint; $x.viewsInit = $m[61].viewsInit;
 /** The words a converted game is told, once: which round of rules it was saved before. */
 const noteOf = (g) => (g.told === 2 ? NOTE2 : NOTE);
 /** The sheets this lane adds to the page: the country's, and the scene. */
@@ -8871,7 +8993,7 @@ function turnsTab(box, x) {
 
 $x.noteOf = noteOf; $x.moreSheets = moreSheets; $x.realmSheet = realmSheet; $x.notices = notices; $x.cardExtras = cardExtras; $x.demandBox = demandBox; $x.turnsTab = turnsTab;
 return $x; })({});
-$m[62] = (($x) => {
+$m[65] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Keeping a game small enough to keep (Phase 4, storage that cannot silently fill). Rules only: no page, no clock.
 // A browser gives one site about five million characters, shared by every game and scenario kept there. So:
@@ -8924,13 +9046,13 @@ const sizeWords = (n) => (n >= 1000000 ? `${Math.floor(n / 100000) / 10} MB` : `
 
 $x.ROOM = ROOM; $x.STEPS = STEPS; $x.slim = slim; $x.fatten = fatten; $x.shortTurn = shortTurn; $x.pressure = pressure; $x.compact = compact; $x.compactNote = compactNote; $x.sizeWords = sizeWords;
 return $x; })({});
-$m[61] = (($x) => {
+$m[64] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's save, kept so that it cannot fill the browser without saying so. The rules of it are in
 // src/story/keep.js; this file does the measuring, the writing, the warning and the file.
 // keeper(key, x) -> {save(state, past) -> past, rows(state, past) -> elements for the Game sheet, file(state), state()}.
 // x is what the game page lends: {el, button, toast}.
-const { ROOM, compact, compactNote, pressure, sizeWords } = $m[62];
+const { ROOM, compact, compactNote, pressure, sizeWords } = $m[65];
 const { RULES } = $m[7];
 
 const PROMISE = `The save promise: this game is saved under rules version ${RULES}. Until launch one a save may end when the rules version changes; this build brings older games up to date where it can, and says so. From launch one, a game saved under the previous rules version will always load.`;
@@ -8995,7 +9117,7 @@ function keeper(key, x, store = own()) {
 
 $x.keeper = keeper;
 return $x; })({});
-$m[63] = (($x) => {
+$m[66] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's page for solo missions (ruling 124, step M1): the order on a province card with its odds before it is
 // given, the roster on the council sheet, and each mission step by step in the Ledger. The rules are in
@@ -9073,7 +9195,7 @@ function missionReports(turn, x) {
 
 $x.keepMissions = keepMissions; $x.missionBox = missionBox; $x.rosterRows = rosterRows; $x.missionReports = missionReports;
 return $x; })({});
-$m[64] = (($x) => {
+$m[67] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The content floor's last parts (road map 5, decision 9): one accept step before a first story game, "Fiction" on
 // newspapers and on anything copied out of the story, and one sentence that each AI service's own rules bind the
@@ -9158,22 +9280,24 @@ const { askPrompt, chatPrompt, councilPrompt, readAsk, readChat, readCouncil, se
 const { FIRST, KINDS, PRESETS, checkSetting, madeWorld, settingScenario, staged, startOrder, worldKey } = $m[32];
 const { loadWorld, ownerColour, unpackWorld, worldMap } = $m[35];
 // 3D hook: what stands on the lit map
-const { mapPieces } = $m[48];
-const { aiPanel, ask, connectBox, connected, loadRoute, waitBox, watch } = $m[49];
-const { sampleReply } = $m[51];
-const { BUILD, SOURCE_URL, VERSION } = $m[50];
-const { guard } = $m[56];
+const { mapPieces } = $m[51];
+const { aiPanel, ask, connectBox, connected, loadRoute, waitBox, watch } = $m[52];
+const { sampleReply } = $m[54];
+const { BUILD, SOURCE_URL, VERSION } = $m[53];
+// figures hook
+const { shelfCredits } = $m[50];
+const { guard } = $m[59];
 // mcp and plugins hook: orders an AI app proposes through the bridge, and scenario packs (site/aimore.js, src/story/plugins.js)
-const { aiHost } = $m[53];
-const { checkPack } = $m[55];
+const { aiHost } = $m[56];
+const { checkPack } = $m[58];
 // features hook: the country sheet, crises, ambitions, the Turns tab (site/realm.js)
-const { backMore, cardExtras, councilMore, demandBox, dimBox, gameMore, keepMore, knownFor, moreSheets, noteOf, notices, realmSheet, turnsTab, viewFill, viewTint, viewsInit } = $m[57];
+const { backMore, cardExtras, councilMore, demandBox, dimBox, gameMore, keepMore, knownFor, moreSheets, noteOf, notices, realmSheet, turnsTab, viewFill, viewTint, viewsInit } = $m[60];
 // phase 4 hook: storage that says when it is full (site/keep.js), solo missions (site/missions.js), the accept step and "Fiction" (site/accept.js)
-const { keeper } = $m[61];
-const { fatten, slim } = $m[62];
-const { keepMissions, missionBox, missionReports, rosterRows } = $m[63];
+const { keeper } = $m[64];
+const { fatten, slim } = $m[65];
+const { keepMissions, missionBox, missionReports, rosterRows } = $m[66];
 const { unfit } = $m[6];
-const { AI_RULES, acceptStep, accepted, fictionCopy, fictionTag } = $m[64];
+const { AI_RULES, acceptStep, accepted, fictionCopy, fictionTag } = $m[67];
 
 const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);
@@ -10165,7 +10289,7 @@ function gameSheet(box) {
     ...gameMore(X), // features hook: the scale of play, and the scenario's own beats
     aiPanel(route, toast), // how Capo reaches an AI: site/ai.js (p5-ai)
     el("p", AI_RULES, "note"), // phase 4 hook
-    about());
+    about(), shelfCredits()); // figures hook: the sculpted pieces' credit lines
 }
 
 // ---- the guide: one turn, start to finish, pointing at each part of the screen; once, and again from the Game menu ----
@@ -10288,6 +10412,7 @@ async function start() {
   // presets hook: a kept game opens on its own world; anything else starts on the real one
   try { if (!(await enter(kept?.state?.world))) await enter(); } catch (e) { toast(`${e.message} Capo needs its web address, not a file opened by double-click.`); return; }
   map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked, mine: () => state?.player, tint: (id) => viewTint(view, X, id), // features hook: tint
+    year: () => (state ? Number(String(state.date).slice(0, 4)) : 9999), // figures hook: the era of the sculpted ships
     // 3D hook: fronts as lines, and capitals, armies, fleets, air wings and commanders as pieces, all read off the state
     wars: () => (state ? state.wars.map((w) => w.pair.split("|")) : []),
     pieces: () => mapPieces({ world, homes, owner: ownerOf, might: (c) => mightOf(geo(), c), wars: state ? state.wars.map((w) => w.pair.split("|")) : [], player: state?.player, staff: state ? commanders(state).filter((x) => !x.off && x.seat !== "generals").length : 0,

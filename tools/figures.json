@@ -1,0 +1,644 @@
+{
+ "date": "2026-11-27",
+ "about": "The sculpted pieces: node tools/models.mjs site/models tools/figures.json --from <work dir> --held <work dir>/held --index src/map/shelf.js. Each file is first cut in Blender by tools/blend.py with the options in blend (sources in 3d-sources/2026-11-27, read as data). Sizes in cell radii, as the recipes they stand in for.",
+ "models": [
+  {
+   "name": "knight",
+   "file": "cut/knight.glb",
+   "blend": "--tris 2500 --floor 0.065",
+   "tris": 2500,
+   "tall": 1.0,
+   "base": 0.32,
+   "licence": "CC-BY-4.0",
+   "title": "Knight Hospitaller - 3d printable",
+   "maker": "Andy Woodhead",
+   "source": "https://sketchfab.com/3d-models/7975ee5c47a94d35abf98070bfdd1ea8",
+   "credit": "\"Knight Hospitaller - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/7975ee5c47a94d35abf98070bfdd1ea8), CC BY 4.0, modified (cut down, repainted, re-encoded).",
+   "slots": [
+    "metal",
+    "wood",
+    "stone",
+    "roof",
+    "thatch",
+    "gold",
+    "cloth",
+    "hull",
+    "dark",
+    "iron",
+    "bone"
+   ],
+   "paint": [
+    {
+     "hue": [
+      335,
+      25
+     ],
+     "sat": 0.35,
+     "light": [
+      0.12,
+      1
+     ],
+     "slot": "cloth",
+     "fin": 1
+    }
+   ],
+   "baseFin": 1
+  },
+  {
+   "name": "legionary",
+   "file": "cut/legionary.glb",
+   "blend": "--tris 2500",
+   "tris": 2500,
+   "tall": 0.94,
+   "base": 0.32,
+   "licence": "CC-BY-4.0",
+   "title": "Roman Soldier - fighting pose - 3d printable",
+   "maker": "Andy Woodhead",
+   "source": "https://sketchfab.com/3d-models/5c29ca5803ad475eaaae12714e8f1dab",
+   "credit": "\"Roman Soldier - fighting pose - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/5c29ca5803ad475eaaae12714e8f1dab), CC BY 4.0, modified (cut down, repainted, re-encoded).",
+   "slots": [
+    "metal",
+    "wood",
+    "stone",
+    "roof",
+    "thatch",
+    "gold",
+    "cloth",
+    "hull",
+    "dark",
+    "iron",
+    "bone"
+   ],
+   "paint": [
+    {
+     "hue": [
+      345,
+      25
+     ],
+     "sat": 0.45,
+     "light": [
+      0.25,
+      1
+     ],
+     "slot": "cloth",
+     "fin": 1
+    }
+   ],
+   "baseFin": 1
+  },
+  {
+   "name": "redcoat",
+   "file": "cut/redcoat.glb",
+   "blend": "--tris 2500 --pose 0.34,0.8,40 --drop musket",
+   "tris": 2500,
+   "tall": 0.94,
+   "base": 0.3,
+   "licence": "CC-BY-4.0",
+   "title": "Waterloo British Infantry - for animation",
+   "maker": "Andy Woodhead",
+   "source": "https://sketchfab.com/3d-models/85a1a8205b2c447fb8d0419978f17b75",
+   "credit": "\"Waterloo British Infantry - for animation\" by Andy Woodhead (sketchfab.com/3d-models/85a1a8205b2c447fb8d0419978f17b75), CC BY 4.0, modified (posed, cut down, repainted, re-encoded).",
+   "slots": [
+    "metal",
+    "wood",
+    "stone",
+    "roof",
+    "thatch",
+    "wall",
+    "gold",
+    "cloth",
+    "hull",
+    "dark",
+    "iron",
+    "bone"
+   ],
+   "paint": [
+    {
+     "hue": [
+      330,
+      30
+     ],
+     "sat": 0.22,
+     "light": [
+      0.15,
+      1
+     ],
+     "slot": "cloth",
+     "fin": 1
+    }
+   ],
+   "baseFin": 1
+  },
+  {
+   "name": "fusilier",
+   "file": "cut/fusilier.glb",
+   "blend": "--tris 2500 --pose 0.36,0.8,40 --drop rifle,musket,gun,bayonet",
+   "tris": 2500,
+   "tall": 0.94,
+   "base": 0.3,
+   "licence": "CC-BY-4.0",
+   "title": "French Infantry - Franco-Prussian War",
+   "maker": "Andy Woodhead",
+   "source": "https://sketchfab.com/3d-models/b935801d58874c72a27a3bd371286811",
+   "credit": "\"French Infantry - Franco-Prussian War\" by Andy Woodhead (sketchfab.com/3d-models/b935801d58874c72a27a3bd371286811), CC BY 4.0, modified (posed, cut down, repainted, re-encoded).",
+   "slots": [
+    "metal",
+    "wood",
+    "stone",
+    "roof",
+    "thatch",
+    "wall",
+    "gold",
+    "cloth",
+    "hull",
+    "dark",
+    "iron",
+    "bone"
+   ],
+   "paint": [
+    {
+     "hue": [
+      190,
+      260
+     ],
+     "sat": 0.3,
+     "slot": "cloth",
+     "fin": 1
+    }
+   ],
+   "hold": "no place in a game yet: foot of the industrial era (an era setting for Brass and Banners, or figures on Capo's map, would show it)",
+   "baseFin": 1
+  },
+  {
+   "name": "marine",
+   "file": "cut/marine.glb",
+   "blend": "--tris 2500 --pose 0.32,0.82,80",
+   "tris": 2500,
+   "tall": 0.94,
+   "base": 0.3,
+   "licence": "CC-BY-4.0",
+   "title": "US Marine T pose - Vietnam",
+   "maker": "Andy Woodhead",
+   "source": "https://sketchfab.com/3d-models/58d066644f8e47a6aed3470dfd5507a7",
+   "credit": "\"US Marine T pose - Vietnam\" by Andy Woodhead (sketchfab.com/3d-models/58d066644f8e47a6aed3470dfd5507a7), CC BY 4.0, modified (posed, cut down, repainted, re-encoded).",
+   "slots": [
+    "metal",
+    "wood",
+    "stone",
+    "thatch",
+    "wall",
+    "gold",
+    "cloth",
+    "hull",
+    "dark",
+    "iron",
+    "bone"
+   ],
+   "paint": [
+    {
+     "hue": [
+      45,
+      160
+     ],
+     "sat": 0.15,
+     "light": [
+      0,
+      0.72
+     ],
+     "slot": "cloth",
+     "fin": 1
+    }
+   ],
+   "hold": "no place in a game yet: foot of the modern era (as above)",
+   "baseFin": 1
+  },
+  {
+   "name": "general",
+   "file": "cut/general.glb",
+   "blend": "--tris 4000 --remesh 220 (an untextured print of many shells, remade as one skin; its rock kept as the figure's ground)",
+   "tris": 4000,
+   "tall": 1.06,
+   "base": 0.34,
+   "baseFin": 1,
+   "licence": "CC-BY-4.0",
+   "title": "Roman General - 3d printable",
+   "maker": "Andy Woodhead",
+   "source": "https://sketchfab.com/3d-models/70d18b0518344b7bad3cd0979072a1c2",
+   "credit": "\"Roman General - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/70d18b0518344b7bad3cd0979072a1c2), CC BY 4.0, modified (remeshed, cut down, painted as pewter, re-encoded).",
+   "slots": [
+    "metal"
+   ]
+  },
+  {
+   "name": "horse",
+   "file": "cut/horse.glb",
+   "blend": "--tris 3000 --drop base,grass,rock",
+   "tris": 3000,
+   "size": 0.5,
+   "base": 0.4,
+   "licence": "CC-BY-4.0",
+   "title": "Galloping Horse - free download - 3d-printable",
+   "maker": "Andy Woodhead",
+   "source": "https://sketchfab.com/3d-models/dfc6f5596aba48a0b08a44c31b97b368",
+   "credit": "\"Galloping Horse - free download - 3d-printable\" by Andy Woodhead (sketchfab.com/3d-models/dfc6f5596aba48a0b08a44c31b97b368), CC BY 4.0, modified (base removed, cut down, repainted, re-encoded).",
+   "slots": [
+    "wood",
+    "dark",
+    "bone",
+    "thatch"
+   ],
+   "paint": [
+    {
+     "light": [
+      0.3,
+      1
+     ],
+     "sat": 0.25,
+     "slot": "cloth",
+     "fin": 1
+    }
+   ],
+   "turn": 1.5708
+  },
+  {
+   "name": "ballista",
+   "file": "cut/ballista.glb",
+   "blend": "--tris 2500",
+   "tris": 2500,
+   "size": 0.5,
+   "base": 0.42,
+   "licence": "CC-BY-4.0",
+   "title": "Roman Ballista - free game asset",
+   "maker": "Andy Woodhead",
+   "source": "https://sketchfab.com/3d-models/a92a4eb4ab04409dbf40344f5f63925a",
+   "credit": "\"Roman Ballista - free game asset\" by Andy Woodhead (sketchfab.com/3d-models/a92a4eb4ab04409dbf40344f5f63925a), CC BY 4.0, modified (cut down, repainted, re-encoded).",
+   "slots": [
+    "metal",
+    "wood",
+    "iron",
+    "dark",
+    "bone",
+    "thatch"
+   ],
+   "paint": [
+    {
+     "hue": [
+      0,
+      60
+     ],
+     "sat": 0.2,
+     "light": [
+      0,
+      0.75
+     ],
+     "slot": "cloth",
+     "fin": 1
+    }
+   ],
+   "hold": "no place in a game yet: the ancient gun (as above)",
+   "baseFin": 1
+  },
+  {
+   "name": "cannon",
+   "file": "cut/cannon.glb",
+   "blend": "--tris 2500 (A Cannon LP.fbx from the original-format download, with its textures folder)",
+   "tris": 2500,
+   "size": 0.52,
+   "base": 0.42,
+   "licence": "CC-BY-4.0",
+   "title": "British field cannon - 1815 - free download",
+   "maker": "Andy Woodhead",
+   "source": "https://sketchfab.com/3d-models/c027cb2e6e764f4196f27c94b5f770d5",
+   "credit": "\"British field cannon - 1815 - free download\" by Andy Woodhead (sketchfab.com/3d-models/c027cb2e6e764f4196f27c94b5f770d5), CC BY 4.0, modified (low-poly version, cut down, repainted, re-encoded).",
+   "slots": [
+    "metal",
+    "wood",
+    "iron",
+    "gold",
+    "dark",
+    "bone"
+   ],
+   "paint": [
+    {
+     "hue": [
+      40,
+      75
+     ],
+     "sat": 0.45,
+     "light": [
+      0.4,
+      1
+     ],
+     "slot": "gold",
+     "fin": 2
+    },
+    {
+     "hue": [
+      0,
+      50
+     ],
+     "sat": 0.2,
+     "slot": "cloth",
+     "fin": 1
+    }
+   ],
+   "baseFin": 1
+  },
+  {
+   "name": "longboat",
+   "file": "cut/longboat.glb",
+   "blend": "--tris 3000",
+   "tris": 3000,
+   "size": 0.58,
+   "turn": 1.5708,
+   "licence": "CC-BY-4.0",
+   "title": "Gislinge Viking Boat",
+   "maker": "Opus Poly",
+   "source": "https://sketchfab.com/3d-models/01098ad7973647a9b558f41d2ebc5193",
+   "credit": "\"Gislinge Viking Boat\" by Opus Poly (sketchfab.com/3d-models/01098ad7973647a9b558f41d2ebc5193), CC BY 4.0, modified (cut down, repainted, re-encoded).",
+   "slots": [
+    "wood",
+    "hull",
+    "dark",
+    "thatch",
+    "bone",
+    "wall"
+   ],
+   "paint": [
+    {
+     "above": 0.35,
+     "light": [
+      0.45,
+      1
+     ],
+     "slot": "cloth",
+     "fin": 1
+    }
+   ]
+  },
+  {
+   "name": "liner",
+   "file": "cut/liner.glb",
+   "blend": "--tris 5000 (decimation stops near 25,000 on this scan; the converter's grid merge takes it to the budget)",
+   "tris": 5000,
+   "size": 0.62,
+   "turn": 1.5708,
+   "licence": "CC-BY-4.0",
+   "title": "Ship of the line, c. 1700 / Linjeskepp, ca 1700",
+   "maker": "Swedish National Maritime and Transport Museums",
+   "source": "https://sketchfab.com/3d-models/3afea352a40045b0a638c9900f669ed4",
+   "credit": "\"Ship of the line, c. 1700\", Swedish National Maritime and Transport Museums (sketchfab.com/3d-models/3afea352a40045b0a638c9900f669ed4), CC BY 4.0, modified (remeshed, cut down, repainted, re-encoded).",
+   "slots": [
+    "wood",
+    "hull",
+    "dark",
+    "thatch",
+    "bone",
+    "wall",
+    "gold"
+   ],
+   "paint": [
+    {
+     "above": 0.55,
+     "slot": "cloth",
+     "fin": 1
+    }
+   ]
+  },
+  {
+   "name": "torpedo",
+   "file": "cut/torpedo.glb",
+   "blend": "--tris 4000 --remesh 500",
+   "tris": 4000,
+   "size": 0.62,
+   "turn": 1.5708,
+   "licence": "CC-BY-4.0",
+   "title": "Swedish 2nd class Torpedo Boat (1908)",
+   "maker": "Swedish National Maritime and Transport Museums",
+   "source": "https://sketchfab.com/3d-models/d71822cc900b43dfa76b014c250e9e7f",
+   "credit": "\"Swedish 2nd class Torpedo Boat (1908)\", Swedish National Maritime and Transport Museums (sketchfab.com/3d-models/d71822cc900b43dfa76b014c250e9e7f), CC BY 4.0, modified (remeshed, cut down, repainted, re-encoded).",
+   "slots": [
+    "metal",
+    "wood",
+    "hull",
+    "dark",
+    "iron",
+    "bone",
+    "wall"
+   ],
+   "paint": [
+    {
+     "below": 0.3,
+     "slot": "cloth",
+     "fin": 1
+    },
+    {
+     "up": 0.6,
+     "below": 0.55,
+     "slot": "cloth",
+     "fin": 1
+    }
+   ]
+  },
+  {
+   "name": "destroyer",
+   "file": "cut/destroyer.glb",
+   "blend": "--tris 5000",
+   "tris": 5000,
+   "size": 0.62,
+   "turn": 1.5708,
+   "licence": "CC-BY-4.0",
+   "title": "1:1 Low poly US NAVY DDG-51 USS Arleigh Burke.",
+   "maker": "Yi Tsung Lee (model and texture by WTigerTw)",
+   "source": "https://sketchfab.com/3d-models/17be09c31c6047e4a5969b68c29eba03",
+   "credit": "\"1:1 Low poly US NAVY DDG-51 USS Arleigh Burke.\" by Yi Tsung Lee, model and texture by WTigerTw (sketchfab.com/3d-models/17be09c31c6047e4a5969b68c29eba03), CC BY 4.0, modified (cut down, repainted, re-encoded).",
+   "slots": [
+    "metal",
+    "hull",
+    "dark",
+    "iron",
+    "bone",
+    "wall"
+   ],
+   "paint": [
+    {
+     "below": 0.3,
+     "slot": "cloth",
+     "fin": 1
+    },
+    {
+     "up": 0.6,
+     "below": 0.55,
+     "slot": "cloth",
+     "fin": 1
+    }
+   ]
+  },
+  {
+   "name": "cottage",
+   "file": "cut/cottage.glb",
+   "blend": "--parts cottage.json --tris 1500, walls turned outward (Medieval Village MegaKit pieces: stone walls, a door, round windows, a 4 x 4 tiled roof and its gables)",
+   "tris": 1500,
+   "size": 0.34,
+   "licence": "CC0-1.0",
+   "title": "A cottage built from the Medieval Village MegaKit",
+   "maker": "Quaternius",
+   "source": "https://quaternius.itch.io/medieval-village-megakit",
+   "slots": [
+    "wood",
+    "stone",
+    "wall",
+    "thatch",
+    "dark",
+    "bone"
+   ],
+   "paint": [
+    {
+     "hue": [
+      0,
+      30
+     ],
+     "sat": 0.45,
+     "slot": "cloth",
+     "fin": 1
+    }
+   ]
+  },
+  {
+   "name": "townhouse",
+   "file": "cut/townhouse.glb",
+   "blend": "--parts townhouse.json --tris 1500, walls turned outward (Medieval Village MegaKit pieces: a stone ground floor, a timber-framed upper floor, a 4 x 6 tiled roof, gables, a chimney)",
+   "tris": 1500,
+   "size": 0.34,
+   "licence": "CC0-1.0",
+   "title": "A town house built from the Medieval Village MegaKit",
+   "maker": "Quaternius",
+   "source": "https://quaternius.itch.io/medieval-village-megakit",
+   "slots": [
+    "wood",
+    "stone",
+    "wall",
+    "thatch",
+    "dark",
+    "bone"
+   ],
+   "paint": [
+    {
+     "hue": [
+      0,
+      30
+     ],
+     "sat": 0.45,
+     "slot": "cloth",
+     "fin": 1
+    }
+   ]
+  },
+  {
+   "name": "block",
+   "file": "cut/block.glb",
+   "blend": "--tris 1500 --remesh 150 (Building_Medium_2_001 from the Downtown City MegaKit)",
+   "tris": 1500,
+   "size": 0.44,
+   "licence": "CC0-1.0",
+   "title": "Building_Medium_2_001 from the Downtown City MegaKit",
+   "maker": "Quaternius",
+   "source": "https://quaternius.itch.io/downtown-city-megakit",
+   "slots": [
+    "metal",
+    "stone",
+    "wall",
+    "roof",
+    "dark",
+    "iron",
+    "bone"
+   ],
+   "paint": [
+    {
+     "up": 0.9,
+     "slot": "cloth",
+     "fin": 1
+    }
+   ],
+   "hold": "the Downtown City kit's pieces do not cut down cleanly (separate parts the decimation cannot join) and the block reads as a grey box; no game shows a modern town yet"
+  },
+  {
+   "name": "adobe",
+   "file": "cut/adobe.glb",
+   "blend": "--tris 1000 (Medium Building A from Low Poly Desert Buildings)",
+   "tris": 1000,
+   "size": 0.36,
+   "licence": "CC0-1.0",
+   "title": "Medium Building A from Low Poly Desert Buildings",
+   "maker": "Anker's Assets",
+   "source": "https://ankersassets.itch.io/low-poly-desert-buildings",
+   "slots": [
+    "wood",
+    "stone",
+    "wall",
+    "thatch",
+    "dark",
+    "bone"
+   ],
+   "paint": [
+    {
+     "up": 0.9,
+     "slot": "cloth",
+     "fin": 1
+    }
+   ]
+  },
+  {
+   "name": "jaca_bearer",
+   "file": "cut/jaca-bearer.glb",
+   "blend": "--tris 3000",
+   "tris": 3000,
+   "tall": 0.8,
+   "hold": "ruling 150: a written check with the Jaca museum first",
+   "licence": "CC-BY-4.0",
+   "title": "2000 1 premio figuras",
+   "maker": "Pedro Francisco Ramirez Mateo, Museo de Miniaturas Militares de Jaca",
+   "source": "https://sketchfab.com/3d-models/70c242192d154069927f3c2ba1bcf71e",
+   "credit": "\"2000 1 premio figuras\" (Pedro Francisco Ramirez Mateo), Museo de Miniaturas Militares de Jaca (sketchfab.com/3d-models/70c242192d154069927f3c2ba1bcf71e), CC BY 4.0, modified."
+  },
+  {
+   "name": "jaca_cuirassier",
+   "file": "cut/jaca-cuirassier.glb",
+   "blend": "--tris 4000",
+   "tris": 4000,
+   "tall": 0.9,
+   "hold": "ruling 150: a written check with the Jaca museum first",
+   "licence": "CC-BY-4.0",
+   "title": "2006 1 Premio Figuras",
+   "maker": "Agustin Pacheco Fernandez, Museo de Miniaturas Militares de Jaca",
+   "source": "https://sketchfab.com/3d-models/e22b91f18c164093b871b3a4b2c20f9d",
+   "credit": "\"2006 1 Premio Figuras\" (Agustin Pacheco Fernandez), Museo de Miniaturas Militares de Jaca (sketchfab.com/3d-models/e22b91f18c164093b871b3a4b2c20f9d), CC BY 4.0, modified."
+  },
+  {
+   "name": "jaca_tank",
+   "file": "cut/jaca-tank.glb",
+   "blend": "--tris 3500",
+   "tris": 3500,
+   "size": 0.45,
+   "hold": "ruling 150: a written check with the Jaca museum first",
+   "licence": "CC-BY-4.0",
+   "title": "2013 1 Premio Materiales",
+   "maker": "Luis Fernando Solanas Jimenez, Museo de Miniaturas Militares de Jaca",
+   "source": "https://sketchfab.com/3d-models/ae79612035654934ae3b00e905d39ac7",
+   "credit": "\"2013 1 Premio Materiales\" (Luis Fernando Solanas Jimenez), Museo de Miniaturas Militares de Jaca (sketchfab.com/3d-models/ae79612035654934ae3b00e905d39ac7), CC BY 4.0, modified."
+  },
+  {
+   "name": "jaca_howitzer",
+   "file": "cut/jaca-howitzer.glb",
+   "blend": "--tris 3500",
+   "tris": 3500,
+   "size": 0.45,
+   "hold": "ruling 150: a written check with the Jaca museum first",
+   "licence": "CC-BY-4.0",
+   "title": "1984 1 premio maquetas",
+   "maker": "Jose Manuel Diez Sierra, Museo de Miniaturas Militares de Jaca",
+   "source": "https://sketchfab.com/3d-models/c844d9d26f264e0eb6614dc259215410",
+   "credit": "\"1984 1 premio maquetas\" (Jose Manuel Diez Sierra), Museo de Miniaturas Militares de Jaca (sketchfab.com/3d-models/c844d9d26f264e0eb6614dc259215410), CC BY 4.0, modified."
+  }
+ ]
+}
