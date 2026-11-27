@@ -18,6 +18,15 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, k) => a + 
 const mark = (ms) => { ends = Math.max(ends, performance.now() + ms); };
 /** Dice as big as the free part of the board allows: a share of its shorter side, within bounds. */
 const big = (b, k, lo, hi) => clamp(Math.min(b.middle.w, b.middle.h) * k, lo, hi);
+/** The part of the board the player can see now: the board's free middle, less the score strip above and a move sheet risen from below (a phone). */
+function room(b) {
+  const v = b.middle, rect = (id) => document.getElementById(id)?.getBoundingClientRect(), act = rect("act"), seats = rect("seats");
+  let top = v.y - v.h / 2, bottom = v.y + v.h / 2;
+  if (act?.width > innerWidth * 0.8 && act.top > innerHeight * 0.3) bottom = Math.min(bottom, act.top);
+  if (seats?.width > innerWidth * 0.6 && seats.bottom < innerHeight * 0.4) top = Math.max(top, seats.bottom);
+  if (bottom - top < 120) { top = v.y - v.h / 2; bottom = v.y + v.h / 2; }
+  return { x: v.x, y: (top + bottom) / 2, w: v.w, h: bottom - top };
+}
 
 /** Will motion play for a move? Not with motion reduced, not behind the title, not when bots are hurried or set to instant. */
 export function moving(T, person = T.human?.()) {
@@ -64,10 +73,11 @@ function follow(b, at) {
  * Dice thrown on the table: from one place, landing at points beside another. sets: [{ faces, rgb, lose }]; land(set, i) -> point.
  * size: a die's side in pixels; total: the number held under them. Returns the time they take to settle.
  */
-export function throwDice(T, from, sets, land, { person = T.human?.(), hold = -1, size = 22, total = null, roll = 640, linger = 1100 } = {}) {
+export function throwDice(T, from, sets, land, { person = T.human?.(), hold = -1, size = 22, total = null, roll = 640, linger = 1100, tag } = {}) {
   if (!moving(T, person)) return 0;
   const b = T.board.moving, f = pace(person), r = Math.round(roll * f);
-  ready().add(dice(sets.map((x, j) => ({ ...x, from: () => from(), land: x.faces.map((_, i) => () => land(j, i)) })), { roll: r, linger: Math.round(linger * f), size, total }));
+  if (tag) ready().drop(tag); // a new throw takes the last one's place
+  ready().add(Object.assign(dice(sets.map((x, j) => ({ ...x, from: () => from(), land: x.faces.map((_, i) => () => land(j, i)) })), { roll: r, linger: Math.round(linger * f), size, total }), { tag }));
   // the dice that lie on the table as models wait until the thrown ones are gone
   if (b.solid && hold >= 0) queueMicrotask(() => b.hold([hold], r + linger * f, ["model"]));
   return r;
@@ -101,7 +111,7 @@ export function bannersDice(T, e, tieBoth) {
   for (let j = 0; j < first; j++) { a -= per[j][0]; d -= per[j][1]; }
   const a0 = a, d0 = d, roll0 = 620 * f, step = m > 1 ? clamp(2600 / m, 330, 560) * f : 0, rollK = Math.min(step * 0.7, 340 * f);
   const start = (j) => (j ? roll0 + 160 * f + (j - 1) * step : 0), landAt = (j) => start(j) + (j ? rollK : roll0), E = landAt(m - 1);
-  const mid = () => { const x = b.place(e.from), y = b.place(e.to), v = b.middle; return { x: clamp(lerp(x.x, y.x, 0.62), v.x - v.w / 2 + S * 2.2, v.x + v.w / 2 - S * 2.2), y: clamp(lerp(x.y, y.y, 0.62) - S * 1.1, v.y - v.h / 2 + S * 1.6, v.y + v.h / 2 - S * 1.6) }; };
+  const seen = room(b), mid = () => { const x = b.place(e.from), y = b.place(e.to), v = seen; return { x: clamp(lerp(x.x, y.x, 0.62), v.x - v.w / 2 + S * 2.2, v.x + v.w / 2 - S * 2.2), y: clamp(lerp(x.y, y.y, 0.62) - S * 1.1, v.y - v.h / 2 + S * 1.6, v.y + v.h / 2 - S * 1.6) }; };
   const lay = (k, cnt) => (_, i) => () => { const c = mid(); return { x: c.x + (i - (cnt - 1) / 2) * S * 1.18, y: c.y + (k ? 0.62 : -0.62) * S }; };
   const lose = (mine, theirs, tie) => mine.map((v, i) => i < theirs.length && (v < theirs[i] || (v === theirs[i] && tie)));
   const above = (cell) => () => { const q = b.place(cell); return { x: q.x, y: q.y - clamp(q.r * 0.36, 11, 22) * 1.9 }; };
@@ -189,9 +199,9 @@ const PLANS = {
     for (const e of events) {
       if (e.kind === "roll") {
         // two big dice come in from the near edge of the board, settle in its middle and hold the number thrown; a raid darkens the edges
-        const v = () => b.middle, S = big(b, 0.11, 52, 84);
+        const seen = room(b), v = () => seen, S = clamp(Math.min(seen.w, seen.h) * 0.11, 48, 84);
         wait = throwDice(T, () => ({ x: v().x - v().w * 0.2, y: v().y + v().h * 0.42, r: 40 }), [{ faces: e.dice, rgb: rgbOf(e.seat) }], (_, i) => ({ x: v().x + (i ? 0.62 : -0.62) * S, y: v().y + (i ? 0.08 : -0.06) * S, r: 50 }),
-          { person, size: S, roll: 700, linger: 1100, total: { text: String(e.n), sub: e.raid ? "raid" : "", red: e.raid } });
+          { person, size: S, roll: 700, linger: 1100, tag: "roll", total: { text: String(e.n), sub: e.raid ? "raid" : "", red: e.raid } });
         if (e.raid) { layer.add(raid({ ms: Math.round(1300 * f) }), wait); told.at.raid = wait / 1000; }
         mark(wait + 900 * f);
       } else if (e.kind === "harvest") {

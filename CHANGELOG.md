@@ -2,6 +2,26 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Motion that reads: dice you can see, a raid you feel, goods that fly, battles that are battles (cold review 3, fix 4)
+
+**Players**
+- **Dice you can see.** Thrown dice are three to four times larger (about 50 px on a phone, up to 84 px on a desktop in Grain and Glass) and are held for a beat with the number thrown under them, where the eye already is: the middle of the part of the board you can see.
+- **Grain and Glass: the 7 is staged.** A raid roll shows "7 raid" in red, the edges of the screen darken once, and a drum sounds. The toll gate is then carried to its new hex, and the good it takes visibly passes from one player's card to the other's, with "−1 Salt" and "+1 Salt" beside them. Goods lost to spoilage show as "−1" by the card.
+- **Grain and Glass: goods fly.** After a roll, each yielding hex sends a crate of its good to the card of every player who gathers from it, the card glows as it arrives, and "+2 Grain"-style chips say what came in.
+- **Brass and Banners: battles feel like battles.** Every throw of a fight is thrown on the table (for a long "Roll it out", the last eight), the losing dice dim, each side's strength counts down beside its province as losses fall, and the last throw is held. Then the army marches in and the province takes its new colour; it no longer changes colour before the dice land.
+- **Bots take their time.** At the Normal speed a bot waits about 1.6 times as long between actions, and waits for the dice, the raid or the capture to be seen before it moves on (never more than 3.5 seconds). Fast and Instant in Settings are as they were.
+- **Nothing waits for the motion when it is your move.** You can act about a fifth of a second after a bot's move, while its dice are still rolling. With motion reduced (Settings, or the system's wish) none of this moves: the result is shown at once, as before. The new sounds (another throw, the raid, a theft, goods arriving) are made in code and follow the sound switch and volume.
+
+**Contributors**
+- `src/map/motion.js`: `dice()` takes `total` (the number held under the dice) and `fadeMs`; new effects `fly` (a crate or the gate carried between two points), `chip` (a rising "+2 Grain"), `tally` (a strength that counts down and shakes), `raid` (a darkened edge); `createMotion(parent, { z })` and `drop(tag)`.
+- `site/motion.js`: `bannersDice` throws the whole fight as a run (`losses()` splits the fight's cost by throw, made to add up to the rules' totals); the Glass plan stages the raid, the toll and the harvest; `stageLeft()` says how long the moment still needs; `stir()` returns how long the board may wait before recolouring what a fight took, and times the cues to the motion. `room()` keeps the dice inside the part of the board that is not under a phone's move sheet.
+- `site/sound.js`: cues `rethrow`, `raid`, `steal`, `gather`; `cuesOf(key, events, move, p, at)` takes the motion's timings. `site/shell.js`: `PACE.normal` 1.6.
+- Small, marked hooks ("motion hook p12"): `src/map/board.js` `show({ after })` lets the cells in `order` wait for the dice; a held piece stays held through the next position and takes its new count; `release()`; held pieces come back on a timer instead of a redraw every frame. `site/hexboard.js` passes `after`; `site/table.js` uses `stir`'s answer, keeps a person's wait to the board's own, and lets a bot at Normal wait for `stageLeft()`; `site/glass.js` gives the motion each hex's neighbours and the goods' names and colours (`T.motionHints`); `site/banners.js` leaves the loss badges to the run when it plays.
+- `test/motion.test.mjs`: the new cues, and sounds timed to a run of throws, a raid, a harvest and a theft.
+- Measured in headless Edge with the GPU, 1440x900 and 375x812: the motion layer's work per frame is 0.4 to 0.7 ms (median), under 2.5 ms at worst; the page's frames stay at 8.3 ms (median). The rare long frames (up to about 600 ms) carry under 20 ms of script and no blocking: they are the graphics process (new 3D models, screen captures), not this code.
+
 ## v0.10.9 (2026-11-27): Capo without a key gets a gazette, pressure and an ending
 
 ### Capo with no AI as a game on its own terms: a gazette, pressure, war from the card, an ending (cold review 3, fixes 6 to 8; story rules version 6)
