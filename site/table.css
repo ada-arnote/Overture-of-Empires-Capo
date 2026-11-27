@@ -300,6 +300,11 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
   #sheet.tabbed { height: calc(90vh / var(--ui-scale)) }
   dialog, #sheet.wide, #sheet.end { width: calc(100vw / var(--ui-scale)); max-width: none; margin: auto 0 0; max-height: calc(90vh / var(--ui-scale)); padding: 18px 16px; border-radius: var(--r-3) var(--r-3) 0 0; border-width: 1px 0 0 } dialog > .go { margin: 0 -16px -18px; padding: 10px 16px max(14px, env(safe-area-inset-bottom)) !important } dialog .go { bottom: -18px }
   .end .ends { grid-template-columns: 1fr 1fr } .end .ends .main { grid-column: 1 / -1; grid-row: 1 } .hero canvas { width: 60px; height: 60px }
+  /* layout hook (p12-layout): held upright, the sheet has a set height (--act, from table.js) and floats over the foot of the screen; the
+     board keeps the rest. The zoom row and the toasts share the band just above the sheet, side by side, and follow a folded sheet down */
+  body:not(.side) #act { max-height: calc(var(--act, 40vh) / var(--ui-scale)) }
+  body:not(.side) #toast, body:not(.side) #toast.on { left: 8px; transform: none; max-width: calc(100vw - 3 * var(--tap) - 44px); text-align: left }
+  body.shut:not(.side) :is(.zoom, #toast) { bottom: calc(var(--tray, 120px) + 8px) }
   #coach { padding: 10px 12px 12px } #coach p + p { font-size: 16px; line-height: 1.4; margin-bottom: var(--sp-2) } #coach .main, #coach .quiet { min-height: var(--tap) }
   #act #coach { top: -12px; margin: 0 0 10px }
 }

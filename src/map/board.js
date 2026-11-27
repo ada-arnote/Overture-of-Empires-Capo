@@ -163,13 +163,19 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       }
       tops[i + 1] = c.top;
     });
-    if (swing && zoom !== 1) { zoom = 1; }
+    if (swing && zoom !== 1 && !swing.keep) { zoom = 1; }
     if (swing) {
       const k = Math.min(1, (t - swing.t) / 420), e = ease(k);
       cam.set({ tilt: swing.a.tilt + (L.tilt - swing.a.tilt) * e, yaw: swing.a.yaw + (L.yaw - swing.a.yaw) * e, q: swing.a.q + (near() - swing.a.q) * e });
       cam.fit(ends, 14);
       base = cam.s;
-      if (k >= 1) { swing = null; layout(asked); } else moving = true; // shell hook (p8-shell): a new look settles at the home zoom, not the whole board
+      if (swing.keep) { cam.s = base * swing.keep.zoom; cam.cx = swing.keep.cx; cam.cy = swing.keep.cy; } // layout hook (p12-layout): a change of look keeps the view
+      if (k >= 1) { const keep = swing.keep; swing = null; layout(asked); restore(keep); } else moving = true; // shell hook (p8-shell): a new look settles at the home zoom, not the whole board
+    }
+    if (glide) { // layout hook (p12-layout): the camera on its way to a place, gently
+      const k = Math.max(0, Math.min(1, (t - glide.t) / 650)), e = ease(k);
+      cam.cx = glide.from[0] + (glide.to[0] - glide.from[0]) * e; cam.cy = glide.from[1] + (glide.to[1] - glide.from[1]) * e;
+      if (k >= 1) glide = null; else moving = true;
     }
     const beat = calm() || !lit ? 0 : Math.max(0, 1.5 - (t - lit) / 1000); // a preview pulses briefly, then the board is still
     if (beat > 0) moving = true;
@@ -383,31 +389,83 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   }
 
   const near = () => L.near / Math.max(cam.H, cam.W * 0.8);
-  // shell hook (site/table.js, p8-shell): `rest` is the zoom the board opens at and goes home to (the home button, the 0 key, a resize).
-  // free.fill asks for a wide map to open as tall as the free part of the screen, but no wider than a quarter more than the whole stage;
-  // free.at is a cell to centre at that zoom (the player's own land).
-  let rest = 1, asked = {};
+  // layout hook (p12-layout): one camera policy for every table game (site/table.js gives the free part of the screen).
+  // 1. Home (the opening view, the home button, the 0 key, a new size): the whole board, fitted to the free part of the screen.
+  //    Where a place would then be under `least` pixels across (a phone), the view comes in until it is not, centred on `at`, your land.
+  // 2. Your turn starts: come(at) glides to your land when it is out of the middle of the view; never at the whole-board view and
+  //    never within HAND ms of your own pan, drag, wheel, pinch or zoom button. The motion layer follows a rival only when zoomed (ruling 154).
+  // 3. A change of look keeps the view; a change of the panels' size keeps a zoomed view's middle; anything else stays where you put it.
+  const HAND = 6000;
+  let rest = 1, asked = {}, hand = -1e9, glide = null, apart = 0;
+  /** How far apart neighbouring places are, in the board's own units: a hex across, or the usual gap between provinces' middles. */
+  function spacing() {
+    if (apart) return apart;
+    if (!picture) return (apart = Math.sqrt(3) * m.R);
+    const pts = m.mid.filter((p) => p && Number.isFinite(p[0])), step = Math.max(1, Math.floor(pts.length / 120)), gaps = [];
+    for (let k = 0; k < pts.length; k += step) { let d = Infinity; for (const q of pts) { const e = Math.hypot(q[0] - pts[k][0], q[1] - pts[k][1]); if (e > 1e-6 && e < d) d = e; } if (d < Infinity) gaps.push(d); }
+    gaps.sort((a, b) => a - b);
+    return (apart = gaps[gaps.length >> 1] || m.R * 2);
+  }
   function layout(free = {}) {
-    const { fill = false, at = -1, ...room } = (asked = free);
+    const { least = 0, tall = false, at = -1, phone, ...room } = (asked = free); // phone: the shell's word to a game's own board, not the camera's
     const kept = zoom > 1 && zoom !== rest ? [cam.cx, cam.cy] : null; // hook (Inch lane, p8): a view zoomed away from its opening keeps its middle when the panels change size
     cam.set({ W: host.clientWidth || 1, H: host.clientHeight || 1, left: 0, right: 0, top: 0, bottom: 0, ...room });
     cam.set({ tilt: L.tilt, yaw: L.yaw, q: near() });
     cam.fit(ends, 14);
     base = cam.s; staged = false;
-    const tall = (cam.H - cam.top - cam.bottom) / (m.h * cam.s), was = rest; // a wide map on a narrow screen starts closer in
-    rest = fill ? Math.max(1, Math.min(3, tall / Math.max(0.3, cam.ct), (1.25 * cam.W) / (m.w * cam.s))) : picture && cam.W < 821 && tall > 1.6 ? Math.min(2.6, tall) : 1;
+    const was = rest, fx = cam.cx, fy = cam.cy, clamp = (z) => Math.max(1, Math.min(7, z));
+    rest = 1;
+    if (least > 0) { // measured on the screen as the tilt and the perspective draw it, at the far edge of the view, and tried again until it holds
+      let z = clamp(least / (spacing() * cam.s));
+      for (let k = 0; k < 3; k++) { cam.s = base * z; if (at >= 0 && at < m.mid.length) [cam.cx, cam.cy] = aim(at); const px = across(); if (!(px > 0)) break; z = clamp(z * least / px); }
+      rest = z;
+    } else if (tall) { const b = extent(); rest = clamp(Math.min(3, (cam.H - cam.top - cam.bottom) / Math.max(1, b.bottom - b.top))); } // a map of fine cells: as tall as the free part
+    cam.s = base; cam.cx = fx; cam.cy = fy;
     zoomed(zoom === 1 || zoom === was ? rest : zoom);
     if (zoom === rest) centre(at); else if (kept) { cam.cx = kept[0]; cam.cy = kept[1]; }
     under.style.width = over.style.width = cam.W + "px";
     under.style.height = over.style.height = cam.H + "px";
     redraw();
   }
+  /** How many pixels apart two neighbouring places are drawn at the far (top) edge of the free part, where they are smallest. */
+  function across() {
+    cam.unprojectTo(cam.left + (cam.W - cam.left - cam.right) / 2, cam.top, 0);
+    const x = cam.ox, y = cam.oy, h = spacing() / 2;
+    cam.projectTo(x - h, y, 0); const ax = cam.px, ay = cam.py; cam.projectTo(x + h, y, 0);
+    return Math.hypot(cam.px - ax, cam.py - ay);
+  }
+  /** Where the whole board lies on the screen, at the camera as it is. */
+  function extent() {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of ends) { cam.projectTo(x, y, 0); x0 = Math.min(x0, cam.px); x1 = Math.max(x1, cam.px); y0 = Math.min(y0, cam.py); y1 = Math.max(y1, cam.py); }
+    return { left: x0, right: x1, top: y0, bottom: y1 };
+  }
+  /** Where the camera's middle goes to put a cell in the middle of the free part of the screen, as far as the map's edges allow. */
+  function aim(i) {
+    const hw = (cam.W - cam.left - cam.right) / 2 / cam.s, hh = (cam.H - cam.top - cam.bottom) / 2 / cam.s / Math.max(0.3, cam.ct), keep = (v, h, n) => (n > 2 * h ? Math.max(h, Math.min(n - h, v)) : n / 2);
+    return [keep(m.mid[i][0], hw, m.w), keep(m.mid[i][1], hh, m.h)];
+  }
   /** shell hook (p8-shell): put a cell in the middle of the free part of the screen, as far as the map's edges allow, when zoomed in. */
   function centre(i) {
     if (!(i >= 0 && i < m.mid.length) || zoom <= 1) return;
-    const hw = (cam.W - cam.left - cam.right) / 2 / cam.s, hh = (cam.H - cam.top - cam.bottom) / 2 / cam.s / Math.max(0.3, cam.ct), keep = (v, h, n) => (n > 2 * h ? Math.max(h, Math.min(n - h, v)) : n / 2);
-    cam.cx = keep(m.mid[i][0], hw, m.w); cam.cy = keep(m.mid[i][1], hh, m.h); redraw();
+    glide = null;
+    [cam.cx, cam.cy] = aim(i); redraw();
   }
+  /** layout hook (p12-layout): rule 2, the camera comes back to a cell (your land) at the start of your turn. True if it moves. */
+  function come(i) {
+    if (!(i >= 0 && i < m.mid.length) || zoom <= 1 || swing || performance.now() - hand < HAND) return false;
+    cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit());
+    const w = cam.W - cam.left - cam.right, h = cam.H - cam.top - cam.bottom;
+    if (Math.abs(cam.px - cam.mx) < w * 0.3 && Math.abs(cam.py - cam.my) < h * 0.3) return false; // in the comfortable middle already
+    const to = aim(i);
+    if (calm()) { glide = null; [cam.cx, cam.cy] = to; redraw(); return true; } // reduced motion: there at once, without travel
+    glide = { t: performance.now(), from: [cam.cx, cam.cy], to }; redraw();
+    return true;
+  }
+  /** The player's own hand on the map: it stops a glide, and holds off the next for a while. */
+  const touched = () => { hand = performance.now(); glide = null; };
+  /** A change of look puts back the zoom and middle it had (rule 3). */
+  function restore(keep) { if (!keep) return; zoomed(keep.zoom); cam.cx = keep.cx; cam.cy = keep.cy; redraw(); }
   // Zoom with the wheel or two fingers, then drag. At the widest the whole board is in view.
   let base = 1, zoom = 1, dragged = false;
   const fingers = new Map();
@@ -424,7 +482,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   function slide(dx, dy) { cam.cx = Math.max(0, Math.min(m.w, cam.cx + dx)); cam.cy = Math.max(0, Math.min(m.h, cam.cy + dy)); redraw(); }
   const spot = (e) => { const r = under.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   under.style.touchAction = "none";
-  under.addEventListener("wheel", (e) => { e.preventDefault(); zoomed(zoom * Math.exp(-e.deltaY * 0.0016), ...spot(e)); }, { passive: false });
+  under.addEventListener("wheel", (e) => { e.preventDefault(); touched(); zoomed(zoom * Math.exp(-e.deltaY * 0.0016), ...spot(e)); }, { passive: false });
   under.addEventListener("pointerdown", (e) => { if (!fingers.size) dragged = false; fingers.set(e.pointerId, spot(e)); });
   addEventListener("pointerup", (e) => fingers.delete(e.pointerId));
   addEventListener("pointercancel", (e) => fingers.delete(e.pointerId));
@@ -433,12 +491,12 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     if (!was) return;
     if (fingers.size === 2) {
       const other = [...fingers].find(([k]) => k !== e.pointerId)[1], d = (p) => Math.hypot(p[0] - other[0], p[1] - other[1]) || 1;
-      dragged = true;
+      dragged = true; touched();
       zoomed((zoom * d(now)) / d(was), (now[0] + other[0]) / 2, (now[1] + other[1]) / 2);
     } else {
       if (!dragged && Math.hypot(now[0] - was[0], now[1] - was[1]) < 6) return; // a tap may wobble
       if (zoom === 1) return;
-      dragged = true;
+      dragged = true; touched();
       cam.unprojectTo(...was, 0);
       const x = cam.ox, y = cam.oy;
       cam.unprojectTo(...now, 0);
@@ -460,9 +518,10 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   return {
     layout, get look() { return lookName; },
     /** Zoom and move without a wheel, a pinch or a drag: by a factor about the middle (0 shows the whole board), by a share of the board. */
-    zoom(f) { zoomed(f ? zoom * f : rest); if (!f) centre(asked.at ?? -1); }, pan(dx, dy) { if (zoom > 1) slide((dx * m.w) / zoom, (dy * m.h) / zoom); }, on(what, f) { (listeners[what] ||= []).push(f); },
-    centre,
-    setLook(name) { if (!LOOKS[name]) return; const a = { tilt: cam.tilt, yaw: cam.yaw, q: cam.q }; lookName = name; L = LOOKS[name]; if (calm()) { layout(asked); for (const c of [under, over]) c.animate?.([{ opacity: 0.25 }, { opacity: 1 }], { duration: 180, easing: "ease-out" }); return; } swing = { t: performance.now(), a }; redraw(); },
+    zoom(f) { touched(); zoomed(f ? zoom * f : rest); if (!f) centre(asked.at ?? -1); }, pan(dx, dy) { touched(); if (zoom > 1) slide((dx * m.w) / zoom, (dy * m.h) / zoom); }, on(what, f) { (listeners[what] ||= []).push(f); },
+    centre, come, // layout hook (p12-layout): rule 2 of the camera policy; bounds, where the whole board lies on the screen now
+    get bounds() { return extent(); },
+    setLook(name) { if (!LOOKS[name]) return; const a = { tilt: cam.tilt, yaw: cam.yaw, q: cam.q }, keep = zoom > 1 ? { zoom, cx: cam.cx, cy: cam.cy } : null; lookName = name; L = LOOKS[name]; glide = null; if (calm()) { layout(asked); restore(keep); for (const c of [under, over]) c.animate?.([{ opacity: 0.25 }, { opacity: 1 }], { duration: 180, easing: "ease-out" }); return; } swing = { t: performance.now(), a, keep }; redraw(); }, // layout hook (p12-layout): keep, the view it had
     /** Seat patterns over owned land, so colour is never the only sign of whose it is. */
     patterns(on) { pat = !!on; redraw(); },
     /** "system" (the default) follows the system's reduced-motion wish, "reduced" and "full" override it. */
