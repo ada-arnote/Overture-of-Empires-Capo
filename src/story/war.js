@@ -102,7 +102,7 @@ export function settleWars(g, to, name) {
     if (wa >= WAR.most || wb >= WAR.most) { peace(a, b, `${name(a)} and ${name(b)}: worn out by their war (weariness ${wa} and ${wb} of ${WAR.most}), they stop by rule; a white peace, each keeps the land it holds`); continue; }
     if (a === me || b === me) {
       const foe = a === me ? b : a, ans = peaceAnswer(g, me, foe, to);
-      if (ans.ok && !g.offers.some((o) => o.from === foe && o.kind === "peace")) { g.offers.push({ from: foe, kind: "peace", date: to }); lines.push({ ok: true, text: `${name(foe)}: offers you peace by rule (${ans.why}); accept it from your actions` }); }
+      if (ans.ok && !g.offers.some((o) => o.from === foe && o.kind === "peace")) { g.offers.push({ from: foe, kind: "peace", date: to }); lines.push({ ok: true, country: foe, text: `${name(foe)}: offers you peace by rule (${ans.why}); accept it from your actions`, offer: "peace" }); }
       continue;
     }
     const x = peaceAnswer(g, a, b, to), y = peaceAnswer(g, b, a, to);

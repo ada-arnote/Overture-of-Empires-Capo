@@ -2,6 +2,26 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Capo with no AI as a game on its own terms: a gazette, pressure, war from the card, an ending (cold review 3, fixes 6 to 8; story rules version 6)
+
+**Players**
+- **The turn is told.** With no AI, the Ledger now opens on a short gazette written by the rules from what happened: first your own country, then the world, in plain sentences with countries and provinces named and dates in words. The sums are still there, one tap away under "Why". The lines "no story was told" and "no AI proposed anything" are gone.
+- **The world presses you.** By the end of turn 2, 3 or 4 something is done to your country, and again from time to time: a neighbour demands a border province, patrols cross your border (protest or let it pass, each with its price), two neighbours sign a defence treaty against you, or a hard season brings unrest. A partner at war now calls you to arms: join, or the treaty is cut back a rung.
+- **Treaties cost and show.** A defence or alliance treaty wants the last treaty with that country to be a year old, and each pledge you have already given makes the next harder to win. A country's card says what your treaties come to in numbers, and your pledged partners are edged in green on the map.
+- **War from the card.** A foreign province's card has a War section: your cause (or the price of having none), both sides' might, who would join against you, the odds of an attack on that province, and Declare war, Join the war, or End the treaty.
+- **An ending.** Your ambition and its count sit beside your country's name. When it is met a screen says so, with the reckoning and the next ambitions to choose from. A country that loses its last land gets its own last screen: take the turn back, begin again, or watch the world go on.
+- On a phone, the short notice after a turn no longer stretches over the Ledger.
+- A game saved under rules version 5 is brought up to date and told what changed; its past turns keep their results.
+
+**Contributors**
+- `src/story/gazette.js` (new): `gazette(g, entry, geo)` builds the prose from the receipt's own records (`fact`, `check`, and new small tags), two or three templates a case, drawn from the seed and the turn; `wordDate`, `spanWord`. It changes no fact. `closeTurn` takes `{rules: true}` for a turn with no AI, marks the log entry and uses the gazette's first sentence as the summary.
+- `src/story/pressure.js` (new): `settlePressure` (called from `settleMore`, before the gauges move), `protestAnswer`, `standBy`, `beside`, `pressureLines` (two short prompt lines, only while something waits), `keepPressure`. Game fields: `press`, `incident`, `call`, `called`. Every draw is named from the seed and the turn, so a seed and its orders replay.
+- `src/story/relations.js`: two new parts in `treatyAnswer` ("the ink still wet", "N pledges already given"), `pledges`, `WAIT`; a start's treaties carry `old: 1`. `ambitions.js`: the met line carries `met`, and `g.over` is set when the player's country holds no land. Receipt lines carry `offer`, `asks`, `land`, `press`, `call`, `incident` where they apply. `saves.js`: WAR and BREAK orders by card are kept; a note for games from version 5. `suggest.js`: a call to arms heads the list.
+- `site/keyless.js` (new): the gazette view, the pressure cards in Actions, the War section and the treaty note on the card, the ambition chip, the win and loss screens. `site/game.js` and `site/worldmap.js` carry one marked line each place ("keyless hook").
+- `test/keyless.test.mjs` (10 tests): on 40 seeds the player is pressed by the end of turn 4 and the turns replay; the gazette holds no codes, sums or numeric dates. Three earlier tests follow the rule change.
+
 ## v0.10.6 (2026-11-27): real land and real cities on Capo's map
 
 ### The real world's land cover and cities on Capo's map (ruling 157)

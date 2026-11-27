@@ -9,6 +9,8 @@
 // asker is tied to its enemy, -3 when the asker fights its partner, -2 for a treaty the asker ended in the last two
 // years, and for defence or alliance +1 for a much stronger asker or -1 for a much weaker one. Trade needs 0,
 // defence 2, an alliance 4. The same sum answers the player and every other country.
+// Rules version 6: a pledge has a price. For defence or alliance, -2 while the pair's last treaty is under a year
+// old (the ink is still wet; a treaty the game began with is never new), and -1 for every defence or alliance treaty the asker holds beyond the first.
 
 export const REL = ["hostile", "bitter", "cool", "neutral", "warm", "friendly", "close"];
 export const NEED = { trade: 0, defence: 2, alliance: 4 };
@@ -19,6 +21,10 @@ const clamp = (n) => Math.max(-3, Math.min(3, n));
 const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
 const fighting = (g, c) => g.wars.filter((w) => w.pair.split("|").includes(c)).map((w) => w.pair.split("|").find((x) => x !== c));
 const partners = (g, c) => g.treaties.filter((t) => t.pair.split("|").includes(c)).map((t) => t.pair.split("|").find((x) => x !== c));
+/** How long a treaty must stand before the pair will hear of a stronger one, in months. */
+export const WAIT = 12;
+/** The defence and alliance treaties a country holds, leaving out the one with `but`: its pledges. */
+export const pledges = (g, c, but = "") => g.treaties.filter((t) => t.kind !== "trade" && t.pair.split("|").includes(c) && !t.pair.split("|").includes(but)).length;
 /** Whole months from one date to a later one, both YYYY-MM-DD. */
 export function monthsApart(a, b) {
   const [y1, m1, d1] = a.split("-").map(Number), [y2, m2, d2] = b.split("-").map(Number);
@@ -89,6 +95,10 @@ export function treatyAnswer(g, from, to, kind, might) {
   if (g.word?.[from]) parts.push([`a treaty ended in ${g.word[from].slice(0, 4)}`, -2]);
   if (kind !== "trade" && gap >= 2) parts.push(["a much stronger partner", 1]);
   if (kind !== "trade" && gap <= -4) parts.push(["a much weaker partner", -1]);
+  // rules version 6: the ink still wet, and an asker pledged to many
+  const last = g.treaties.find((t) => t.pair === pair(from, to)), given = pledges(g, from, to);
+  if (kind !== "trade" && last && last.since && !last.old && last.kind !== kind && monthsApart(last.since, g.date) < WAIT) parts.push(["the ink still wet on their last treaty", -2]);
+  if (kind !== "trade" && given >= 2) parts.push([`${given} pledges already given`, 1 - given]);
   const score = parts.reduce((s, [, n]) => s + n, 0);
   return { ok: score >= need, score, need, parts, why: `${parts.map(([l, n]) => `${l} ${signed(n)}`).join(", ")}: ${score}, needing ${need}` };
 }

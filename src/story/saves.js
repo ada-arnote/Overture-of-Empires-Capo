@@ -16,8 +16,9 @@ import { keepLands } from "./polity.js";
 // Older games are converted, never refused: nothing they hold needs the old rule, their turns keep the receipts
 // they had, and every attack from the next turn on is made under these rules.
 /** The plain words for a game converted from older rules, or "" when it needs none. */
+const NOTE6 = "This game was saved under rules version 5. It has been brought up to date: its past turns keep the results they had. From now on a defence or alliance treaty wants the last treaty to be a year old and counts the pledges already given, the rules may press your country (a demand, a border incident, a pact against you, unrest), a partner at war may call you to arms, and a country that loses its last land is over.";
 const NOTE5 = "This game was saved under rules version 4. It has been brought up to date: its past turns keep the results they had. From now on other countries bind each other by pacts of non-aggression and tribute and answer their own unrest by rule, two small neighbours of a great power agree to a pact more readily, and a rising left a year unanswered may found a new country.";
-export const convertNote = (s) => (s && typeof s === "object" && s.rules !== RULES ? s.rules === 4 ? NOTE5 : "This game was saved under older rules. It has been brought up to date: its past turns keep the results they had. From now on countries keep relations and answer treaties and peace by rule, wars end by rule when both sides are worn out, a country's might changes with its land and its wars, and the story keeps a chronicle, people and open threads." : "");
+export const convertNote = (s) => (s && typeof s === "object" && s.rules !== RULES ? s.rules === 5 ? NOTE6 : s.rules === 4 ? NOTE5 : "This game was saved under older rules. It has been brought up to date: its past turns keep the results they had. From now on countries keep relations and answer treaties and peace by rule, wars end by rule when both sides are worn out, a country's might changes with its land and its wars, and the story keeps a chronicle, people and open threads." : "");
 
 /** A game saved before some part existed gets that part empty. */
 export const mendGame = (s) => ({ wars: [], treaties: [], offers: [], chats: [], counsel: [], council: null, standing: STANDING[s.mode] || 5, facts: [], might: {}, edits: [], sandbox: false, orders: [], rel: {}, word: {}, truce: {}, people: [], threads: [], branch: 0, ...s, start: s.start || startOf(s), chron: s.chron || chronicleFrom(s.log || [], s.turn || 1), rules: RULES });
@@ -27,7 +28,7 @@ const startOf = (s) => Object.fromEntries(Object.entries(s.owners || {}).filter(
  * The player's orders by card, each tied to the action that asked for it: an attack {text, verb, target, seat,
  * approach}, or a treaty or peace with a country {text, verb, target, detail}.
  */
-const ORDERS = ["ATTACK", "TREATY", "PEACE", "PACT"], KINDS = ["trade", "defence", "alliance"];
+const ORDERS = ["ATTACK", "TREATY", "PEACE", "PACT", "WAR", "BREAK"], KINDS = ["trade", "defence", "alliance"];
 const keepOrders = (v, isProvince, known) => (Array.isArray(v) ? v : []).map((o) => ({ ...o, verb: ORDERS.includes(o?.verb) ? o.verb : "ATTACK" }))
   .filter((o) => typeof o.text === "string" && typeof o.target === "string" && (o.verb === "ATTACK" ? isProvince(o.target) : known(o.target)))
   .map((o) => (o.verb === "ATTACK" ? { text: o.text, verb: o.verb, target: o.target, seat: typeof o.seat === "string" ? o.seat : "", approach: APPROACHES[o.approach] ? o.approach : "steady" } : { text: o.text, verb: o.verb, target: o.target, detail: KINDS.includes(o.detail) ? o.detail : "" }));

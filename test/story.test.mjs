@@ -380,7 +380,7 @@ test("a country asked for a treaty answers by rule, and says why", () => {
   const neutral = treatyAnswer(g, "PER", "CHL", "defence", might4);
   assert.deepEqual([neutral.ok, neutral.score, neutral.need, neutral.why], [false, 0, 2, "relations neutral 0: 0, needing 2"]);
   assert.equal(treatyAnswer(g, "PER", "CHL", "trade", might4).ok, true, "trade with a neutral country is agreed");
-  // trust is built in steps: trade, then defence, then an alliance, one a turn
+  // trust is built in steps: trade, then defence, then an alliance; from rules version 6 a stronger treaty wants the last one a year old
   const acts = ["Treaty with Bolivia"], G = geo4(g);
   let r = applyMoves(g, [mv("PER", "TREATY", "BOL", "alliance", 1)], G, acts, 1);
   assert.deepEqual([r[0].ok, r[0].text], [false, "Peru: proposes an alliance treaty to Bolivia, which refuses (relations neutral 0: 0, needing 4)"]);
@@ -388,9 +388,12 @@ test("a country asked for a treaty answers by rule, and says why", () => {
   assert.equal(g.treaties.length, 0);
   r = applyMoves(g, [mv("PER", "TREATY", "BOL", "trade", 1), mv("PER", "TREATY", "BOL", "defence", 1)], G, acts, 1);
   assert.equal(r[0].text, "Peru: signs a trade treaty with Bolivia, which agrees (relations neutral 0: 0, needing 0)");
-  assert.equal(r[1].text, "Peru: turns its trade treaty with Bolivia into a defence treaty, which agrees (relations warm +2: 2, needing 2)");
-  assert.equal(relOf(g, "PER", "BOL"), 1, "two treaties in one turn rise one step");
-  assert.equal(applyMoves(g, [mv("PER", "TREATY", "BOL", "alliance", 1)], G, acts, 1)[0].ok, false, "an alliance needs more than warm");
+  assert.equal(r[1].text, "Peru: proposes a defence treaty to Bolivia, which refuses (relations warm +2, the ink still wet on their last treaty -2: 0, needing 2)");
+  g.date = "2027-12-01"; // a year on, the ink is dry
+  r = applyMoves(g, [mv("PER", "TREATY", "BOL", "defence", 1)], G, acts, 1);
+  assert.equal(r[0].text, "Peru: turns its trade treaty with Bolivia into a defence treaty, which agrees (relations warm +2: 2, needing 2)");
+  assert.equal(relOf(g, "PER", "BOL"), 2, "a second treaty, a year later, lifts relations a step more");
+  assert.equal(applyMoves(g, [mv("PER", "TREATY", "BOL", "alliance", 1)], G, acts, 1)[0].ok, false, "an alliance needs more, and its ink is wet too");
   // a shared enemy helps; a treaty with its enemy, a war with its partner and a treaty ended all hurt
   const w = game4("ans-2", { wars: [{ pair: "CHL|PER", since: "2026-12-01", by: "PER" }, { pair: "BOL|CHL", since: "2026-12-01", by: "CHL" }] });
   assert.equal(treatyAnswer(w, "PER", "BOL", "defence", might4).why, "relations neutral 0, a shared enemy +2: 2, needing 2");
@@ -405,7 +408,7 @@ test("a country asked for a treaty answers by rule, and says why", () => {
   // the same sum answers rivals asking each other
   const rr = applyMoves(game4("ans-5"), [mv("CHL", "TREATY", "BRA", "alliance")], G, [], 1);
   assert.deepEqual([rr[0].ok, rr[0].text], [false, "Chile: proposes an alliance treaty to Brazil, which refuses (relations neutral 0: 0, needing 4)"]);
-  for (const t of [r[0].text, r[1].text, rr[0].text]) assert.doesNotMatch(t, /\d\.\d|\.\s/, "one sentence, whole numbers");
+  for (const t of [r[0].text, rr[0].text]) assert.doesNotMatch(t, /\d\.\d|\.\s/, "one sentence, whole numbers");
 });
 
 test("offers: made only when they would be agreed to, never twice, lapsing after a year; a card's order needs no line from the AI", () => {
@@ -696,7 +699,7 @@ test("suggested actions are built from the state of the game, each with the answ
     ["TREATY", "BRA", "Propose a trade treaty to Brazil (BRA).", "Brazil would agree (relations neutral 0: 0, needing 0)"],
   ]);
   // what is already ordered or offered is not suggested again; the next treaty up is suggested only when it would be agreed
-  g.orders = [{ text: "x", verb: "PEACE", target: "CHL", detail: "" }]; g.treaties = [{ pair: "BOL|PER", kind: "trade", since: g.date }]; g.offers = [{ from: "BRA", kind: "trade", date: g.date }];
+  g.orders = [{ text: "x", verb: "PEACE", target: "CHL", detail: "" }]; g.treaties = [{ pair: "BOL|PER", kind: "trade", since: g.date, old: 1 }]; g.offers = [{ from: "BRA", kind: "trade", date: g.date }];
   assert.deepEqual(suggest(g, G).map((x) => [x.verb, x.detail || ""]), [["ATTACK", ""], ["TREATY", "defence"]], "a trade partner reads as warm, which is enough for defence");
   g.treaties[0].kind = "defence";
   assert.deepEqual(suggest(g, G).map((x) => x.verb), ["ATTACK"], "an alliance needs more");
