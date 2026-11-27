@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Q0cmGdrmmF58y/FSeYFBn1u+SeVSJTnTk3NNIGIquUc='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-i05Yjt413B3NeiY5UTtNXlujQTnvYideW0C4yq9R5JA='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Hedge and Highway (early) · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -3262,6 +3262,8 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     get solid() { return solid(); },
     /** A style's pack of sculpted models, once fetched: they take the place of the code-made ones of the same names. */
     pack(buffer) { if (meshes) { meshes.add(unpack(buffer)); staged = false; redraw(); } },
+    /** stacking hook: models of a game's own, made in code (src/map/stones.js); false when this board draws no models. */
+    add(more) { if (!meshes) return false; meshes.add(more); staged = false; redraw(); return true; },
     get style() { return look3; }, get styleName() { return styleName; },
     /** Another style: the same board and pieces, in other materials. */
     setStyle(name) { if (!STYLES[name]) return; const kit = models(look3.kit); styleName = name; look3 = wear(name, light); if (meshes && models(look3.kit) !== kit) meshes.add(models(look3.kit)); staged = false; dirty = true; redraw(); },
@@ -3282,7 +3284,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.10.2";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "8d9d9446";
+const BUILD = "ee4247d4";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -4764,9 +4766,9 @@ const $ = (id) => document.getElementById(id);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const THEME = "capo-tent-theme";
-const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["hard", "Hard bot"], ["away", "A friend, by link"]];
+const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["hard", "Hard bot"], ["master", "Strongest bot"], ["away", "A friend, by link"]]; // stacking hook: master, only where G.master
 // gentle is the lessons' bot, not offered in the setup
-const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", hard: "Hard bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
+const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", hard: "Hard bot", master: "Strongest bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
 // what each table game grew from, named by its family of games only: no titles, characters or art of anyone else's
 const FAMILY = {
   banners: "classic world-conquest board games, where armies spread over a map and battles are fought with dice",
@@ -5206,6 +5208,7 @@ function createTable(G) {
       for (let slice = performance.now(); ;) {
         const s = t.next();
         if (s.done) { move = s.value; break; }
+        if (typeof s.value?.then === "function") { await s.value; if (mine !== run) return; slice = performance.now(); continue; } // stacking hook: a bot thinking in a worker hands over a promise
         if (performance.now() - slice > 7) { await sleep(0); if (mine !== run) return; slice = performance.now(); }
       }
       if (!T.hurry) await sleep(Math.max(0, G.pace(T.match.position) * PACE[settings.speed] - (performance.now() - from)));
@@ -5606,7 +5609,7 @@ function createTable(G) {
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
       const li = el("li"), k = el("select");
-      k.append(...KINDS.filter(([v]) => v !== "hard" || G.hard).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one
+      k.append(...KINDS.filter(([v]) => (v !== "hard" || G.hard) && (v !== "master" || G.master)).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one
       k.value = setup.who[s];
       k.setAttribute("aria-label", NAMES[s]);
       k.onchange = () => { setup.who[s] = k.value; passLine(); };

@@ -37,9 +37,9 @@ export const $ = (id) => document.getElementById(id);
 export const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const THEME = "capo-tent-theme";
-const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["hard", "Hard bot"], ["away", "A friend, by link"]];
+const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["hard", "Hard bot"], ["master", "Strongest bot"], ["away", "A friend, by link"]]; // stacking hook: master, only where G.master
 // gentle is the lessons' bot, not offered in the setup
-const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", hard: "Hard bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
+const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", hard: "Hard bot", master: "Strongest bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
 // what each table game grew from, named by its family of games only: no titles, characters or art of anyone else's
 const FAMILY = {
   banners: "classic world-conquest board games, where armies spread over a map and battles are fought with dice",
@@ -479,6 +479,7 @@ export function createTable(G) {
       for (let slice = performance.now(); ;) {
         const s = t.next();
         if (s.done) { move = s.value; break; }
+        if (typeof s.value?.then === "function") { await s.value; if (mine !== run) return; slice = performance.now(); continue; } // stacking hook: a bot thinking in a worker hands over a promise
         if (performance.now() - slice > 7) { await sleep(0); if (mine !== run) return; slice = performance.now(); }
       }
       if (!T.hurry) await sleep(Math.max(0, G.pace(T.match.position) * PACE[settings.speed] - (performance.now() - from)));
@@ -879,7 +880,7 @@ export function createTable(G) {
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
       const li = el("li"), k = el("select");
-      k.append(...KINDS.filter(([v]) => v !== "hard" || G.hard).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one
+      k.append(...KINDS.filter(([v]) => (v !== "hard" || G.hard) && (v !== "master" || G.master)).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one
       k.value = setup.who[s];
       k.setAttribute("aria-label", NAMES[s]);
       k.onchange = () => { setup.who[s] = k.value; passLine(); };

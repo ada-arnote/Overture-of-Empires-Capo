@@ -22,8 +22,12 @@ import { glass } from "../src/games/glass/rules.js";
 import { choose as glassBot } from "../src/games/glass/bot.js";
 import { inch } from "../src/games/inch/rules.js";
 import { choose as inchBot } from "../src/games/inch/bot.js";
+// stacking hook: the stacking game, played only when named (node tools/fair.mjs stacking): its Traditional games run long
+import { stacking } from "../src/games/stacking/rules.js";
+import { choose as stackingBot } from "../src/games/stacking/bot.js";
 
-export const GAMES = { banners: [banners, bannersBot], fable: [fable, fableBot], glass: [glass, glassBot], inch: [inch, inchBot] };
+export const GAMES = { banners: [banners, bannersBot], fable: [fable, fableBot], glass: [glass, glassBot], inch: [inch, inchBot], stacking: [stacking, stackingBot] };
+const NAMED = ["stacking"]; // stacking hook
 export const STYLES = { classic: "Traditional", ours: "Capo" };
 export const LINE = 10; // points between the best and worst seat
 const CAP = 20000, CHUNK = 20;
@@ -131,7 +135,7 @@ if (!isMainThread) parentPort.on("message", (job) => parentPort.postMessage({ k:
 else if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const argv = process.argv.slice(2), arg = (k) => (argv.includes(k) ? argv[argv.indexOf(k) + 1] : null), t = Date.now();
   const names = argv.filter((a, i) => GAMES[a] && !String(argv[i - 1]).startsWith("--")), games = Number(arg("--games") || 1000);
-  const rows = plan(names.length ? names : Object.keys(GAMES), { styles: arg("--style") ? [arg("--style")] : undefined, seats: arg("--seats") ? arg("--seats").split(",").map(Number) : null });
+  const rows = plan(names.length ? names : Object.keys(GAMES).filter((n) => !NAMED.includes(n)), { styles: arg("--style") ? [arg("--style")] : undefined, seats: arg("--seats") ? arg("--seats").split(",").map(Number) : null });
   const part = (arg("--part") || "1/1").split("/").map(Number), each = (r) => console.error(`${r.name} ${r.style} ${r.live ? "slots" : r.seats}: ${Math.round(r.ms / 1000)} CPU s`);
   const done = argv.includes("--merge") ? merge(argv.filter((a) => a.endsWith(".json") && a !== arg("--json")).flatMap((f) => JSON.parse(readFileSync(f, "utf8")))) : await table(rows, { games, part, workers: Number(arg("--workers") || 0) || undefined, each });
   const text = `${markdown(done)}\n\n${done.filter((r) => !r.pass).length} of ${done.length} over the ${LINE}-point line. Wall time ${Math.round((Date.now() - t) / 1000)} s.`;
