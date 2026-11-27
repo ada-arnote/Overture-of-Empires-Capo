@@ -26,13 +26,24 @@
 .rings .arrow { fill: none; stroke-width: 1.4; stroke-linecap: round }
 .rings .arrow.support { stroke-dasharray: 1.6 1.4; stroke-width: 1.1 }
 .rings .arrow.transport { stroke-dasharray: .4 1.4; stroke-width: 1.4 }
-.rings .arrow.failed { opacity: .45 }
+.rings .arrow.failed { opacity: .45; stroke-dasharray: 1 1.6 }
+.rings .arrow.lit { stroke-width: 2 }
+.rings .arrow { cursor: pointer }
 #kinds button, #counts button { min-height: 40px }
 .early { display: inline-block; width: fit-content; align-self: flex-start; margin: 0 0 10px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); font: 700 var(--fs-1)/1.4 var(--sans); letter-spacing: var(--caps); text-transform: uppercase }
 .reveal h3 { display: flex; align-items: center; gap: 8px; margin: 14px 0 4px } .reveal h3 canvas { width: 22px; height: 22px }
 .reveal ul { padding-left: 20px } .reveal li { margin: 2px 0 } .reveal .quiet-holds { color: var(--text-3); font-size: var(--fs-2) }
 .reveal li.bad { color: var(--danger) }
 #cover { text-align: center } #cover p { margin-bottom: 10px }
+/* talk, answers, the reveal step by step, the ledger */
+.cast { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 4px; font-size: var(--fs-1); color: var(--text-2) } .cast li { display: flex; gap: 6px; align-items: baseline } .cast canvas { width: 18px; height: 18px; flex: none; align-self: center } .cast b { color: var(--text) }
+.vows { margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--edge-soft); border-radius: var(--r-1); font-size: var(--fs-1) } .vows b { display: block; color: var(--accent); margin-bottom: 4px } .vows p { margin: 2px 0 }
+.said { min-height: 2.6em; margin: 0 0 8px; font-style: italic }
+.words { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 4px } .words li { display: flex; gap: 8px; align-items: center; justify-content: space-between; font-size: var(--fs-2) } .words button { min-height: 36px; padding: 0 10px; flex: none }
+.offer { margin: 0 0 12px; padding: 10px; border: 1px solid var(--edge-soft); border-radius: var(--r-1) } .offer h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px } .offer h3 canvas { width: 22px; height: 22px } .offer ul { padding-left: 20px; margin: 0 0 8px } .offer p { margin: 0 0 2px; color: var(--text-2) }
+#replay-bar { width: 100%; margin: 4px 0 8px; accent-color: var(--accent) } #replay-lines { padding-left: 20px; margin: 0 0 10px; max-height: 32vh; overflow-y: auto; font-size: var(--fs-2) } #replay-lines li { margin: 2px 0 } #replay-all { margin-top: 6px }
+.broken, #replay-lines .bad { color: var(--danger) } .void { color: var(--text-3) }
+.ledger h3 { margin: 12px 0 4px } .ledger ul { padding-left: 20px } .ledger .ranks th canvas { width: 18px; height: 18px; vertical-align: -3px; margin-right: 6px }
 </style>
 </head>
 <body class="menu">
@@ -55,12 +66,36 @@
   <p id="status" role="status"></p>
   <div id="cover" hidden><p id="cover-say"></p><div class="go"><button id="open-sheet" type="button" class="main"></button></div></div>
   <div id="choice">
-    <p id="info"></p>
-    <div class="pick strip" id="sources" role="radiogroup" aria-label="Your provinces"></div>
-    <div class="pick small" id="kinds" role="radiogroup" aria-label="Order"></div>
-    <div class="pick strip" id="targets" role="radiogroup" aria-label="Where to"></div>
-    <div class="pick small" id="counts" role="radiogroup" aria-label="How many"></div>
-    <div class="go"><button id="clear" type="button" class="quiet">Clear</button><button id="do" type="button" class="main">Seal my orders</button></div>
+    <div id="replay" hidden>
+      <p id="replay-title" class="cap"></p>
+      <input id="replay-bar" type="range" min="0" max="4" step="1" value="0" aria-label="Step through the reveal">
+      <p id="replay-say"></p>
+      <ul id="replay-lines"></ul>
+      <div class="go"><button id="replay-back" type="button" class="quiet">Back</button><button id="replay-skip" type="button" class="quiet">Skip to the end</button><button id="replay-next" type="button" class="main">Next</button></div>
+      <button id="replay-all" type="button" class="text">Read the whole reveal</button>
+    </div>
+    <div id="talk" hidden>
+      <p id="talk-say"></p>
+      <ul id="talk-cast" class="cast" aria-label="At this table" hidden></ul>
+      <div id="talk-last" class="vows" hidden></div>
+      <div class="pick small" id="talk-mode" role="radiogroup" aria-label="Promise or ask"></div>
+      <div class="pick strip" id="talk-who" role="radiogroup" aria-label="To whom"></div>
+      <div class="pick strip" id="talk-form" role="radiogroup" aria-label="Which form"></div>
+      <div class="pick strip" id="talk-where" role="radiogroup" aria-label="Where"></div>
+      <p id="talk-preview" class="said"></p>
+      <ul id="talk-list" class="words"></ul>
+      <div class="go"><button id="talk-add" type="button" class="quiet">Say it</button><button id="talk-done" type="button" class="main">Say nothing this season</button></div>
+    </div>
+    <div id="answer" hidden></div>
+    <div id="orders" hidden>
+      <p id="info"></p>
+      <div id="vows" class="vows" hidden></div>
+      <div class="pick strip" id="sources" role="radiogroup" aria-label="Your provinces"></div>
+      <div class="pick small" id="kinds" role="radiogroup" aria-label="Order"></div>
+      <div class="pick strip" id="targets" role="radiogroup" aria-label="Where to"></div>
+      <div class="pick small" id="counts" role="radiogroup" aria-label="How many"></div>
+      <div class="go"><button id="clear" type="button" class="quiet">Clear</button><button id="do" type="button" class="main">Seal my orders</button></div>
+    </div>
   </div>
   <button id="last" type="button" class="quiet" hidden>The last reveal</button>
   <div id="after" hidden class="go"><button id="review" type="button" class="quiet">See the board</button><button id="again" type="button" class="main">Play again</button></div>
