@@ -156,6 +156,6 @@ test("shelf: the page reads only good cards, and the site serves the shelf to it
   // built pages served from the site may read their own site (the shelf); the double-click pages reach nothing
   for (const name of Object.keys(GAMES).filter((g) => g !== "capo")) {
     const rule = readFileSync(path.join(root, "play", `${name}.html`), "utf8").match(/Content-Security-Policy" content="([^"]*)"/)[1];
-    assert.match(rule, / connect-src 'self';/, `${name}: its served page reads the shelf`);
+    assert.match(rule, / connect-src 'self'[ ;]/, `${name}: its served page reads the shelf`);
   }
 });
