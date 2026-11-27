@@ -2,7 +2,7 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
-## Unreleased
+## v0.10.3 (2026-11-27): made by Arnote Studios
 
 - The maker is named as Arnote Studios (ruling 156), with copyright to Ada Arnote, on the front page, in every game's About, in Capo's Game menu, in README, NOTICES, CONTRIBUTING and package.json. The three starting shelf entries now credit Arnote Studios. The room-server guide names the Cloudflare account and suggests the workers.dev name.
 
