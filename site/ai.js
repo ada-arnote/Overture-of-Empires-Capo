@@ -9,6 +9,8 @@ import { formatOf, linesFrom, toolOf } from "../src/story/replyform.js";
 import { SHAPES, splitEvents } from "../src/story/wire.js";
 // mcp and plugins hook: the bridge to the player's own AI app, and data-only plugins (site/aimore.js)
 import { aiMore, bridgeAsk, bridgePart, pluginPart, voiceNow } from "./aimore.js";
+// guide hook (ruling 153.8): Choose an AI, the guide to the services, free routes first (site/aiguide.js)
+import { guidePart } from "./aiguide.js";
 
 /** The reply allowance in tokens for each kind of call (lane 2 review). A thinking model gets four times as much. */
 export const BUDGET = { turn: 1800, chat: 400, council: 500, ask: 500, character: 300, check: 300 };
@@ -316,7 +318,7 @@ export function aiPanel(r, done = () => {}, o = {}) {
     const head = el("h3", o.title || "How Capo reaches an AI"), result = status(), p = presetOf(r);
     head.id = uid("head"); box.setAttribute("aria-labelledby", head.id); result.id = uid("result"); result.textContent = said; said = "";
     const out = [head, connected(r) ? el("p", `Connected: ${p.name}${r.model ? `, ${r.model}` : ""}. Capo asks it for each turn, chat and question.`, "note")
-      : el("p", "No AI is connected. Choose a service, give its key if it needs one, and press Check connection.", "note")];
+      : el("p", "No AI is connected. Choose a service, give its key if it needs one, and press Check connection.", "note"), guidePart(r, ui)]; // guide hook
     if (r.gone && !connected(r)) out.push(el("p", "Copying prompts into a chat and pasting replies back is no longer part of Capo. Connect a service or an AI on this computer here; a turn can also move by the rules alone.", "warn"));
     const pick = el("select", undefined, "plain"), groups = [["Hosted: your own key", (x) => !x.local && !x.custom], ["On this computer: no key", (x) => x.local || x.custom]];
     for (const [label, test] of groups) { const g = el("optgroup"); g.label = label; g.append(...PRESETS.filter(test).map((x) => new Option(x.name, x.id))); pick.append(g); }

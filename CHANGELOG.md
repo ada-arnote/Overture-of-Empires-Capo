@@ -2,6 +2,22 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Choose an AI: a guide to the services Capo can reach (ruling 153.8)
+
+**Players**
+- **Choose an AI: a guide**, a button in How Capo reaches an AI, so it is in the Game menu and on the connect step of a turn. It opens over the page and says first that no AI is needed: Advance moves the world by the rules. Then the routes, free ones first: OpenRouter's free models, Google Gemini's free tier and Groq; Ollama and LM Studio on your own computer; your own AI app through the bridge; then paid by use: OpenAI, Anthropic, DeepSeek, Cerebras (a trial credit), Mistral and Together AI.
+- Each route, folded until you open it: what it costs, the steps (where to get a key, what to paste where), what to expect, privacy (your key stays in this browser and goes only to that service), and what its own pages did not confirm. Links open the service's own pages in a new tab. **Use this** fills in the service and a model in the settings and puts you in the Key field; nothing is sent until you press Check connection.
+- **If something goes wrong**: what to do for each error the page shows (a refused key, no credit, too many requests, an unknown model, a blocked call, a server on this computer that does not answer, a reply cut short, and more).
+- Facts checked on each service's own pages on 27 November 2026; services change their free tiers often, so their page has the last word.
+
+**Contributors**
+- `site/aiguide.js` (new): `ROUTES` (group, preset, model, cost, steps, expect, privacy, unsure, links), `HELP` (by the error kinds of `site/ai.js`), `guideParts`, `openGuide`, `guidePart`. Built from elements and text.
+- `site/config.js`: `AI_LINKS`, the services' own pages the guide links to, kept above the services the page calls, so the gate and the page rule are unchanged.
+- Marked "guide hook" lines: `site/ai.js` (the import, and the guide line in the settings), `site/game.html` (the guide's styles). `site/game.js` is unchanged.
+- `test/aiguide.test.mjs` (4 tests).
+
 ## v0.10.2 (2026-11-27): play live by two links, a community shelf, and a room server ready to deploy
 
 ### The community shelf: scenarios, stories and replays players share (ruling 155, option D)
