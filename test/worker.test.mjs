@@ -542,7 +542,7 @@ test("the worker's files follow the house rules, and nothing secret or account-b
   const files = [...walk(dir), path.join(root, "site", "rooms.js"), path.join(root, "site", "notice-sw.js"), path.join(root, "test", "fixtures", "workerd.js")];
   for (const f of files) {
     const text = readFileSync(f, "utf8"), name = path.relative(root, f);
-    assert.ok(!text.includes("—"), `${name} has an em dash`);
+    assert.ok(!text.includes(String.fromCharCode(0x2014)), `${name} has an em dash`);
     if (/\.m?js$/.test(f)) assert.ok(text.startsWith("// SPDX-License-Identifier: AGPL-3.0-or-later"), `${name} needs the licence mark`);
     if (/\.m?js$/.test(f)) assert.ok(!/\.(?:innerHTML|outerHTML)\s*=|insertAdjacentHTML|\beval\s*\(/.test(text), `${name} writes markup or runs text`);
     if (/\.m?js$/.test(f) && f.startsWith(dir)) for (const m of text.matchAll(/from\s+"([^"]+)"/g)) assert.ok(m[1].startsWith("."), `${name} imports ${m[1]}: the worker has no dependencies`);
