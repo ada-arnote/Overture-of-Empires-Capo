@@ -229,6 +229,7 @@ export function board(T, stage) {
   // dried land is drawn as one more seat, the colour of bare paper; a capital is a tower showing its nation's strength
   const rank = dryRank(b), n = cs.length;
   return hexBoard(T, stage, {
+    era: "early", // figures hook: which sculpted pieces stand in 3D (src/map/figures.js)
     picture, cells: [], rough: [], sea: [...b.dry.map(() => false), true], seats: [...cs, DRY], fine: { cells: b.cells, of, mid: b.dry },
     terrain: (k) => (k < b.dry.length && b.hill[b.dry[k]] ? 7 : 0),
     ground: (k) => (k >= b.dry.length ? SEA : b.hill[b.dry[k]] ? HILL : LAND[k % 3]),

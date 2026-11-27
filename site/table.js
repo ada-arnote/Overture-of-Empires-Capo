@@ -7,6 +7,8 @@ import { footer } from "./footer.js";
 import { canLock, linkGames, makeLink, newId, readLink } from "./link.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
 import { coach } from "./coach.js";
+// figures hook
+import { shelfCredits } from "./shelf.js";
 import { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } from "./shell.js";
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
@@ -771,7 +773,8 @@ export function createTable(G) {
       ...(G.family || familyLine(G.key) ? [el("p", G.family || familyLine(G.key))] : []),
       where,
       el("p", "Free software under the GNU Affero General Public License, version 3 or later (AGPL-3.0-or-later): you may read, change and share it, and a changed copy that others use over a network must offer them its source."),
-      el("p", "Credits: the rules, maps, pieces, emblems and sounds are the project's own work; the sounds are made in code as the game runs. The coastlines are drawn from Natural Earth, which is in the public domain. Anything borrowed is listed with its licence in CREDITS.csv, ADAPTED.csv and NOTICES.md beside the source."),
+      el("p", "Credits: the rules, maps, emblems and sounds are the project's own work, and so are the pieces made in code; the sounds are made in code as the game runs. The coastlines are drawn from Natural Earth, which is in the public domain. Anything borrowed is listed with its licence in CREDITS.csv, ADAPTED.csv and NOTICES.md beside the source."),
+      shelfCredits(), // figures hook: the sculpted pieces' credit lines
     );
     if (/^https:\/\//.test(SOURCE_URL)) where.append(src);
     return box;

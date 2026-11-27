@@ -296,6 +296,7 @@ createTable({
     });
     document.body.classList.toggle("atlas", b.flat);
     return hexBoard(T, stage, {
+      era: "early", // figures hook: which sculpted pieces stand in 3D (src/map/figures.js)
       picture, lines, labels, lands: b.region, fine: { cells: b.fine, of: b.of, mid: b.mid }, cells: [], rough: [], sea: [...b.mid.map(() => false), true],
       ground: (i) => (i >= b.n ? SEA : LAND[b.region[i] % LAND.length]),
       owner: () => [...T.match.position.owner, NONE],

@@ -10,6 +10,9 @@ import { Meshes } from "../src/map/mesh.js";
 import { models } from "../src/map/models.js";
 import { STYLE_KEY, styleOf } from "../src/map/style.js";
 import { WorldGround } from "../src/map/world.js";
+// figures hook
+import { eraOf, figures } from "../src/map/figures.js";
+import { shelf } from "./shelf.js";
 
 /** Fetch and unpack a world: absolute points for every arc, a path, box and middle for every province. */
 export async function loadWorld(url, disputesUrl = "") {
@@ -111,7 +114,7 @@ export function worldMap(canvas, world, o) {
       Object.assign(under.style, { position: "fixed", inset: "0", width: "100%", height: "100%", display: "block" });
       const ground = new WorldGround(under), meshes = new Meshes(ground.g, models());
       canvas.before(under);
-      lit = { under, ground, meshes, rgb: new Map(), key: "" };
+      lit = { under, ground, meshes, rgb: new Map(), key: "", fig: figures(eraOf(o.year?.() ?? 9999), shelf, (got) => { if (lit?.meshes === meshes) { meshes.add(got); redraw(); } }) }; // figures hook: sculpted ships by the year
       under.addEventListener("webglcontextlost", (e) => { e.preventDefault(); dark(); });
       const wood = new Image(); wood.onload = () => { if (lit) { lit.ground.wood(wood); redraw(); } }; wood.src = "textures/walnut.webp";
       shape();
@@ -179,12 +182,13 @@ export function worldMap(canvas, world, o) {
   }
   /** What stands on the lit map: the page's pieces, each the same size on the screen whatever the zoom (a little larger close in). */
   function stage() {
+    lit.fig.era = eraOf(o.year?.() ?? 9999); // figures hook
     const b = band(), k = ((canvas.clientWidth < 600 ? 28 : 36) / view.s) * Math.pow(view.s / wide, 0.22), list = [];
     for (const p of (pieces ||= o.pieces?.() || [])) {
       if ((p.band || 0) > b || (p.until ?? 9) < b) continue;
       const q = Array.isArray(p.at) ? p.at : world.provinces.get(p.at)?.label;
       if (!q) continue;
-      list.push({ m: p.m, x: q[0] + (p.dx || 0) * k, y: q[1] + (p.dy || 0) * k, z: p.sea ? 0 : 1, s: k * (p.size || 1) * style.scale, t: p.turn || 0, rgb: p.owner ? rgbOf(o.colour?.(p.owner) || ownerColour(p.owner)) : p.rgb || null });
+      list.push({ m: lit.fig.pick(p.m, 0, style, true), x: q[0] + (p.dx || 0) * k, y: q[1] + (p.dy || 0) * k, z: p.sea ? 0 : 1, s: k * (p.size || 1) * style.scale, t: p.turn || 0, rgb: p.owner ? rgbOf(o.colour?.(p.owner) || ownerColour(p.owner)) : p.rgb || null });
     }
     lit.meshes.set(list);
     return k;

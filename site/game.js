@@ -23,6 +23,8 @@ import { mapPieces } from "./mappieces.js";
 import { aiPanel, ask, connectBox, connected, loadRoute, waitBox, watch } from "./ai.js";
 import { sampleReply } from "../src/story/replyform.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
+// figures hook
+import { shelfCredits } from "./shelf.js";
 import { guard } from "./guard.js";
 // mcp and plugins hook: orders an AI app proposes through the bridge, and scenario packs (site/aimore.js, src/story/plugins.js)
 import { aiHost } from "./aimore.js";
@@ -1023,7 +1025,7 @@ function gameSheet(box) {
     ...gameMore(X), // features hook: the scale of play, and the scenario's own beats
     aiPanel(route, toast), // how Capo reaches an AI: site/ai.js (p5-ai)
     el("p", AI_RULES, "note"), // phase 4 hook
-    about());
+    about(), shelfCredits()); // figures hook: the sculpted pieces' credit lines
 }
 
 // ---- the guide: one turn, start to finish, pointing at each part of the screen; once, and again from the Game menu ----
@@ -1146,6 +1148,7 @@ async function start() {
   // presets hook: a kept game opens on its own world; anything else starts on the real one
   try { if (!(await enter(kept?.state?.world))) await enter(); } catch (e) { toast(`${e.message} Capo needs its web address, not a file opened by double-click.`); return; }
   map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked, mine: () => state?.player, tint: (id) => viewTint(view, X, id), // features hook: tint
+    year: () => (state ? Number(String(state.date).slice(0, 4)) : 9999), // figures hook: the era of the sculpted ships
     // 3D hook: fronts as lines, and capitals, armies, fleets, air wings and commanders as pieces, all read off the state
     wars: () => (state ? state.wars.map((w) => w.pair.split("|")) : []),
     pieces: () => mapPieces({ world, homes, owner: ownerOf, might: (c) => mightOf(geo(), c), wars: state ? state.wars.map((w) => w.pair.split("|")) : [], player: state?.player, staff: state ? commanders(state).filter((x) => !x.off && x.seat !== "generals").length : 0 }) });

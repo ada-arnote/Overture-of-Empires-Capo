@@ -2,6 +2,22 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Sculpted pieces in 3D
+
+**Players**
+- **In 3D, the weakest pieces are now sculpted miniatures** (rulings 146 and 147), painted in the board's own colours so every style can repaint them, with the owner's colour as enamel and on the base. Brass and Banners: the foot soldier is a Waterloo redcoat, the gun an 1815 field cannon, the cavalry a galloping horse. The Island Fable: the guard is a Roman legionary, the knight a Knight Hospitaller, the marshal a pewter Roman general. Grain and Glass and An Inch of Ink: towns and depots are timbered town houses and stone cottages, and on sand, flat-roofed desert houses. Capo's map: fleets are ships of their time, by the game's year (a Viking-age boat, a ship of the line, a 1908 torpedo boat, a modern destroyer).
+- The pieces made in code stay: in Flat, in a page opened by double-click, in the Clear style's figures (they read better at a glance there), and while a sculpted piece is still on its way. A piece is fetched only when a board in 3D first shows it; Banners fetches about 100 kB, Capo 52 kB.
+- **Credits:** every game's About (Capo: the Game menu) lists the sculpted pieces with their makers and licences.
+
+**Contributors**
+- `tools/blend.py` (offline, Blender 5.2 in background mode, never shipped): imports GLB, glTF or FBX as data, optionally builds a model from kit pieces (`--parts`), drops plinths and loose parts, brings arms made for animation down to the sides (`--pose`), remakes a many-shelled print as one skin (`--remesh`), decimates to the budget, and colours each kept triangle from the full model's painted texture under it.
+- `tools/models.mjs`: CC BY allowed with a required credit line, title, maker and source (`cleared`); reads a glTF inside a zip; slots matched by hue more than lightness, paint rules by material, colour, hue, strength, lightness, facing and height; the painted light and dark kept as a shade (pack version 2, read by `src/map/models.js`); a metal or enamel base; one file a model in `site/models/`; writes `src/map/shelf.js` (the index and credit lines) and the shelf's rows in `CREDITS.csv` and `NOTICES.md` (`--records`); held models go only to `--held`. The list is `tools/figures.json`.
+- `src/map/figures.js`: which shelf model stands for a recipe by era (`ancient`, `medieval`, `fable`, `early`, `industrial`, `modern`) and on sand, fetched once and lazily; `createBoard` takes `era` and `shelf` (a fetcher); a style's `sculpt` lists the sorts it wears (War table and Campaign map all; Clear ships and buildings). `site/shelf.js` holds the fetcher and the credits panel; the bundle points it at `../site/models/` for served pages (with `connect-src 'self'`) and at nothing for double-click pages.
+- `tools/check.mjs`: a model on the shelf needs its `CREDITS.csv` row, and a CC BY one its line in `NOTICES.md`.
+- Converted but not shipped: the four Jaca museum scans (ruling 150 asks for a written check with the museum first), the Franco-Prussian and Vietnam-era foot soldiers and the Roman ballista (no game shows those eras yet), and a Downtown City block (it does not cut down cleanly).
+
 ## v0.9.3 (2026-11-26): Late 2026 first, no-AI turns in one press, and Inch's third age sooner
 
 ### An Inch of Ink: the third age sooner, Continue paused, a nudge to Normal

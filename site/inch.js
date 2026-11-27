@@ -85,6 +85,7 @@ createTable({
     document.body.classList.remove("atlas");
     const rough = T.match.position.cost.map((c) => c === 2);
     return hexBoard(T, stage, {
+      era: "early", // figures hook: which sculpted pieces stand in 3D (src/map/figures.js)
       cells: boardOf(T.match.position).cells, rough, sea: [], ground: (i) => (rough[i] ? HILL : PAPER[(i * 7 + (i >> 2)) % 3]),
       owner: () => T.match.position.owner,
       pieces: () => T.match.position.home.flatMap((h, s) => (h < 0 ? [] : [{ kind: "tower", at: h, rgb: RGB[s], count: T.match.position.pool[s], now: s === T.match.turn }])),

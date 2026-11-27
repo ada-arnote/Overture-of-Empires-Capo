@@ -3,6 +3,8 @@
 import { LOOKS, canDraw, createBoard } from "../src/map/board.js";
 import { STYLES, STYLE_KEY } from "../src/map/style.js";
 import { ICONS, RGB } from "./table.js";
+// figures hook
+import { shelf } from "./shelf.js";
 
 /** The seats' patterns for the still board, the same six as on the moving board and the score bar: /, dots, |, x, \, -. */
 function patterns(make, f) {
@@ -53,7 +55,7 @@ export function hexBoard(T, stage, o) {
   };
   if (canDraw()) {
     try {
-      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, fit: o.fit, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, terrain: o.terrain, style: get(STYLE_KEY) || "war", wood: "textures/walnut.webp", probe: !LOOKS[kept] && !weak, look: LOOKS[kept] ? kept : weak ? "flat" : "relief" });
+      b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, fit: o.fit, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, terrain: o.terrain, style: get(STYLE_KEY) || "war", wood: "textures/walnut.webp", probe: !LOOKS[kept] && !weak, look: LOOKS[kept] ? kept : weak ? "flat" : "relief", era: o.era || "", shelf }); // figures hook: era, and the sculpted pieces' shelf
       if (b.style.pack) fetch(`models/${b.style.pack}`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((buf) => { if (buf) b?.pack(buf); }).catch(() => {}); // a style's sculpted models come after the board is up; the code-made ones stand meanwhile
       b.on("slow", () => { try { localStorage.setItem(SLOW, "1"); } catch { /* it will be timed again next time */ } b?.setLook("flat"); });
       b.on("pick", (i) => { if (i >= 0) o.tap(i); });

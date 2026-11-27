@@ -237,6 +237,7 @@ createTable({
     document.body.classList.remove("atlas");
     card(T);
     return hexBoard(T, stage, {
+      era: "medieval", // figures hook: which sculpted pieces stand in 3D (src/map/figures.js)
       cells: b.cells, rough: none, sea, picture, labels: portLabels(p, picture), terrain: (i) => (sea[i] ? 1 : p.good[i] === WASTE ? 6 : [2, 4, 3, 5][p.good[i]]), ground: (i) => (sea[i] ? SEA : p.good[i] === WASTE ? WASTEG : TILE[p.good[i]]),
       owner: () => b.cells.map(() => NONE),
       pieces() {
