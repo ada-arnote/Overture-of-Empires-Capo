@@ -4,6 +4,8 @@
 // A game is a plain object:
 //   id, version          text
 //   options              { name: { values: [...], normal } }   house rules, as plain data
+//                        or { name: { check(value) -> true or false, normal } }   an open option, such as a campaign's marks:
+//                        any value its check accepts; it is in a match's options only when it was given
 //   setup(options, dice) the first position
 //   turn(position)       the seat to move, or null when the game is over
 //   moves(position)      every legal move for that seat, as plain data
@@ -32,7 +34,7 @@ export function checkGame(game) {
   for (const [k, type] of Object.entries(NEEDED)) if (typeof game?.[k] !== type) throw new TypeError(`game is missing ${k}`);
   if (!/^[a-z][a-z0-9-]{0,31}$/.test(game.id)) throw new TypeError("game id must be short lower-case text");
   for (const [k, o] of Object.entries(game.options)) {
-    if (!Array.isArray(o.values) || !o.values.some((v) => same(v, o.normal))) throw new TypeError(`option ${k}: its normal value is not in its list`);
+    if (o.check ? typeof o.check !== "function" || !o.check(o.normal) : !Array.isArray(o.values) || !o.values.some((v) => same(v, o.normal))) throw new TypeError(`option ${k}: its normal value is not in its list`);
   }
   return game;
 }
@@ -42,6 +44,14 @@ export function readOptions(game, given = {}) {
   const out = {};
   for (const k of Object.keys(given)) if (!Object.hasOwn(game.options, k)) throw new Refusal("option", `unknown option "${k.slice(0, 40)}"`);
   for (const [k, o] of Object.entries(game.options)) {
+    if (o.check) { // an open option: left out unless given, so every match without it keeps the options and fingerprint it had
+      if (!Object.hasOwn(given, k)) continue;
+      let v;
+      try { v = JSON.parse(canon(given[k])); } catch { v = undefined; }
+      if (v === undefined || !o.check(v)) throw new Refusal("option", `option "${k}" cannot have that value`);
+      out[k] = v;
+      continue;
+    }
     const v = Object.hasOwn(given, k) ? given[k] : o.normal;
     const found = o.values.find((x) => { try { return same(x, v); } catch { return false; } });
     if (found === undefined) throw new Refusal("option", `option "${k}" cannot have that value`);

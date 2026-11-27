@@ -10,6 +10,8 @@ import { $, ICONS, NAMES, RGB, createTable, el, radio, sheet, toast } from "./ta
 import { hexBoard } from "./hexboard.js";
 // motion hook
 import { bannersDice } from "./motion.js";
+// legacy hook: campaigns (early), behind "Campaign (early)" in the setup
+import { campaign } from "./legacy.js";
 
 const SEA = [68, 108, 122], LAND = [[222, 190, 150], [206, 206, 150], [228, 200, 180], [190, 206, 178], [214, 190, 200], [226, 214, 158], [196, 200, 214], [210, 180, 150], [178, 204, 200], [224, 206, 190]];
 const SUITS = ["Drum", "Horn", "Banner", "Crown"];
@@ -229,7 +231,7 @@ const LESSON = {
 };
 const NICE = { forts: ["Forts", "Spend 4 of what you muster to build one. It throws one more die in defence."], leaders: ["Leaders", "Each player has one. It adds 1 to your best die where it stands, and comes back two rounds after it is lost."], capitals: ["Capitals", "Hold more than half of them at the start of your turn and you win. They add 1 to the defender's best die."], secrets: ["Secret goals", "Each player is dealt one. It counts at the start of your turn."], events: ["Seasons", "Some rounds bring a harvest, a storm that closes the crossings, or unrest."] };
 
-createTable({
+const T = createTable({
   game: banners, key: "banners", title: "Brass and Banners", won: "The land is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 4, lengths: [], hard: true, nameOf,
   // bots do not linger: moving in and placing are quick, a fight is given time to be read
   pace: (p) => (p.phase === "occupy" ? 110 : p.phase === "attack" ? (p.owner.length > 40 ? 300 : 380) : 220),
@@ -285,7 +287,8 @@ createTable({
     if (e.kind === "score") return e.last ? `${who} scores ${e.n} at the end: ${e.all} points.` : `${who} scores ${e.n}: ${e.all} points.`;
     return "";
   },
-  seen(T, events) { for (const e of events) if (e.kind === "fight") { shown = e; shownTie = terms(T.match.position, e.from, e.to).tie === "both"; showDice(T); onMap(T, e); } else if (e.kind === "muster") { shown = null; if (!T.demo) showDice(T); } },
+  seen(T, events) { for (const e of events) if (e.kind === "fight") { shown = e; shownTie = terms(T.match.position, e.from, e.to).tie === "both"; showDice(T); onMap(T, e); } else if (e.kind === "muster") { shown = null; if (!T.demo) showDice(T); } campaign.seen(T, events); }, // legacy hook: a campaign game is recorded as it ends
+  next: (T) => campaign.next(T), summary: (T) => campaign.summary(T), // legacy hook: the end screen's way back to the campaign
   fresh(T) { source = target = null; much = -1; shown = null; showDice(T); showBag(T); },
   order: (events) => events.flatMap((e) => (e.kind === "take" ? [e.at] : [])),
   board(T, stage) {
@@ -406,3 +409,4 @@ createTable({
     ];
   },
 });
+campaign.mount(T); // legacy hook

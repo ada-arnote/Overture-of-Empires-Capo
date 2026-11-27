@@ -6,6 +6,8 @@ import { MAPS, areaBoard, bonusOf, bordersOf } from "../areas.js";
 // what a land pays is kept with the board maker, which reads the same rule to keep lands even
 export { bonusOf, bordersOf } from "../areas.js";
 import { DICE, odds as chanceOf, meet, toll as tollOf } from "./dice.js";
+// legacy hook: a campaign's marks, read at the start only
+import { applyMarks, checkMarks } from "./marks.js";
 
 export const NONE = -1, HAND = 5, FORT = 4;
 const BASE = 3, PER = 3, WILD = 3;
@@ -37,7 +39,7 @@ export const boardOf = (p) => areaBoard(p.key, p.map);
 export const cellsOf = (p, seat) => p.owner.reduce((n, o) => n + (o === seat ? 1 : 0), 0);
 export const landOf = (p) => p.owner.length;
 export const goalOf = (p) => Math.ceil((p.owner.length * p.rule.goal) / 100);
-export const nameOf = (p, i) => boardOf(p).names[i];
+export const nameOf = (p, i) => p.called?.[i] ?? boardOf(p).names[i]; // legacy hook: a campaign may name a place; names are words, never rules
 export const suitOf = (p, card) => (card >= p.owner.length ? WILD : card % 3);
 const mineOf = (p, s) => p.owner.flatMap((o, i) => (o === s ? [i] : []));
 const living = (p) => Array.from({ length: p.seats }, (_, s) => s).filter((s) => p.owner.includes(s));
@@ -285,6 +287,7 @@ export const banners = {
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 4 }, map: { values: MAPS, normal: "world" },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
+    marks: { check: checkMarks, normal: null }, // legacy hook: an open option, given only to a campaign's games (./legacy.js)
   },
 
   setup(o, dice) {
@@ -306,10 +309,12 @@ export const banners = {
       at.forEach((a, s) => { p.owner[a] = s; p.str[a] = 4; });
       if (p.caps) p.caps = [...at];
       if (p.leaders) p.leaders = [...at];
+      applyMarks(p, o.marks, at); // legacy hook
       begin(p, []);
       return p;
     }
     p.reserve = Array(o.seats).fill(Math.max(6, each));
+    applyMarks(p, o.marks); // legacy hook
     if (rule.start === "claimed") { p.phase = "claim"; p.str = p.str.map(() => 0); return p; }
     dice.shuffle(all).slice(0, each * o.seats).forEach((i, k) => { p.owner[i] = k % o.seats; p.str[i] = 1; });
     p.phase = "setup";

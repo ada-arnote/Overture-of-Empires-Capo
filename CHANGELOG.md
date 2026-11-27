@@ -2,6 +2,24 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.9.9 (2026-11-27): campaigns for Brass and Banners, early
+
+### Brass and Banners: legacy campaigns, early
+
+**Players**
+- **Campaign (early)**, under Choose your own on the Brass and Banners title card: a campaign of 5 or 10 games, "The Long Muster", for 2 to 4 seats, each a person or a bot. Every game is played on the world map with the campaign's rules (land dealt out, 65% of the land or the most after 20 rounds).
+- **Each game leaves marks on the next.** A win is worth 3 points and holding on to the end 1. The winner names the province they held strongest from the story's list of names, and it keeps that name on the map; the seat that placed last starts the next game with 3 more to set out, unless it leads the campaign.
+- **Seals.** Sealed changes open when their moment comes: capitals after the first game, forts (and a wall around the first capital to fall) when a capital first falls, leaders after the third game. After the game a sealed change shows what opened it; Break the seal shows the new rule, which plays from the next game on.
+- **The campaign is a file you hold.** Save it after any game and open it again on this page: every game in it is replayed, and a file changed by hand is refused. The whole last game can be taken back when everyone agrees; it is counted, the count is shown, and the game is dealt anew.
+- A campaign keeps the rules version it began on, and says so. Marked early: nowhere on the front page.
+
+**Contributors**
+- `src/core/campaign.js`: the campaign record (`beginCampaign`, `addGame`, `nameLast`, `takeBack`, `writeCampaign`, `readCampaign`) and its fold (`foldCampaign`, `advance`, `nextGame`, `standings`). Points, marks and opened seals are never stored; they are folded again from each game's seed and moves. Seals open on a fixed list of tests (`after_game`, `first`, `wins`).
+- `src/games/banners/legacy.js`: "The Long Muster" as data (`LONG_MUSTER`), the rules versions a campaign may be pinned to (`RULES`), and the layer the fold reads (`LEGACY`: `optionsFor`, `factsOf`). `src/games/banners/marks.js`: the marks' shape (`checkMarks`) and how setup reads them (`applyMarks`: names, forts, extra strength at the start).
+- `src/core/match.js`: a game may declare an open option, `{ check, normal }`, accepted when its check says yes and present in a match's options only when given, so ordinary games keep their options, saves and fingerprints. Banners' `marks` is the first.
+- Marked "legacy hook" lines: `src/games/banners/rules.js` (the `marks` option, two `applyMarks` calls in `setup`, `nameOf` reads a campaign's names); `site/banners.js` (`seen`, `next`, `summary`, `campaign.mount`); `site/banners.html` (the button). The screens are `site/legacy.js`.
+- `test/legacy.test.mjs`: the record round-trips, a campaign replays from its record, marks change the next game's setup, the rules version is pinned, take-backs are counted, ordinary games are untouched.
+
 ## v0.9.8 (2026-11-27): rivals make pacts, risings found countries
 
 ### Capo: countries bind each other, a rising can found a country, and the world's pace is yours to set
