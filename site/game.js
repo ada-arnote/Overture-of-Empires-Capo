@@ -1148,7 +1148,8 @@ async function start() {
   map = worldMap($("map"), world, { owner: ownerOf, name, colour: viewColour, pick: card, picked: () => picked, mine: () => state?.player, tint: (id) => viewTint(view, X, id), // features hook: tint
     // 3D hook: fronts as lines, and capitals, armies, fleets, air wings and commanders as pieces, all read off the state
     wars: () => (state ? state.wars.map((w) => w.pair.split("|")) : []),
-    pieces: () => mapPieces({ world, homes, owner: ownerOf, might: (c) => mightOf(geo(), c), wars: state ? state.wars.map((w) => w.pair.split("|")) : [], player: state?.player, staff: state ? commanders(state).filter((x) => !x.off && x.seat !== "generals").length : 0 }) });
+    pieces: () => mapPieces({ world, homes, owner: ownerOf, might: (c) => mightOf(geo(), c), wars: state ? state.wars.map((w) => w.pair.split("|")) : [], player: state?.player, staff: state ? commanders(state).filter((x) => !x.off && x.seat !== "generals").length : 0,
+      strength: state ? (c) => strengthOf(state, geo(), c) : null, g: state }) }); // capomap hook: strength pips, and missions read off the game for pins
   $("view").onchange = (e) => { view = e.target.value; map.refresh(); };
   legend = viewsInit($("view"), X, () => view); // features hook: more map views, and their legend
   $("in").onclick = () => map.zoomBy(1.6);
