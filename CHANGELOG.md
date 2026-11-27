@@ -2,7 +2,7 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
-## Unreleased
+## v0.10.7 (2026-11-27): the stacking game grows a quick set, stronger bots and a lesson (early, unlisted)
 
 ### The stacking game: the quick Capo set, bots that attack, a lesson, puzzles and a lit table (still early and unlisted)
 
