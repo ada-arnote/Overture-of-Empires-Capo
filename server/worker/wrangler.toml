@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# The worker's settings for Cloudflare (ruling 155). A template: no account id, no secret, nothing personal.
+# Wrangler asks you to log in and uses that account. Steps: server/worker/DEPLOY.md.
+
+name = "capo-rooms"
+main = "index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true      # served at capo-rooms.<your-subdomain>.workers.dev; no domain, no route
+preview_urls = false
+
+[vars]
+# The pages this worker serves, separated by spaces. The live site, and this computer for trying it out.
+ORIGINS = "https://ada-arnote.github.io http://localhost:8080 http://127.0.0.1:8080"
+# "no" closes every room and save at once (the pages fall back to play by link). Change it and deploy again.
+OPEN = "yes"
+# Where browsers learn their outside address. Free, with no account.
+STUN = "stun:stun.cloudflare.com:3478"
+# Who sends the "your turn" notice, as push services see it: the site's own address, never a person.
+VAPID_SUBJECT = "https://ada-arnote.github.io/Overture-of-Empires-Capo/"
+
+# Secrets are set with `npx wrangler secret put NAME`, never written here:
+#   VAPID_PUBLIC, VAPID_PRIVATE   the notice keys, made by `node tools/keys.mjs` (without them, no notices; all else works)
+#   TURN_KEY_ID, TURN_KEY_TOKEN   only if the owner turns on Cloudflare's relay (without them, the room itself relays moves)
+
+# Rooms and saves. On the free plan Durable Objects must keep their data in SQLite: hence new_sqlite_classes.
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[durable_objects.bindings]]
+name = "KEEPS"
+class_name = "Keep"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room", "Keep"]
+
+# No logs kept by us beyond what the host keeps by default (options.md decision 11).
+[observability]
+enabled = false
+
+# Optional second fence on requests per address (the worker counts in memory as well). Uncomment once the account has it.
+# [[ratelimits]]
+# name = "LIMIT"
+# namespace_id = "1001"
+# simple = { limit = 240, period = 60 }

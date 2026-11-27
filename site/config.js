@@ -22,3 +22,9 @@ export const AI_BASES = {
   lmstudio: "http://localhost:1234/v1",
   llamacpp: "http://localhost:8080/v1",
 };
+// worker hook (ruling 155): named outside addresses the table pages may reach for play with others, each with its reason.
+// PLACEHOLDER until the live-link lane's single named-address list lands: on merge, move this row into that list and
+// delete this one. An empty address means nothing is ever contacted and the site stays fully static.
+export const PLAY_ADDRESSES = [
+  { name: "worker", address: "", reason: "room codes, a relay for pairs that cannot connect directly, play by turn with a 'your turn' notice, and saves by code (server/worker/)" },
+];
