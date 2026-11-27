@@ -2,6 +2,27 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### The front page shows the games as they are now: 3D boards and the relief map (cold review 3, fix 2)
+
+**Players**
+- **The live board on the front page stands on the War table.** Four bots play Brass and Banners tilted on the walnut table with its sculpted soldiers, in lamplight, as the game itself opens. Each game is dealt and played unseen to round 4, so the board opens mid-game on the same position as the picture shown before it starts (no more jump from a game under way to a fresh one). Weak or slow devices get Flat, as on the game pages; Pause stays.
+- **On a phone** the desk keeps the picture, uncrowded, and offers "Watch a live game"; watched, the board stands closer in and keeps clear of the strip where "Play this game" sits.
+- **New pictures, all our own screenshots of the real boards:** the hero and Brass and Banners card (the War table, round 4), The Island Fable, Grain and Glass and An Inch of Ink in 3D mid-game, and Capo's lit relief map of Europe on the first day of a game as Poland, with forests, real cities, armies, fleets and the fronts in Ukraine.
+- **A close-up of a war table** (The Island Fable's knights and villages) replaces the tent etching in the open-source section.
+- **Bringing an AI, for newcomers:** the Capo section now says what an AI service and a key are, roughly how long setup takes, that several are free to start and that the game's own guide helps choose; playing by the rules alone, with its gazette, is its own step.
+- **The phone menu** opens as a sheet over the page; the bar no longer jumps and the page no longer moves down.
+- **Sharing the page** shows a JPEG card (1200 by 630) with its size and a description, for apps that show no WebP.
+- The front page's credits name the makers of the sculpted models seen in the pictures (CC BY 4.0) and the CC0 houses; the tent print's credit goes with the print.
+
+**Contributors**
+- `site/live.js`: `createBoard` in the relief look and War table style with the walnut, the model shelf, era `early`, lamplight and the device probe (`capo-3d-slow`, as `site/hexboard.js`); `live()` is async and deals a game in steps of 12 moves to round `FROM` (4) and a first stack of five; the view stands at zoom 1.15 at the desk's 20 by 9 shape, closer on a narrower desk, 2.6 with a 52 px foot band on a phone. `site/main.js`: awaits `live()`; a desk under 560 px wide waits for "Watch a live game".
+- `site/shots/`: banners.webp 92.8 kB (1692 by 741), fable.webp 44.7 kB, glass.webp 59.6 kB, inch.webp 44.7 kB (720 by 450 each), capo.webp 95.1 kB (960 by 600), table.webp 58.9 kB (800 by 500), share.jpg 76.5 kB (1200 by 630): 472 kB in all, taken in headless Edge on the GPU at 2x. Only the hero loads with the page; the rest are lazy.
+- `tools/check.mjs`: the shots guide is 400 kB (it was 120) and `site/shots/` may hold a `.jpg` share card, counted at full size and needing its CREDITS.csv row (owner, 27 November); `tools/serve.mjs` serves `.jpg`. `test/tools.test.mjs`: the shots test covers the JPEG.
+- `site/icons/engraved/sandby-tent.webp` is removed, with its CREDITS.csv row and NOTICES.md line; NOTICES.md says which CC BY models appear in the pictures.
+- Checked at 1440 by 900 and 375 by 812 in headless Edge: no layout shift (0.000), no console errors, no sideways scroll; before and after pictures kept privately.
+
 ## v0.10.9 (2026-11-27): Capo without a key gets a gazette, pressure and an ending
 
 ### Capo with no AI as a game on its own terms: a gazette, pressure, war from the card, an ending (cold review 3, fixes 6 to 8; story rules version 6)

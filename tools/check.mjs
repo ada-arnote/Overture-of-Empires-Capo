@@ -17,15 +17,15 @@ export const LIMITS = {
   map: 300 * KB, // one map file in maps/, compressed: fetched by the page that needs it, never by the first page
   lines: { "src/map": 2400, "src/games": 6500, "src/core": 700, tools: 1300 }, // tools: 1,300 (ruling 150)
   // vendored assets, apart from code (lane 7's rule of thumb); still inside the 600 kB above. Each folder holds only its own kinds, plus .txt licence texts
-  assets: { "site/fonts": { max: 110 * KB, types: [".woff2", ".txt"] }, "site/icons": { max: 25 * KB, types: [".svg", ".png", ".webp", ".ico", ".txt"] }, "site/sounds": { max: 60 * KB, types: [".ogg", ".mp3", ".txt"] }, "site/textures": { max: 32 * KB, types: [".webp", ".png", ".txt"] }, "site/shots": { max: 120 * KB, types: [".webp", ".txt"] }, "site/models": { max: 120 * KB, types: [".bin", ".txt"] } }, // models: sculpted packs in our own small format, fetched by a game page only when a style asks for them (ruling 140) // textures: ruling 128; shots (our own in-game screenshots): ruling 130
+  assets: { "site/fonts": { max: 110 * KB, types: [".woff2", ".txt"] }, "site/icons": { max: 25 * KB, types: [".svg", ".png", ".webp", ".ico", ".txt"] }, "site/sounds": { max: 60 * KB, types: [".ogg", ".mp3", ".txt"] }, "site/textures": { max: 32 * KB, types: [".webp", ".png", ".txt"] }, "site/shots": { max: 400 * KB, types: [".webp", ".jpg", ".txt"] }, "site/models": { max: 120 * KB, types: [".bin", ".txt"] } }, // models: sculpted packs in our own small format, fetched by a game page only when a style asks for them (ruling 140) // textures: ruling 128; shots (our own in-game screenshots): ruling 130, raised to 400 kB for 2x shots of the 3D boards, with a JPEG share card for apps that show no WebP (owner, 27 November)
 };
 export const LICENCES = ["CC0-1.0", "CC-BY-4.0", "CC-BY-3.0", "OFL-1.1", "MIT", "ISC", "public domain", "own work"];
 // the words that show a licence's own text is there: beside a font in a .txt, and in NOTICES.md for MIT and ISC
 const TEXT = { "OFL-1.1": /SIL OPEN FONT LICENSE[\s\S]*Version 1\.1/i, MIT: /Permission is hereby granted, free of charge/, ISC: /Permission to use, copy, modify, and\/or distribute/ };
-const PACKED = new Set([".woff2", ".ogg", ".mp3", ".png", ".webp"]); // already compressed: counted at full size
+const PACKED = new Set([".woff2", ".ogg", ".mp3", ".png", ".webp", ".jpg"]); // already compressed: counted at full size
 const SHIPPED = ["src", "site"];
-const TYPES = new Set([".js", ".css", ".html", ".json", ".svg", ".png", ".webp", ".ogg", ".mp3", ".woff2", ".bin", ".rl", ".csv", ".txt", ".webmanifest", ".ico"]);
-const MEDIA = new Set([".svg", ".png", ".webp", ".ogg", ".mp3", ".woff2", ".ico"]);
+const TYPES = new Set([".js", ".css", ".html", ".json", ".svg", ".png", ".webp", ".ogg", ".mp3", ".woff2", ".bin", ".rl", ".csv", ".txt", ".webmanifest", ".ico", ".jpg"]);
+const MEDIA = new Set([".svg", ".png", ".webp", ".ogg", ".mp3", ".woff2", ".ico", ".jpg"]);
 const LIVE_SHAPE = /^(?:stun|turns?):[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d{1,5})?$/; // ruling 155
 const WHO_MAY_IMPORT = { "src/core": ["src/core"], "src/games": ["src/core", "src/games"], "src/map": ["src/map"] };
 

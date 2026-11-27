@@ -118,11 +118,14 @@ test("textures have their own 32 kB budget, at full size, for WebP and PNG tiles
   stops({ "site/textures/a.svg": "<svg/>", "CREDITS.csv": HEAD + credit("site/textures/a.svg") }, /only \.webp \.png \.txt go in site\/textures/);
   stops({ "site/textures/a.png": "x" }, /no row in CREDITS/);
 });
-test("screenshots have their own 120 kB budget, at full size, for WebP only", () => {
+test("screenshots have their own 400 kB budget, at full size, for WebP and a JPEG share card only", () => {
   const credit = (f) => `${f},A,Someone,own work,taken from this project's pages,2026-11-26,none
 `, t = "site/shots/a.webp", used = check(root).assets["site/shots"];
-  noted({ [t]: "x".repeat(120001 - used), "CREDITS.csv": HEAD + credit(t) }, /site\/shots: \d+ kB, above its 120 kB asset guide/);
-  stops({ "site/shots/a.png": "x", "CREDITS.csv": HEAD + credit("site/shots/a.png") }, /only \.webp \.txt go in site\/shots/);
+  noted({ [t]: "x".repeat(Math.max(1, 400001 - used)), "CREDITS.csv": HEAD + credit(t) }, /site\/shots: \d+ kB, above its 400 kB asset guide/);
+  { const j = "site/shots/a.jpg", { bad, assets } = withFiles({ [j]: "x".repeat(1000), "CREDITS.csv": HEAD + credit(j) }); assert.deepEqual(bad.filter((x) => /site\/shots/.test(x)), [], JSON.stringify(bad)); assert.equal(assets["site/shots"], used + 1000); } // a JPEG is counted at full size, like the WebP pictures
+  stops({ "site/shots/a.jpg": "x" }, /no row in CREDITS/);
+  stops({ "site/shots/a.png": "x", "CREDITS.csv": HEAD + credit("site/shots/a.png") }, /only \.webp \.jpg \.txt go in site\/shots/);
+  stops({ "site/a.jpg": "x", "CREDITS.csv": HEAD + credit("site/a.jpg") }, /ship only from/);
 });
 test("site pages keep their rule: nothing by default, trusted types, fonts and sounds only from their own site", () => {
   const meta = (rule) => `<meta http-equiv="Content-Security-Policy" content="${rule}">`, ok = "default-src 'none'; script-src 'self'; font-src 'self'; media-src 'self'; require-trusted-types-for 'script'";
