@@ -2,7 +2,7 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
-## Unreleased
+## v0.9.4 (2026-11-27): lists that wrap, names on the board, a lesson that waits
 
 ### The table games' shell and pages: lists that wrap, places named on the board, a lesson that waits for you
 
