@@ -2,6 +2,13 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.10.13 (2026-11-27): the front page's road map and news, brought up to date
+
+**Players**
+- **What is new** shows the latest three releases: dice you can read (v0.10.11), the whole map and phones (v0.10.10), and Capo told as a gazette with no AI (v0.10.9).
+- **Coming soon** says where each planned piece stands: Margins of Trust, the tile game, the garden game and the stacking game are in early testing; an early first legacy campaign is in Brass and Banners now; rooms and play by turn are built and waiting to go live. The tile game is listed for the first time.
+- **At every table** now mentions Grain and Glass's lesson and An Inch of Ink's coaching, live play between two browsers, and the six board styles with colour-blind-safe and high-contrast seats.
+
 ## v0.10.12 (2026-11-27): the front page shows the 3D games
 
 ### The front page shows the games as they are now: 3D boards and the relief map (cold review 3, fix 2)
