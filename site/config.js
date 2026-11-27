@@ -6,6 +6,34 @@ export const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/p
 export const VERSION = "0.10.4";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
 export const BUILD = "dev";
+// guide hook (ruling 153.8): each AI service's own pages, for links in the Choose an AI guide (site/aiguide.js). A player
+// follows them in a new tab; the page never fetches them, and its rule does not reach them. Kept above the list of services
+// the page may call, because the gate reads every address after that list's name as one the page calls.
+export const AI_LINKS = {
+  openrouterKeys: "https://openrouter.ai/settings/keys",
+  openrouterPrivacy: "https://openrouter.ai/docs/features/privacy-and-logging",
+  openrouterLimits: "https://openrouter.ai/docs/api-reference/limits",
+  geminiKey: "https://aistudio.google.com/apikey",
+  geminiLimits: "https://aistudio.google.com/rate-limit",
+  geminiPricing: "https://aistudio.google.com/docs/pricing",
+  groqKeys: "https://console.groq.com/keys",
+  groqLimits: "https://console.groq.com/settings/limits",
+  ollama: "https://ollama.com/download",
+  ollamaHelp: "https://docs.ollama.com/faq",
+  lmstudio: "https://lmstudio.ai",
+  lmstudioServer: "https://lmstudio.ai/docs/developer/core/server/settings",
+  node: "https://nodejs.org",
+  openaiKeys: "https://platform.openai.com/api-keys",
+  openaiPricing: "https://developers.openai.com/api/docs/pricing",
+  anthropicKeys: "https://platform.claude.com/settings/keys",
+  anthropicPricing: "https://platform.claude.com/docs/en/about-claude/pricing",
+  deepseekKeys: "https://platform.deepseek.com/api_keys",
+  deepseekPricing: "https://api-docs.deepseek.com/quick_start/pricing/",
+  mistralKeys: "https://console.mistral.ai/api-keys",
+  cerebras: "https://cloud.cerebras.ai",
+  cerebrasLimits: "https://inference-docs.cerebras.ai/support/rate-limits",
+  together: "https://www.together.ai",
+};
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 export const AI_BASES = {

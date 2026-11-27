@@ -55,6 +55,14 @@ button.connect { min-height: var(--tap); padding: 0 6px; border: 0; background: 
 
 /* AI wiring (p5-ai, site/ai.js) */
 .aipanel .field { display: grid; gap: 4px } .connectbox .aipanel { margin-top: 8px } .connectbox { scroll-margin-top: 64px } /* clear of the sheet's sticky head */ .choices { border: 0; padding: 0; display: grid; gap: 4px }
+/* guide hook: Choose an AI (site/aiguide.js) */
+@media (min-width: 821px) { dialog.aiguide { width: min(620px, calc((100vw - 32px) / var(--ui-scale))); max-height: min(calc(88vh / var(--ui-scale)), 820px) } }
+.aiguide { overflow-wrap: anywhere } .aiguide h3 { margin: 18px 0 6px; font: 700 var(--fs-1)/1.2 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent) } .aiguide h4 { margin: 10px 0 4px; font-size: var(--fs-2) }
+.aiguide .route { border: 1px solid var(--edge-soft); border-radius: var(--r-1); margin: 6px 0; padding: 0 12px } .aiguide .route[open] { padding-bottom: 6px; background: var(--raise) }
+.aiguide summary { min-height: var(--tap); padding: 8px 0; cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; list-style: none } .aiguide summary::-webkit-details-marker { display: none } .aiguide summary .note { margin: 0 }
+.aiguide summary::before { content: "+"; width: 1em; color: var(--accent); font-weight: 700 } .aiguide .route[open] > summary::before { content: "\2212" } .aiguide .guide-close:first-child { margin-top: -10px }
+.aiguide ol { padding-left: 22px } .aiguide a { color: var(--accent-hi); display: inline-flex; align-items: center; min-height: var(--tap); overflow-wrap: anywhere }
+.aiguide dt { font-weight: 700; margin-top: 8px } .aiguide dd { margin: 2px 0 0 14px } .aiguide .guide-close { justify-content: flex-end }
 .stream { max-height: 9em; overflow: auto; white-space: pre-wrap; font-size: var(--fs-1); color: var(--text-2) }
 
 /* the province card */
