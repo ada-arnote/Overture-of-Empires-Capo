@@ -2,7 +2,7 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
-## Unreleased
+## v0.10.10 (2026-11-27): the whole map on open, and phones get the board
 
 ### The camera and the phone held upright, in every table game (third cold review, fixes 3 and 5)
 
