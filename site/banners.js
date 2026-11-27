@@ -16,6 +16,11 @@ import { campaign } from "./legacy.js";
 const SEA = [68, 108, 122], LAND = [[222, 190, 150], [206, 206, 150], [228, 200, 180], [190, 206, 178], [214, 190, 200], [226, 214, 158], [196, 200, 214], [210, 180, 150], [178, 204, 200], [224, 206, 190]];
 const SUITS = ["Drum", "Horn", "Banner", "Crown"];
 let source = null, target = null, much = -1, shown = null, shownTie = false; // what is chosen, and the last dice thrown
+// era hook (ruling 154): which sculpted pieces stand in 3D (src/map/figures.js). Looks only: kept in this browser, never in the rules.
+const ERA_KEY = "capo-banners-era", ERA_NAMES = [["ancient", "Ancient"], ["medieval", "Medieval"], ["early", "Gunpowder"], ["industrial", "Industrial"], ["modern", "Modern"]];
+const isEra = (v) => ERA_NAMES.some(([k]) => k === v);
+let era = (() => { try { const v = localStorage.getItem(ERA_KEY); return isEra(v) ? v : "early"; } catch { return "early"; } })();
+const setEra = (v) => { if (!isEra(v)) return; era = v; try { localStorage.setItem(ERA_KEY, v); } catch { /* this visit only */ } T.board?.setEra?.(v); const k = document.querySelector('select[name="era"]'); if (k) k.value = v; }; // the setup's list follows a change in Settings
 
 const legal = (T) => (T.ready() ? T.match.legal() : []);
 const keys = (list, k) => [...new Set(list.map((m) => m[k]).filter((x) => x !== undefined))];
@@ -252,7 +257,9 @@ const T = createTable({
     ours: "Capo: our own variation.\nTen scored rounds. Each player starts alone on one province in empty land. From round 2 you score at the start of your turn for what you still hold: 1 for every three provinces and each whole land's bonus. After round 10 everyone scores once more and the most points wins; holding 65% of the land wins at once. Nobody is put out: your last province cannot be attacked, so you can always build up there and come back. Ties cost both sides, cards are always worth the same, and in the first round whoever moves later places more.",
     coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
   },
-  choices: [{ key: "map", label: "Map", normal: "world", values: [["world", "The world"], ["isles", "An archipelago"], ["grown", "An inland sea"]] }],
+  choices: [{ key: "map", label: "Map", normal: "world", values: [["world", "The world"], ["isles", "An archipelago"], ["grown", "An inland sea"]] },
+    { key: "era", label: "Era", normal: "early", local: true, get: () => era, set: setEra, values: ERA_NAMES }], // era hook: looks only, kept by this page
+  settings: [{ label: "Era", get: () => era, set: setEra, values: ERA_NAMES, note: "The era chooses the sculpted pieces that stand on the board in 3D, in the styles that show figures. The rules are the same in every era." }], // era hook
   switches: [
     { key: "start", label: "Start", normal: SWITCHES.start.normal, values: [["dealt", "Land dealt out"], ["claimed", "Claim in turn"], ["far", "One capital each"]] },
     { key: "dice", label: "Dice", normal: SWITCHES.dice.normal, values: [["standard", "3 against 2, ties to defender"], ["guard", "4 against 3, ties to defender"], ["even", "4 against 3, ties cost both"], ["open", "3 against 3, ties cost both"], ["heavy", "5 against 3, ties to defender"]] },
@@ -305,7 +312,7 @@ const T = createTable({
     document.body.classList.toggle("atlas", b.flat);
     return hexBoard(T, stage, {
       reading: { places: b.mid.map((_, i) => ({ at: i, text: nameOf(p, i) })) }, // reading hook (p10-reading): each province's name, where there is room, and under the pointer
-      era: "early", // figures hook: which sculpted pieces stand in 3D (src/map/figures.js)
+      era, // figures hook: which sculpted pieces stand in 3D (src/map/figures.js); era hook: the player's choice
       picture, lines, labels, lands: b.region, fine: { cells: b.fine, of: b.of, mid: b.mid }, cells: [], rough: [], sea: [...b.mid.map(() => false), true],
       ground: (i) => (i >= b.n ? SEA : LAND[b.region[i] % LAND.length]),
       owner: () => [...T.match.position.owner, NONE],
