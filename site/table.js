@@ -37,9 +37,9 @@ export const $ = (id) => document.getElementById(id);
 export const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const THEME = "capo-tent-theme";
-const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["hard", "Hard bot"], ["away", "A friend, by link"]];
+const KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["hard", "Hard bot"], ["master", "Strongest bot"], ["away", "A friend, by link"]]; // stacking hook: master, only where G.master
 // gentle is the lessons' bot, not offered in the setup
-const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", hard: "Hard bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
+const WORDS = { you: "A person", normal: "Bot", easy: "Easy bot", hard: "Hard bot", master: "Strongest bot", gentle: "Gentle bot", away: "By link" }, STYLES = { classic: "Traditional", custom: "Custom", ours: "Capo", coda: "Coda" };
 // what each table game grew from, named by its family of games only: no titles, characters or art of anyone else's
 const FAMILY = {
   banners: "classic world-conquest board games, where armies spread over a map and battles are fought with dice",
@@ -116,12 +116,15 @@ export function toast(t, spoken = true) { const b = $("toast"); b.setAttribute("
 /** One sheet at a time. `kind` widens it (the menu, the end); no `close` leaves the closing to the sheet's own buttons and Escape. */
 export function sheet(title, body, close = "Close", kind = "") {
   $("sheet").className = kind === "paper" ? kind : `panel ${kind}`; // paper for what is read, lacquer for the rest
+  const fresh = !$("sheet").open || $("sheet-body").firstChild !== body;
   $("sheet-title").textContent = title;
   $("sheet-body").replaceChildren(body);
   $("sheet-close").parentNode.hidden = !close;
   $("sheet-close").textContent = close;
   $("sheet-close").className = close === "Close" || close === "Resume" ? "main" : "quiet";
   if (!$("sheet").open) { opener ||= document.activeElement; $("sheet").showModal(); }
+  // a sheet opens at its top: showModal, and a caller's focus on a button below, would scroll it down to that button
+  if (fresh) { $("sheet").scrollTop = 0; requestAnimationFrame(() => { $("sheet").scrollTop = 0; }); }
 }
 /** What had the keyboard when the first of a run of sheets opened: given back when the last one closes. */
 let opener = null;
@@ -261,6 +264,7 @@ export function createTable(G) {
     ready: () => !T.demo && T.human() && !T.busy,
     solo: () => T.kinds.filter((k) => k === "you" || k === "away").length === 1 || (!!T.link && T.kinds.filter((k) => k === "you").length === 1),
     play, refresh: panel, realtime: () => realtime(), begin: (m, kinds) => begin(m, kinds), // begin: a game's own ladder starts its next step
+    replacing: (go, what) => replacing(go, what), // a game's own ladder asks first, as Play does, before it replaces a game in progress
   };
   const live = liveLink({ T, G, begin, sheet, closeSheet, toast, el, names: NAMES, send }); // livelink hook: sets T.live
   /** Is this game played on a clock? Then there are no turns: no turn keys, no taking back, no turn banner. */
@@ -414,6 +418,12 @@ export function createTable(G) {
     if (resting && T.demo && !still()) next();
   }
   const tally = (p) => Array.from({ length: T.kinds.length }, (_, s) => G.cellsOf(p, s));
+  /** The log written again from the moves, in the seats' names as they are now: a change of seat colours renames the seats, and the log follows. */
+  const relog = () => {
+    const again = createMatch(G.game, { seed: T.match.seed, options: T.match.options, salts: T.match.salts }), out = [];
+    for (const mv of T.match.list) out.push(...again.play(mv).map((e) => G.line(e, again.position)).filter(Boolean));
+    if (out.length === log.length) { log = out; drawn = -1; }
+  };
   const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, look: T.look, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo && !lesson?.owns()) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds, look: T.look })); };
 
   /** A tick of a real-time game: played at once, drawn without waiting, saved now and then. */
@@ -479,6 +489,7 @@ export function createTable(G) {
       for (let slice = performance.now(); ;) {
         const s = t.next();
         if (s.done) { move = s.value; break; }
+        if (typeof s.value?.then === "function") { await s.value; if (mine !== run) return; slice = performance.now(); continue; } // stacking hook: a bot thinking in a worker hands over a promise
         if (performance.now() - slice > 7) { await sleep(0); if (mine !== run) return; slice = performance.now(); }
       }
       if (!T.hurry) await sleep(Math.max(0, G.pace(T.match.position) * PACE[settings.speed] - (performance.now() - from)));
@@ -823,7 +834,7 @@ export function createTable(G) {
     if (!clock) row("Bot speed", ...bind("speed"), CHOICES.speed);
     row("Motion", ...bind("motion"), CHOICES.motion);
     if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
-    const reseat = () => { dress(); board?.recolour?.(); board?.show([], true); if (T.match && !T.demo) score(); }; // styles hook: seat colours follow the style until chosen
+    const reseat = () => { dress(); board?.recolour?.(); board?.show([], true); if (T.match && !T.demo) { relog(); score(); } }; // styles hook: seat colours follow the style until chosen
     if (board?.styles?.length) row("Board style", () => board.style, (v) => { board.setStyle(v); reseat(); }, board.styles); // 3D hook: styles are data (src/map/style.js)
     for (const s of G.settings || []) { row(s.label, s.get, s.set, s.values); if (s.note) box.append(el("p", s.note, "about")); } // era hook: a game's own looks (Banners' era)
     row("Seat colours", () => seatSet(read(SEATS_KEY), read(STYLE_KEY)), (v) => { store(SEATS_KEY, v); reseat(); }, Object.entries(SEATS).map(([k, v]) => [k, v.name]));
@@ -881,7 +892,7 @@ export function createTable(G) {
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
       const li = el("li"), k = el("select");
-      k.append(...KINDS.filter(([v]) => (v !== "hard" || G.hard) && (v !== "away" || G.links !== false)).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one; links hook: no friend by link where links: false
+      k.append(...KINDS.filter(([v]) => (v !== "hard" || G.hard) && (v !== "master" || G.master) && (v !== "away" || G.links !== false)).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one; links hook: no friend by link where links: false; stacking hook: master
       k.value = setup.who[s];
       k.setAttribute("aria-label", NAMES[s]);
       k.onchange = () => { setup.who[s] = k.value; passLine(); };
