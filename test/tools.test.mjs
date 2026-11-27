@@ -38,8 +38,9 @@ test("a release needs the licence text and a source address", () => {
   stops({ "site/config.js": MARK + 'export const SOURCE_URL = "";\nexport const VERSION = "1";\n' }, /no source address/, { release: true });
   // the AI services stay as they are: the Capo page's connect-src must match them (p5-ai)
   // and the front page's share card names the site's own address, SITE_URL
-  const config = readFileSync(path.join(root, "site/config.js"), "utf8"), services = config.match(/export const AI_BASES[\s\S]*?\};\n/)[0], site = config.match(/export const SITE_URL = .*\n/)[0];
-  const ok = withFiles({ LICENSE: "GNU AFFERO GENERAL PUBLIC LICENSE", "site/config.js": MARK + 'export const SOURCE_URL = "https://example.org/capo";\nexport const VERSION = "1";\n' + site + services }, { release: true });
+  // and the table pages' rule lists the addresses named for live play (ruling 155)
+  const config = readFileSync(path.join(root, "site/config.js"), "utf8"), services = config.match(/export const AI_BASES[\s\S]*?\};\n/)[0], site = config.match(/export const SITE_URL = .*\n/)[0], live = config.match(/export const LIVE_ADDRESSES[\s\S]*?\];\n/)[0];
+  const ok = withFiles({ LICENSE: "GNU AFFERO GENERAL PUBLIC LICENSE", "site/config.js": MARK + 'export const SOURCE_URL = "https://example.org/capo";\nexport const VERSION = "1";\n' + site + services + live }, { release: true });
   assert.deepEqual(ok.bad, []);
 });
 test("rules code may not use chance, the clock, the page, uneven maths or language settings", () => {
@@ -139,7 +140,9 @@ test("bundled pages: served ones take fonts and sounds from their site, double-c
     const served = page(html, css, js, "../site/", false, dir), alone = page(html, css, js, "", false, dir), rule = (h) => h.match(/Content-Security-Policy" content="([^"]*)"/)[1];
     assert.match(rule(served), /^default-src 'none'; .*img-src 'self' data:; font-src 'self'; media-src 'self';.* require-trusted-types-for 'script'$/);
     assert.match(rule(alone), /^default-src 'none'; .*img-src data:; font-src data:; media-src data:;.* require-trusted-types-for 'script'$/);
-    assert.ok(!/'self'|:\/\//.test(rule(alone)));
+    // nothing from anywhere, past the address named for live play (ruling 155), which browsers never fetch from
+    assert.match(rule(alone), / connect-src stun:\/\/[\w.-]+:\d+;/);
+    assert.ok(!/'self'|:\/\//.test(rule(alone).replace(/ connect-src stun:\/\/[\w.-]+:\d+;/, "")));
     assert.ok(served.includes('url("../site/fonts/a.woff2")') && served.includes("url(../site/icons/a.svg)") && served.includes('"../site/sounds/a.ogg"'));
     const b64 = (t) => Buffer.from(t).toString("base64");
     assert.ok(alone.includes(`url("data:font/woff2;base64,${b64("wOF2")}")`) && alone.includes(`url(data:image/svg+xml;base64,${b64("<svg/>")})`) && alone.includes(`"data:audio/ogg;base64,${b64("OggS")}"`));

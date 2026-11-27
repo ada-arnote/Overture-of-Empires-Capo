@@ -106,7 +106,7 @@ let counted = { key: "", rows: [] };
 function count(T) {
   const m = T.match, key = `${m.seed}/${m.list.length}`;
   if (counted.key === key) return counted.rows;
-  const again = createMatch(fable, { seed: m.seed, options: m.options }), rows = Array.from({ length: m.options.seats }, () => ({ peak: 0, took: 0, lost: 0, raised: 0, starved: 0, cuts: 0 }));
+  const again = createMatch(fable, { seed: m.seed, options: m.options, salts: m.salts }), rows = Array.from({ length: m.options.seats }, () => ({ peak: 0, took: 0, lost: 0, raised: 0, starved: 0, cuts: 0 }));
   const peaks = () => rows.forEach((r, s) => { r.peak = Math.max(r.peak, cellsOf(again.position, s)); });
   peaks();
   for (const mv of m.list) {

@@ -10,6 +10,8 @@ import { coach } from "./coach.js";
 import { CHOICES, PACE, SCALE, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } from "./shell.js";
 // motion hook: motion and sound that follow each move (site/motion.js, site/sound.js)
 import { hail, stir } from "./motion.js";
+// livelink hook: live play by two pasted links, straight between two browsers (site/livelink.js)
+import { liveLink } from "./livelink.js";
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -250,6 +252,7 @@ export function createTable(G) {
     solo: () => T.kinds.filter((k) => k === "you" || k === "away").length === 1 || (!!T.link && T.kinds.filter((k) => k === "you").length === 1),
     play, refresh: panel, realtime: () => realtime(), begin: (m, kinds) => begin(m, kinds), // begin: a game's own ladder starts its next step
   };
+  const live = liveLink({ T, G, begin, sheet, closeSheet, toast, el, names: NAMES, send }); // livelink hook: sets T.live
   /** Is this game played on a clock? Then there are no turns: no turn keys, no taking back, no turn banner. */
   function realtime(p = T.match?.position) {
     if (!p) return false;
@@ -421,7 +424,10 @@ export function createTable(G) {
     T.busy = true;
     let events;
     // a key can ask for a move the rules do not allow just now (E in an opening that has no end of turn): it is refused, and nothing is lost
-    try { events = T.match.play(move); } catch (e) { if (!(e instanceof Refusal) || T.demo || !person) throw e; T.busy = false; toast("That cannot be done now."); return; }
+    // livelink hook: in live play a move goes to the other browser first, and comes back with the salt for its dice
+    let salt;
+    if (T.live.on()) { try { salt = await T.live.salt(move, T.match.list.length); } catch (e) { if (!(e instanceof Refusal)) throw e; T.busy = false; toast(e.code === "down" ? "The live connection dropped before that move went across." : "That cannot be done now."); panel(); return; } if (mine !== run) return; }
+    try { events = T.match.play(move, salt); } catch (e) { if (!(e instanceof Refusal) || T.demo || !person) throw e; T.busy = false; toast("That cannot be done now."); return; }
     const words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
     // in a game by link, a move that rolled dice is final: nobody can look at the dice, take it back and choose again
     if (T.link && T.match.rolled) T.link.floor = T.match.list.length;
@@ -452,6 +458,7 @@ export function createTable(G) {
     if (T.match.turn === null) { if (T.demo) { await sleep(2500); if (mine === run && T.demo) attract(); } return; }
     if (T.human()) return;
     if (T.away()) { panel(); return; }
+    if (T.live.waits(T.match.turn)) { panel(); return; } // livelink hook: the other browser plays this seat
     T.busy = true;
     if (!T.demo) panel();
     const dice = chance(seedState(`${T.match.seed}/${T.match.list.length}`)), from = performance.now();
@@ -471,6 +478,7 @@ export function createTable(G) {
   /** The panel that hands the game to a friend. The link is made before it is asked for, so one press copies it. */
   let ready = null;
   function sendBox() {
+    if (T.live.on()) { send.hidden = true; return; } // livelink hook: no links to send while the browsers are joined
     const p = T.match.position, over = T.match.turn === null, on = !!T.link && !T.demo && !T.busy && T.kinds.includes("you") && (T.away() || over), mark = on ? `${T.link.id}/${T.match.list.length}` : "";
     send.hidden = !on;
     if (!on || ready?.mark === mark) return;
@@ -544,6 +552,7 @@ export function createTable(G) {
     go.type = "button"; go.onclick = () => { const v = t.value; closeSheet(); openLink(v); };
     if (T.link && !T.demo) box.append(el("p", ready?.url ? "This game is played by link. Its newest link is ready in the move panel." : "This game is played by link. The move panel offers the link when it is a friend's turn."));
     box.append(el("p", "To start one, choose \"A friend, by link\" for a player. Links hold the whole game. Without a password, anyone who has the link can read it. A friend set on cheating could try a turn more than once, so play with people you trust."), named, go);
+    box.append(...live.box()); // livelink hook
     for (const r of all) {
       let m;
       try { m = openSave(r.save, [G.game]).match; } catch { continue; }
@@ -558,7 +567,7 @@ export function createTable(G) {
   const linkSheet = () => sheet("Link games", linkBox(), "Back");
   /** Play out what happened since `from`, then go on. */
   async function catchUp(m, from) {
-    const mine = run, all = m.list, show = createMatch(G.game, { seed: m.seed, options: m.options });
+    const mine = run, all = m.list, show = createMatch(G.game, { seed: m.seed, options: m.options, salts: m.salts }); // livelink hook: salts
     for (const mv of all.slice(0, from)) show.play(mv);
     Object.assign(T, { match: show, busy: true, catching: true });
     G.changed?.(T);
@@ -595,13 +604,14 @@ export function createTable(G) {
     ready = null;
     skip.hidden = true;
     Object.assign(T, { demo: false, busy: false, catching: false, match: m, kinds: k, link });
+    live.begun(); // livelink hook
     real = null; storyN = 0;
     G.fresh?.(T);
     log = []; land = []; mark = -1; drawn = -1; fell = []; held = "";
     unbrief();
     $("status").textContent = ""; // nothing said in the last game lingers in this one
     $("toast").classList.remove("on");
-    const again = createMatch(G.game, { seed: m.seed, options: m.options });
+    const again = createMatch(G.game, { seed: m.seed, options: m.options, salts: m.salts }); // livelink hook: salts
     land.push(tally(again.position));
     m.list.forEach((mv, i) => { if (i === from) mark = log.length; log.push(...again.play(mv).map((e) => G.line(e, again.position)).filter(Boolean)); land.push(tally(again.position)); watch(again.position); });
     if (mark < 0) mark = log.length;
@@ -725,7 +735,7 @@ export function createTable(G) {
   const restart = () => begin(createMatch(G.game, { seed: seed(), options: T.match.options }), [...T.kinds], T.link ? { id: newId(), roles: T.kinds.map((x) => (x === "you" ? "host" : x === "away" ? "friend" : x)), pass: T.link.pass, floor: 0 } : null);
   const floor = () => (T.link ? T.link.floor : 0);
   // take back stops where hidden things were seen: a roll, a draw or a steal, and any other seat's move (a bot's turn), so it never shows what is coming
-  const undoable = () => (T.catching || T.busy || T.demo || realtime() || !T.match ? "none" : takeBack(T.match, T.kinds, floor()));
+  const undoable = () => (T.catching || T.busy || T.demo || realtime() || !T.match || T.live.on() ? "none" : takeBack(T.match, T.kinds, floor())); // livelink hook: live moves are final
   const canUndo = () => undoable() === "yes";
   function undo() {
     const why = undoable();
@@ -1000,7 +1010,7 @@ export function createTable(G) {
   apply();
   titleCard();
   resumeButton();
-  const arrive = () => { if (!location.hash.startsWith("#t=")) return; const text = location.hash; history.replaceState(null, "", location.pathname + location.search); openLink(text); };
+  const arrive = () => { if (live.arrive(location.hash)) { history.replaceState(null, "", location.pathname + location.search); return; } if (!location.hash.startsWith("#t=")) return; const text = location.hash; history.replaceState(null, "", location.pathname + location.search); openLink(text); }; // livelink hook: a reply for live play, or an invitation kept for later
   addEventListener("hashchange", arrive);
   attract();
   arrive();

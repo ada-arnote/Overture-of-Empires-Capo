@@ -50,13 +50,19 @@ export function readOptions(game, given = {}) {
   return out;
 }
 
-export function createMatch(game, { options = {}, seed = "" } = {}) {
+/** A salt mixes fresh chance into one move's dice: eight hex digits that two players drew together (src/core/session.js). */
+const SALT = /^[0-9a-f]{8}$/;
+
+/** salts: for each move, a salt or "" (a game played live); a replay passes the same list and rolls the same dice. */
+export function createMatch(game, { options = {}, seed = "", salts = [] } = {}) {
   checkGame(game);
+  if (!Array.isArray(salts) || salts.length > MAX_MOVES || salts.some((s) => s !== "" && !SALT.test(s))) throw new Refusal("shape", "those salts are not right");
+  const given = [...salts];
   const chosen = deepFreeze(readOptions(game, options)), theSeed = String(seed).slice(0, 200);
   const dice = chance(seedState(`${game.id}/${theSeed}`));
   const opening = deepFreeze(game.setup(chosen, dice));
   canon(opening); // a bad first position fails here, not ten moves later
-  const steps = [{ position: opening, dice: dice.state, events: [] }], played = [];
+  const steps = [{ position: opening, dice: dice.state, events: [] }], played = [], mixed = [];
   const now = () => steps[steps.length - 1];
 
   return {
@@ -66,22 +72,28 @@ export function createMatch(game, { options = {}, seed = "" } = {}) {
     get turn() { return game.turn(now().position); },
     get result() { return game.result(now().position); },
     get list() { return played.map((m) => structuredClone(m)); },
+    /** For each move, the salt its dice were mixed with, or "" (most moves: no salt, or no dice). */
+    get salts() { return [...mixed]; },
     legal() { return this.turn === null ? [] : game.moves(now().position); },
     isLegal(move) { const want = canon(move); return this.legal().some((m) => canon(m) === want); },
     fingerprint: () => fingerprint([game.id, game.version, chosen, now().position, now().dice]),
 
-    /** Play one move, or refuse it and change nothing. */
-    play(move) {
+    /** Play one move, or refuse it and change nothing. A salt, if any, mixes into this move's dice; else the one given at the start. */
+    play(move, salt = given[played.length] || "") {
       if (this.turn === null) throw new Refusal("over", "the game is over");
       if (played.length >= MAX_MOVES) throw new Refusal("long", "the list of moves is full");
       let copy;
       try { copy = JSON.parse(canon(move)); } catch (e) { throw new Refusal("shape", `that is not a move: ${e.message}`); }
       if (game.allows ? !game.allows(now().position, copy) : !this.isLegal(copy)) throw new Refusal("illegal", `that move is not allowed now: ${canon(copy).slice(0, 120)}`);
-      const d = chance(now().dice), made = game.apply(now().position, copy, d);
+      if (salt !== "" && !SALT.test(salt)) throw new Refusal("shape", "that salt is not right");
+      const before = now().dice, start = salt ? seedState(`${before.join(".")}/${salt}`) : before;
+      const d = chance(start), made = game.apply(now().position, copy, d), used = d.state.join() !== start.join();
       canon(made.position);
       canon(made.events || []);
-      steps.push({ position: deepFreeze(made.position), dice: d.state, events: deepFreeze(made.events || []) });
+      // a salt counts only where dice were thrown: a move without chance keeps the dice as they were, and no salt
+      steps.push({ position: deepFreeze(made.position), dice: used ? d.state : before, events: deepFreeze(made.events || []) });
       played.push(deepFreeze(copy));
+      mixed.push(used ? salt : "");
       return now().events;
     },
     /** Whether the last move rolled any dice. In a game between people such a move is not taken back. */
@@ -91,6 +103,7 @@ export function createMatch(game, { options = {}, seed = "" } = {}) {
       if (!played.length) return false;
       steps.pop();
       played.pop();
+      mixed.pop();
       return true;
     },
     /** The position after the first n moves. */
@@ -99,7 +112,7 @@ export function createMatch(game, { options = {}, seed = "" } = {}) {
       return steps[n].position;
     },
     save() {
-      return canon({ format: FORMAT, game: game.id, version: game.version, options: chosen, seed: theSeed, moves: played, end: this.fingerprint() });
+      return canon({ format: FORMAT, game: game.id, version: game.version, options: chosen, seed: theSeed, moves: played, ...(mixed.some(Boolean) ? { salts: mixed } : {}), end: this.fingerprint() });
     },
   };
 }
@@ -123,7 +136,8 @@ export function openSave(text, games) {
   if (typeof text !== "string" || text.length > MAX_FILE) throw new Refusal("file", "that file is too large or not text");
   let f;
   try { f = JSON.parse(text); } catch { throw notASave(); }
-  if (!f || typeof f !== "object" || Array.isArray(f) || Object.keys(f).sort().join() !== FIELDS.join()) throw notASave();
+  if (!f || typeof f !== "object" || Array.isArray(f) || Object.keys(f).filter((k) => k !== "salts").sort().join() !== FIELDS.join()) throw notASave();
+  if (f.salts !== undefined && (!Array.isArray(f.salts) || !Array.isArray(f.moves) || f.salts.length !== f.moves.length || !f.salts.every((s) => s === "" || SALT.test(s)))) throw notASave();
   if (f.format !== FORMAT) throw new Refusal("format", "this save was made by a different version of these games");
   if (!Array.isArray(f.moves) || f.moves.length > MAX_MOVES || typeof f.seed !== "string" || typeof f.end !== "string") throw notASave();
   if (!f.options || typeof f.options !== "object" || Array.isArray(f.options)) throw notASave();
@@ -131,7 +145,7 @@ export function openSave(text, games) {
   if (!game) throw new Refusal("game", "this copy does not have that game");
   if (game.version !== f.version) throw new Refusal("version", `this save needs version ${String(f.version).slice(0, 20)} of ${game.id}; this copy has ${game.version}`);
 
-  const match = createMatch(game, { options: f.options, seed: f.seed }), total = f.moves.length;
+  const match = createMatch(game, { options: f.options, seed: f.seed, salts: f.salts || [] }), total = f.moves.length;
   const fail = (code, index, message) => {
     if (whenReplayFails({ code, index, total }) === "keep") return { match, warning: `${message}. Kept ${index} of ${total} moves.` };
     throw new Refusal(code, message);
