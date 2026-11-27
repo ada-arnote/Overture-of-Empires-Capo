@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0d1623">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<title>The stacking game (early) · Overture of Empires: Capo</title>
+<link rel="stylesheet" href="table.css">
+<link rel="icon" href="icons/tent/mark.svg">
+<script src="source.js"></script>
+<style>
+/* the flat board: an SVG laid in the free part of the screen */
+#stage svg.flat { position: absolute; display: block; touch-action: manipulation; user-select: none }
+#stage svg.flat .cell { cursor: pointer }
+#stage svg.flat text { pointer-events: none; font: 700 11px var(--sans) }
+/* the tower strip: the stack you last touched, stone by stone, top first; then every tower on the board; then the pouches */
+#tower { margin: 0 0 var(--sp-2); padding: 8px 10px; border-radius: var(--r-1); background: var(--accent-wash, rgba(205, 216, 229, .08)); border-left: 3px solid var(--accent); font-size: var(--fs-2) }
+#tower .cap { margin: 0 0 4px } #tower[hidden] { display: none }
+#tower ol, #tower ul { list-style: none; padding: 0; margin: 0 }
+#tower ol li { display: flex; align-items: center; gap: 8px; min-height: 28px }
+#tower ol li + li { border-top: 1px solid var(--edge-soft) }
+#tower .tier { flex: none; width: 3.2em; color: var(--text-3); font-size: var(--fs-1); font-variant-numeric: tabular-nums }
+#tower .dot { flex: none; width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55) }
+#tower .acts { margin-left: auto; color: var(--text-3); font-size: var(--fs-1) }
+#tower details { margin-top: 6px } #tower summary { cursor: pointer; color: var(--text-2); min-height: 28px; line-height: 28px }
+#tower ul button { display: block; width: 100%; min-height: 34px; margin-top: 3px; padding: 3px 8px; text-align: left; font: inherit; font-size: var(--fs-1) }
+#tower .pouch { margin-top: 6px; color: var(--text-2); font-size: var(--fs-1) }
+.early { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; font-size: 12px; vertical-align: .2em; letter-spacing: var(--caps); text-transform: uppercase }
+@media (max-width: 820px) { #tower { padding: 6px 8px } #tower ol li { min-height: 24px } .shut:not(.side) #act #tower { display: none } }
+</style>
+</head>
+<body class="menu">
+<p id="broken" class="broken">If nothing happens, this copy was opened as a file. Open <b>play-stacking.html</b> from the dist folder instead.</p>
+<header id="bar" class="panel" hidden>
+  <button id="menu" type="button" class="icon" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  <div class="mid"><p id="round"></p>
+    <div id="land" role="img"><div id="fills"></div><i id="goal"></i></div></div>
+  <button id="look" type="button" class="icon" aria-label="Change the board's look"><svg viewBox="0 0 24 24"><path d="M3 9l9-5 9 5-9 5zM3 9v6l9 5 9-5V9M12 14v6"/></svg></button>
+</header>
+
+<main>
+<h1 class="sr play-h">The stacking game</h1>
+<div id="stage" aria-hidden="true"></div>
+<div class="shade" aria-hidden="true"></div>
+
+<ul id="seats" hidden aria-label="Players"></ul>
+
+<section id="act" class="panel" hidden aria-label="Your move">
+  <p id="status" role="status"></p>
+  <div id="tower" aria-label="The stack you last touched"></div>
+  <div id="choice">
+    <div class="pick strip" id="sources" role="radiogroup" aria-label="Which stone"></div>
+    <div class="pick strip" id="wheres" role="radiogroup" aria-label="What it does"></div>
+    <div class="go"><button id="do" type="button" class="main"></button></div>
+  </div>
+  <div id="after" hidden class="go"><button id="review" type="button" class="quiet">See the board</button><button id="again" type="button" class="main">Play again</button></div>
+</section>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<section id="title" class="title" aria-labelledby="title-h">
+  <p class="eyebrow">Overture of Empires: Capo</p>
+  <h1 id="title-h">The stacking<br>game <span class="early">Early</span></h1>
+  <p class="tag">Stack stones up to three high. Only the top stone acts, and taller stacks strike further. Trap the rival Lodestone to win.</p>
+  <div class="panel card">
+    <div class="go"><button id="resume" type="button" class="quiet" hidden>Continue</button><button id="quick" type="button" class="main">Play</button></div>
+    <p id="preset" class="about"></p>
+    <details id="own"><summary>Choose your own</summary>
+    <div class="line"><span>Rules</span><div class="pick small" id="style" role="radiogroup" aria-label="Rules"></div></div>
+    <p id="about" class="about"></p>
+    <div class="line"><span>Players</span><div class="pick small" id="count" role="radiogroup" aria-label="Players"></div></div>
+    <ul id="who"></ul>
+    <div class="line" id="length-line"><span>Length</span><div class="pick small" id="length" role="radiogroup" aria-label="Length"></div></div>
+    <div class="go"><button id="start" type="button" class="quiet">Begin</button></div>
+    </details>
+  </div>
+  <p class="links"><button type="button" class="text" id="how">How to play</button><button type="button" class="text" id="open">Open a saved game</button><a href="./" class="text">All games</a></p>
+</section>
+</main>
+
+<dialog id="sheet" class="panel" aria-labelledby="sheet-title"><h2 id="sheet-title"></h2><div id="sheet-body"></div><div class="go"><button type="button" class="main" id="sheet-close">Close</button></div></dialog>
+<input id="file" type="file" accept=".json,application/json" hidden>
+<footer id="foot"><span id="version"></span><span id="source"></span><span>AGPL-3.0</span></footer>
+<script type="module" src="stacking.js"></script>
+</body>
+</html>
