@@ -2,6 +2,23 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### The community shelf: scenarios, stories and replays players share (ruling 155, option D)
+
+**Players**
+- **Community shelf** on Capo's first screen (beside Open a scenario file) and in every table game's menu and title links. It lists what players have shared, with who made it, its licence and its date, and opens it in one press: a Capo scenario joins the list of starts, a Capo story opens as your game to play on from where it stands, a table-game replay opens at its end so you can step through it move by move (or play on, if it is unfinished). An entry made from another names it.
+- **Share to the shelf.** In Capo's Game menu, under Save the world as a scenario, and as Share this story; in each table game's menu once a move is made. Give it a title, a line, the name it goes by (any name you choose) and a licence (CC BY 4.0 or CC0), and the game saves a shelf file and says how to offer it on GitHub with your own account. A story leaves out your chats with the AI and the counsel you asked for. The page never sends anything.
+- Three entries of our own to start: a Nordic winter scenario, a fork of it three months on, and a Fable replay between three bots.
+- Capo's "Finding others' scenarios: coming soon" line is gone: it is here.
+
+**Contributors**
+- `shelf/`: one JSON file an entry and `index.json`, served by Pages and read by the pages from their own site. `src/story/shelf.js` (new): the format and its checks (shape, fields, sizes, CC BY or CC0, the hard line, no web or email addresses, keys included), `makeEntry`, `storyOf`, `cardOf`, `readIndex`. `site/shelf.js` (new): `shelfView` and `shareView`.
+- `tools/shelf.mjs` (new): the shelf's gate. Every file passes the format check, then the game's own readers: a scenario's check on the map it is set on with every part kept, a saved Capo game's check, and a replay played again from seed and moves to the end and winners it claims. A replay made under older rules of its game is a note and is shown but not opened. `node tools/shelf.mjs` writes the index; a passing file not in the index yet is a note, so an offer's own pull request passes. `tools/check.mjs` runs it.
+- Marked "shelf hook" lines: `site/game.js` (`takeScenario`, now shared by files and the shelf, `takeStory`, `shelfStart`, `shelfSheet`), `site/table.js` (`openSaved`, now shared by files and the shelf, `shelf`, `share`), `src/story/scenarios.js` (`SOON` empty), `site/table.css`, `tools/serve.mjs` (serves `shelf/`), `tools/bundle.mjs` (served table pages keep `connect-src 'self'` to read the shelf; double-click pages still reach nothing).
+- `CONTRIBUTING.md` (new): how to make, offer and take a shelf entry. `.github/ISSUE_TEMPLATE/shelf.yml` (new): an offer form that takes the file.
+- `test/shelf.test.mjs` (8 tests). Site code 249.8 to 252 kB compressed.
+
 ## v0.9.6 (2026-11-27): Capo's world map, closer in
 
 ### Capo's lit map: pips, mission pins, cities and towns, dressing, sharper relief, lit lakes

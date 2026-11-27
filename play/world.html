@@ -336,6 +336,17 @@ body.side #toast { top: calc(var(--bar-b, 56px) / var(--ui-scale) + 50px); botto
 /* reduced motion: the system's wish, or the player's in Settings */
 .still * { transition: none !important } .still #dice svg, .still #coach-ring { animation: none }
 @media (prefers-reduced-motion: reduce) { #coach-ring { animation: none } }
+
+/* shelf hook: the community shelf, in Capo's first screen and Game menu and in each table game's menu (site/shelf.js) */
+.shelf-list { list-style: none; padding: 0 !important; margin: 8px 0 12px; display: grid; gap: 8px }
+.shelf-list li { display: grid; gap: 4px; padding: 10px 12px; margin: 0 !important; border: 1px solid var(--edge-soft); border-radius: var(--r-1); background: var(--raise) }
+.shelf-list p { margin: 0 !important; font: 15px/1.45 var(--serif); color: var(--text-2) }
+.shelf-head b { display: block; font: 400 var(--fs-5)/1.2 var(--display); color: var(--text) } .shelf-head small, .shelf-facts, .shelf-say { color: var(--text-3); font-size: var(--fs-1) } .shelf-say:empty { display: none } .shelf-say { color: var(--danger) }
+.shelf-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0 } .shelf-row > .main { flex: 0 1 auto; min-width: 120px } .shelf-row a { text-align: center }
+.shelf-field { display: grid; gap: 4px; margin: 0 0 10px; color: var(--text-3); font-size: var(--fs-2) } .shelf-field .field { width: 100%; box-sizing: border-box }
+.shelf-licence { border: 0; padding: 0; margin: 0 0 10px; display: grid; gap: 6px } .shelf-licence legend { padding: 0; margin-bottom: 4px; color: var(--text-3); font-size: var(--fs-2) }
+.shelf-licence label, .shelf-own { display: flex; gap: 10px; align-items: flex-start; color: var(--text); font-size: var(--fs-2) } .shelf-licence input, .shelf-own input { accent-color: var(--accent); margin-top: 3px; flex: none }
+.shelf-own { margin: 4px 0 8px } .shelf-steps ol { padding-left: 20px; margin: 6px 0 } .shelf-steps li { margin-bottom: 6px; font-size: var(--fs-2) }
 </style>
 <link rel="icon" href="../site/icons/tent/mark.svg">
 <style>

@@ -1,0 +1,26 @@
+# An offer to the community shelf (ruling 155): the player attaches a shelf file the game made. See CONTRIBUTING.md.
+name: Offer to the shelf
+description: Offer a Capo scenario, a Capo story or a table-game replay to the community shelf.
+title: "Shelf: "
+labels: ["shelf"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Make the file in the game first (Share to the shelf), then attach it below. Everything in it will be public: leave out your own name, where you live and anything else about you. The rules for entries are in CONTRIBUTING.md.
+  - type: textarea
+    id: file
+    attributes:
+      label: The shelf file
+      description: Drag the .json file the game saved into this box, or paste its contents.
+    validations:
+      required: true
+  - type: checkboxes
+    id: mine
+    attributes:
+      label: Yours to offer
+      options:
+        - label: I made this, and I offer it under the licence named in the file (CC BY 4.0 or CC0).
+          required: true
+        - label: It holds no personal details about me or anyone else.
+          required: true

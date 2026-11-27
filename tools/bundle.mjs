@@ -67,7 +67,7 @@ export function assets(text, home, from) {
 
 export function page(html, css, js, home = "", fetches = false, from = path.join(root, "site")) {
   const safe = assets(js, home, from).replace(/<\/script/gi, "<\\/script"), hash = createHash("sha256").update(`\n${safe}\n`).digest("base64");
-  // a page that fetches keeps the addresses it may reach (its own site for map data, an AI for the story); the games reach nothing
+  // a page that fetches keeps the addresses it may reach (its own site for map data, an AI for the story); served table games their own site only, for the community shelf; a double-click game reaches nothing
   const reach = html.match(/connect-src ([^;"]*)/)?.[1]?.trim() || "", talk = fetches && reach ? ` connect-src ${reach};` : "";
   // served pages load fonts, pictures and sounds from their own site; the double-click page carries them inside, as data:
   const own = home ? "'self'" : "data:", img = home ? "'self' data:" : "data:";
@@ -87,7 +87,7 @@ if (process.argv[1]?.endsWith("bundle.mjs")) {
     const raw = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`, stamp = createHash("sha256").update(raw).digest("hex").slice(0, 8);
     const fetches = ["world", "game"].includes(name), js = raw.replace('const BUILD = "dev";', `const BUILD = "${stamp}";`), text = page(at(`${name}.html`), at("table.css"), js, "", fetches);
     mkdirSync(path.join(root, "play"), { recursive: true });
-    writeFileSync(path.join(root, "play", `${name}.html`), page(at(`${name}.html`), at("table.css"), js, "../site/", fetches));
+    writeFileSync(path.join(root, "play", `${name}.html`), page(at(`${name}.html`), at("table.css"), js, "../site/", true)); // shelf hook: a served page may read its own site (the community shelf); the double-click page reaches nothing
     writeFileSync(path.join(out, `play-${name}.html`), text);
     console.log(`dist/play-${name}.html, ${Math.round(text.length / 1000)} kB. Open it by double-click.`);
   }

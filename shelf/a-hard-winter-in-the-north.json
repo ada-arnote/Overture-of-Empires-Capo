@@ -1,0 +1,63 @@
+{
+ "kind": "capo-shelf",
+ "v": 1,
+ "made": "2026-11-27",
+ "by": "Capo",
+ "licence": "CC0-1.0",
+ "id": "a-hard-winter-in-the-north",
+ "type": "scenario",
+ "game": "capo",
+ "title": "A Hard Winter in the North",
+ "about": "Our own example: a Nordic winter that tests four trade and defence pacts. Play any country; the North is where the story is.",
+ "data": {
+  "kind": "capo-scenario",
+  "v": 1,
+  "fiction": "Fiction: a starting point for a story game. Not news and not a forecast.",
+  "owners": {},
+  "wars": [],
+  "might": {},
+  "custom": null,
+  "id": "shelf-a-hard-winter",
+  "title": "A Hard Winter in the North",
+  "start": "2027-01-15",
+  "blurb": "The Baltic freezes early and the North must feed itself. Trade pacts hold the region together, for now.",
+  "opening": "Fiction. The winter of 2027 comes early and stays. Ice closes the Baltic ports weeks before anyone planned for it, fuel and grain run short, and the countries of the North lean on one another as they have not done in a generation. Every pact will be tested before the thaw.",
+  "treaties": [
+   {
+    "pair": "NOR|SWE",
+    "kind": "trade"
+   },
+   {
+    "pair": "FIN|SWE",
+    "kind": "trade"
+   },
+   {
+    "pair": "EST|FIN",
+    "kind": "trade"
+   },
+   {
+    "pair": "DNK|NOR",
+    "kind": "defence"
+   }
+  ],
+  "rel": {
+   "NOR|SWE": 2,
+   "FIN|SWE": 2,
+   "EST|FIN": 1,
+   "DNK|NOR": 1,
+   "FIN|RUS": -2,
+   "EST|RUS": -2
+  },
+  "facts": [
+   {
+    "text": "Ice closed the Baltic ports of Finland, Estonia and northern Sweden in early January, weeks earlier than in any recent year."
+   },
+   {
+    "text": "Fuel and grain are rationed in Finland and Estonia; Norway's ice-free ports carry most of the region's imports."
+   },
+   {
+    "text": "Every leader in this story is an invented person, named by office only."
+   }
+  ]
+ }
+}

@@ -35,6 +35,9 @@ import { fatten, slim } from "../src/story/keep.js";
 import { keepMissions, missionBox, missionReports, rosterRows } from "./missions.js";
 import { unfit } from "../src/story/roster.js";
 import { AI_RULES, acceptStep, accepted, fictionCopy, fictionTag } from "./accept.js";
+// shelf hook: the community shelf, to browse and open scenarios and stories and to share your own (site/shelf.js, ruling 155)
+import { shareView, shelfView } from "./shelf.js";
+import { storyOf } from "../src/story/shelf.js";
 
 const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);
@@ -281,6 +284,41 @@ function viewColour(code) {
   return RELATION[t?.kind || "none"];
 }
 
+// ---- shelf hook: the community shelf (site/shelf.js, src/story/shelf.js, ruling 155) ----
+/** A scenario from a file or the shelf, checked against the world it is set on, then kept beside the built-in ones and chosen. */
+async function takeScenario(raw) {
+  if (!(await enter(raw?.world))) { toast("That scenario is set on a world that could not be read."); return choose(draft.scenario); }
+  const r = checkScenario(raw, (c) => homes.has(c), (id) => world.provinces.has(id)), why = !r.ok ? r.why : crossesLine(scenarioText(r.scenario)).length ? "That scenario is refused: nothing sexual involving minors." : "";
+  if (why) { toast(why); return choose(draft.scenario); }
+  shelve([...shelf().filter((x) => x.id !== r.scenario.id), r.scenario]); toast(`Opened: ${r.scenario.title}.`); return choose(r.scenario.id);
+}
+/** A story from the shelf: a game checked as a saved file is, then yours to play on from where it stands (a fork). */
+function takeStory(raw, id) {
+  const go = async () => {
+    const g = (await enter(raw?.world)) && checkSave(raw);
+    if (!g) { toast("That story could not be read."); return draft ? choose(draft.scenario) : enter(); }
+    state = { ...g, shelf: id }; past = []; draft = null; save();
+    $("start").classList.remove("open"); map.refresh(); play(); toast(convertNote(raw) || "Opened from the shelf. It is yours now: play on from here, or read its chronicle in the Ledger.");
+  };
+  if (load()?.state) sure("Open this story? It takes the place of the game kept in this browser. Save that one to a file first to keep it.", "Open the story", go); else go();
+}
+/** The shelf entry the game in hand came from, if any: a story opened from it, or the scenario it began with. */
+const shelfFrom = () => state?.shelf || (String(state?.scenario || "").startsWith("shelf-") ? state.scenario.slice(6) : undefined);
+/** The shelf, in place of the first screen's wizard; Back returns to it. */
+function shelfStart() {
+  const box = $("start-box"), back = el("div", undefined, "row");
+  back.append(button("Back", startScreen, "go"));
+  box.replaceChildren(el("p", "Overture of Empires", "eyebrow"), el("h2", "Community shelf"), shelfView({ game: "capo", open: (e) => (e.type === "story" ? takeStory(e.data, e.id) : takeScenario({ ...e.data, id: `shelf-${e.id}` })), share: "Share your own from the Game menu once you play: Share to the shelf, under the scenario, or Share this story." }), back);
+  land(box.querySelector("h2"));
+}
+let sharing = null; // what the Share sheet offers, set by the button that opens it
+function shelfSheet(box) {
+  const back = el("div", undefined, "row");
+  back.append(button("Back to the Game menu", () => open("game")));
+  box.append(el("h2", "Share to the shelf"), sharing ? shareView(sharing) : el("p", "Nothing to share.", "note"), back);
+}
+// ---- end of the shelf hook ----
+
 // ---- the first screen: a wizard, as in the original: scenario, country, you, begin ----
 const PALETTE = ["#c9553f", "#d9a43a", "#4f9a6b", "#3f7fb5", "#8a5fb5", "#c46a9a", "#5fb3b0", "#b07a43", "#6f8f3a", "#a33f5f", "#4a5fa8", "#d07f50"];
 const blankCharacter = () => Object.fromEntries(CHARACTER.map(([k]) => [k, ""]));
@@ -318,11 +356,11 @@ function stepScenario(box) {
   let head = "";
   for (const s of allScenarios()) {
     // the two present-day starts lead with no heading; the rest go under a heading for each kind
-    const l = el("label"), r = el("input"), t = el("span"), opened = mine.some((x) => x.id === s.id), lead = s.id === FIRST || SCENARIOS.includes(s), kind = opened ? "Opened from files" : lead ? "" : KINDS[s.kind] || "";
+    const l = el("label"), r = el("input"), t = el("span"), opened = mine.some((x) => x.id === s.id), lead = s.id === FIRST || SCENARIOS.includes(s), kind = opened ? "Opened from files and the shelf" : lead ? "" : KINDS[s.kind] || "";
     if (kind !== head && (head = kind)) list.append(el("h3", kind)); // presets hook: a heading for each kind of start
     Object.assign(r, { type: "radio", name: "scenario", value: s.id, checked: s.id === draft.scenario });
     r.onchange = () => choose(s.id);
-    t.append(el("b", s.title), el("small", `${s.alt ? "Fiction. " : ""}${s.blurb || ""}${opened ? ` From a file; starts ${fmtDate(s.start)}.` : ""}`));
+    t.append(el("b", s.title), el("small", `${s.alt ? "Fiction. " : ""}${s.blurb || ""}${opened ? ` From ${s.id.startsWith("shelf-") ? "the community shelf" : "a file"}; starts ${fmtDate(s.start)}.` : ""}`)); // shelf hook: where it came from
     l.append(r, t);
     if (opened) l.append(button("Remove", () => { shelve(shelf().filter((x) => x.id !== s.id)); if (draft.scenario === s.id) return choose(firstId()); startScreen(); }));
     list.append(l);
@@ -335,12 +373,9 @@ function stepScenario(box) {
     if (raw?.kind === "capo-pack") return openPack(raw); // plugins hook
     // presets hook: a setting file becomes a scenario on its own world; a scenario is checked against the world it is set on
     if (raw?.kind === "capo-setting") { const c = checkSetting(raw); if (!c.ok) return toast(c.why); raw = { ...settingScenario(c.setting, "first"), kind: "capo-scenario", v: 1, id: `file-${c.setting.id}` }; }
-    if (!(await enter(raw?.world))) return toast("That scenario is set on a world that could not be read.");
-    const r = checkScenario(raw, (c) => homes.has(c), (id) => world.provinces.has(id)), why = !r.ok ? r.why : crossesLine(scenarioText(r.scenario)).length ? "That scenario is refused: nothing sexual involving minors." : "";
-    if (why) { toast(why); return choose(draft.scenario); }
-    shelve([...shelf().filter((x) => x.id !== r.scenario.id), r.scenario]); toast(`Opened: ${r.scenario.title}.`); choose(r.scenario.id);
+    return takeScenario(raw); // shelf hook: the same way in as a scenario from the shelf
   };
-  const openRow = el("div", undefined, "row"); openRow.append(button("Open a scenario file", () => file.click()), file);
+  const openRow = el("div", undefined, "row"); openRow.append(button("Open a scenario file", () => file.click()), button("Community shelf", shelfStart), file); // shelf hook
   for (const [title, what] of SOON) { const l = el("label"), t = el("span"); l.style.opacity = ".55"; t.append(el("b", `${title}: coming soon`), el("small", what)); l.append(t); list.append(l); }
   const sa = scen(), about = el("div");
   if (sa.alt) about.append(el("h3", `${sa.title}: ${fmtDate(sa.start)}`), el("p", sa.opening, "note"), el("p", `Where history turned. ${sa.alt.turn}`, "note"), ...(sa.balance ? [el("p", `How it is balanced. ${sa.balance}`, "note")] : []),
@@ -544,7 +579,7 @@ function open(which) {
   if (!which) { box.classList.remove("open"); land(was === "game" ? $("top").querySelector("button[aria-label^=Game]") : $("dock").children[DOCK.findIndex(([k]) => k === was)]); return; }
   if (which === "ledger" && state.seen !== state.turn) { state.seen = state.turn; save(); dock(); }
   box.replaceChildren();
-  ({ actions, chats, ledger, advisors, master, game: gameSheet, ...moreSheets(X) }[which])(box); // features hook: the country sheet and the scene
+  ({ actions, chats, ledger, advisors, master, game: gameSheet, shelf: shelfSheet, ...moreSheets(X) }[which])(box); // shelf hook: shelfSheet // features hook: the country sheet and the scene
   if (which === "actions") box.prepend(...notices(X)); // features hook: a converted game's note, a demand on you, the ambition nudge
   const head = el("div", undefined, "head"), title = box.querySelector("h2"), shut = button("", () => open(null), "ic");
   shut.append(icon("close")); shut.setAttribute("aria-label", "Close");
@@ -1003,6 +1038,7 @@ function gameSheet(box) {
   saves.append(button(past.length ? `Take back ${past[past.length - 1].why}` : "Take back the last turn", () => { if (!past.length) return toast("Nothing to take back."); state = restore(past.pop()); save(); topBar(); open("game"); map.refresh(); }),
     button("Save to a file", () => { const a = el("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: "application/json" })); a.download = `capo-${state.player}-turn-${state.turn}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }),
     button("Open a file", () => sure("Open a saved game? It takes the place of this one. Save this one to a file first to keep it.", "Choose a file", () => file.click())),
+    button("Share this story", () => { sharing = { type: "story", game: "capo", data: storyOf(state), title: `${state.custom?.name || name(state.player)}, ${fmtDate(state.date)}`, about: "", from: shelfFrom(), what: "this story, as far as it has gone (your chats with the AI and the counsel you asked for are left out)" }; open("shelf"); }), // shelf hook
     button("New game", () => sure("Leave this game? It stays saved until you begin another.", "Leave", () => { open(null); $("top").hidden = true; $("dock").hidden = true; state = null; draft = null; enter().then(() => { map.refresh(); startScreen(); }); })));
   const sTitle = Object.assign(el("input", undefined, "plain"), { type: "text", maxLength: 60, placeholder: "Title, for example: The Andean War of 2027" });
   const sBlurb = Object.assign(el("input", undefined, "plain"), { type: "text", maxLength: 200, placeholder: "One line on what it is" });
@@ -1016,6 +1052,10 @@ function gameSheet(box) {
     const a = el("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(s)], { type: "application/json" }));
     a.download = `capo-scenario-${s.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "untitled"}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     toast("Saved. Open it from the first screen, or share the file.");
+  }), button("Share to the shelf", () => { // shelf hook: the same scenario, as a shelf file
+    const s = scenarioFrom(state, { title: sTitle.value, blurb: sBlurb.value, opening: sOpen.value, beats: state.script });
+    if (!s.title) return toast("Give the scenario a title.");
+    sharing = { type: "scenario", game: "capo", data: s, title: s.title, about: s.blurb, from: shelfFrom(), what: "this world as a scenario" }; open("shelf");
   }));
   const again = el("div", undefined, "row"); again.append(button("Show the guide", () => { open(null); guide(0); }));
   box.append(el("h2", "Game"), home(), again, el("h3", "Your game"), el("p", `Kept in this browser. ${past.length} turn${past.length === 1 ? "" : "s"} can be taken back. A turn with a settled attack, played again, draws fresh numbers and is marked in the chronicle.`, "note"), saves, file, ...keep.rows(state, past), // phase 4 hook: the save's size, the room left, the save promise

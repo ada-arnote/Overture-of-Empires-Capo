@@ -1,0 +1,69 @@
+{
+ "kind": "capo-shelf",
+ "v": 1,
+ "made": "2026-11-27",
+ "by": "Capo",
+ "licence": "CC0-1.0",
+ "id": "a-hard-winter-the-thaw",
+ "type": "scenario",
+ "game": "capo",
+ "title": "A Hard Winter: the Thaw",
+ "about": "Our own example of a fork: the same North three months on, made from A Hard Winter in the North.",
+ "from": "a-hard-winter-in-the-north",
+ "data": {
+  "kind": "capo-scenario",
+  "v": 1,
+  "fiction": "Fiction: a starting point for a story game. Not news and not a forecast.",
+  "owners": {},
+  "wars": [],
+  "might": {},
+  "custom": null,
+  "id": "shelf-a-hard-winter-the-thaw",
+  "title": "A Hard Winter: the Thaw",
+  "start": "2027-04-01",
+  "blurb": "Made from A Hard Winter in the North. The ice breaks, the ports open, and the North counts what the winter cost.",
+  "opening": "Fiction. The thaw comes late but all at once. The ports reopen, the ration cards are put away, and the pacts that held through the winter become something more: Norway and Sweden talk openly of an alliance, and every capital in the region asks who stood by it and who did not.",
+  "treaties": [
+   {
+    "pair": "NOR|SWE",
+    "kind": "alliance"
+   },
+   {
+    "pair": "FIN|SWE",
+    "kind": "trade"
+   },
+   {
+    "pair": "EST|FIN",
+    "kind": "defence"
+   },
+   {
+    "pair": "DNK|NOR",
+    "kind": "defence"
+   },
+   {
+    "pair": "DNK|SWE",
+    "kind": "trade"
+   }
+  ],
+  "rel": {
+   "NOR|SWE": 3,
+   "FIN|SWE": 2,
+   "EST|FIN": 2,
+   "DNK|NOR": 2,
+   "DNK|SWE": 1,
+   "FIN|RUS": -2,
+   "EST|RUS": -2
+  },
+  "facts": [
+   {
+    "text": "The winter of 2027 closed the Baltic ports for eleven weeks; Norway's ports and Swedish rail carried the region through it."
+   },
+   {
+    "text": "Norway and Sweden have begun talks on a full alliance, the first in their modern history."
+   },
+   {
+    "text": "Every leader in this story is an invented person, named by office only."
+   }
+  ]
+ }
+}

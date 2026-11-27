@@ -156,6 +156,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const card = await import("./report.mjs"), v = card.verdict(card.sweep({ seeds: 2 }));
     r.bad.push(...v.bad);
     r.note.push(...v.note);
+    const shelf = (await import("./shelf.mjs")).checkShelf(root); // shelf hook: every shared entry passes the shelf's rules and the game's own readers (ruling 155)
+    r.bad.push(...shelf.bad);
+    r.note.push(...shelf.note);
   }
   for (const n of r.note) console.log("note  " + n);
   for (const b of r.bad) console.log("STOP  " + b);
