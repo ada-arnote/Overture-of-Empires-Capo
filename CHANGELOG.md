@@ -2,6 +2,23 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Brass and Banners: nobody is knocked out in Capo
+
+**Players**
+- **The last stand.** In Capo a player's last province cannot be attacked, so nobody is put out. Whoever is driven back to one province keeps it, keeps their points, places there every turn (3 at least) and can break out again. Every Capo game now runs its ten rounds and is decided on points, unless someone holds 65% of the land, which still wins at once. Before, 92 in 100 two-player Capo games between bots ended by a knockout before round 10; now 92 in 100 are decided on points and none by a knockout.
+- The log says when a player is down to their last province, the province's description says so, and tapping it to attack explains why you cannot. How to play has a paragraph on the last stand; the card rules for putting a player out are left out where nobody can be.
+- Custom has the rule as a switch, Last province: "Lose it and you are out" (as before) or "It cannot be attacked: nobody is out". Traditional is unchanged.
+- With secret goals and the last stand, nobody is dealt "put a rival out".
+
+**Contributors**
+- Banners rules are version 8: the `last` switch (`out` or `stands`, normal `out`; Capo `stands`, Traditional `out`), `stands(p, at)`, and the `stand` event (`seat`, `at`, `by`) when a take leaves a seat one province. Attacks on a standing province are not offered; bots skip them and no longer value pushing a seat towards a knockout that cannot happen. Saves and links from version 7 do not open as version 8 (the game says which version they need). Games stay whole-number and replay from seed and moves.
+- Fairness, `node tools/fair.mjs banners`, 1,000 normal-bot games a seat count, wins by seat in %: Capo 51.9 / 48.1 (2), 34.9 / 32.4 / 32.7 (3), 25.6 / 24.0 / 28.4 / 21.8 (4), 18.2 / 21.3 / 19.1 / 20.1 / 21.3 (5), 14.0 / 12.3 / 18.2 / 16.9 / 17.6 / 20.6 (6); widest gaps 3.8, 2.5, 6.6, 3.1, 8.3. At 4,000 games: 0.7 (2), 0.9 (4), 6.2 (6), the later seats ahead at six. Traditional is the same table as version 7, game for game.
+- How Capo games end, version 7 then 8: on points 7% then 92% (2 seats), 18% then 80% (3), 26% then 58% (4), 41% then 93% (5), 47% then 98% (6); by knockout 92, 66, 20, 11 and 3% then none; the rest on 65% of the land. Median length 6, 8, 9, 10, 10 rounds, now all ten at every seat count (the tenth-percentile game ends in round 9 at three and four seats, on land).
+- Comebacks, 400 games a row: a seat makes a last stand in 95% of two-seat games and breaks back out to four provinces or more in 90%; a seat that made a stand went on to win 19% of duels. The hard bot's edge over the normal bot in a Capo duel is 51% of 600 games (55% under version 7).
+- `test/banners.test.mjs`: the last stand as a rule (offered moves, every bot tier, the event, secret goals) and bot games that run their rounds; knockout tests now set the rule they test.
+
 ## v0.9.5 (2026-11-27): dice that roll, armies that march, and sound
 
 ### The table games move and sound

@@ -23,12 +23,13 @@ export const SWITCHES = {
   spoils: { values: ["trade", "wait"], normal: "trade" }, // trade: put a player out, take their cards, and hand in at once while you hold five or more
   score: { values: ["land", "rounds"], normal: "land" }, // rounds: from round 2 each seat scores what it holds at the start of its turn, and once more at the end; the most points wins when the rounds run out
   luck: { values: ["fair", "bag"], normal: "fair" }, // bag: every die is drawn from an open bag of throws (see BAG), so each face comes up as often as the others
+  last: { values: ["out", "stands"], normal: "out" }, // stands: a player's last province cannot be attacked, so nobody is put out and the game runs its rounds
 };
 /** The bag of throws: six of each face. A die is drawn from what is left; when fewer than LOW are left, a fresh set goes in. */
 export const BAG = { each: 6, low: 12 };
 const SETS = {
-  classic: { start: "dealt", dice: "standard", muster: "floor", cards: "rising", goal: 100, rounds: 0, neutral: 2, order: "fixed", opening: "lean", spoils: "trade", score: "land", luck: "fair" },
-  ours: { start: "far", dice: "even", muster: "plus", cards: "flat", goal: 65, rounds: 10, neutral: 3, order: "fixed", opening: "grade", spoils: "wait", score: "rounds", luck: "fair" },
+  classic: { start: "dealt", dice: "standard", muster: "floor", cards: "rising", goal: 100, rounds: 0, neutral: 2, order: "fixed", opening: "lean", spoils: "trade", score: "land", luck: "fair", last: "out" },
+  ours: { start: "far", dice: "even", muster: "plus", cards: "flat", goal: 65, rounds: 10, neutral: 3, order: "fixed", opening: "grade", spoils: "wait", score: "rounds", luck: "fair", last: "stands" },
 };
 export const EXPANSIONS = ["forts", "leaders", "capitals", "secrets", "events"];
 const off = { values: [false, true], normal: false };
@@ -40,6 +41,8 @@ export const goalOf = (p) => Math.ceil((p.owner.length * p.rule.goal) / 100);
 export const nameOf = (p, i) => boardOf(p).names[i];
 export const suitOf = (p, card) => (card >= p.owner.length ? WILD : card % 3);
 const mineOf = (p, s) => p.owner.flatMap((o, i) => (o === s ? [i] : []));
+/** The last stand: under `last: "stands"` a player's only province cannot be attacked. Nobody is put out; they hold on and muster there. */
+export const stands = (p, at) => p.rule.last === "stands" && p.owner[at] !== NONE && cellsOf(p, p.owner[at]) === 1;
 const living = (p) => Array.from({ length: p.seats }, (_, s) => s).filter((s) => p.owner.includes(s));
 
 /** Places that can be reached from a place now. In a storm nobody crosses water. */
@@ -270,6 +273,7 @@ function fight(p, m, dice, events) {
   if (p.leaders && was !== NONE && p.leaders[was] === m.to) { p.leaders[was] = NONE; p.back[was] = p.round + 2; events.push({ kind: "leaderlost", seat: was, by: s }); }
   const knocked = was !== NONE && !p.owner.includes(was);
   if (knocked) out(p, was, s, events);
+  else if (was !== NONE && stands(p, p.owner.indexOf(was))) events.push({ kind: "stand", seat: was, at: p.owner.indexOf(was), by: s }); // down to its last province, which nobody can attack
   settle(p, events);
   if (p.over) return;
   if (p.str[m.from] > 1) { p.phase = "occupy"; p.pend = { from: m.from, to: m.to, ...(knocked ? { out: was } : {}) }; return; }
@@ -281,7 +285,7 @@ function fight(p, m, dice, events) {
 export const amounts = (n) => Array.from({ length: Math.max(0, n) }, (_, i) => i + 1);
 
 export const banners = {
-  id: "banners", version: "7",
+  id: "banners", version: "8",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 4 }, map: { values: MAPS, normal: "world" },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
@@ -298,7 +302,7 @@ export const banners = {
     if (o.events) p.event = "calm";
     if (o.secrets) {
       const lands = b.lands.map((_, k) => k), pairs = lands.flatMap((x) => lands.filter((y) => y > x && b.sizes[x] + b.sizes[y] >= b.n / 6 && b.sizes[x] + b.sizes[y] <= b.n / 3.4).map((y) => [x, y]));
-      const all = dice.shuffle([...dice.shuffle(pairs).slice(0, 5).map((x) => ({ kind: "lands", lands: x })), { kind: "share", many: Math.ceil((b.n * 45) / 100) }, { kind: "strong", many: Math.ceil((b.n * 30) / 100) }, ...Array.from({ length: o.seats > 2 ? o.seats : 0 }, (_, s) => ({ kind: "rival", seat: s }))]);
+      const all = dice.shuffle([...dice.shuffle(pairs).slice(0, 5).map((x) => ({ kind: "lands", lands: x })), { kind: "share", many: Math.ceil((b.n * 45) / 100) }, { kind: "strong", many: Math.ceil((b.n * 30) / 100) }, ...Array.from({ length: o.seats > 2 && rule.last !== "stands" ? o.seats : 0 }, (_, s) => ({ kind: "rival", seat: s }))]);
       p.goals = Array.from({ length: o.seats }, (_, s) => { const k = all.findIndex((g) => g.kind !== "rival" || g.seat !== s); return all.splice(k, 1)[0]; });
     }
     if (rule.start === "far") {
@@ -331,7 +335,7 @@ export const banners = {
       return [...place(), ...sets, ...(p.forts && p.left >= FORT ? mine.filter((at) => !p.forts[at]).map((at) => ({ do: "fort", at })) : [])];
     }
     const truce = p.rule.opening === "truce" && p.round === 1; // the first round is for placing, not striking
-    if (!truce) for (const from of mine) if (p.str[from] > 1) for (const to of nearOf(p, from)) if (p.owner[to] !== s) out.push({ do: "attack", from, to, roll: "once" }, { do: "attack", from, to, roll: "all" });
+    if (!truce) for (const from of mine) if (p.str[from] > 1) for (const to of nearOf(p, from)) if (p.owner[to] !== s && !stands(p, to)) out.push({ do: "attack", from, to, roll: "once" }, { do: "attack", from, to, roll: "all" });
     for (const from of mine) {
       if (p.str[from] < 2) continue;
       const seen = new Set([from]), list = [from];
