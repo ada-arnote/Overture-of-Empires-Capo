@@ -2,6 +2,19 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### An era for Brass and Banners (ruling 154)
+
+**Players**
+- **Era** in Brass and Banners: Ancient, Medieval, Gunpowder (the look so far, and still the start), Industrial or Modern. It chooses which sculpted pieces stand on the board in 3D: Roman legionaries with a general and ballistae, knights, redcoats with cannon, French infantry of 1870, or Vietnam-era marines. Where an era has no sculpted piece for a role, the piece made in code stands. Choose it under Choose your own or in Settings; it takes effect at once and this browser remembers it. Looks only: the rules, links and saved games are the same in every era, and each player sees the era they chose.
+- Three more sculpted pieces on the shelf, each fetched only when a board shows it: "French Infantry - Franco-Prussian War", "US Marine T pose - Vietnam" and "Roman Ballista - free game asset", all by Andy Woodhead, CC BY 4.0, credited in About.
+
+**Contributors**
+- `site/models/`: `fusilier.bin`, `marine.bin`, `ballista.bin` (31 to 32 kB each, 93 kB in all), no longer held in `tools/figures.json`; `src/map/shelf.js`, `CREDITS.csv` and `NOTICES.md` written again by `tools/models.mjs --records`. The four Jaca scans stay held (ruling 150).
+- Marked "era hook" lines: `site/banners.js` (the setting, kept as `capo-banners-era`), `src/map/board.js` (`setEra`), `site/hexboard.js` (`setEra`), `site/table.js` (a choice the game keeps itself, with `get` and `set`, changes the looks without restarting the game behind the title; `G.settings`, a game's own rows in Settings). No rules version change.
+- `test/models.test.mjs`: each era's soldier is on the shelf, the ancient gun is the ballista, and no era stands a Jaca scan.
+
 ## v0.10.2 (2026-11-27): play live by two links, a community shelf, and a room server ready to deploy
 
 ### The community shelf: scenarios, stories and replays players share (ruling 155, option D)

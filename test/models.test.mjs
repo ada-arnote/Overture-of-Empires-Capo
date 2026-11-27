@@ -159,6 +159,10 @@ test("the converter reads a glTF inside a zip, keeps the painted wash as a shade
 test("sculpted pieces stand in by era and region, fetched once, only in a style that wears them; the recipes stay otherwise", async () => {
   assert.equal(eraOf(-50), "ancient"); assert.equal(eraOf(1200), "medieval"); assert.equal(eraOf(1700), "early"); assert.equal(eraOf(1900), "industrial"); assert.equal(eraOf(2026), "modern");
   for (const t of Object.values(ERAS)) for (const s of Object.values(t)) assert.ok(SORT[s], s);
+  // era hook: Brass and Banners' five eras each stand a sculpted soldier, and the ancient gun is the ballista (ruling 154)
+  for (const [e, foot] of Object.entries({ ancient: "legionary", medieval: "knight", early: "redcoat", industrial: "fusilier", modern: "marine" })) assert.ok(ERAS[e].foot === foot && SHELF[foot], `${e}: ${foot} on the shelf`);
+  assert.ok(ERAS.ancient.gun === "ballista" && SHELF.ballista && ERAS.ancient.unit4 === "general", "the ancient gun and leader");
+  assert.ok(!Object.values(ERAS).some((t) => Object.values(t).some((s) => /jaca/.test(s))), "no era stands a Jaca scan (ruling 150)");
   const war = { sculpt: ["figures", "ships", "buildings"] }, plain = { sculpt: [] }, asked = [], got = [];
   const one = pack({ cannon: { points: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], faces: [[0, 1, 2, 0, 2, 128]] } }), buf = one.buffer.slice(one.byteOffset, one.byteOffset + one.length);
   const f = figures("early", (file) => { asked.push(file); return Promise.resolve(buf); }, (m) => got.push(...Object.keys(m)));

@@ -825,6 +825,7 @@ export function createTable(G) {
     if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
     const reseat = () => { dress(); board?.recolour?.(); board?.show([], true); if (T.match && !T.demo) score(); }; // styles hook: seat colours follow the style until chosen
     if (board?.styles?.length) row("Board style", () => board.style, (v) => { board.setStyle(v); reseat(); }, board.styles); // 3D hook: styles are data (src/map/style.js)
+    for (const s of G.settings || []) { row(s.label, s.get, s.set, s.values); if (s.note) box.append(el("p", s.note, "about")); } // era hook: a game's own looks (Banners' era)
     row("Seat colours", () => seatSet(read(SEATS_KEY), read(STYLE_KEY)), (v) => { store(SEATS_KEY, v); reseat(); }, Object.entries(SEATS).map(([k, v]) => [k, v.name]));
     row("Letter keys", ...bind("keys"), CHOICES.keys);
     box.append(el("p", clock ? "This game's letter keys are in How to play. Off leaves Tab, arrows, Enter and Escape." : "E ends the turn (press twice), U takes back, and each game has a few more. Off leaves Tab, arrows, Enter and Escape.", "about"));
@@ -858,7 +859,7 @@ export function createTable(G) {
     $("start").disabled = soon;
     $("start").textContent = soon ? "Coming soon" : "Begin";
     $("length-line").hidden = setup.style !== "ours" || !G.lengths.length;
-    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.name = c.key; k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; titleCard(); more.querySelector(`select[name="${c.key}"]`)?.focus(); attract(); }; line.append(el("span", c.label), k); return line; };
+    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(c.get ? c.get() : setup.extra[c.key]); k.name = c.key; k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; c.set?.(setup.extra[c.key]); titleCard(); more.querySelector(`select[name="${c.key}"]`)?.focus(); if (!c.set) attract(); }; /* era hook: a choice the game keeps itself (get, set) changes the looks, not the game in view */ line.append(el("span", c.label), k); return line; };
     more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => (!c.only || c.only.includes(setup.style)) && (!c.when || c.when(setup.style, setup.extra))).map(pickOf)));
     if (setup.style === "custom") more.append(...G.switches.map(pickOf));
     if (G.expansions && !soon && (!G.expansionsFor || G.expansionsFor(setup.style, setup.extra))) {
