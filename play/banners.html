@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+YGUXbQ75/Qr40/wQzxKINqrivpCeCLLPK+8ygJbWwA='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' stun://stun.cloudflare.com:3478; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-CZ6hv+M3i5aF+t6matWf9VoA91OhvOLPTDYoB8nqAaw='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' stun://stun.cloudflare.com:3478; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Brass and Banners · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -4183,7 +4183,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.10.2";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "db007d7e";
+const BUILD = "3698c1df";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -4984,6 +4984,8 @@ const gathered = (pc) => new Promise((done) => {
   pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete") { clearTimeout(t); done(); } });
 });
 const blobOf = (url) => url.slice(url.indexOf("#t=") + 3);
+// inchlive hook: the real-time game's live play (site/inchplay.js) makes its invitations and replies the same way
+const PARTS = { GATHER, HAND, OPEN, blobOf, gathered, secret, squeeze, unsqueeze };
 
 const PRIVACY = "Live play joins your browser straight to your friend's. To find the way, each browser asks a public address service (stun.cloudflare.com) for its own internet address; nothing about the game goes there. Your friend's browser sees your internet address, and the invitation and the reply carry it, so send them only to the person you play with.";
 const FAIR = "Every move is checked by the rules in both browsers, and nobody can peek at the dice: each roll is drawn from secrets of both browsers, shown only after the move is sent. Both browsers hold the whole game, so among friends all is well, but a changed browser could see hidden cards.";
@@ -5224,7 +5226,7 @@ function liveLink({ T, G, begin, sheet, closeSheet, toast, el, names, send }) {
   };
 }
 
-$x.canLive = canLive; $x.PRIVACY = PRIVACY; $x.FAIR = FAIR; $x.liveLink = liveLink;
+$x.canLive = canLive; $x.PARTS = PARTS; $x.PRIVACY = PRIVACY; $x.FAIR = FAIR; $x.liveLink = liveLink;
 return $x; })({});
 $m[42] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -5943,8 +5945,8 @@ function createTable(G) {
   const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, look: T.look, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo && !lesson?.owns()) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds, look: T.look })); };
 
   /** A tick of a real-time game: played at once, drawn without waiting, saved now and then. */
-  function flow(move) {
-    const events = T.match.play(move), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
+  function flow(move, salt) { // inchlive hook: a move played live in lockstep comes with the salt both browsers drew for its dice
+    const events = T.match.play(move, salt), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
     log.push(...words);
     if (T.match.list.length % 10 === 0 || T.match.turn === null) { land.push(tally(T.match.position)); keep(); }
     G.seen?.(T, events);

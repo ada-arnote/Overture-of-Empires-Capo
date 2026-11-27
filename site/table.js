@@ -417,8 +417,8 @@ export function createTable(G) {
   const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, look: T.look, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo && !lesson?.owns()) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds, look: T.look })); };
 
   /** A tick of a real-time game: played at once, drawn without waiting, saved now and then. */
-  function flow(move) {
-    const events = T.match.play(move), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
+  function flow(move, salt) { // inchlive hook: a move played live in lockstep comes with the salt both browsers drew for its dice
+    const events = T.match.play(move, salt), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
     log.push(...words);
     if (T.match.list.length % 10 === 0 || T.match.turn === null) { land.push(tally(T.match.position)); keep(); }
     G.seen?.(T, events);
