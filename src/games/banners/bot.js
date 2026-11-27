@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Bots for Brass and Banners. They see only what a player sees, and work out the same odds the player is shown.
-import { FORT, HAND, NONE, banners, boardOf, bonusOf, cellsOf, goalOf, nearOf, odds, setsOf, setWorth, toll } from "./rules.js";
+import { FORT, HAND, NONE, banners, boardOf, bonusOf, cellsOf, goalOf, nearOf, odds, setsOf, setWorth, stands, toll } from "./rules.js";
 import { steps } from "../areas.js";
 
 export const TIERS = ["random", "easy", "normal", "hard"];
@@ -19,7 +19,7 @@ export function worth(p, seat, at) {
     v += 60;
     if (whole) v += 120 * bonus;
     const n = cellsOf(p, o);
-    if (n <= 3) v += 400 - 100 * n + 60 * p.hands[o].length + (p.rule.spoils === "trade" && p.hands[seat].length + p.hands[o].length >= HAND ? 150 : 0); // about to be put out, and their cards handed in at once
+    if (n <= 3 && p.rule.last !== "stands") v += 400 - 100 * n + 60 * p.hands[o].length + (p.rule.spoils === "trade" && p.hands[seat].length + p.hands[o].length >= HAND ? 150 : 0); // about to be put out, and their cards handed in at once
     if (g?.kind === "rival" && g.seat === o) v += 70;
     if (p.leaders && p.leaders[o] === at) v += 70;
     v += Math.max(0, n * 3 - cellsOf(p, seat)); // hold back whoever is ahead
@@ -33,7 +33,7 @@ const strongest = (p, seat, at) => nearOf(p, at).reduce((n, m) => (p.owner[m] !=
 function best(p, seat, from, extra, floor) {
   let top = 0, to = -1;
   for (const m of nearOf(p, from)) {
-    if (p.owner[m] === seat) continue;
+    if (p.owner[m] === seat || stands(p, m)) continue; // a last stand cannot be attacked
     const o = odds(p, from, m, p.str[from] - 1 + extra);
     if (o < floor) continue;
     const v = Math.floor((worth(p, seat, m) * o) / MILLION);
@@ -80,7 +80,7 @@ function attack(p, dice, noise, floor, ranks) {
     if (p.owner[i] !== s || p.str[i] < 2) continue;
     if (p.caps && p.caps[s] === i && p.str[i] < 2 * strongest(p, s, i) && risk(p, i, 0) < 600000 && strongest(p, s, i) > 2) continue; // a capital is not emptied
     for (const m of nearOf(p, i)) {
-      if (p.owner[m] === s) continue;
+      if (p.owner[m] === s || stands(p, m)) continue;
       const o = odds(p, i, m);
       if (o < (goal <= 2 ? Math.min(floor, 400000) : floor)) continue;
       // attack from where the rest of the strength is least needed
@@ -144,7 +144,7 @@ const H = { floor: 450000, deep: 5, bare: 30, least: 20 }; // the least chance i
 function march(q, s, from, force, deep) {
   let top = 0, to = -1;
   for (const m of nearOf(q, from)) {
-    if (q.owner[m] === s) continue;
+    if (q.owner[m] === s || stands(q, m)) continue;
     const o = odds(q, from, m, force);
     if (o < H.floor) continue;
     const left = force - Math.floor((toll(q, from, m, force) + 500) / 1000), w = worth(q, s, m), was = q.owner[m], had = q.str[m];

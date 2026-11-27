@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chance, createMatch, seedState } from "../src/core/index.js";
-import { BAG, EXPANSIONS, HAND, NONE, SAFETY, SWITCHES, amounts, banners, boardOf, bonusOf, bordersOf, cellsOf, gain, goalOf, muster, nearOf, odds, setWorth, setsOf, toll, wholeOf } from "../src/games/banners/rules.js";
+import { BAG, EXPANSIONS, HAND, NONE, SAFETY, SWITCHES, amounts, banners, stands, boardOf, bonusOf, bordersOf, cellsOf, gain, goalOf, muster, nearOf, odds, setWorth, setsOf, toll, wholeOf } from "../src/games/banners/rules.js";
 import { DICE, fair, meet, odds as diceOdds, toll as diceToll } from "../src/games/banners/dice.js";
 import { areaBoard } from "../src/games/areas.js";
 import { TIERS, choose } from "../src/games/banners/bot.js";
@@ -131,7 +131,7 @@ test("a won fight moves one in, offers the rest from none to all but one, and mo
   assert.equal(r.str[A], 1); assert.equal(r.str[B], q.str[A]); assert.equal(r.phase, "attack"); assert.equal(r.pend, null);
 });
 test("putting a seat out hands its cards to the one who did it, and the turn passes it by", () => {
-  const p = made([[A, 0, 40], [B, 1, 1], [far, 2, 3], [far2, 2, 3]], { seats: 3, hands: [[], [5, 6], []] });
+  const p = made([[A, 0, 40], [B, 1, 1], [far, 2, 3], [far2, 2, 3]], { seats: 3, style: "custom", hands: [[], [5, 6], []] });
   const q = win(p, A, B).position;
   assert.equal(q.outBy[1], 0); assert.deepEqual(q.hands[1], []); assert.ok([5, 6].every((c) => q.hands[0].includes(c))); assert.equal(q.over, null);
   let r = banners.apply(q, { do: "occupy", n: 0 }).position;
@@ -142,9 +142,9 @@ test("putting a seat out hands its cards to the one who did it, and the turn pas
   }
 });
 test("the last one left wins, and so does holding enough of the land", () => {
-  const two = made([[A, 0, 40], [B, 1, 1]]), q = win(two, A, B).position;
+  const two = made([[A, 0, 40], [B, 1, 1]], { style: "custom" }), q = win(two, A, B).position;
   assert.deepEqual(q.over.winners, [0]); assert.equal(banners.turn(q), null);
-  const p = made([[A, 0, 40], [B, NONE, 1], [far, 1, 3]]), need = goalOf(p) - 1;
+  const p = made([[A, 0, 40], [B, NONE, 1], [far, 1, 3]], { style: "custom" }), need = goalOf(p) - 1;
   let given = 1;
   for (let i = 0; i < p.owner.length && given < need; i++) if (p.owner[i] === NONE && i !== B) { p.owner[i] = 0; given++; }
   assert.equal(cellsOf(p, 0), need); assert.equal(p.owner[far], 1);
@@ -288,6 +288,7 @@ test("a knockout hands over the cards; at five or more Traditional must hand in 
   const set = [0, 3, 6]; // three of one suit
   for (const style of ["classic", "ours"]) for (const moveIn of [true, false]) {
     const p = made([[A, 0, moveIn ? 40 : 2], [B, 1, 1], [far, 2, 3], [far2, 2, 3]], { seats: 3, style, hands: [[...set], [1, 4], []] });
+    p.rule = { ...p.rule, last: "out" }; // Capo's cards after a knockout, as Custom plays them with Capo's other rules
     let q, events, tries = 0;
     do ({ position: q, events } = win(p, A, B, `ko ${tries++}`)); while (q.owner[B] !== 0 && tries < 50); // 2 against 1 can fail: try other dice
     assert.equal(q.owner[B], 0); assert.equal(q.outBy[1], 0); assert.equal(q.hands[0].length, HAND);
@@ -305,6 +306,37 @@ test("a knockout hands over the cards; at five or more Traditional must hand in 
   // under five cards there is nothing to hand in yet
   const p = made([[A, 0, 40], [B, 1, 1], [far, 2, 3], [far2, 2, 3]], { seats: 3, style: "classic", hands: [[0], [1], []] });
   assert.equal(banners.apply(win(p, A, B).position, { do: "occupy", n: 0 }).position.phase, "attack");
+});
+test("the last stand: in Capo a player's last province cannot be attacked, so nobody is put out; Traditional still knocks out", () => {
+  assert.equal(start(2, "ours").position.rule.last, "stands");
+  for (const style of ["classic", "custom"]) assert.equal(start(2, style).position.rule.last, "out");
+  const p = made([[A, 0, 40], [B, 1, 1], [far, 1, 3]]);
+  assert.ok(banners.moves(p).some((x) => x.do === "attack" && x.to === B), "two provinces: both can be attacked");
+  const alone = made([[A, 0, 40], [B, 1, 1]]);
+  assert.ok(stands(alone, B) && stands(alone, A) && !stands(p, B), "a seat with one province stands there");
+  assert.ok(!banners.moves(alone).some((x) => x.do === "attack" && x.to === B), "the last province is never offered");
+  assert.ok(banners.moves(alone).some((x) => x.do === "attack" && x.to !== B), "the rest of the map still is");
+  for (const tier of TIERS) for (let i = 0; i < 8; i++) assert.ok(inList(banners.moves(alone), choose(alone, roller(`stand ${tier} ${i}`), tier)), `${tier} bot chooses a legal move`);
+  // taking the second-last province says so, and leaves the seat in the game
+  const { position: q, events } = win(p, A, B);
+  assert.equal(q.owner[B], 0); assert.equal(q.outBy[1], NONE); assert.equal(q.over, null);
+  assert.ok(events.some((e) => e.kind === "stand" && e.seat === 1 && e.at === far && e.by === 0));
+  assert.ok(!events.some((e) => e.kind === "out"));
+  assert.ok(!banners.moves(q.phase === "occupy" ? banners.apply(q, { do: "occupy", n: 0 }).position : q).some((x) => x.to === far));
+  // under Custom's normal rule the same attack is offered and puts the seat out
+  const old = made([[A, 0, 40], [B, 1, 1]], { style: "custom" });
+  assert.ok(banners.moves(old).some((x) => x.do === "attack" && x.to === B));
+  // secret goals never ask you to put a rival out when nobody can be
+  for (let i = 0; i < 6; i++) assert.ok(createMatch(banners, { seed: `goal ${i}`, options: { style: "ours", seats: 6, secrets: true } }).position.goals.every((g) => g.kind !== "rival"));
+});
+test("the last stand: Capo games run their ten rounds or end on 65% of the land, never on a knockout", () => {
+  for (const n of [2, 3]) for (let i = 0; i < 4; i++) {
+    const m = botGame(banners, choose, { seed: `stand ${n} ${i}`, options: { seats: n, style: "ours" }, tiers: Array(n).fill("normal"), each: sound });
+    const r = ended(m, n);
+    assert.ok(["scored the most over the rounds", "held enough of the land"].includes(r.why), r.why);
+    assert.ok(m.position.outBy.every((x) => x === NONE), "nobody was put out");
+    for (let s = 0; s < n; s++) assert.ok(cellsOf(m.position, s) >= 1, "every seat still holds a province");
+  }
 });
 test("first turns: under grade each seat in round 1 musters more the later it moves, the first at least half and the last all of it; under lean the first of two musters a third", () => {
   const firsts = (options) => {
