@@ -1,5 +1,7 @@
 # Contributing
 
+Overture of Empires: Capo is made by Arnote Studios. Contributions are accepted under the project's licence, AGPL-3.0-or-later.
+
 ## Shelf entries: scenarios, stories and replays
 
 The community shelf is the `shelf/` folder of this repository. Capo's first screen and every table game's menu read it from the site itself, so anything taken onto the shelf can be opened by every player. Nothing is posted from the pages: you offer an entry yourself, on GitHub, with your own account.

@@ -4,13 +4,13 @@ The worker behind room codes, the relay, play by turn with a "your turn" notice,
 
 ## What you need
 
-- A Cloudflare account under the studio name (ruling 153: never the owner's own name). Free plan only.
+- A Cloudflare account named "Arnote Studios" (ruling 153: never the owner's own name). Free plan only.
 - Node.js 20 or newer on your computer. The deploy tool, `wrangler`, is fetched by `npx` when you run it; it is a tool on your computer, never part of the site.
 
 ## Steps
 
 1. **Open the account.** Sign up at dash.cloudflare.com with the studio's email address. Choose the Free plan. **Do not add a card.** If sign-up asks for one, stop and bring it back (options.md decision 3).
-2. **Choose the workers.dev name.** In the dashboard, Workers and Pages, set your `workers.dev` subdomain. Use the studio name: it is part of the address players' browsers will reach (`capo-rooms.<subdomain>.workers.dev`).
+2. **Choose the workers.dev name.** In the dashboard, Workers and Pages, set your `workers.dev` subdomain. Suggested: `arnote-studios` (if it is taken, try `arnote-games` or `arnotestudios`). It is part of the address players' browsers will reach (`capo-rooms.arnote-studios.workers.dev`).
 3. **Log in from your computer.** In a terminal, in this folder (`server/worker`):
    ```
    npx wrangler login

@@ -1,6 +1,6 @@
 # Notices
 
-Overture of Empires: Capo is free software under the GNU Affero General Public License, version 3 or later. The text is in LICENSE.
+Overture of Empires: Capo, made by Arnote Studios (copyright 2026 Ada Arnote), is free software under the GNU Affero General Public License, version 3 or later. The text is in LICENSE.
 
 Nothing from another project has been copied into this project yet. When something is, its notice goes here and its file goes in ADAPTED.csv.
 

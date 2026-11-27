@@ -1031,7 +1031,7 @@ function askCouncil(members) {
 
 /** Which build this is, and where its source can be read (the AGPL asks that every copy says so). */
 function about() {
-  const p = el("p", `Overture of Empires: Capo, version ${VERSION}, build ${BUILD}. Free software under the GNU AGPL. `, "note"), a = el("a", "Source code");
+  const p = el("p", `Overture of Empires: Capo, made by Arnote Studios (© 2026 Ada Arnote). Version ${VERSION}, build ${BUILD}. Free software under the GNU AGPL. `, "note"), a = el("a", "Source code");
   a.href = SOURCE_URL; a.target = "_blank"; a.rel = "noopener"; p.append(a);
   return p;
 }
