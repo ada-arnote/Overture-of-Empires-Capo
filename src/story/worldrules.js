@@ -11,6 +11,8 @@ import { chanceOf, check, checkLine } from "./check.js";
 import { relate, relationLines, treatyAnswer, treatyName } from "./relations.js";
 import { countTaken, endWar, mightOf, peaceAnswer, strengthOf, truceUntil } from "./war.js";
 export { MIGHT, mightOf } from "./war.js";
+// round 3 hook: pacts of non-aggression and tribute as moves, for every country
+import { clauseMove } from "./pacts.js";
 
 export const VERBS = {
   WAR: "declare war on a country (target: its country code)",
@@ -19,6 +21,9 @@ export const VERBS = {
   BREAK: "end a treaty (target: the other country's code)",
   ATTACK: "attack one province held by a country it is at war with, next to land it holds or across a narrow sea from it (target: the province id)",
   GIVE: "hand one of its own provinces to another country by agreement (target: the province id; detail: the receiving country's code)",
+  // round 3 hook: two clauses that bind, answered by pacts.js
+  PACT: "offer a country a five-year pact of non-aggression (target: its country code)",
+  TRIBUTE: "demand a yearly tribute of a weaker country beside it (target: its country code)",
 };
 const KINDS = ["trade", "defence", "alliance"];
 const pair = (a, b) => [a, b].sort().join("|");
@@ -37,7 +42,8 @@ export function applyMoves(g, moves, geo, actions, months) {
   let rivals = 0;
   // a fact is the receipt's own record of what changed: [kind, country, other, count or kind]. Relations and the chronicle read it
   const note = (fact) => { if (fact) relate(g, fact, rose); return fact ? { fact } : {}; };
-  const say = (m, ok, why, beat, fact) => receipt.push({ ok, text: `${geo.name(m.country)}: ${why}`, verb: m.verb, country: m.country, ...(beat ? { check: beat } : {}), ...note(fact) });
+  // as: the country a line speaks for when it is not the mover (the one that answers a demand for tribute)
+  const say = (m, ok, why, beat, fact, as = m.country) => receipt.push({ ok, text: `${geo.name(as)}: ${why}`, verb: m.verb, country: as, ...(beat ? { check: beat } : {}), ...note(fact) });
   for (const m of moves) {
     // a citizen does not command the country: its government moves on its own, like any other
     const c = m.country, citizen = g.mode === "citizen", isMe = c === me && !citizen, verb = m.verb;
@@ -52,9 +58,10 @@ export function applyMoves(g, moves, geo, actions, months) {
     if (barred(g, m)) { say(m, false, barred(g, m)); continue; } // features hook
     const staller = isMe ? stalledBy(g, m, receipt.length) : null;
     if (staller) { say(m, false, `${verb.toLowerCase()} held back: ${staller.name} (favour ${staller.favour}), who opposes it, stalled the order this turn`); continue; }
-    const r = ({ WAR: war, PEACE: peace, TREATY: treaty, BREAK: unbind, ATTACK: attack, GIVE: give })[verb](g, m, geo, { isMe, attacks, months, spent });
-    say(m, r.ok, r.why, r.check, r.fact);
+    const r = ({ WAR: war, PEACE: peace, TREATY: treaty, BREAK: unbind, ATTACK: attack, GIVE: give, PACT: clauseMove, TRIBUTE: clauseMove })[verb](g, m, geo, { isMe, attacks, months, spent });
+    say(m, r.ok, r.why, r.check, r.fact, r.as);
     if (r.at) receipt[receipt.length - 1].at = r.at;
+    if (r.gauge) receipt[receipt.length - 1].gauge = r.gauge; // round 3 hook: a clause's push on a gauge, read by state.js
     for (const extra of r.also || []) receipt.push(typeof extra === "string" ? { ok: true, text: extra } : { ok: true, text: extra.text, ...note(extra.fact) });
   }
   return receipt;
@@ -141,7 +148,7 @@ export function ownMoves(g, moves, actions, geo) {
   return [...add, ...moves];
 }
 
-const SAY = { WAR: "declare war on", PEACE: "make peace with", TREATY: "propose a treaty to", BREAK: "end the treaty with", ATTACK: "attack", GIVE: "hand over" };
+const SAY = { WAR: "declare war on", PEACE: "make peace with", TREATY: "propose a treaty to", BREAK: "end the treaty with", ATTACK: "attack", GIVE: "hand over", PACT: "offer a pact of non-aggression to", TRIBUTE: "demand tribute of" };
 /**
  * The moves a reply wrote for the player's own country, in plain words, for the player to tick before the rules run:
  * [{i, text, card}], i the move's place in the list. card: the player ordered it by card, so it stands either way.

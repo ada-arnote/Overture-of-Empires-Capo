@@ -6,7 +6,8 @@
 import { treatyName } from "./relations.js";
 
 export const KEEP = { recent: 3, turns: 6, eras: 4, span: 10, line: 130, era: 110, told: 320, facts: 8 };
-const ORDER = ["fell", "war", "peace", "took", "treaty", "broke", "gave", "no", "thread"];
+// round 3: "formed" (a rising founds a country), "pact" and "tribute" (clauses that bind, pacts.js)
+const ORDER = ["fell", "formed", "war", "peace", "took", "treaty", "broke", "gave", "tribute", "pact", "no", "thread"];
 const clip = (s, n) => { const t = String(s || "").replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 3).trimEnd()}...` : t; };
 const key = (f) => f.slice(0, f[0] === "treaty" || f[0] === "no" ? 4 : 3).join(":");
 const counted = (k) => k === "took" || k === "gave";
@@ -27,6 +28,9 @@ export const factsOf = (receipt) => joinFacts([(receipt || []).filter((r) => r.f
 
 const WORDS = {
   fell: (n, a) => `${n(a)} lost its last land`,
+  formed: (n, a, b, k) => `${n(a)} broke from ${n(b)} with ${k} province${k > 1 ? "s" : ""}`,
+  pact: (n, a, b) => `${n(a)} and ${n(b)} signed a pact of non-aggression`,
+  tribute: (n, a, b) => `${n(a)} agreed to pay ${n(b)} tribute`,
   war: (n, a, b) => `${n(a)} declared war on ${n(b)}`,
   peace: (n, a, b) => `${n(a)} and ${n(b)} made peace`,
   took: (n, a, b, k) => `${n(a)} took ${k} province${k > 1 ? "s" : ""} from ${n(b)}`,

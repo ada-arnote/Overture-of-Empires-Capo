@@ -8,6 +8,8 @@ import { worldRef } from "./settings.js";
 import { altText, checkAlt } from "./overlay.js";
 // features hook: a scenario may script beats of its own (beats.js)
 import { keepScript } from "./beats.js";
+// round 3 hook: a scenario saved from a game carries the countries founded in it
+import { keepLands } from "./polity.js";
 
 export const SCENARIOS = [
   {
@@ -69,6 +71,7 @@ export function scenarioFrom(g, meta) {
     title: text(meta.title, LIMIT.title), blurb: text(meta.blurb, LIMIT.blurb), opening: text(meta.opening, LIMIT.opening),
     start: g.date, owners: { ...(g.base || {}), ...g.owners }, ...(g.alt ? { alt: structuredClone(g.alt) } : {}), wars: g.wars.map((w) => ({ pair: w.pair, since: w.since })), treaties: g.treaties.map((t) => ({ pair: t.pair, kind: t.kind, since: t.since })),
     facts: (g.facts || []).map((f) => ({ text: f.text })), might: { ...(g.might || {}) }, custom: g.custom ? { ...g.custom } : null, ...(g.world ? { world: g.world } : {}),
+    ...(Object.keys(g.lands || {}).length ? { lands: structuredClone(g.lands) } : {}), // round 3 hook
     ...(meta.beats?.length ? { beats: keepScript(meta.beats).map(({ text, when, from }) => ({ text, when, from })) } : {}), // features hook
   };
 }
@@ -85,13 +88,14 @@ export function checkScenario(s, isCountry, isProvince) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s.start || "") || Number.isNaN(Date.parse(`${s.start}T00:00:00Z`))) return { ok: false, why: "The scenario's start date is not a date." };
   // a world of its own (an alternate history): its countries count as known, and its borders are the ground it starts from
   const alt = checkAlt(s.alt, isCountry, isProvince), land = (c) => !!alt && Object.hasOwn(alt.lands, c);
+  const made = Object.fromEntries(Object.entries(keepLands(s, isProvince)).filter(([c]) => !isCountry(c) && !land(c) && c !== s.custom?.code)), founded = (c) => Object.hasOwn(made, c); // round 3 hook
   let custom = null;
   if (s.custom) {
     const c = s.custom;
     if (!/^[A-Z]{3}$/.test(c.code || "") || isCountry(c.code) || land(c.code)) return { ok: false, why: "The scenario's own country has a code the map already uses." };
     custom = { code: c.code, name: text(c.name, 40) || c.code, colour: /^#[0-9a-f]{6}$/i.test(c.colour || "") ? c.colour : "#c9553f", history: text(c.history, LIMIT.history) };
   }
-  const known = (c) => isCountry(c) || land(c) || c === custom?.code, pairOk = (p) => typeof p === "string" && p.split("|").length === 2 && p.split("|").every(known) && p.split("|")[0] !== p.split("|")[1];
+  const known = (c) => isCountry(c) || land(c) || founded(c) || c === custom?.code, pairOk = (p) => typeof p === "string" && p.split("|").length === 2 && p.split("|").every(known) && p.split("|")[0] !== p.split("|")[1];
   const owners = Object.fromEntries(Object.entries(s.owners || {}).filter(([id, c]) => isProvince(id) && known(c)).slice(0, LIMIT.owners));
   const wars = (Array.isArray(s.wars) ? s.wars : []).filter((w) => pairOk(w?.pair)).slice(0, LIMIT.wars).map((w) => ({ pair: w.pair.split("|").sort().join("|"), since: s.start, by: "scenario" }));
   const treaties = (Array.isArray(s.treaties) ? s.treaties : []).filter((t) => pairOk(t?.pair) && ["trade", "defence", "alliance"].includes(t.kind)).slice(0, LIMIT.treaties).map((t) => ({ pair: t.pair.split("|").sort().join("|"), kind: t.kind, since: s.start }));
@@ -100,8 +104,8 @@ export function checkScenario(s, isCountry, isProvince) {
   // where pairs of countries stand as the story opens, -3 to 3 (authored starts): a war or a treaty speaks for itself
   const rel = Object.fromEntries(Object.entries(s.rel && typeof s.rel === "object" ? s.rel : {}).filter(([p, n]) => pairOk(p) && Number.isInteger(n) && n >= -3 && n <= 3 && n !== 0).slice(0, 200).map(([p, n]) => [p.split("|").sort().join("|"), n]));
   if (custom && !Object.values(owners).includes(custom.code)) return { ok: false, why: "The scenario's own country holds no land." };
-  return { ok: true, scenario: { kind: "capo-scenario", v: 1, id: text(s.id, 80) || `file-${title}`, title, blurb: text(s.blurb, LIMIT.blurb), opening: text(s.opening, LIMIT.opening), start: s.start, owners, wars, treaties, facts, might, rel, custom, ...(world ? { world } : {}), ...(alt ? { alt, balance: text(s.balance, 500) } : {}), ...(keepScript(s.beats).length ? { beats: keepScript(s.beats) } : {}) } }; // features hook: beats
+  return { ok: true, scenario: { kind: "capo-scenario", v: 1, id: text(s.id, 80) || `file-${title}`, title, blurb: text(s.blurb, LIMIT.blurb), opening: text(s.opening, LIMIT.opening), start: s.start, owners, wars, treaties, facts, might, rel, custom, ...(world ? { world } : {}), ...(alt ? { alt, balance: text(s.balance, 500) } : {}), ...(keepScript(s.beats).length ? { beats: keepScript(s.beats) } : {}), ...(Object.keys(made).length ? { lands: made } : {}) } }; // features hook: beats; round 3 hook: lands
 }
 
 /** Every piece of text in a scenario, for the hard-line check. */
-export const scenarioText = (s) => [s.title, s.blurb, s.opening, s.custom?.name, s.custom?.history, ...s.facts.map((f) => f.text), s.balance, ...altText(s.alt), ...(s.beats || []).map((b) => b.text)].filter(Boolean);
+export const scenarioText = (s) => [s.title, s.blurb, s.opening, s.custom?.name, s.custom?.history, ...s.facts.map((f) => f.text), s.balance, ...altText(s.alt), ...(s.beats || []).map((b) => b.text), ...Object.values(s.lands || {}).map((l) => l.name)].filter(Boolean);

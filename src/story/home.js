@@ -7,19 +7,25 @@
 // takes favour to -3: only what the player does makes a member resign.
 // Unrest. When a country's stability falls to shaken, the rules name a figure and a province where trouble gathers.
 // At in revolt it is a rising (the country declares no war and makes no attack, as before). A rising a year old
-// hands a province taken from another country back to it, or else costs a step of mandate. Unrest fades when
-// stability is steady again.
+// hands a province taken from another country back to it; otherwise the rebel provinces found a country of their
+// own (polity.js), or, where none can be founded, it costs a step of mandate. Unrest fades when stability is
+// steady again.
 // The player's two answers, by card: meet their terms (a step of treasury buys a step of stability), or move
 // against them, on the check: skill 3 (or the Interior's own skill) against 3, 4 for a rising, with mandate, an
 // empty treasury and a war abroad as its parts. Clean: a step of stability. Costly: the same, and a step of mandate
 // lost. Failed: a step of mandate lost, and unrest not yet a rising loses a step of stability too.
+// Every other country answers its own unrest by the same two answers, by rule: six months after it gathers, and
+// once a year after that while it stands, it meets the terms when its treasury is full or better and otherwise
+// moves against it with skill 3. So a rising that a failed move began is answered once more, as its year is up;
+// a rising answered in that turn has not held, and takes no toll.
 import { chanceOf, check, checkLine } from "./check.js";
 import { hash32 } from "./line.js";
 import { monthsApart } from "./relations.js";
 import { gaugeOf, gaugeWord } from "./state.js";
 import { commandOf, turnKey } from "./worldrules.js";
+import { found } from "./polity.js";
 
-export const HOME = { drift: 6, year: 12, skill: 3, unrest: 3, rising: 4 };
+export const HOME = { drift: 6, year: 12, skill: 3, unrest: 3, rising: 4, answer: 6, again: 12, purse: 3 };
 const band = (n) => (n >= 3 ? 1 : n <= 1 ? -1 : 0);
 const wars = (g, c) => g.wars.filter((w) => w.pair.split("|").includes(c)).length;
 const deals = (g, c) => g.treaties.filter((t) => t.pair.split("|").includes(c)).length;
@@ -71,22 +77,38 @@ export const termsFor = (g, c = g.player) => (!g.unrest?.[c] ? "there is no unre
  * year old takes its toll. plans are the turn's orders by card that stand. Lines may carry `gauge` pushes.
  */
 export function settleUnrest(g, to, geo, plans = []) {
-  const lines = [], me = g.player, name = geo.name;
-  const mine = g.unrest?.[me];
-  if (mine && g.mode !== "citizen" && plans.some((p) => p.kind === "terms") && !termsFor(g)) {
-    lines.push({ ok: true, country: me, text: `${name(me)}: meets the terms of ${mine.who}, and the treasury pays`, gauge: [[me, "t", -1, "terms paid to end unrest"], [me, "s", 1, "the unrest's terms met"]] });
-  } else if (mine && g.mode !== "citizen" && plans.some((p) => p.kind === "quell")) {
-    const q = quellPlan(g, geo), beat = check(g.seed, { ...q.plan, turn: turnKey(g) }), how = `(${checkLine(beat)})`, lost = [me, "m", -1, beat.band === "costly" ? "blood in the streets" : "a crackdown that failed"];
-    if (beat.band === "failed") lines.push({ ok: true, country: me, roll: beat, text: `${name(me)}: moves against ${mine.who} and fails ${how}`, gauge: [lost, ...(mine.rising ? [] : [[me, "s", -1, "a crackdown that failed"]])] });
-    else lines.push({ ok: true, country: me, roll: beat, text: `${name(me)}: moves against ${mine.who} and scatters them${beat.band === "costly" ? ", at a price in blood" : ""} ${how}`, gauge: [[me, "s", 1, "unrest put down"], ...(beat.band === "costly" ? [lost] : [])] });
+  const lines = [], me = g.player, name = geo.name, own = g.mode !== "citizen", mine = g.unrest?.[me], calmed = new Set();
+  // the two answers, the same for every country: terms the treasury pays, or a move against it on the check
+  const terms = (c, u) => { calmed.add(c); lines.push({ ok: true, country: c, text: `${name(c)}: meets the terms of ${u.who}, and the treasury pays`, gauge: [[c, "t", -1, "terms paid to end unrest"], [c, "s", 1, "the unrest's terms met"]] }); };
+  const quell = (c, u, shown) => {
+    const q = quellPlan(g, geo, c), beat = check(g.seed, { ...q.plan, turn: turnKey(g) }), how = `(${checkLine(beat)})`, lost = [c, "m", -1, beat.band === "costly" ? "blood in the streets" : "a crackdown that failed"], roll = shown ? { roll: beat } : {};
+    if (beat.band === "failed") lines.push({ ok: true, country: c, ...roll, text: `${name(c)}: moves against ${u.who} and fails ${how}`, gauge: [lost, ...(u.rising ? [] : [[c, "s", -1, "a crackdown that failed"]])] });
+    else { calmed.add(c); lines.push({ ok: true, country: c, ...roll, text: `${name(c)}: moves against ${u.who} and scatters them${beat.band === "costly" ? ", at a price in blood" : ""} ${how}`, gauge: [[c, "s", 1, "unrest put down"], ...(beat.band === "costly" ? [lost] : [])] }); }
+  };
+  if (mine && own && plans.some((p) => p.kind === "terms") && !termsFor(g)) terms(me, mine);
+  else if (mine && own && plans.some((p) => p.kind === "quell")) quell(me, mine, true);
+  // round 3: every other country answers its own unrest by rule, six months after it gathers and once a year after
+  // while it stands: terms when its treasury is full or better, otherwise a move against it
+  for (const [c, u] of Object.entries(g.unrest || {}).sort()) {
+    if ((c === me && own) || !geo.holds(c) || geo.owner(u.id) !== c || monthsApart(u.ans || u.since, to) < (u.ans ? HOME.again : HOME.answer)) continue;
+    u.ans = to;
+    if (gaugeOf(g, c, "t") >= HOME.purse) terms(c, u); else quell(c, u, false);
   }
   for (const [c, u] of Object.entries(g.unrest || {}).sort()) {
-    if (!u.rising || monthsApart(u.at || u.since, to) < HOME.year) continue;
+    // a rising answered this turn has not held: it takes no toll
+    if (!u.rising || calmed.has(c) || monthsApart(u.at || u.since, to) < HOME.year) continue;
     u.at = to;
-    const old = geo.place(u.id)?.country;
+    const old = geo.place(u.id)?.country, place = geo.place(u.id)?.name;
     if (geo.owner(u.id) === c && old !== c && geo.holds(old) > 0 && geo.holds(c) > 1 && !g.wars.some((w) => w.pair === [c, old].sort().join("|"))) {
       delete g.owners[u.id];
-      lines.push({ ok: true, country: c, text: `${name(c)}: the rising of ${u.who} hands ${geo.place(u.id).name} back to ${name(old)}, a year unanswered`, fact: ["gave", c, old, 1] });
+      lines.push({ ok: true, country: c, text: `${name(c)}: the rising of ${u.who} hands ${place} back to ${name(old)}, a year unanswered`, fact: ["gave", c, old, 1] });
+      delete g.unrest[c];
+      continue;
+    }
+    // round 3: a rising that holds founds a country (polity.js)
+    const born = geo.owner(u.id) === c ? found(g, geo, c, u, to) : null;
+    if (born) {
+      lines.push({ ok: true, country: c, text: `${name(c)}: the rising of ${u.who} holds ${place} a year unanswered and founds ${born.name} (${born.code}), with ${born.ids.length} province${born.ids.length > 1 ? "s" : ""}; a truce of two years follows`, fact: ["formed", born.code, c, born.ids.length], gauge: [[c, "s", 1, "the rising has left, and its land with it"], [c, "m", -1, "land lost to a rising"]] });
       delete g.unrest[c];
     } else lines.push({ ok: true, country: c, text: `${name(c)}: the rising of ${u.who} stands a year unanswered`, gauge: [[c, "m", -1, "a rising unanswered"]] });
   }
@@ -136,6 +158,6 @@ export function homeLines(g, geo) {
 export function keepHome(s, known, isProvince) {
   const DATE = /^\d{4}-\d{2}-\d{2}$/, obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
   const unrest = Object.fromEntries(Object.entries(obj(s.unrest)).filter(([c, u]) => known(c) && u && isProvince(u.id) && typeof u.who === "string" && DATE.test(u.since || ""))
-    .map(([c, u]) => [c, { id: u.id, who: u.who.slice(0, 80), since: u.since, ...(u.rising ? { rising: true, at: DATE.test(u.at || "") ? u.at : u.since } : {}) }]));
+    .map(([c, u]) => [c, { id: u.id, who: u.who.slice(0, 80), since: u.since, ...(DATE.test(u.ans || "") ? { ans: u.ans } : {}), ...(u.rising ? { rising: true, at: DATE.test(u.at || "") ? u.at : u.since } : {}) }]));
   return { unrest, home: DATE.test(s.home?.at || "") ? { at: s.home.at } : undefined };
 }
