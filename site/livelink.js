@@ -31,6 +31,8 @@ const gathered = (pc) => new Promise((done) => {
   pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete") { clearTimeout(t); done(); } });
 });
 const blobOf = (url) => url.slice(url.indexOf("#t=") + 3);
+// inchlive hook: the real-time game's live play (site/inchplay.js) makes its invitations and replies the same way
+export const PARTS = { GATHER, HAND, OPEN, blobOf, gathered, secret, squeeze, unsqueeze };
 
 export const PRIVACY = "Live play joins your browser straight to your friend's. To find the way, each browser asks a public address service (stun.cloudflare.com) for its own internet address; nothing about the game goes there. Your friend's browser sees your internet address, and the invitation and the reply carry it, so send them only to the person you play with.";
 export const FAIR = "Every move is checked by the rules in both browsers, and nobody can peek at the dice: each roll is drawn from secrets of both browsers, shown only after the move is sent. Both browsers hold the whole game, so among friends all is well, but a changed browser could see hidden cards.";

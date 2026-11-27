@@ -4,7 +4,8 @@ import { NONE, boardOf, cellsOf, goalOf, growth, inch, liveBoardFor, poolLimit, 
 import { choose, thinking } from "../src/games/inch/bot.js";
 import { $, NAMES, PAPER, RGB, createTable, radio, toast } from "./table.js";
 import { hexBoard } from "./hexboard.js";
-import { board as liveBoard, continueText, ending as liveEnding, hold as liveHold, key as liveKey, leave as liveLeave, lineOf as liveLine, liveGoal, liveLand, nudge, panel as livePanel, record, rules as liveRules, seen as liveSeen, stats as liveStats, summary as liveSummary, time as liveTime } from "./inchlive.js";
+import { board as liveBoard, continueText, ending as liveEnding, hold as liveHold, key as liveKey, leave as liveLeave, lineOf as liveLine, liveGoal, liveLand, nudge, panel as livePanel, record, rules as liveRules, seen as liveSeen, stats as liveStats, summary as liveSummary, time as liveTime, view } from "./inchlive.js";
+import { begun as liveBegun, inchPlay } from "./inchplay.js";
 
 const SHARE = { quarter: "Quarter", third: "A third", half: "Half", most: "Most", all: "All" }, HILL = [201, 178, 140];
 const cells = (n) => `${n} ${n === 1 ? "cell" : "cells"}`, place = (to) => (to === NONE ? "empty land" : NAMES[to]);
@@ -26,7 +27,7 @@ function aim(T, i) {
   return T.refresh();
 }
 
-createTable({
+const table = createTable({
   game: inch, key: "inch", title: "An Inch of Ink", won: "The map is yours.", lengths: [], pace: () => 650,
   // your land and the land that wins, in words: "1525/1844" read as owned of the whole map
   landText: (c, goal) => `${c}, goal ${goal}`,
@@ -69,7 +70,7 @@ createTable({
   ],
   stats: (p, s) => p.live ? liveStats(p, s) : (() => { const c = cellsOf(p, s), x = p.pool[s]; return [["Strength", x], ["Grows", p.home[s] === NONE ? "out" : `+${Math.max(0, Math.min(growth(p, s), poolLimit(c) - x))}`]]; })(),
   line(e, p) {
-    if (p?.live) return liveLine(e, p);
+    if (p?.live) return liveLine(e, view(p)); // a game for two is told from this browser's seat
     const who = NAMES[e.seat];
     if (e.kind === "pour") return `${who} pours ${e.spent} over ${place(e.to)} and takes ${cells(e.taken.length)}.`;
     if (e.kind === "order" && e.turns.length > 2) return `Round ${e.round}: ${e.turns.map((s) => NAMES[s]).join(", then ")}.`;
@@ -126,7 +127,8 @@ createTable({
     coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
   },
   switches: [], // all of Custom's switches are choices above, so each shows only with the clock it belongs to
-  fresh: (T) => { liveLeave(); liveHold(T); },
+  fresh: (T) => { liveLeave(); liveHold(T); liveBegun(T); },
   more: record,
   rules: (classic, p) => (p ? p.live : classic || style === "ours") ? liveRules(p, !p && style === "ours") : ((p ? p.rule.growth === "rising" : classic) ? ["Your strength is one pool. The number on your tower shows it. It grows every turn: 3, and 1 for every 3 cells you hold, and a little more each round for everyone.", "Tap empty land or a rival, or choose it in the list, then choose how much to pour: the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A rival's land costs more when they hold a lot of strength on little land.", "The tower only shows whose land it is. If it is taken it moves.", "Reach the gold mark on the bar to win. If nobody has after 40 rounds, the most land wins.", "Whoever moves first changes every round. With three, the order of each round is drawn.", "Keys: 1 to 4 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."] : ["Your strength is one pool. The number on your tower shows it. It grows every turn: land grows it, and saving a little more.", "Tap empty land or a rival, or choose it in the list, then choose how much to pour: the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A cell with four of yours around it costs half.", "A rival's land costs more when they hold a lot of strength on little land. A home costs 3 more.", "Land cut off from your tower falls at the start of your turn. If your tower is taken, it moves to your largest piece of land.", "Reach the gold mark on the bar to win, or hold the most land after the last round. Whoever moves first changes every round.", "Keys: 1, 2, 3 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."]),
 });
+inchPlay(table); // live play of the real-time game between two browsers (site/inchplay.js)
