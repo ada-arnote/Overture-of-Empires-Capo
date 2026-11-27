@@ -2,6 +2,26 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.9.5 (2026-11-27): dice that roll, armies that march, and sound
+
+### The table games move and sound
+
+**Players**
+- **Brass and Banners: dice are thrown on the table.** An attack's dice tumble from your province, bounce and settle beside the one you attack, on the real throw; the losing dice dim, and in the tilted looks they become the dice that lie on the table. A won fight marches the army in and the province is taken with a ring and your emblem. Moves and moving in march across the map; placing strength marks the place; a fort is built with a small flourish.
+- **The Island Fable:** units walk from hex to hex (boats sail a little slower), taking a rival's hex rings it in your colour, raising a scout, a fort or a farm is built with sparks, and units that cannot be paid fade away.
+- **Grain and Glass:** the two dice roll onto the island and settle, then the hexes that yield glint in their good's colour; depots, towns, harbours and routes are built with a flourish.
+- **An Inch of Ink:** a band of light crosses the map when a new age begins.
+- **A win has its moment:** pennants in your colours fall across the result card.
+- **The camera follows a rival's move,** gently, when it happens out of view and the map is zoomed in. It never moves while you are dragging or zooming, or for a few seconds after you last moved the map.
+- **New sounds, made as the game runs:** dice, a march, a capture, building, and in An Inch of Ink five of its own: you are attacked, you finish a nation, a truce begins or ends, a new age, and you are out. All short and quiet, under the Sound switch and the volume.
+- Motion never holds up a move: the board already shows where things stand, and you can play on while it plays. With Motion set to Reduced (or the system asking for less motion) nothing moves and the dice stay in the panel and on the map as before. Bots set to Instant play without motion.
+
+**Contributors**
+- `src/map/motion.js`: one canvas over the window, drawn only while an effect runs (`travel`, `dice`, `capture`, `build`, `pulse`, `sweep`, `pennants`); `frames()` gives the frame gaps and the layer's own work per frame. `site/motion.js`: each game's events as motion, the camera follow, `moving(T)`. `site/sound.js`: the cues (`CUES`, `cuesOf`, `play`), on `audio()` from `site/shell.js`.
+- Marked "motion hook" lines: `src/map/board.js` gains `hold(cells, ms, kinds)`, `place(i, dx, dy)`, `nudge(dx, dy)`, `zoomed` and `middle`; `site/hexboard.js` exposes the board as `moving`; `site/table.js` calls `stir` after each move and `hail` at the end (in place of `cue`); `site/banners.js` throws the dice through `bannersDice` instead of its floating box.
+- The layer's own work: median under 1 ms a frame, slowest 2.5 ms with nine effects, dice and pennants at once at 1440 x 900, 3.8 ms at phone size. The three new files add 11 kB compressed. Rules untouched: games stay whole-number and replay from seed and moves.
+- `test/motion.test.mjs`: which cue each event makes, in every game.
+
 ## v0.9.4 (2026-11-27): lists that wrap, names on the board, a lesson that waits
 
 ### The table games' shell and pages: lists that wrap, places named on the board, a lesson that waits for you

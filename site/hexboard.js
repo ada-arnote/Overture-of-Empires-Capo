@@ -86,6 +86,7 @@ export function hexBoard(T, stage, o) {
     light: (cells, chosen) => b?.preview(cells, chosen),
     clear: () => b?.preview([]),
     at: (i) => b?.screenOf(i), // where a cell is on the screen, for the coach
+    get moving() { return b; }, // motion hook (site/motion.js): the moving board itself, or null for the still picture
     destroy: () => b?.destroy(),
   };
 }

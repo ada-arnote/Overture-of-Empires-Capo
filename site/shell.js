@@ -59,6 +59,8 @@ let ctx = null;
 export function wake() {
   try { ctx ||= new AudioContext(); if (ctx.state === "suspended") ctx.resume(); } catch { ctx = null; }
 }
+/** motion hook (site/sound.js): the sounds' context once a press has woken it, for the game cues made there. */
+export const audio = () => (ctx && ctx.state === "running" && settings.sound === "on" && settings.volume ? ctx : null);
 // [hertz, start, length, loudness, wave]
 const TUNES = {
   tick: [[1900, 0, 0.03, 0.12, "square"]],
