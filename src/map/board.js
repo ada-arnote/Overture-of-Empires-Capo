@@ -524,5 +524,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     setLight(v) { light = v === "lamp" ? "lamp" : "day"; look3 = wear(styleName, light); staged = false; dirty = true; redraw(); },
     /** styles hook: the seats' colours have changed; owned land takes them at the next show. */
     recolour() { show.forEach((c) => { if (c.owner >= 0) c.owner = -2; }); },
+    /** era hook: which era's sculpted pieces stand in 3D (a key of ERAS in figures.js); looks only. */
+    setEra(e) { fig.era = e; staged = false; redraw(); },
   };
 }

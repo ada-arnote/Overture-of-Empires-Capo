@@ -10,7 +10,7 @@ export const ERAS = {
   ancient: { foot: "legionary", unit2: "legionary", gun: "ballista", horse: "horse", unit4: "general", leader: "general", ship: "longboat", fleet: "longboat" },
   medieval: { unit3: "knight", foot: "knight", horse: "horse", ship: "longboat", fleet: "longboat", town: "townhouse", depot: "cottage" },
   early: { foot: "redcoat", gun: "cannon", horse: "horse", ship: "liner", fleet: "liner", town: "townhouse", depot: "cottage" },
-  industrial: { foot: "fusilier", gun: "cannon", ship: "torpedo", fleet: "torpedo", town: "block", depot: "townhouse" },
+  industrial: { foot: "fusilier", gun: "cannon", horse: "horse", ship: "torpedo", fleet: "torpedo", town: "block", depot: "townhouse" },
   fable: { unit2: "legionary", unit3: "knight", unit4: "general", horse: "horse", town: "townhouse", depot: "cottage" }, // The Island Fable's guard, knight and marshal
   modern: { foot: "marine", ship: "destroyer", fleet: "destroyer", town: "block", depot: "block" },
 };

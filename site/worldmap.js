@@ -24,7 +24,9 @@ export async function loadWorld(url, disputesUrl = "") {
   const world = unpackWorld(await res.json(), disputes);
   // the real world brings its relief (heights baked from open data, a picture) and its rivers and lakes; without them the map still works
   world.relief = url.replace(/[^/]+$/, "relief.webp");
-  const waters = await fetch(url.replace(/[^/]+$/, "waters.json")).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  world.cover = url.replace(/[^/]+$/, "cover.webp"); // mapdata hook: what grows on the land, and the real cities (tools/mapdata.py)
+  const near = (name) => fetch(url.replace(/[^/]+$/, name)).then((r) => (r.ok ? r.json() : null)).catch(() => null), [waters, towns] = await Promise.all([near("waters.json"), near("cities.json")]);
+  if (towns) world.cities = towns.cities.map(([name, x, y, rank, at]) => ({ name, x: x / 10, y: y / 10, rank, at })); // mapdata hook
   if (waters) {
     const line = (d, path, close) => { let x = 0, y = 0; for (let i = 0; i < d.length; i += 2) { x += d[i]; y += d[i + 1]; if (i) path.lineTo(x / 10, y / 10); else path.moveTo(x / 10, y / 10); } if (close) path.closePath(); };
     world.rivers = [0, 1, 2, 3].map(() => new Path2D()); world.lakes = new Path2D(); world.lakeRings = [];
@@ -129,6 +131,8 @@ export function worldMap(canvas, world, o) {
     lit.ground.load([world.width, world.height], list.map((p) => ({ rings: p.poly })), coast, (world.arcs.length % 97) / 7);
     lit.ground.relief(null); lit.key = ""; lit.ground.lakes(world.lakeRings); lit.dress = null; lit.heights = null; // capomap: lakes; the dressing is made when first needed
     if (world.relief) { const img = new Image(), w = world; img.onload = () => { if (lit && world === w) { lit.ground.relief(img); lit.heights = img; redraw(); } }; img.src = world.relief; }
+    lit.ground.cover(null); lit.covers = null; // mapdata hook: what grows, on the real world
+    if (world.cover) { const img = new Image(), w = world; img.onload = () => { if (lit && world === w) { lit.ground.cover(img); lit.covers = img; redraw(); } }; img.src = world.cover; }
   }
   /** A colour as three numbers, whatever way it was written. */
   const rgbOf = (text) => {
@@ -198,6 +202,7 @@ export function worldMap(canvas, world, o) {
     if (b === 2) {
       if (!lit.dress) lit.dress = new Dressing(world);
       if (lit.heights && !lit.dress.heights) lit.dress.relief(heightsOf(lit.heights));
+      if (lit.covers && !lit.dress.covers) lit.dress.cover(coverOf(lit.covers)); // mapdata hook
       list.push(...lit.dress.stand([box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad], view.s, k, phone ? 260 : 520, phone ? 66 : 76, style.models || {}));
     }
     lit.meshes.set(list);
@@ -210,6 +215,14 @@ export function worldMap(canvas, world, o) {
     const d = x.getImageData(0, 0, w, h).data, r = new Uint8Array(w * h), a = new Uint8Array(w * h);
     for (let i = 0; i < w * h; i++) { r[i] = d[i * 4]; a[i] = d[i * 4 + 3]; }
     return { w, h, r, a };
+  }
+  /** mapdata hook: the land cover picture read back, one class a point. */
+  function coverOf(img) {
+    const c = document.createElement("canvas"), w = img.width, h = img.height, x = c.getContext("2d", { willReadFrequently: true });
+    c.width = w; c.height = h; x.drawImage(img, 0, 0);
+    const d = x.getImageData(0, 0, w, h).data, k = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) k[i] = Math.min(15, (d[i * 4] + 8) >> 4);
+    return { w, h, k };
   }
   /** One frame of the lit map. */
   function shine() {
@@ -335,11 +348,16 @@ export function worldMap(canvas, world, o) {
       if (!b || a > b.a) biggest.set(who, { a, p });
     }
     let left = near ? 400 : 30; // the whole world names its thirty largest countries at most
-    for (const [who, { a, p }] of [...biggest].sort((m, n) => n[1].a - m[1].a)) if (left > 0 && a * s * s > (near ? 700 : 1500) && put(o.name?.(who) || world.countries[who] || who, p.label[0], p.label[1], near > 1 ? 14 : 12, 600)) left--;
+    const said = new Map(), once = (text, mx, my, ...a) => { const [x, y] = spot(mx, my), was = said.get(text) || []; if (was.some(([u, v]) => Math.hypot(u - x, v - y) < 160) || !put(text, mx, my, ...a)) return false; said.set(text, [...was, [x, y]]); return true; }; // mapdata hook: a name is not printed twice side by side
+    for (const [who, { a, p }] of [...biggest].sort((m, n) => n[1].a - m[1].a)) if (left > 0 && a * s * s > (near ? 700 : 1500) && once(o.name?.(who) || world.countries[who] || who, p.label[0], p.label[1], near > 1 ? 14 : 12, 600)) left--;
+    // mapdata hook: the real cities that stand are named under them, capitals and the larger first, the rest after the provinces
+    const towns = lit && near > 0 ? (pieces ||= o.pieces?.() || []).filter((p) => p.name && (p.band || 0) <= near && (p.until ?? 9) >= near) : [], town = (p) => once(p.name, p.at[0], p.at[1], p.rank > 1 ? 10 : 11, p.rank > 1 ? "italic 500" : "italic 600", false, -11);
+    for (const p of towns) if (p.rank < 2) town(p);
     if (near > 0) {
       const least = near > 1 ? 46 : 110; // a region names only its large provinces
-      for (const p of world.provinces.values()) { const [x0, y0, x1, y1] = p.box; if ((x1 - x0) * s > least && (y1 - y0) * s > 14) put(p.name, p.label[0], p.label[1], 11, 500, false, lit ? 13 : 0); } // capomap: above the town that stands there
+      for (const p of world.provinces.values()) { const [x0, y0, x1, y1] = p.box; if ((x1 - x0) * s > least && (y1 - y0) * s > 14) once(p.name, p.label[0], p.label[1], 11, 500, false, lit ? 13 : 0); } // capomap: above the town that stands there
     }
+    for (const p of towns) if (p.rank > 1) town(p); // mapdata hook
   }
 
   // a page out of sight may get no animation frames, so a timer stands in when none comes

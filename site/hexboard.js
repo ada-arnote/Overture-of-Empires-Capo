@@ -119,6 +119,7 @@ export function hexBoard(T, stage, o) {
     get moving() { return b; }, // motion hook (site/motion.js): the moving board itself, or null for the still picture
     /** styles hook: the seats' colours changed (Settings, Seat colours): owned land takes the new ones. */
     recolour() { b?.recolour(); if (!b && svg) still(); },
+    setEra: (e) => b?.setEra?.(e), // era hook: Banners' era setting, looks only
     destroy() { seen.disconnect(); night.removeEventListener("change", relight); b?.destroy(); key?.remove(); },
   };
 }

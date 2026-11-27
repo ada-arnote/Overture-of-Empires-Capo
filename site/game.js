@@ -114,7 +114,7 @@ async function enter(ref) {
   on = key; stagedKey = null; if (!made) rebase(world, null); index(); claimsOf.clear(); claims(); map?.world(world);
   if (first) earthOnce(); // alternate histories: the real map's countries and disputes, and the presets laid over it, once
   stage();
-  document.querySelector(".credit").textContent = made ? "A world of our own, made from a seed" : "Made with Natural Earth";
+  document.querySelector(".credit").textContent = made ? "A world of our own, made from a seed" : "Made with Natural Earth. Ecoregions 2017 © RESOLVE, CC BY 4.0"; // mapdata hook: the land cover's credit line
   return true;
 }
 /** Choose where the story starts, and move to that world. A world of our own may be made again from another seed. */
@@ -1031,7 +1031,7 @@ function askCouncil(members) {
 
 /** Which build this is, and where its source can be read (the AGPL asks that every copy says so). */
 function about() {
-  const p = el("p", `Overture of Empires: Capo, version ${VERSION}, build ${BUILD}. Free software under the GNU AGPL. `, "note"), a = el("a", "Source code");
+  const p = el("p", `Overture of Empires: Capo, made by Arnote Studios (© 2026 Ada Arnote). Version ${VERSION}, build ${BUILD}. Free software under the GNU AGPL. `, "note"), a = el("a", "Source code");
   a.href = SOURCE_URL; a.target = "_blank"; a.rel = "noopener"; p.append(a);
   return p;
 }
@@ -1195,7 +1195,7 @@ async function start() {
     // 3D hook: fronts as lines, and capitals, armies, fleets, air wings and commanders as pieces, all read off the state
     wars: () => (state ? state.wars.map((w) => w.pair.split("|")) : []),
     pieces: () => mapPieces({ world, homes, owner: ownerOf, might: (c) => mightOf(geo(), c), wars: state ? state.wars.map((w) => w.pair.split("|")) : [], player: state?.player, staff: state ? commanders(state).filter((x) => !x.off && x.seat !== "generals").length : 0,
-      strength: state ? (c) => strengthOf(state, geo(), c) : null, g: state }) }); // capomap hook: strength pips, and missions read off the game for pins
+      strength: state ? (c) => strengthOf(state, geo(), c) : null, g: state, cities: on === "" && !(state || scen())?.alt ? world.cities : null }) }); // capomap hook: strength pips, and missions read off the game for pins; mapdata hook: real cities on the real map only
   $("view").onchange = (e) => { view = e.target.value; map.refresh(); };
   legend = viewsInit($("view"), X, () => view); // features hook: more map views, and their legend
   $("in").onclick = () => map.zoomBy(1.6);

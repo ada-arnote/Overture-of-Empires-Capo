@@ -8,11 +8,11 @@
    "game": "capo",
    "title": "A Hard Winter in the North",
    "about": "Our own example: a Nordic winter that tests four trade and defence pacts. Play any country; the North is where the story is.",
-   "by": "Capo",
+   "by": "Arnote Studios",
    "licence": "CC0-1.0",
    "made": "2026-11-27",
    "start": "2027-01-15",
-   "size": 1815
+   "size": 1825
   },
   {
    "id": "a-hard-winter-the-thaw",
@@ -20,12 +20,12 @@
    "game": "capo",
    "title": "A Hard Winter: the Thaw",
    "about": "Our own example of a fork: the same North three months on, made from A Hard Winter in the North.",
-   "by": "Capo",
+   "by": "Arnote Studios",
    "licence": "CC0-1.0",
    "made": "2026-11-27",
    "from": "a-hard-winter-in-the-north",
    "start": "2027-04-01",
-   "size": 1890
+   "size": 1900
   },
   {
    "id": "fable-three-bots-small-island",
@@ -33,7 +33,7 @@
    "game": "fable",
    "title": "Three bots on a small island",
    "about": "Our own example: three bots play the traditional rules on a small round island until one of them holds it all. Step through it move by move.",
-   "by": "Capo",
+   "by": "Arnote Studios",
    "licence": "CC0-1.0",
    "made": "2026-11-27",
    "version": "8",
@@ -43,7 +43,7 @@
      0
     ]
    },
-   "size": 6763
+   "size": 6773
   }
  ]
 }

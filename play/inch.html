@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-bp2sdIReWX+bcXWe/h6vf5qfXGTsCBrl5GzB5QHiONo='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' stun://stun.cloudflare.com:3478; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-C2kZRM+bxh4BUcLotftVoGCyg75vDCHAFou8uBE3Y0I='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' stun://stun.cloudflare.com:3478; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>An Inch of Ink · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -1233,13 +1233,21 @@ const RIVALS = {
 /** A truce you offer a neighbour (version 11). long: ticks it holds; gap: ticks after it ends before you can offer another;
  *  most: a neighbour holding more than this many times your strength will not take one. One at a time, kept by the rules. */
 const PACT = { long: 120, gap: 120, most: 2 };
-/** The neighbour you keep a truce with now, or NONE. */
-const pactOn = (p) => (p.pact && p.tick < p.pact.until && p.alive[p.pact.to] ? p.pact.to : NONE);
+/** Two people in one game (the open option `people`, played live between two browsers): seats 0 and 1 are people, the rest bots.
+ *  A game for one has no `people`, and every rule below reads exactly as it did for it. */
+const person = (p, s) => s === p.human || (!!p.people && p.people.includes(s));
+const peopleOf = (p) => p.people || [p.human];
+/** A person's truce, { to, until, next }, or null: yours in a game for one, each person's own in a game for two. */
+const pactIn = (p, h = p.human) => (p.pacts ? p.pacts[p.people.indexOf(h)] ?? null : h === p.human ? p.pact : null);
+const setPact = (p, h, x) => { if (p.pacts) { p.pacts = [...p.pacts]; p.pacts[p.people.indexOf(h)] = x; } else p.pact = x; };
+/** The neighbour a person (you, normally) keeps a truce with now, or NONE. */
+const pactOn = (p, h = p.human) => { const x = pactIn(p, h); return x && p.tick < x.until && p.alive[x.to] ? x.to : NONE; };
 /** Why you cannot offer `o` a truce now, or "" when you can: "near" (not a living neighbour), "held" (a truce holds), "wait", "strong". */
 function pactWhy(p, b, o) {
-  if (p.over || p.phase !== "play" || !p.alive[p.human] || !Number.isInteger(o) || o < 0 || o >= p.troops.length || o === p.human || !p.alive[o] || !bordersOf(p, b)[p.human].has(o)) return "near";
+  if (p.over || p.phase !== "play" || !p.alive[p.human] || !Number.isInteger(o) || o < 0 || o >= p.troops.length || person(p, o) || !p.alive[o] || !bordersOf(p, b)[p.human].has(o)) return "near";
   if (pactOn(p) !== NONE) return "held";
-  if (p.pact && p.tick < p.pact.next) return "wait";
+  const x = pactIn(p);
+  if (x && p.tick < x.next) return "wait";
   return p.troops[o] > PACT.most * p.troops[p.human] ? "strong" : "";
 }
 
@@ -1423,7 +1431,7 @@ function send(p, by, to, troops, events) {
   const flood = !!p.armed[by];
   if (flood) { p.armed[by] = 0; troops *= 2; }
   let a = p.attacks.find((x) => x.by === by && x.to === to);
-  if (a) a.left += troops; else { p.attacks.push(a = { by, to, left: troops, got: 0 }); if (to === p.human && events) events.push({ kind: "attacked", by, to }); }
+  if (a) a.left += troops; else { p.attacks.push(a = { by, to, left: troops, got: 0 }); if (person(p, to) && events) events.push({ kind: "attacked", by, to }); }
   if (flood) a.fl = 1;
 }
 /** What calling an attack back costs: a quarter of what is left of it, rounded up. */
@@ -1439,26 +1447,26 @@ function placeNear(p, b, s, o) {
   return false;
 }
 
-/** Whether a bot leaves you alone just now: during the truce, and while as many others as its tier allows (pile) are attacking you already. */
-function spared(p, s) {
+/** Whether a bot leaves a person (you) alone just now: during the truce, and while as many others as its tier allows (pile) are attacking them already. */
+function spared(p, s, h = p.human) {
   const t = tier(p);
-  if (p.tick < t.truce || s === pactOn(p)) return true;
-  return !!t.pile && !p.attacks.some((a) => a.by === s && a.to === p.human) && p.attacks.filter((a) => a.to === p.human).length >= t.pile;
+  if (p.tick < t.truce || s === pactOn(p, h)) return true;
+  return !!t.pile && !p.attacks.some((a) => a.by === s && a.to === h) && p.attacks.filter((a) => a.to === h).length >= t.pile;
 }
 
 /** The bots: each has a temper drawn at the start, and leans the way its ink pulls. They act now and then, never on every tick. */
 function think(p, b, dice, borders, events) {
   const t = tier(p);
   for (let s = 0; s < p.troops.length; s++) {
-    if (s === p.human || !p.land[s] || dice.below(t.every)) continue;
+    if (person(p, s) || !p.land[s] || dice.below(t.every)) continue;
     const ink = inkOf(p, s), top = maxOf(p, s), card = p.ages && p.tick >= agesOf(p)[2] && p.card[s] < 0;
     if (card && p.troops[s] * 10 < top * 4) { p.card[s] = 1; p.wind[s] = p.tick + WIND; } // Second wind when low
     const busy = p.attacks.some((a) => a.by === s), full = p.troops[s] * 10 >= top * 7;
     if (busy && !full) continue;
     const near = [...borders[s]], amount = Math.floor((p.troops[s] * (30 + p.temper[s] * 10)) / 100);
     // how strong a rival looks: you may look stronger than you are, and during the truce you are left alone; gold leaf and sepia see a rival with a place near as weaker
-    const rivals = near.filter((o) => o !== NONE && !(o === p.human && spared(p, s))), greedy = ink.each || ink.id === "sepia";
-    const looks = (o) => { const x = o === p.human ? Math.floor((p.troops[o] * t.you) / 10) : p.troops[o]; return greedy && p.places.length && placeNear(p, b, s, o) ? Math.floor((x * 9) / 10) : x; };
+    const rivals = near.filter((o) => o !== NONE && !(person(p, o) && spared(p, s, o))), greedy = ink.each || ink.id === "sepia";
+    const looks = (o) => { const x = person(p, o) ? Math.floor((p.troops[o] * t.you) / 10) : p.troops[o]; return greedy && p.places.length && placeNear(p, b, s, o) ? Math.floor((x * 9) / 10) : x; };
     if (near.includes(NONE) && (!rivals.length || dice.below(ink.empty ? 6 : 3))) { send(p, s, NONE, amount, events); continue; }
     const weak = rivals.length ? rivals.reduce((x, y) => (looks(y) * Math.max(1, p.land[x]) < looks(x) * Math.max(1, p.land[y]) ? y : x)) : null;
     const edge = (p.temper[s] > 2 ? t.bold : t.dare) - (ink.reach || ink.guard ? 1 : 0); // vermilion and iron gall dare with a tenth less
@@ -1471,16 +1479,16 @@ function think(p, b, dice, borders, events) {
     if (!full && !ink.sail) continue;
     if (p.boats && !near.includes(NONE) && sail(p, b, s, events)) continue;
     if (!full) continue;
-    if (weak !== null && !(t.spare && weak === p.human)) send(p, s, weak, amount, events);
+    if (weak !== null && !(t.spare && person(p, weak))) send(p, s, weak, amount, events);
   }
 }
 
 /** A bot sends half its strength by boat to the nearest coast it can take. Changes p. Returns whether it sailed. */
 function sail(p, b, s, events) {
-  const troops = Math.floor(p.troops[s] / 2), spare = tier(p).spare || spared(p, s);
+  const troops = Math.floor(p.troops[s] / 2), spare = (h) => tier(p).spare || spared(p, s, h);
   let best = -1, key = 0;
   for (const [at, d] of shores(p, b, s)) {
-    if (troops <= landingPrice(p, b, at, s) || (spare && p.owner[at] === p.human)) continue;
+    if (troops <= landingPrice(p, b, at, s) || (person(p, p.owner[at]) && spare(p.owner[at]))) continue;
     const k = d * b.n + p.order[at]; // the nearest, and among those the game's own order
     if (best < 0 || k < key) { best = at; key = k; }
   }
@@ -1498,7 +1506,7 @@ function land(p, b, s, at, troops, events) {
   p.owner[at] = s;
   p.land[s]++;
   const a = p.attacks.find((x) => x.by === s && x.to === was);
-  if (a) a.left += troops - cost; else { p.attacks.push({ by: s, to: was, left: troops - cost, got: 0 }); if (was === p.human && s !== p.human && events) events.push({ kind: "attacked", by: s, to: was }); }
+  if (a) a.left += troops - cost; else { p.attacks.push({ by: s, to: was, left: troops - cost, got: 0 }); if (person(p, was) && s !== was && events) events.push({ kind: "attacked", by: s, to: was }); }
   return true;
 }
 
@@ -1520,17 +1528,17 @@ function soak(p, b, fell, events) {
         if (x === o) { if (!seen[m]) { seen[m] = 1; list.push(m); } } else if (by === -2) by = x; else if (by !== x) by = -3;
       }
     }
-    if (by >= 0 && !(o === p.human && (p.tick < tier(p).truce || by === pactOn(p))) && !(by === p.human && o === pactOn(p) && o !== NONE)) for (const c of list) if (b.near[c].some((m) => p.owner[m] === by)) ring.push(c, by);
+    if (by >= 0 && !(person(p, o) && (p.tick < tier(p).truce || by === pactOn(p, o))) && !(person(p, by) && o !== NONE && o === pactOn(p, by))) for (const c of list) if (b.near[c].some((m) => p.owner[m] === by)) ring.push(c, by);
   }
-  const closing = new Set(); // who is soaking up your land this tick
+  const closing = new Map(); // who is soaking up a person's land this tick
   for (let k = 0; k < ring.length; k += 2) {
     const c = ring[k], by = ring[k + 1], o = p.owner[c];
-    if (o === p.human) closing.add(by);
+    if (person(p, o)) closing.set(by * 1000 + o, [by, o]);
     if (o !== NONE) { p.troops[o] = Math.max(0, p.troops[o] - Math.max(1, Math.floor(p.troops[o] / Math.max(1, p.land[o])))); p.land[o]--; fell.set(o, by); }
     p.owner[c] = by;
     p.land[by]++;
   }
-  for (const by of closing) events.push({ kind: "soaked", by, to: p.human });
+  for (const [by, to] of closing.values()) events.push({ kind: "soaked", by, to });
 }
 
 /** The Ink Dries: the cells whose turn came this tick dry out and are lost to whoever held them. Changes p. */
@@ -1577,7 +1585,7 @@ function tick(p, b, dice, events) {
   p.tick++;
   for (let s = 0; s < p.troops.length; s++) {
     if (!p.land[s]) continue;
-    const top = maxOf(p, s), g = gainOf(p, s), r = s === p.human ? 10 : tier(p).grow;
+    const top = maxOf(p, s), g = gainOf(p, s), r = person(p, s) ? 10 : tier(p).grow;
     // a bot's growth is scaled by its tier, spread over the ticks in whole numbers
     const add = r === 10 ? g : Math.floor((g * r * p.tick) / 10) - Math.floor((g * r * (p.tick - 1)) / 10);
     p.troops[s] = p.troops[s] > top ? p.troops[s] - Math.ceil((p.troops[s] - top) / 10) : Math.min(top, p.troops[s] + add);
@@ -1586,10 +1594,10 @@ function tick(p, b, dice, events) {
   if (p.ages && (p.tick === ages[1] || p.tick === ages[2])) {
     events.push({ kind: "age", age: p.tick === ages[1] ? 2 : 3 });
     // calm bots pick Full pot, fierce ones Broad stroke
-    if (p.tick === ages[1]) for (let s = 0; s < p.troops.length; s++) if (s !== p.human && p.land[s]) p.mark[s] = p.temper[s] < 2 ? 1 : 0;
+    if (p.tick === ages[1]) for (let s = 0; s < p.troops.length; s++) if (!person(p, s) && p.land[s]) p.mark[s] = p.temper[s] < 2 ? 1 : 0;
   }
   const borders = bordersOf(p, b);
-  if (p.pact && p.tick === p.pact.until && p.alive[p.pact.to]) events.push({ kind: "pactend", to: p.pact.to });
+  for (const h of peopleOf(p)) { const x = pactIn(p, h); if (x && p.tick === x.until && p.alive[x.to]) events.push({ kind: "pactend", to: x.to, ...(p.people ? { seat: h } : {}) }); }
   think(p, b, dice, borders, events);
   // two nations attacking each other meet first: the smaller force is spent against the larger
   for (const a of p.attacks) {
@@ -1666,11 +1674,12 @@ const liveBoardOf = (p, chance) => liveBoard(p.map, p.key, chance);
 /** Traditional fixes its own rules; Custom takes each switch as given. */
 function liveSetup(o, dice, chance) {
   // Traditional and Capo fix their own rules; Capo (The Ink Dries) draws its map and has no inks, places but wells, or ages
-  const ours = o.style !== "custom", dries = o.style === "ours", key = dice.below(0x40000000), map = dries ? LIVE_MAPS[dice.below(LIVE_MAPS.length)] : o.map;
+  const ours = o.style !== "custom", dries = o.style === "ours", two = o.people === 2, key = dice.below(0x40000000), map = dries ? LIVE_MAPS[dice.below(LIVE_MAPS.length)] : o.map;
   const b = liveBoard(map, key, chance), n = dries ? DRIES.nations : o.nations, inks = dries ? "off" : ours ? "chosen" : o.inks;
   // boats are always on where the map has more than one landmass, so that every map can be won
-  const p = { live: true, classic: true, style: o.style, map, key: map === "world" ? 0 : key, human: 0, total: b.total, owner: Array(b.n).fill(NONE), order: dice.shuffle(b.cells.map((_, i) => i)), troops: Array(n).fill(START), land: Array(n).fill(0), alive: Array(n).fill(1), temper: Array.from({ length: n }, () => dice.below(4)), names: ["You", ...dice.shuffle(NATIONS).slice(0, n - 1)], attacks: [], cities: [], boats: !!o.boats || b.masses > 1, building: !ours && !!o.cities, rivals: RIVALS[o.rivals] ? o.rivals : "gentle", tick: 0, limit: dries ? DRIES.from + DRIES.span : ours ? SAFE : 2 * o.time, phase: "spawn", seat: 0, round: 1, over: null, pact: null };
+  const p = { live: true, classic: true, style: o.style, map, key: map === "world" ? 0 : key, human: 0, total: b.total, owner: Array(b.n).fill(NONE), order: dice.shuffle(b.cells.map((_, i) => i)), troops: Array(n).fill(START), land: Array(n).fill(0), alive: Array(n).fill(1), temper: Array.from({ length: n }, () => dice.below(4)), names: two ? dice.shuffle(NATIONS).slice(0, n) : ["You", ...dice.shuffle(NATIONS).slice(0, n - 1)], attacks: [], cities: [], boats: !!o.boats || b.masses > 1, building: !ours && !!o.cities, rivals: RIVALS[o.rivals] ? o.rivals : "gentle", tick: 0, limit: dries ? DRIES.from + DRIES.span : ours ? SAFE : 2 * o.time, phase: "spawn", seat: 0, round: 1, over: null, pact: null };
   p.rounds = p.limit;
+  if (two) { p.people = [0, 1]; p.pacts = [null, null]; } // two people: seat 1 is the second, who starts where they choose, as you do
   // inks drawn by the seed from an even deck, so that six nations hold one of each; yours is drawn too, for "Draw for me"
   p.ink = inks === "off" ? Array(n).fill(NONE) : dice.shuffle(Array.from({ length: Math.ceil(n / 6) * 6 }, (_, k) => k % 6)).slice(0, n);
   p.choose = inks === "chosen";
@@ -1684,9 +1693,9 @@ function liveSetup(o, dice, chance) {
   const spots = [];
   for (let s = 0; s < n; s++) spots.push(deal(p, b, dice, spots));
   even(b, spots);
-  for (let s = 1; s < n; s++) claim(p, b, s, spots[s]);
+  for (let s = 1; s < n; s++) if (!person(p, s)) claim(p, b, s, spots[s]);
   p.starts = spots;
-  if (dries) { p.cap = spots.map((at, s) => (s ? at : NONE)); p.fade = Array(b.n).fill(0); }
+  if (dries) { p.cap = spots.map((at, s) => (person(p, s) ? NONE : at)); p.fade = Array(b.n).fill(0); }
   // places: at least 6 cells from any bot's start and 4 from each other, the four kinds in turn
   const rate = PLACE_RATE[ours ? "normal" : o.places], want = rate ? Math.floor(b.total / rate) : 0;
   p.places = [];
@@ -1751,9 +1760,10 @@ function claim(p, b, s, i) {
 /** Where you may start: empty land with an empty ring, and no place in it. */
 const startable = (p, b, i) => b.land[i] === 1 && p.owner[i] === NONE && b.near[i].every((m) => p.owner[m] === NONE) && !p.places.some(([at]) => at === i || b.near[i].includes(at));
 
-function liveMoves(p, b) {
+/** A person's own moves, as the person to move (p.human). A person who has started waits in the spawn phase for the other. */
+function ownMoves(p, b) {
   if (p.over) return [];
-  if (p.phase === "spawn") return b.dry.filter((i) => startable(p, b, i)).flatMap((at) => (p.choose ? INKS.map((k) => ({ do: "spawn", at, ink: k.id })) : [{ do: "spawn", at }]));
+  if (p.phase === "spawn") return p.land[p.human] ? [] : b.dry.filter((i) => startable(p, b, i)).flatMap((at) => (p.choose ? INKS.map((k) => ({ do: "spawn", at, ink: k.id })) : [{ do: "spawn", at }]));
   const out = [{ do: "tick", n: 1 }, { do: "tick", n: 2 }, { do: "tick", n: 4 }], h = p.human, near = [...bordersOf(p, b)[h]];
   const kept = pactOn(p);
   for (const to of near) if (to === NONE || to !== kept) for (const pct of PCTS) out.push({ do: "attack", to, pct });
@@ -1765,6 +1775,18 @@ function liveMoves(p, b) {
   if (cardDue(p)) for (const k of CARDS) out.push({ do: "card", card: k.id });
   return out;
 }
+/** The same position seen from another person's seat: what that person may do, and what their order changes. */
+const as = (p, h) => (h === p.human ? p : { ...p, human: h });
+/** Every move: in a game for two, the clock and each person's orders, each order naming its person (`by`). */
+function liveMoves(p, b) {
+  if (!p.people) return ownMoves(p, b);
+  if (p.over) return [];
+  const out = p.phase === "play" ? [1, 2, 4].map((n) => ({ do: "tick", n })) : [];
+  for (const h of p.people) for (const m of ownMoves(as(p, h), b)) if (m.do !== "tick") out.push({ ...m, by: h });
+  return out;
+}
+/** One person's moves without the `by`, as the page offers them. */
+const liveMovesOf = (p, b, h = p.human) => ownMoves(as(p, h), b);
 const cityPrice = (p) => 60 * (1 + p.cities.filter((c) => p.owner[c] === p.human).length);
 /** Whether your mark or your card is waiting to be chosen. */
 const markDue = (p) => p.ages && !!p.alive[p.human] && p.tick >= agesOf(p)[1] && p.mark[p.human] < 0;
@@ -1775,8 +1797,16 @@ const shaped = (m, ...keys) => !!m && typeof m === "object" && !Array.isArray(m)
 const KEYS = { tick: ["n"], attack: ["to", "pct"], recall: ["to"], pact: ["to"], boat: ["at", "pct"], city: ["at"], mark: ["mark"], card: ["card"] };
 /** A quick check, so that a tick does not have to list every move to be allowed. It allows exactly what liveMoves lists. */
 function liveAllows(p, b, m) {
+  if (p.people && m && typeof m === "object" && m.do !== "tick") {
+    if (!Object.hasOwn(m, "by") || !p.people.includes(m.by)) return false;
+    const { by, ...rest } = m;
+    return ownAllows(as(p, by), b, rest);
+  }
+  return ownAllows(p, b, m);
+}
+function ownAllows(p, b, m) {
   if (p.over || !m || typeof m !== "object") return false;
-  if (p.phase === "spawn") return m.do === "spawn" && shaped(m, "do", "at", ...(p.choose ? ["ink"] : [])) && Number.isInteger(m.at) && startable(p, b, m.at) && (!p.choose || INKS.some((k) => k.id === m.ink));
+  if (p.phase === "spawn") return !p.land[p.human] && m.do === "spawn" && shaped(m, "do", "at", ...(p.choose ? ["ink"] : [])) && Number.isInteger(m.at) && startable(p, b, m.at) && (!p.choose || INKS.some((k) => k.id === m.ink));
   if (!Object.hasOwn(KEYS, m.do) || !shaped(m, "do", ...KEYS[m.do])) return false;
   if (m.do === "tick") return [1, 2, 4].includes(m.n);
   if (m.do === "attack") return PCTS.includes(m.pct) && (m.to === NONE || (Number.isInteger(m.to) && m.to >= 0 && m.to < p.troops.length && m.to !== p.human && m.to !== pactOn(p))) && bordersOf(p, b)[p.human].has(m.to);
@@ -1791,14 +1821,22 @@ function liveAllows(p, b, m) {
 const copy = (p) => ({ ...p, owner: [...p.owner], troops: [...p.troops], land: [...p.land], alive: [...p.alive], attacks: p.attacks.map((a) => ({ ...a })), cities: [...p.cities], ink: [...p.ink], mark: [...p.mark], card: [...p.card], armed: [...p.armed], wind: [...p.wind], ...(p.dries ? { cap: [...p.cap], fade: [...p.fade] } : {}) });
 
 function liveApply(before, b, m, dice) {
+  if (before.people && Object.hasOwn(m, "by")) { // an order of one of two people, applied from their seat
+    const { by, ...rest } = m, r = ownApply(as(before, by), b, rest, dice);
+    r.position.human = before.human;
+    return r;
+  }
+  return ownApply(before, b, m, dice);
+}
+function ownApply(before, b, m, dice) {
   const p = copy(before), events = [], s = p.human;
-  if (m.do === "spawn") { claim(p, b, s, m.at); if (p.dries) p.cap[s] = m.at; if (m.ink) p.ink[s] = INKS.findIndex((k) => k.id === m.ink); p.phase = "play"; events.push({ kind: "spawn", at: m.at }); }
+  if (m.do === "spawn") { claim(p, b, s, m.at); if (p.dries) p.cap[s] = m.at; if (m.ink) p.ink[s] = INKS.findIndex((k) => k.id === m.ink); p.phase = peopleOf(p).every((h) => p.land[h]) ? "play" : "spawn"; events.push({ kind: "spawn", at: m.at, ...(p.people ? { seat: s } : {}) }); }
   else if (m.do === "attack") { send(p, s, m.to, Math.floor((p.troops[s] * m.pct) / 100)); events.push({ kind: "attack", seat: s, to: m.to, pct: m.pct }); }
   else if (m.do === "pact") { // a truce: attacks between you end, each side's strength coming home whole
     for (const a of p.attacks) if ((a.by === s && a.to === m.to) || (a.by === m.to && a.to === s)) p.troops[a.by] += a.left;
     p.attacks = p.attacks.filter((a) => !((a.by === s && a.to === m.to) || (a.by === m.to && a.to === s)));
-    p.pact = { to: m.to, until: p.tick + PACT.long, next: p.tick + PACT.long + PACT.gap };
-    events.push({ kind: "pact", seat: s, to: m.to, until: p.pact.until });
+    setPact(p, s, { to: m.to, until: p.tick + PACT.long, next: p.tick + PACT.long + PACT.gap });
+    events.push({ kind: "pact", seat: s, to: m.to, until: p.tick + PACT.long });
   } else if (m.do === "recall") { // the attack ends where it stands: a quarter of what is left is lost, the rest comes home
     const a = recallable(p, m.to), lost = recallLoss(a.left);
     p.attacks = p.attacks.filter((x) => x !== a);
@@ -1818,7 +1856,7 @@ function liveApply(before, b, m, dice) {
   return { position: p, events };
 }
 
-$x.NONE = NONE; $x.PCTS = PCTS; $x.TICK_MS = TICK_MS; $x.LIVE_MAPS = LIVE_MAPS; $x.AGE_AT = AGE_AT; $x.EASE = EASE; $x.LOW = LOW; $x.SAFE = SAFE; $x.WIND = WIND; $x.agesOf = agesOf; $x.DRIES = DRIES; $x.RIVALS = RIVALS; $x.PACT = PACT; $x.pactOn = pactOn; $x.pactWhy = pactWhy; $x.INKS = INKS; $x.PLACES = PLACES; $x.PLACE_RATE = PLACE_RATE; $x.MARKS = MARKS; $x.CARDS = CARDS; $x.inkOf = inkOf; $x.markOf = markOf; $x.held = held; $x.ageOf = ageOf; $x.apart = apart; $x.liveBoard = liveBoard; $x.dryRank = dryRank; $x.driedOf = driedOf; $x.wetOf = wetOf; $x.wetAt = wetAt; $x.landOf = landOf; $x.maxOf = maxOf; $x.gainOf = gainOf; $x.costOf = costOf; $x.goalPercent = goalPercent; $x.goalOf = goalOf; $x.bordersOf = bordersOf; $x.recallLoss = recallLoss; $x.recallable = recallable; $x.tier = tier; $x.rangeOf = rangeOf; $x.shores = shores; $x.landings = landings; $x.landingPrice = landingPrice; $x.liveBoardOf = liveBoardOf; $x.liveSetup = liveSetup; $x.deal = deal; $x.liveMoves = liveMoves; $x.cityPrice = cityPrice; $x.markDue = markDue; $x.cardDue = cardDue; $x.liveAllows = liveAllows; $x.liveApply = liveApply;
+$x.NONE = NONE; $x.PCTS = PCTS; $x.TICK_MS = TICK_MS; $x.LIVE_MAPS = LIVE_MAPS; $x.AGE_AT = AGE_AT; $x.EASE = EASE; $x.LOW = LOW; $x.SAFE = SAFE; $x.WIND = WIND; $x.agesOf = agesOf; $x.DRIES = DRIES; $x.RIVALS = RIVALS; $x.PACT = PACT; $x.person = person; $x.peopleOf = peopleOf; $x.pactIn = pactIn; $x.pactOn = pactOn; $x.pactWhy = pactWhy; $x.INKS = INKS; $x.PLACES = PLACES; $x.PLACE_RATE = PLACE_RATE; $x.MARKS = MARKS; $x.CARDS = CARDS; $x.inkOf = inkOf; $x.markOf = markOf; $x.held = held; $x.ageOf = ageOf; $x.apart = apart; $x.liveBoard = liveBoard; $x.dryRank = dryRank; $x.driedOf = driedOf; $x.wetOf = wetOf; $x.wetAt = wetAt; $x.landOf = landOf; $x.maxOf = maxOf; $x.gainOf = gainOf; $x.costOf = costOf; $x.goalPercent = goalPercent; $x.goalOf = goalOf; $x.bordersOf = bordersOf; $x.recallLoss = recallLoss; $x.recallable = recallable; $x.tier = tier; $x.rangeOf = rangeOf; $x.shores = shores; $x.landings = landings; $x.landingPrice = landingPrice; $x.liveBoardOf = liveBoardOf; $x.liveSetup = liveSetup; $x.deal = deal; $x.liveMoves = liveMoves; $x.liveMovesOf = liveMovesOf; $x.cityPrice = cityPrice; $x.markDue = markDue; $x.cardDue = cardDue; $x.liveAllows = liveAllows; $x.liveApply = liveApply;
 return $x; })({});
 $m[1] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -1956,7 +1994,9 @@ function advance(p, events, dice) {
 
 const inch = {
   id: "inch", version: "12",
-  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, rivals: { values: ["gentle", "even", "hard"], normal: "gentle" }, time: { values: [600, 800, 1800, 0], normal: 1800 }, ...LIVE_SWITCHES, ...SWITCHES },
+  options: { style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3], normal: 2 }, map: { values: LIVE_MAPS, normal: "world" }, nations: { values: [8, 12, 20, 30, 50], normal: 20 }, cities: { values: [false, true], normal: false }, boats: { values: [false, true], normal: false }, rivals: { values: ["gentle", "even", "hard"], normal: "gentle" }, time: { values: [600, 800, 1800, 0], normal: 1800 }, ...LIVE_SWITCHES, ...SWITCHES,
+    // inchlive hook: two people in one real-time game, played live between two browsers. An open option, so a game for one keeps its options and fingerprint
+    people: { check: (v) => v === 1 || v === 2, normal: 1 } },
 
   setup(o, dice) {
     if (o.style !== "custom" || o.live) return liveSetup(o, dice, roller);
@@ -2794,8 +2834,11 @@ const SHELF = {
   knight: { file: "knight.bin", tris: 2433, licence: "CC-BY-4.0", credit: "\"Knight Hospitaller - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/7975ee5c47a94d35abf98070bfdd1ea8), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
   legionary: { file: "legionary.bin", tris: 2415, licence: "CC-BY-4.0", credit: "\"Roman Soldier - fighting pose - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/5c29ca5803ad475eaaae12714e8f1dab), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
   redcoat: { file: "redcoat.bin", tris: 2448, licence: "CC-BY-4.0", credit: "\"Waterloo British Infantry - for animation\" by Andy Woodhead (sketchfab.com/3d-models/85a1a8205b2c447fb8d0419978f17b75), CC BY 4.0, modified (posed, cut down, repainted, re-encoded)." },
+  fusilier: { file: "fusilier.bin", tris: 2466, licence: "CC-BY-4.0", credit: "\"French Infantry - Franco-Prussian War\" by Andy Woodhead (sketchfab.com/3d-models/b935801d58874c72a27a3bd371286811), CC BY 4.0, modified (posed, cut down, repainted, re-encoded)." },
+  marine: { file: "marine.bin", tris: 2450, licence: "CC-BY-4.0", credit: "\"US Marine T pose - Vietnam\" by Andy Woodhead (sketchfab.com/3d-models/58d066644f8e47a6aed3470dfd5507a7), CC BY 4.0, modified (posed, cut down, repainted, re-encoded)." },
   general: { file: "general.bin", tris: 3980, licence: "CC-BY-4.0", credit: "\"Roman General - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/70d18b0518344b7bad3cd0979072a1c2), CC BY 4.0, modified (remeshed, cut down, painted as pewter, re-encoded)." },
   horse: { file: "horse.bin", tris: 2946, licence: "CC-BY-4.0", credit: "\"Galloping Horse - free download - 3d-printable\" by Andy Woodhead (sketchfab.com/3d-models/dfc6f5596aba48a0b08a44c31b97b368), CC BY 4.0, modified (base removed, cut down, repainted, re-encoded)." },
+  ballista: { file: "ballista.bin", tris: 2488, licence: "CC-BY-4.0", credit: "\"Roman Ballista - free game asset\" by Andy Woodhead (sketchfab.com/3d-models/a92a4eb4ab04409dbf40344f5f63925a), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
   cannon: { file: "cannon.bin", tris: 2309, licence: "CC-BY-4.0", credit: "\"British field cannon - 1815 - free download\" by Andy Woodhead (sketchfab.com/3d-models/c027cb2e6e764f4196f27c94b5f770d5), CC BY 4.0, modified (low-poly version, cut down, repainted, re-encoded)." },
   longboat: { file: "longboat.bin", tris: 2868, licence: "CC-BY-4.0", credit: "\"Gislinge Viking Boat\" by Opus Poly (sketchfab.com/3d-models/01098ad7973647a9b558f41d2ebc5193), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
   liner: { file: "liner.bin", tris: 4961, licence: "CC-BY-4.0", credit: "\"Ship of the line, c. 1700\", Swedish National Maritime and Transport Museums (sketchfab.com/3d-models/3afea352a40045b0a638c9900f669ed4), CC BY 4.0, modified (remeshed, cut down, repainted, re-encoded)." },
@@ -2821,7 +2864,7 @@ const ERAS = {
   ancient: { foot: "legionary", unit2: "legionary", gun: "ballista", horse: "horse", unit4: "general", leader: "general", ship: "longboat", fleet: "longboat" },
   medieval: { unit3: "knight", foot: "knight", horse: "horse", ship: "longboat", fleet: "longboat", town: "townhouse", depot: "cottage" },
   early: { foot: "redcoat", gun: "cannon", horse: "horse", ship: "liner", fleet: "liner", town: "townhouse", depot: "cottage" },
-  industrial: { foot: "fusilier", gun: "cannon", ship: "torpedo", fleet: "torpedo", town: "block", depot: "townhouse" },
+  industrial: { foot: "fusilier", gun: "cannon", horse: "horse", ship: "torpedo", fleet: "torpedo", town: "block", depot: "townhouse" },
   fable: { unit2: "legionary", unit3: "knight", unit4: "general", horse: "horse", town: "townhouse", depot: "cottage" }, // The Island Fable's guard, knight and marshal
   modern: { foot: "marine", ship: "destroyer", fleet: "destroyer", town: "block", depot: "block" },
 };
@@ -3859,6 +3902,8 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     setLight(v) { light = v === "lamp" ? "lamp" : "day"; look3 = wear(styleName, light); staged = false; dirty = true; redraw(); },
     /** styles hook: the seats' colours have changed; owned land takes them at the next show. */
     recolour() { show.forEach((c) => { if (c.owner >= 0) c.owner = -2; }); },
+    /** era hook: which era's sculpted pieces stand in 3D (a key of ERAS in figures.js); looks only. */
+    setEra(e) { fig.era = e; staged = false; redraw(); },
   };
 }
 
@@ -3870,9 +3915,37 @@ $m[27] = (($x) => {
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-const VERSION = "0.10.2";
+const VERSION = "0.10.6";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "d98066ba";
+const BUILD = "2e211730";
+// guide hook (ruling 153.8): each AI service's own pages, for links in the Choose an AI guide (site/aiguide.js). A player
+// follows them in a new tab; the page never fetches them, and its rule does not reach them. Kept above the list of services
+// the page may call, because the gate reads every address after that list's name as one the page calls.
+const AI_LINKS = {
+  openrouterKeys: "https://openrouter.ai/settings/keys",
+  openrouterPrivacy: "https://openrouter.ai/docs/features/privacy-and-logging",
+  openrouterLimits: "https://openrouter.ai/docs/api-reference/limits",
+  geminiKey: "https://aistudio.google.com/apikey",
+  geminiLimits: "https://aistudio.google.com/rate-limit",
+  geminiPricing: "https://aistudio.google.com/docs/pricing",
+  groqKeys: "https://console.groq.com/keys",
+  groqLimits: "https://console.groq.com/settings/limits",
+  ollama: "https://ollama.com/download",
+  ollamaHelp: "https://docs.ollama.com/faq",
+  lmstudio: "https://lmstudio.ai",
+  lmstudioServer: "https://lmstudio.ai/docs/developer/core/server/settings",
+  node: "https://nodejs.org",
+  openaiKeys: "https://platform.openai.com/api-keys",
+  openaiPricing: "https://developers.openai.com/api/docs/pricing",
+  anthropicKeys: "https://platform.claude.com/settings/keys",
+  anthropicPricing: "https://platform.claude.com/docs/en/about-claude/pricing",
+  deepseekKeys: "https://platform.deepseek.com/api_keys",
+  deepseekPricing: "https://api-docs.deepseek.com/quick_start/pricing/",
+  mistralKeys: "https://console.mistral.ai/api-keys",
+  cerebras: "https://cloud.cerebras.ai",
+  cerebrasLimits: "https://inference-docs.cerebras.ai/support/rate-limits",
+  together: "https://www.together.ai",
+};
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -3901,7 +3974,7 @@ const PLAY_ADDRESSES = [
   { name: "worker", address: "", reason: "room codes, a relay for pairs that cannot connect directly, play by turn with a 'your turn' notice, and saves by code (server/worker/)" },
 ];
 
-$x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_BASES = AI_BASES; $x.LIVE_ADDRESSES = LIVE_ADDRESSES; $x.PLAY_ADDRESSES = PLAY_ADDRESSES;
+$x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_LINKS = AI_LINKS; $x.AI_BASES = AI_BASES; $x.LIVE_ADDRESSES = LIVE_ADDRESSES; $x.PLAY_ADDRESSES = PLAY_ADDRESSES;
 return $x; })({});
 $m[28] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -4775,6 +4848,8 @@ const gathered = (pc) => new Promise((done) => {
   pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete") { clearTimeout(t); done(); } });
 });
 const blobOf = (url) => url.slice(url.indexOf("#t=") + 3);
+// inchlive hook: the real-time game's live play (site/inchplay.js) makes its invitations and replies the same way
+const PARTS = { GATHER, HAND, OPEN, blobOf, gathered, secret, squeeze, unsqueeze };
 
 const PRIVACY = "Live play joins your browser straight to your friend's. To find the way, each browser asks a public address service (stun.cloudflare.com) for its own internet address; nothing about the game goes there. Your friend's browser sees your internet address, and the invitation and the reply carry it, so send them only to the person you play with.";
 const FAIR = "Every move is checked by the rules in both browsers, and nobody can peek at the dice: each roll is drawn from secrets of both browsers, shown only after the move is sent. Both browsers hold the whole game, so among friends all is well, but a changed browser could see hidden cards.";
@@ -5015,7 +5090,7 @@ function liveLink({ T, G, begin, sheet, closeSheet, toast, el, names, send }) {
   };
 }
 
-$x.canLive = canLive; $x.PRIVACY = PRIVACY; $x.FAIR = FAIR; $x.liveLink = liveLink;
+$x.canLive = canLive; $x.PARTS = PARTS; $x.PRIVACY = PRIVACY; $x.FAIR = FAIR; $x.liveLink = liveLink;
 return $x; })({});
 $m[39] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -5462,7 +5537,7 @@ function createTable(G) {
   send.id = "send"; send.hidden = skip.hidden = pass.hidden = true;
   sendRow.append(sendShare, sendCopy); send.append(sendSay, sendRow);
   $("act").append(send, skip);
-  $("title").querySelector(".links").append(linkButton);
+  if (G.links !== false) $("title").querySelector(".links").append(linkButton); // links hook: a game whose play by link is not ready yet says links: false
   Object.assign(passField, { type: "text", className: "field", placeholder: "None", autocomplete: "off", maxLength: 100 });
   passField.setAttribute("aria-label", "Password for the link, if you want one");
   pass.append(el("span", "Password"), passField);
@@ -5734,8 +5809,8 @@ function createTable(G) {
   const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, look: T.look, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo && !lesson?.owns()) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds, look: T.look })); };
 
   /** A tick of a real-time game: played at once, drawn without waiting, saved now and then. */
-  function flow(move) {
-    const events = T.match.play(move), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
+  function flow(move, salt) { // inchlive hook: a move played live in lockstep comes with the salt both browsers drew for its dice
+    const events = T.match.play(move, salt), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
     log.push(...words);
     if (T.match.list.length % 10 === 0 || T.match.turn === null) { land.push(tally(T.match.position)); keep(); }
     G.seen?.(T, events);
@@ -6090,7 +6165,7 @@ function createTable(G) {
   function menu(at = tab) {
     tab = at;
     if (!$("sheet").open || !$("sheet-body").contains(menuBox)) sheet(G.title, menuBox, T.demo ? "Close" : "Resume", "wide tabbed");
-    radio(tabs, [["game", "Game"], ["settings", "Settings"], ["link", "Link play"], ["about", "About"]].map(([value, label]) => ({ value, label })), tab, menu, true);
+    radio(tabs, [["game", "Game"], ["settings", "Settings"], ...(G.links === false ? [] : [["link", "Link play"]]), ["about", "About"]].map(([value, label]) => ({ value, label })), tab, menu, true); // links hook
     for (const b of tabs.children) b.setAttribute("aria-controls", pane.id);
     pane.setAttribute("aria-label", tabs.querySelector("[aria-selected=true]").textContent);
     pane.replaceChildren({ game: gameTab, settings: settingsTab, link: linkBox, about: aboutTab }[tab]());
@@ -6143,6 +6218,7 @@ function createTable(G) {
     if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
     const reseat = () => { dress(); board?.recolour?.(); board?.show([], true); if (T.match && !T.demo) score(); }; // styles hook: seat colours follow the style until chosen
     if (board?.styles?.length) row("Board style", () => board.style, (v) => { board.setStyle(v); reseat(); }, board.styles); // 3D hook: styles are data (src/map/style.js)
+    for (const s of G.settings || []) { row(s.label, s.get, s.set, s.values); if (s.note) box.append(el("p", s.note, "about")); } // era hook: a game's own looks (Banners' era)
     row("Seat colours", () => seatSet(read(SEATS_KEY), read(STYLE_KEY)), (v) => { store(SEATS_KEY, v); reseat(); }, Object.entries(SEATS).map(([k, v]) => [k, v.name]));
     row("Letter keys", ...bind("keys"), CHOICES.keys);
     box.append(el("p", clock ? "This game's letter keys are in How to play. Off leaves Tab, arrows, Enter and Escape." : "E ends the turn (press twice), U takes back, and each game has a few more. Off leaves Tab, arrows, Enter and Escape.", "about"));
@@ -6157,10 +6233,11 @@ function createTable(G) {
     const box = el("div", undefined, "stack"), src = el("a", "Read the source code"), where = el("p", /^https:\/\//.test(SOURCE_URL) ? undefined : "The source address is not set in this copy yet.");
     src.href = SOURCE_URL;
     box.append(
-      el("p", `${G.title}, one of the table games of Overture of Empires: Capo. Version ${VERSION}, build ${BUILD}.`),
+      el("p", `${G.title}, one of the table games of Overture of Empires: Capo, made by Arnote Studios. Version ${VERSION}, build ${BUILD}.`),
       ...(G.family || familyLine(G.key) ? [el("p", G.family || familyLine(G.key))] : []),
       where,
       el("p", "Free software under the GNU Affero General Public License, version 3 or later (AGPL-3.0-or-later): you may read, change and share it, and a changed copy that others use over a network must offer them its source."),
+      el("p", "© 2026 Ada Arnote, Arnote Studios."),
       el("p", "Credits: the rules, maps, emblems and sounds are the project's own work, and so are the pieces made in code; the sounds are made in code as the game runs. The coastlines are drawn from Natural Earth, which is in the public domain. Anything borrowed is listed with its licence in CREDITS.csv, ADAPTED.csv and NOTICES.md beside the source."),
       shelfCredits(), // figures hook: the sculpted pieces' credit lines
     );
@@ -6176,7 +6253,7 @@ function createTable(G) {
     $("start").disabled = soon;
     $("start").textContent = soon ? "Coming soon" : "Begin";
     $("length-line").hidden = setup.style !== "ours" || !G.lengths.length;
-    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.name = c.key; k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; titleCard(); more.querySelector(`select[name="${c.key}"]`)?.focus(); attract(); }; line.append(el("span", c.label), k); return line; };
+    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(c.get ? c.get() : setup.extra[c.key]); k.name = c.key; k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; c.set?.(setup.extra[c.key]); titleCard(); more.querySelector(`select[name="${c.key}"]`)?.focus(); if (!c.set) attract(); }; /* era hook: a choice the game keeps itself (get, set) changes the looks, not the game in view */ line.append(el("span", c.label), k); return line; };
     more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => (!c.only || c.only.includes(setup.style)) && (!c.when || c.when(setup.style, setup.extra))).map(pickOf)));
     if (setup.style === "custom") more.append(...G.switches.map(pickOf));
     if (G.expansions && !soon && (!G.expansionsFor || G.expansionsFor(setup.style, setup.extra))) {
@@ -6197,7 +6274,7 @@ function createTable(G) {
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
       const li = el("li"), k = el("select");
-      k.append(...KINDS.filter(([v]) => (v !== "hard" || G.hard) && (v !== "master" || G.master)).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one
+      k.append(...KINDS.filter(([v]) => (v !== "hard" || G.hard) && (v !== "master" || G.master) && (v !== "away" || G.links !== false)).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one; links hook: no friend by link where links: false; stacking hook: master
       k.value = setup.who[s];
       k.setAttribute("aria-label", NAMES[s]);
       k.onchange = () => { setup.who[s] = k.value; passLine(); };
@@ -6483,6 +6560,7 @@ function hexBoard(T, stage, o) {
     get moving() { return b; }, // motion hook (site/motion.js): the moving board itself, or null for the still picture
     /** styles hook: the seats' colours changed (Settings, Seat colours): owned land takes the new ones. */
     recolour() { b?.recolour(); if (!b && svg) still(); },
+    setEra: (e) => b?.setEra?.(e), // era hook: Banners' era setting, looks only
     destroy() { seen.disconnect(); night.removeEventListener("change", relight); b?.destroy(); key?.remove(); },
   };
 }
@@ -6625,7 +6703,7 @@ $m[41] = (($x) => {
 // to send to, and a button, so the game is played the same with a keyboard or a screen reader.
 // Beside them: the attacks under way, yours to call back and a rival's to answer; Find me, which shows and says where your land is;
 // five tips that follow your first minute; and, at the end, your figures and every leading nation's share over the game, read back from the moves.
-const { CARDS, DRIES, INKS, MARKS, NONE, PACT, PCTS, PLACES, RIVALS, SAFE, TICK_MS, ageOf, agesOf, apart, bordersOf, cardDue, cityPrice, dryRank, driedOf, gainOf, goalOf, inkOf, landingPrice, landings, markDue, markOf, maxOf, pactOn, pactWhy, rangeOf, recallLoss, recallable, shores, wetAt, wetOf } = $m[10];
+const { CARDS, DRIES, INKS, MARKS, NONE, PACT, PCTS, PLACES, RIVALS, SAFE, TICK_MS, ageOf, agesOf, apart, bordersOf, cardDue, cityPrice, dryRank, driedOf, gainOf, goalOf, inkOf, landingPrice, landings, liveMovesOf, markDue, markOf, maxOf, pactIn, pactOn, pactWhy, rangeOf, recallLoss, recallable, shores, wetAt, wetOf } = $m[10];
 const { inch, liveBoardFor } = $m[1];
 const { createMatch } = $m[3];
 const { $, RGB, el, radio, sheet, toast } = $m[13];
@@ -6653,6 +6731,18 @@ let begun = null, struck = 0, struckBy = -1, framed = null;
 // `held` the game brought back paused (Continue, or a saved file), until its clock runs again
 let held = null;
 const told = new Map();
+// inchlive hook: a game for two people played live (site/inchplay.js). `net` is that game's live table: this browser's seat,
+// whether the two browsers are joined, and where orders and the pause go. Every position this page reads is seen from that seat.
+let net = null, inviter = null;
+const useNet = (x) => { net = x; };
+/** Invite a friend to play this game live: set by site/inchplay.js. */
+const useInviter = (f) => { inviter = f; };
+const views = new WeakMap();
+/** A position as this browser's person sees it: in a game for two, their own seat is `human`. */
+const view = (p) => { if (!p?.people || !net || net.seat === p.human) return p; if (!views.has(p)) views.set(p, Object.freeze({ ...p, human: net.seat })); return views.get(p); };
+const pos = (T) => view(T.match.position);
+/** An order of this browser's person: in a game for two it names its seat and goes to the live table (or, played on alone, to the table here). */
+const act = (T, m) => { const p = T.match.position; if (!p.people) return T.play(m); if (net && !net.alone) return void net.order(m); return T.play({ ...m, by: net ? net.seat : p.human }); };
 const keepTips = () => { try { localStorage.setItem(TIPS_KEY, tips ? "on" : "off"); } catch { /* the tips still work for this visit */ } };
 
 /** Colours for every nation: yours first, the rest spread round the wheel, never a near twin of yours, in two lightnesses
@@ -6661,6 +6751,7 @@ function colours(p) {
   const hue = ([r, g, b]) => { const x = Math.max(r, g, b), d = x - Math.min(r, g, b) || 1; return ((x === r ? (g - b) / d + 6 : x === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60) % 360; }, mine = hue(RGB[0]);
   return p.troops.map((_, s) => {
     if (s === 0) return RGB[0];
+    if (s === 1 && p.people) return RGB[1]; // inchlive hook: the second person wears the second seat's colour
     let h = (s * 137.508) % 360;
     if (Math.min(Math.abs(h - mine), 360 - Math.abs(h - mine)) < 28) h = (h + 56) % 360;
     const l = Math.floor(s / 6) % 2 ? 0.42 : 0.58, f = (n) => { const k = (n + h / 30) % 12; return Math.round(255 * (l - 0.3 * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); };
@@ -6693,14 +6784,14 @@ const slotOf = (b) => { if (!slots.has(b)) slots.set(b, new Map(b.dry.map((c, k)
 let starts = { p: null, list: [] };
 /** About eight good places to start, the one dealt for you first: the most empty land within six steps, far from others. */
 function startsOf(T) {
-  const p = T.match.position;
+  const p = pos(T);
   if (starts.p === p) return starts.list;
-  const b = liveBoardFor(p), ok = [...new Set(T.match.legal().map((m) => m.at))], far = Array(b.n).fill(14), queue = [];
+  const b = liveBoardFor(p), ok = [...new Set(liveMovesOf(p, b).map((m) => m.at))], far = Array(b.n).fill(14), queue = [];
   for (let i = 0; i < b.n; i++) if (p.owner[i] !== NONE) { far[i] = 0; queue.push(i); }
   for (let k = 0; k < queue.length; k++) for (const m of b.near[queue[k]]) if (far[m] > far[queue[k]] + 1) { far[m] = far[queue[k]] + 1; queue.push(m); }
   const room = (i) => { const d = new Map([[i, 0]]), l = [i]; for (let k = 0; k < l.length; k++) for (const m of b.near[l[k]]) if (b.land[m] && p.owner[m] === NONE && !d.has(m) && d.get(l[k]) < 6) { d.set(m, d.get(l[k]) + 1); l.push(m); } return l.length; };
   const scored = ok.map((i) => ({ at: i, room: room(i), far: far[i] })).sort((x, y) => y.room + 6 * y.far - (x.room + 6 * x.far) || x.at - y.at);
-  const dealt = scored.find((x) => x.at === p.starts?.[0]), pick = dealt ? [dealt] : [];
+  const dealt = scored.find((x) => x.at === p.starts?.[p.human]), pick = dealt ? [dealt] : [];
   for (const gap of [12, 7, 3]) for (const x of scored) if (pick.length < 8 && pick.every((y) => apart(b, x.at, y.at) >= gap)) pick.push(x);
   const named = pick.map((x) => ({ ...x, where: region(p, b, x.at) })), seen = new Map();
   for (const x of named) seen.set(x.where, (seen.get(x.where) || 0) + 1);
@@ -6757,6 +6848,7 @@ function controls(T) {
   out.textContent = `${pct}%`;
   row.append(el("span", "Send"), slider, out);
   pause.onclick = () => {
+    if (T.match?.position.people && net?.joined()) return net.pause(); // inchlive hook: the pause is shared
     if (T.match && waiting(T)) { begun = T.match; paused = false; held = null; speak("The clock runs."); return T.refresh(); } // before your first order the button starts the clock
     paused = !paused; held = null; speak(paused ? "Paused. You can still send orders." : "The clock runs again."); return T.refresh();
   };
@@ -6781,8 +6873,10 @@ function controls(T) {
   mine.onclick = () => inkSheet(T);
   for (const e of [list, go]) { e.addEventListener("focusin", () => T.ready() && mark(T)); e.addEventListener("focusout", () => setTimeout(() => T.ready() && mark(T))); }
   const heading = el("p", "", "live-title"); // what to do, in plain words that are not read out at every tick
-  box.append(heading, guide, el("p", "", "live-info"), due, mine, head, list, row, go, pact, pactSay, runs, btns, fast, board);
-  Object.assign(box, { city, slider, due, head, list, go, ink: mine, pause, row, btns, fast, heading, runs, guide, me, help, pact, pactSay });
+  const link = el("p", "", "live-info"), linkGo = el("div", undefined, "go"); // inchlive hook: live play with a friend, and how it stands
+  link.id = "live-net"; linkGo.id = "live-net-go";
+  box.append(heading, guide, el("p", "", "live-info"), link, linkGo, due, mine, head, list, row, go, pact, pactSay, runs, btns, fast, board);
+  Object.assign(box, { city, slider, due, head, list, go, ink: mine, pause, row, btns, fast, heading, runs, guide, me, help, pact, pactSay, link, linkGo });
   $("choice").append(box);
   return box;
 }
@@ -6790,7 +6884,7 @@ function controls(T) {
 /** Whether the clock still waits for your first order: nothing but your start and the clock in the game's moves so far. */
 function waiting(T) {
   const m = T.match;
-  if (!m || begun === m || m.position.phase !== "play") return false;
+  if (!m || begun === m || m.position.phase !== "play" || m.position.people) return false; // inchlive hook: a game for two starts when both have started
   if (m.list.some((x) => x.do !== "tick" && x.do !== "spawn")) { begun = m; return false; }
   return true;
 }
@@ -6800,7 +6894,7 @@ function start(T) {
   clearInterval(clock);
   clock = setInterval(() => {
     const p = T.match?.position;
-    if (!p?.live || T.demo || paused || p.phase !== "play" || document.querySelector("#sheet").open || !T.ready() || waiting(T)) return;
+    if (!p?.live || T.demo || paused || p.phase !== "play" || document.querySelector("#sheet").open || !T.ready() || waiting(T) || (p.people && !net?.alone)) return; // inchlive hook
     if (speed < 1 && beat++ % 2) return;
     T.flow({ do: "tick", n: Math.max(1, speed) });
   }, TICK_MS);
@@ -6809,18 +6903,18 @@ function start(T) {
 const placeAt = (p, i) => p.places.find(([at]) => at === i);
 /** A spawn, an attack or a landing, from the map or from the panel. */
 function send(T, t) {
-  const p = T.match.position, b = liveBoardFor(p);
+  const p = pos(T), b = liveBoardFor(p);
   sent[t.to === NONE ? 0 : 1] = true;
-  if (!t.boat) { aim = `n${t.to}`; return T.play({ do: "attack", to: t.to, pct }); }
+  if (!t.boat) { aim = `n${t.to}`; return act(T, { do: "attack", to: t.to, pct }); }
   const need = landingPrice(p, b, t.at) + 1;
   if (Math.floor((p.troops[p.human] * pct) / 100) < need) return toast(`Landing there takes ${need} strength. Send a bigger share, or wait and grow.`);
   aim = `b${p.owner[t.at]}:${region(p, b, t.at)}`;
-  return T.play({ do: "boat", at: t.at, pct });
+  return act(T, { do: "boat", at: t.at, pct });
 }
-const spawn = (T, at) => { const p = T.match.position, want = p.choose ? INKS[ink === "draw" ? p.ink[0] : ink].id : undefined, m = T.match.legal().find((x) => x.at === at && x.ink === want); if (m) found = performance.now() + 3000; return m ? T.play(m) : undefined; };
+const spawn = (T, at) => { const p = pos(T), want = p.choose ? INKS[ink === "draw" ? p.ink[p.human] : ink].id : undefined, m = liveMovesOf(p, liveBoardFor(p)).find((x) => x.at === at && x.ink === want); if (m) found = performance.now() + 3000; return m ? act(T, m) : undefined; };
 function tap(T, i) {
   if (!T.ready()) return undefined;
-  const p = T.match.position, b = liveBoardFor(p), spot = placeAt(p, i);
+  const p = pos(T), b = liveBoardFor(p), spot = placeAt(p, i);
   if (i < 0 || !b.land[i]) return toast("That is sea.");
   if (!wetAt(p, b, i)) return toast("That land has dried. Nobody can hold it now.");
   if (spot) toast(`${PLACES[spot[1]].name}: ${PLACES[spot[1]].line}`);
@@ -6828,10 +6922,10 @@ function tap(T, i) {
   if (!p.alive[p.human]) return toast("You are out. Watch to the end, or start again from the menu.");
   const o = p.owner[i];
   if (o === p.human) {
-    if (building && p.building) { const m = { do: "city", at: i }; if (p.troops[p.human] < cityPrice(p)) return toast(`A city costs ${cityPrice(p)} strength.`); building = false; box?.city.setAttribute("aria-pressed", "false"); return T.play(m); }
+    if (building && p.building) { const m = { do: "city", at: i }; if (p.troops[p.human] < cityPrice(p)) return toast(`A city costs ${cityPrice(p)} strength.`); building = false; box?.city.setAttribute("aria-pressed", "false"); return act(T, m); }
     return spot || toast("That land is yours. Tap a neighbour's, or empty land beside yours.");
   }
-  if (o !== NONE && o === pactOn(p)) return toast(`You keep a truce with ${p.names[o]} for ${clockOf(p.pact.until - p.tick)} more. Neither of you can attack the other.`);
+  if (o !== NONE && o === pactOn(p)) return toast(`You keep a truce with ${p.names[o]} for ${clockOf(pactIn(p).until - p.tick)} more. Neither of you can attack the other.`);
   if (bordersOf(p, b)[p.human].has(o)) return send(T, { to: o });
   if (p.boats && landings(p, b).has(i)) return send(T, { boat: true, at: i });
   if (!p.boats) return toast("You can only attack land beside yours.");
@@ -6841,7 +6935,7 @@ function tap(T, i) {
 }
 
 function board(T, stage) {
-  const p = T.match.position, b = liveBoardFor(p), cs = colours(p), slot = slotOf(b), of = b.cells.map((_, i) => (slot.has(i) ? slot.get(i) : -1));
+  const p = pos(T), b = liveBoardFor(p), cs = colours(p), slot = slotOf(b), of = b.cells.map((_, i) => (slot.has(i) ? slot.get(i) : -1));
   const picture = areaPicture(b.cells, of, b.dry, 9, true);
   document.body.classList.add("atlas");
   drawn = "";
@@ -6852,13 +6946,13 @@ function board(T, stage) {
     picture, cells: [], rough: [], sea: [...b.dry.map(() => false), true], seats: [...cs, DRY], fine: { cells: b.cells, of, mid: b.dry },
     terrain: (k) => (k < b.dry.length && b.hill[b.dry[k]] ? 7 : 0),
     ground: (k) => (k >= b.dry.length ? SEA : b.hill[b.dry[k]] ? HILL : LAND[k % 3]),
-    owner: () => { const q = T.match.position, k = driedOf(q); return [...b.dry.map((c) => (rank[c] < k ? n : q.owner[c])), NONE]; },
+    owner: () => { const q = pos(T), k = driedOf(q); return [...b.dry.map((c) => (rank[c] < k ? n : q.owner[c])), NONE]; },
     pieces: () => {
-      const q = T.match.position, rgb = (at) => cs[q.owner[at]] || [180, 170, 150], towers = q.cap ? q.cap.flatMap((at, s) => (at >= 0 && q.land[s] ? [{ kind: "tower", at: slot.get(at), rgb: cs[s], count: q.troops[s], now: s === q.human }] : [])) : [];
+      const q = pos(T), rgb = (at) => cs[q.owner[at]] || [180, 170, 150], towers = q.cap ? q.cap.flatMap((at, s) => (at >= 0 && q.land[s] ? [{ kind: "tower", at: slot.get(at), rgb: cs[s], count: q.troops[s], now: s === q.human }] : [])) : [];
       return [...q.cities.map((at) => ({ kind: "town", at: slot.get(at), rgb: rgb(at) })), ...q.places.map(([at, k]) => ({ kind: GLYPH[k], at: slot.get(at), rgb: rgb(at), good: 4 })), ...towers];
     },
     names() { // every nation's name sits in the middle of its land, so colour is never the only sign of whose it is; a phone names the larger ones
-      const q = T.match.position, sum = q.troops.map(() => [0, 0, 0]), least = innerWidth > 820 ? 5 : 25;
+      const q = pos(T), sum = q.troops.map(() => [0, 0, 0]), least = innerWidth > 820 ? 5 : 25;
       q.owner.forEach((o, i) => { if (o >= 0) { const [x, y] = picture.at[i]; sum[o][0] += x; sum[o][1] += y; sum[o][2]++; } });
       return sum.flatMap(([x, y, c], s) => (c >= least ? [{ at: [x / c, y / c], text: q.names[s], sea: true }] : []));
     },
@@ -6886,7 +6980,7 @@ function front(p, b, to, from) {
 /** The board shows what the panel says: the place chosen to start; the front of your biggest attack under way, with an arrow;
  *  where the next share would go while the panel has the keyboard or the pointer; and, when asked, how far your boats reach. */
 function mark(T) {
-  const p = T.match.position, b = liveBoardFor(p), slot = slotOf(b), h = p.human, now = box && (box.contains(document.activeElement) || box.matches(":hover"));
+  const p = pos(T), b = liveBoardFor(p), slot = slotOf(b), h = p.human, now = box && (box.contains(document.activeElement) || box.matches(":hover"));
   let glow = [], ring = -1, at = -1, arrow = null;
   if (p.phase === "spawn") { const s = Number(home); if (home && b.land[s]) { glow = [s, ...b.near[s]].filter((c) => b.land[c]); at = s; } }
   else if (p.alive[h] && p.land[h]) {
@@ -6917,12 +7011,12 @@ function mark(T) {
 /** A nation's card: its ink, its mark and its card, opened from the leaderboard. */
 function card(p, s) {
   const u = el("ul"), i = inkOf(p, s), m = markOf(p, s);
-  u.append(...[i.name && `${i.name}: ${i.line}`, m.name && `${m.name}: ${m.line}`, p.card[s] >= 0 && `Played ${CARDS[p.card[s]].name}.`, `${p.land[s]} cells, ${p.troops[s]} strength.`, s !== p.human && pactOn(p) === s && `At truce with you for ${clockOf(p.pact.until - p.tick)} more.`].filter(Boolean).map((t) => el("li", t)));
+  u.append(...[i.name && `${i.name}: ${i.line}`, m.name && `${m.name}: ${m.line}`, p.card[s] >= 0 && `Played ${CARDS[p.card[s]].name}.`, `${p.land[s]} cells, ${p.troops[s]} strength.`, s !== p.human && pactOn(p) === s && `At truce with you for ${clockOf(pactIn(p).until - p.tick)} more.`].filter(Boolean).map((t) => el("li", t)));
   sheet(s === p.human ? "You" : p.names[s], u);
 }
 /** Find me: the map moves to your land when it is out of sight, your border glows, and a line says where you are and who is beside you. */
 function find(T) {
-  const p = T.match.position, b = liveBoardFor(p), h = p.human;
+  const p = pos(T), b = liveBoardFor(p), h = p.human;
   if (p.phase !== "play") return toast("You have no land yet. Choose where to start.");
   if (!p.land[h]) return toast("You have no land left.");
   const mid = centre(p, b), slot = slotOf(b).get(mid), near = [...bordersOf(p, b)[h]].filter((o) => o !== NONE).map((o) => p.names[o]).sort();
@@ -6960,11 +7054,11 @@ function truce(T, p, b, t) {
   if (!why) {
     const words = `Offer ${p.names[o]} a truce for ${span(PACT.long)}`;
     if (c.pact.textContent !== words) c.pact.textContent = words;
-    c.pact.onclick = () => { const q = T.match.position; if (T.ready() && !pactWhy(q, liveBoardFor(q), o)) T.play({ do: "pact", to: o }); };
+    c.pact.onclick = () => { const q = pos(T); if (T.ready() && !pactWhy(q, liveBoardFor(q), o)) act(T, { do: "pact", to: o }); };
   }
-  const say = kept !== NONE ? `Truce with ${p.names[kept]}: ${clockOf(p.pact.until - p.tick)} left. Neither of you can attack the other.`
+  const say = kept !== NONE ? `Truce with ${p.names[kept]}: ${clockOf(pactIn(p).until - p.tick)} left. Neither of you can attack the other.`
     : why === "strong" ? `${p.names[o]} holds more than ${PACT.most === 2 ? "twice" : `${PACT.most} times`} your strength and will not take a truce.`
-    : why === "wait" ? `Another truce can be offered at ${clockOf(p.pact.next)}.` : "";
+    : why === "wait" ? `Another truce can be offered at ${clockOf(pactIn(p).next)}.` : "";
   if (c.pactSay.textContent !== say) c.pactSay.textContent = say;
   c.pactSay.hidden = !say;
 }
@@ -6978,7 +7072,7 @@ function under(T, p) {
     if (!runRows.has(key)) {
       const li = el("li", undefined, out ? "" : "in"), b = button(out ? "Call back" : "Answer");
       b.setAttribute("aria-label", out ? `Call back your attack on ${who}` : `Answer ${who}: choose it to send to`);
-      b.onclick = () => { if (!T.ready()) return; if (!out) return answer(T, a.by); const now = recallable(T.match.position, a.to); if (now) { toast(lineOf({ kind: "recall", back: now.left - recallLoss(now.left), lost: recallLoss(now.left) })); T.play({ do: "recall", to: a.to }); } return undefined; };
+      b.onclick = () => { if (!T.ready()) return; if (!out) return answer(T, a.by); const now = recallable(pos(T), a.to); if (now) { toast(lineOf({ kind: "recall", back: now.left - recallLoss(now.left), lost: recallLoss(now.left) })); act(T, { do: "recall", to: a.to }); } return undefined; };
       li.append(el("span"), b);
       runRows.set(key, li);
     }
@@ -7006,7 +7100,7 @@ function strike(T, by) {
 }
 /** Answer an attacker: it becomes where you send next, and the button takes the keyboard. */
 function answer(T, by) {
-  const p = T.match.position, t = targetsOf(p, liveBoardFor(p)).find((x) => x.value === `n${by}`);
+  const p = pos(T), t = targetsOf(p, liveBoardFor(p)).find((x) => x.value === `n${by}`);
   if (!t) return toast(`${p.names[by]} is not beside your land now.`);
   aim = t.value;
   T.refresh();
@@ -7030,9 +7124,9 @@ function guide(T, p, b) {
 }
 /** Your ink, chosen before the map: a sheet, so that the map is free to look at once it closes. */
 function inkSheet(T) {
-  const p = T.match.position, body = el("div", undefined, "stack"), list = el("div", undefined, "pick list inks");
+  const p = pos(T), body = el("div", undefined, "stack"), list = el("div", undefined, "pick list inks");
   list.setAttribute("role", "radiogroup"); list.setAttribute("aria-label", "Your ink");
-  const draw = () => radio(list, [{ value: "draw", label: "Draw for me", note: `The game drew ${INKS[p.ink[0]].name}: ${INKS[p.ink[0]].line}` }, ...INKS.map((k, v) => ({ value: String(v), label: k.name, note: k.line, rgb: k.rgb }))], String(ink), (v) => { ink = v === "draw" ? v : Number(v); draw(); T.refresh(); });
+  const draw = () => radio(list, [{ value: "draw", label: "Draw for me", note: `The game drew ${INKS[p.ink[p.human]].name}: ${INKS[p.ink[p.human]].line}` }, ...INKS.map((k, v) => ({ value: String(v), label: k.name, note: k.line, rgb: k.rgb }))], String(ink), (v) => { ink = v === "draw" ? v : Number(v); draw(); T.refresh(); });
   draw();
   body.append(el("p", "Every nation has an ink with one rule. Choose yours, then choose where to start."), list);
   sheet("Choose your ink", body, "Choose where to start");
@@ -7049,7 +7143,7 @@ function due(T, p) {
   d.hidden = !list.length;
   if (d.dataset.at === String(list.length && list[0][0])) return;
   d.dataset.at = String(list.length && list[0][0]);
-  d.replaceChildren(...list.map(([kind, k]) => { const b = button(k.name, "main"), n = el("small", k.line); n.style.display = "block"; b.append(n); b.style.whiteSpace = "normal"; b.onclick = () => T.ready() && T.play({ do: kind, [kind]: k.id }); return b; }));
+  d.replaceChildren(...list.map(([kind, k]) => { const b = button(k.name, "main"), n = el("small", k.line); n.style.display = "block"; b.append(n); b.style.whiteSpace = "normal"; b.onclick = () => T.ready() && act(T, { do: kind, [kind]: k.id }); return b; }));
 }
 /** The status line is spoken, so it changes only when the state does; the numbers sit in the plain line below it. */
 const state = (t) => { if ($("status").textContent !== t) $("status").textContent = t; };
@@ -7070,7 +7164,7 @@ function leaders(p) {
       if (i.rgb) sw.style.background = `rgb(${i.rgb})`;
       b.append(dot, el("b"), el("span"), info);
       if (i.name) info.prepend(sw);
-      b.onclick = () => card(T0.match.position, k);
+      b.onclick = () => card(pos(T0), k);
       li.append(b);
       rowsOf.set(k, li);
     }
@@ -7086,9 +7180,19 @@ function leaders(p) {
 }
 let T0 = null;
 
+/** inchlive hook: live play's line and buttons: an invitation from a game not yet begun, then how the live game stands. */
+function linkRow(T, p, c) {
+  const say = p.people && net ? net.line() : "", offers = p.people ? net?.offers() || [] : p.phase === "spawn" && inviter && !T.match.list.length && !T.demo ? [["Play live with a friend", () => inviter()]] : [];
+  if (c.link.textContent !== say) c.link.textContent = say;
+  c.link.hidden = !say;
+  const key = offers.map(([t]) => t).join("|");
+  if (c.linkGo.dataset.keys !== key) { c.linkGo.dataset.keys = key; c.linkGo.replaceChildren(...offers.map(([t, go], k) => { const x = button(t, k ? "quiet" : "main"); x.onclick = go; return x; })); }
+  c.linkGo.hidden = !offers.length;
+}
 function panel(T) {
-  const p = T.match.position, s = p.human, c = controls(T), b = liveBoardFor(p);
+  const p = pos(T), s = p.human, c = controls(T), b = liveBoardFor(p);
   T0 = T;
+  linkRow(T, p, c);
   for (const id of ["targets", "shares", "pour", "wait"]) $(id).closest(".go, .pick")?.setAttribute("hidden", "");
   $("targets").hidden = $("shares").hidden = true;
   $("pour").parentElement.hidden = true;
@@ -7100,12 +7204,19 @@ function panel(T) {
   c.ink.hidden = !spawning || !p.choose;
   c.list.hidden = c.head.hidden = c.go.hidden = out;
   $("leaders").hidden = spawning;
+  if (spawning && p.land[s]) { // inchlive hook: in a game for two, you have started and your friend is still choosing
+    state("Your friend is choosing where to start. The clock starts when you both have.");
+    c.heading.textContent = ""; c.list.hidden = c.head.hidden = c.go.hidden = c.ink.hidden = true; c.due.hidden = c.runs.hidden = c.me.hidden = true;
+    c.querySelector(".live-info").textContent = "";
+    mark(T);
+    return;
+  }
   if (spawning) {
-    const list = startsOf(T), pick = ink === "draw" ? p.ink[0] : ink;
+    const list = startsOf(T), pick = ink === "draw" ? p.ink[p.human] : ink;
     if (!list.some((x) => x.value === home)) home = list[0]?.value ?? "";
     state("Choose where to start: a place in the list, or empty land on the map.");
     c.heading.textContent = "";
-    c.querySelector(".live-info").textContent = `${p.troops.length - 1} other nations are on the map. Choose a place with room to grow.${p.dries ? " Your first cell is your capital, and the page dries from its edges inward." : ""}`;
+    c.querySelector(".live-info").textContent = `${p.people ? `Your friend and ${p.troops.length - 2} other nations` : `${p.troops.length - 1} other nations`} are on the map. Choose a place with room to grow.${p.dries ? " Your first cell is your capital, and the page dries from its edges inward." : ""}`;
     c.ink.textContent = p.choose ? `Your ink: ${ink === "draw" ? `drawn for you, ${INKS[pick].name}` : INKS[pick].name}. Change` : "";
     c.head.textContent = "Where to start";
     rows(c.list, list.map((x) => ({ value: x.value, label: x.where, note: x.note })), home, (v) => { home = v; T.refresh(); });
@@ -7129,11 +7240,12 @@ function panel(T) {
   const mine = inkOf(p, s), top = maxOf(p, s), have = p.troops[s];
   // the shell blanks the spoken status while a move plays out, so in play it holds only what lasts: that you are out
   state(out ? "You are out. Watching to the end" : "");
-  const hold = waiting(T);
-  c.heading.textContent = out ? "" : hold ? "The clock waits for your first order. Choose where to send a share of your strength." : paused ? `${held === T.match ? "Paused where you left it. Resume, or press Space, to go on." : "Paused."} You can still send orders.` : "Choose where to send a share of your strength.";
-  c.pause.textContent = hold ? "Start the clock" : paused ? "Resume" : "Pause";
+  const hold = waiting(T), shared = !!p.people && !!net && !net.alone, still = shared ? net.paused() : paused; // inchlive hook: a shared pause
+  c.fast.hidden = c.fast.hidden || shared; // both browsers run at one speed
+  c.heading.textContent = out ? "" : hold ? "The clock waits for your first order. Choose where to send a share of your strength." : shared ? (still ? "Paused for you both. You can still send orders." : "Choose where to send a share of your strength.") : paused ? `${held === T.match ? "Paused where you left it. Resume, or press Space, to go on." : "Paused."} You can still send orders.` : "Choose where to send a share of your strength.";
+  c.pause.textContent = hold ? "Start the clock" : still ? "Resume" : "Pause";
   // on a phone the map comes in close on your land once you have it (and on a game brought back), not the whole world in a strip
-  if (framed !== T.match && !T.demo && p.land[s]) { framed = T.match; if (innerWidth <= 820) requestAnimationFrame(() => { if (T.match?.position.live) frame(T, T.match.position, b, centre(T.match.position, b), 13); }); }
+  if (framed !== T.match && !T.demo && p.land[s]) { framed = T.match; if (innerWidth <= 820) requestAnimationFrame(() => { if (T.match?.position.live) frame(T, pos(T), b, centre(pos(T), b), 13); }); }
   const page = p.dries ? (p.tick < DRIES.from ? `The page dries from ${clockOf(DRIES.from)}. ` : `${Math.round((100 * wetOf(p)) / p.total)}% of the page is still wet. `) : "";
   const strength = have > top ? `Strength ${have}, over your limit of ${top}, so it falls back slowly.` : `Strength ${have} of a limit of ${top}, +${gainOf(p, s)} every half second.`;
   c.querySelector(".live-info").textContent = out ? "The other nations play on to the end. Speed up the clock, or start again from the menu." : `${strength} ${page}${mine.name ? `${mine.name}: ${mine.line}` : ""}${p.boats ? ` Your boats cross ${rangeOf(p, b, s)} cells of sea.` : ""}`;
@@ -7144,7 +7256,7 @@ function panel(T) {
     rows(c.list, list, aim, (v) => { aim = v; T.refresh(); });
     const t = list.find((x) => x.value === aim), amount = Math.floor((have * pct) / 100);
     c.go.textContent = !t ? "Nothing in reach" : `Send ${pct}% (${amount}) ${t.boat ? "by boat " : ""}${t.to === NONE ? "into empty land" : `to ${p.names[t.to]}`}`;
-    c.go.onclick = () => { const now = targetsOf(T.match.position, liveBoardFor(T.match.position)).find((x) => x.value === aim); if (T.ready() && now) send(T, now); };
+    c.go.onclick = () => { const now = targetsOf(pos(T), liveBoardFor(pos(T))).find((x) => x.value === aim); if (T.ready() && now) send(T, now); };
     truce(T, p, b, t);
     // said once each time your land passes a quarter, a half, three quarters or nine tenths of the goal, and when it falls back
     const r = p.land[s] / goalOf(p);
@@ -7161,12 +7273,12 @@ function panel(T) {
 }
 
 const ending = (T) => {
-  const p = T.match.position, w = T.match.result.winners[0];
+  const p = pos(T), w = T.match.result.winners[0];
   return w === p.human ? "The map is yours." : p.alive[p.human] ? `${p.names[w]} wins.` : `You were out. ${p.names[w]} wins.`;
 };
 /** The end screen's words: who won and how, then the leading nations' inks and marks. */
 function summary(T) {
-  const p = T.match.position, r = T.match.result, m = Math.round(p.tick / 120), who = (s) => [inkOf(p, s).name, markOf(p, s).name].filter(Boolean).join(", ");
+  const p = pos(T), r = T.match.result, m = Math.round(p.tick / 120), who = (s) => [inkOf(p, s).name, markOf(p, s).name].filter(Boolean).join(", ");
   queueMicrotask(() => figures(T)); // the end sheet is built around these words; the figures join it once it stands
   return `${p.names[r.winners[0]]} ${r.why}, after ${m < 1 ? "less than a minute" : `${m} ${m === 1 ? "minute" : "minutes"}`} of game time${who(r.winners[0]) ? `, with ${who(r.winners[0])}` : ""}.`;
 }
@@ -7174,7 +7286,7 @@ function summary(T) {
  *  starts the same game against normal rivals. */
 function nudge(T) {
   const m = T.match, p = m.position;
-  if (!p.live || T.demo || T.kinds[0] !== "you" || p.rivals !== "gentle" || !p.over || p.over.winners[0] !== p.human || p.tick >= QUICK) return null;
+  if (!p.live || p.people || T.demo || T.kinds[0] !== "you" || p.rivals !== "gentle" || !p.over || p.over.winners[0] !== p.human || p.tick >= QUICK) return null;
   const wrap = el("section", undefined, "stack"), go = button("Try Normal rivals", "quiet");
   go.onclick = () => { $("sheet").close(); T.begin(createMatch(inch, { seed: [...crypto.getRandomValues(new Uint32Array(2))].map((v) => v.toString(36)).join(""), options: { ...m.options, rivals: "even" } }), [...T.kinds]); };
   wrap.append(el("p", `A win in ${clockOf(p.tick)}: gentle rivals may be too easy for you now. Normal rivals leave you alone for ${span(RIVALS.even.truce)}, then up to ${RIVALS.even.pile} attack you at once.`, "live-info"), go);
@@ -7187,7 +7299,7 @@ const stats = (p, s) => (p.over ? [["Strength", p.troops[s]], ...(p.ink.some((k)
  *  where you finished, your best share and when, what you sent, what you took and lost, whom you finished. Then every leading
  *  nation's share of the land over the game, each line named at its end. */
 function figures(T) {
-  const m = T.match, p = m.position, h = p.human, host = $("sheet-body").firstElementChild, old = $("chart");
+  const m = T.match, p = view(m.position), h = p.human, host = $("sheet-body").firstElementChild, old = $("chart");
   if (!host || !p.over || !old) return;
   const wrap = el("section", undefined, "live-end"), wait = el("p", "Reading the game back for your figures.", "live-info"), again = createMatch(inch, { seed: m.seed, options: m.options });
   const st = { orders: 0, sent: 0, back: 0, took: 0, lost: 0, best: 0, bestAt: 0, top: 0, ended: [], outAt: -1, series: [] }, every = Math.max(2, Math.ceil(p.tick / 240));
@@ -7267,12 +7379,15 @@ function attacked(e, p) {
   told.set(key, p.tick);
   return e.kind === "soaked" ? `${p.names[e.by]} has your land surrounded: it soaks in a ring every half second.` : `${p.names[e.by]} attacks you.`;
 }
-const lineOf = (e, p) => (e.kind === "dries" ? "The page begins to dry from its edges." : e.kind === "capital" ? (e.seat === p.human ? "Your capital is lost: it moves to your largest land, and a quarter of your strength goes with it." : "") : e.kind === "out" ? (e.seat === p.human ? (e.by >= 0 ? `You are out: ${p.names[e.by]} took your last land.` : "You are out.") : e.by === p.human ? `You finish ${p.names[e.seat]}.` : `${p.names[e.seat]} is gone.`) : e.kind === "attacked" || e.kind === "soaked" ? attacked(e, p) : e.kind === "pact" ? `You and ${p.names[e.to]} keep a truce for ${span(PACT.long)}: neither of you can attack the other.` : e.kind === "pactend" ? `Your truce with ${p.names[e.to]} is over.` : e.kind === "recall" ? `You call your attack back: ${e.back} come home, ${e.lost} are lost.` : e.kind === "city" ? "You build a city." : e.kind === "boat" ? (e.landed ? "Your boats land." : `Your boats are thrown back. They lose ${e.lost ?? 0}; the rest come home.`) : e.kind === "age" ? (e.age === 2 ? "Age II, Ink: choose your mark." : "Age III, Seal: your card is ready, and the goal begins to ease.") : e.kind === "mark" || e.kind === "card" ? `You take ${[...MARKS, ...CARDS].find((k) => k.id === e[e.kind]).name}.` : "");
+/** inchlive hook: in a game for two, the other person's own doings are told by name, or not at all. */
+const OWN = new Set(["pact", "pactend", "recall", "city", "boat", "mark", "card"]);
+const lineOf = (e, p) => (p?.people && e.seat !== undefined && e.seat !== p.human && OWN.has(e.kind) ? (e.kind === "pact" ? `${p.names[e.seat]} keeps a truce with ${p.names[e.to]}.` : "") : oneLine(e, p));
+const oneLine = (e, p) => (e.kind === "dries" ? "The page begins to dry from its edges." : e.kind === "capital" ? (e.seat === p.human ? "Your capital is lost: it moves to your largest land, and a quarter of your strength goes with it." : "") : e.kind === "out" ? (e.seat === p.human ? (e.by >= 0 ? `You are out: ${p.names[e.by]} took your last land.` : "You are out.") : e.by === p.human ? `You finish ${p.names[e.seat]}.` : `${p.names[e.seat]} is gone.`) : e.kind === "attacked" || e.kind === "soaked" ? attacked(e, p) : e.kind === "pact" ? `You and ${p.names[e.to]} keep a truce for ${span(PACT.long)}: neither of you can attack the other.` : e.kind === "pactend" ? `Your truce with ${p.names[e.to]} is over.` : e.kind === "recall" ? `You call your attack back: ${e.back} come home, ${e.lost} are lost.` : e.kind === "city" ? "You build a city." : e.kind === "boat" ? (e.landed ? "Your boats land." : `Your boats are thrown back. They lose ${e.lost ?? 0}; the rest come home.`) : e.kind === "age" ? (e.age === 2 ? "Age II, Ink: choose your mark." : "Age III, Seal: your card is ready, and the goal begins to ease.") : e.kind === "mark" || e.kind === "card" ? `You take ${[...MARKS, ...CARDS].find((k) => k.id === e[e.kind]).name}.` : "");
 /** When you lose your last cell the game goes on without you: watch it to the end, or start again. The open sheet holds the clock.
  *  When a game you played ends, the ledger notes it. */
 function seen(T, events) {
-  const p = T.match.position;
-  if (p.over && events.some((e) => e.kind === "end") && !T.demo && T.kinds[0] === "you" && !p.dries) note({ seed: T.match.seed, map: p.map, rivals: p.rivals, ticks: p.tick, ink: p.ink[0], mark: p.mark[0], nations: p.troops.length, won: p.over.winners[0] === p.human }) && (me = null);
+  const p = pos(T);
+  if (p.over && events.some((e) => e.kind === "end") && !T.demo && T.kinds[0] === "you" && !p.dries && !p.people) note({ seed: T.match.seed, map: p.map, rivals: p.rivals, ticks: p.tick, ink: p.ink[0], mark: p.mark[0], nations: p.troops.length, won: p.over.winners[0] === p.human }) && (me = null);
   // a new attack on you, or land of yours that has begun to soak away (said once in half a minute)
   const hit = events.find((e) => e.to === p.human && (e.kind === "attacked" || (e.kind === "soaked" && told.get(`s${e.by}`) === p.tick)));
   if (hit && p.alive[p.human] && !T.demo) strike(T, hit.by);
@@ -7317,7 +7432,7 @@ addEventListener("keydown", (e) => {
 function key(T, k) {
   if (k === "f") { find(T); return true; }
   if (k === "s") {
-    const p = T.match.position, s = p.human, going = p.attacks.filter((a) => a.by === s);
+    const p = pos(T), s = p.human, going = p.attacks.filter((a) => a.by === s);
     if (p.phase !== "play") return false;
     toast(`Strength ${p.troops[s]}, limit ${maxOf(p, s)}. Land ${p.land[s]}, goal ${goalOf(p)}. ${going.length ? `${word(going.length, "attack", "attacks")} under way, ${going.reduce((n, a) => n + a.left, 0)} strength in them.` : "No attack under way."}`);
     return true;
@@ -7359,7 +7474,7 @@ function rules(p, dries = false) {
   if (p ? p.dries : dries) return driesRules(p);
   const limit = p ? p.limit : SAFE, ages = p ? p.ages : true, inks = p ? p.ink.some((k) => k >= 0) : true, places = p ? p.places.length > 0 : true, ease = p ? p.ease : true, at = agesOf(p || { map: "world" });
   return [
-    "Real time: the clock starts with your first order, then runs on its own. Pause it (Space, or the button), or run it slower or faster, with the buttons.",
+    p?.people ? "Live with a friend: you each play a nation and the bots play the rest, the same in both browsers. The clock starts when you have both chosen where to start, runs at one speed for you both, and either of you can pause it for both. An order reaches both maps in under a second." : "Real time: the clock starts with your first order, then runs on its own. Pause it (Space, or the button), or run it slower or faster, with the buttons.",
     `${inks ? "Choose an ink, or Draw for me, then choose" : "Choose"} a place to start in the list, or tap empty land. Your strength grows every half second: more for more land, a little more for saving, up to a limit set by your land.`,
     "Choose a share with the slider, then a neighbour or empty land beside yours, in the list or on the map. That share of your strength goes, and the border creeps forward until it is spent. An arrow on the map points at your biggest attack.",
     "Call an attack back from the list under the button: a quarter of what is left of it is lost, and the rest comes home. A Flood cannot be called back.",
@@ -7380,7 +7495,569 @@ function rules(p, dries = false) {
   ];
 }
 
-$x.colours = colours; $x.start = start; $x.tap = tap; $x.board = board; $x.panel = panel; $x.ending = ending; $x.summary = summary; $x.nudge = nudge; $x.stats = stats; $x.lineOf = lineOf; $x.seen = seen; $x.hold = hold; $x.continueText = continueText; $x.leave = leave; $x.liveGoal = liveGoal; $x.liveLand = liveLand; $x.time = time; $x.record = record; $x.key = key; $x.rules = rules;
+$x.useNet = useNet; $x.useInviter = useInviter; $x.view = view; $x.colours = colours; $x.start = start; $x.tap = tap; $x.board = board; $x.panel = panel; $x.ending = ending; $x.summary = summary; $x.nudge = nudge; $x.stats = stats; $x.lineOf = lineOf; $x.seen = seen; $x.hold = hold; $x.continueText = continueText; $x.leave = leave; $x.liveGoal = liveGoal; $x.liveLand = liveLand; $x.time = time; $x.record = record; $x.key = key; $x.rules = rules;
+return $x; })({});
+$m[45] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// A real-time game played live between two browsers, in lockstep, over any channel that carries plain messages in order
+// (site/inchplay.js uses the live link's WebRTC). Turn games use session.js; a game on a clock needs a different exchange.
+//
+// Time is counted in frames, four a second, never in wall time: frame f is the same moment on both sides. Each side sends one
+// message a frame with the orders its person gave since the last, and a commitment to a fresh secret. An order is sent for a frame
+// DELAY frames ahead of the last one played, so the other side has it in time (the input delay). Frame f is played when both
+// sides' messages for it are here: first any pause or resume, then the host's orders, then the guest's, each checked by the rules
+// on both sides alike (an order the game no longer allows is skipped by both), then, every TICK frames while the clock runs, one
+// tick of the game. That tick's dice are mixed with both secrets of the frame (session.js's salt), and a side shows its secret only
+// once it holds the other's orders and commitment for that frame, so neither can know the dice before its own orders are fixed.
+// Both sides play the same moves from the same seed, so the game is a list of moves like any other, saved and replayed whole.
+// Every SUM frames each side sends a short sum of the game; sums that differ stop live play (a desync). A dropped channel stalls
+// the clock on both sides alike; joined again, each side sends what the other has not had, and play goes on from the same frame.
+const { canon } = $m[4];
+const { DEALT, commitOf, saltOf, seedOf } = $m[9];
+
+const FRAME_MS = 250, DELAY = 2, TICK = 2, SUM = 4;
+const V = 1, SECRET = /^[0-9a-f]{32}$/, HASH = /^[0-9a-f]{64}$/, MOST = 8, AHEAD = 64, CONTROLS = ["pause", "go"];
+const isF = (n) => Number.isInteger(n) && n >= 0 && n < 2 ** 31;
+
+/** A short sum of a game's position and length, quick enough to take every second: FNV-1a over every whole number and word in it,
+ *  walked in canon's order (keys sorted). Two sums differ when the games do, but for a chance of about one in four billion. */
+function quickSum(match) {
+  let a = 0x811c9dc5, b = 0x01000193 ^ match.list.length;
+  const mix = (n) => { a = Math.imul(a ^ (n & 0xffff), 0x01000193); b = Math.imul(b ^ (n >>> 16 & 0xffff) ^ (n < 0 ? 0x5bd1 : 0), 0x01000193); };
+  const walk = (v) => {
+    if (v === null || v === undefined) mix(7);
+    else if (typeof v === "number") { mix(1); mix(v | 0); mix(Math.floor(v / 2 ** 32) | 0); }
+    else if (typeof v === "boolean") mix(v ? 3 : 5);
+    else if (typeof v === "string") { mix(11); for (let i = 0; i < v.length; i++) mix(v.charCodeAt(i)); }
+    else if (Array.isArray(v)) { mix(13); mix(v.length); for (const x of v) walk(x); }
+    else { mix(17); for (const k of Object.keys(v).sort()) { walk(k); walk(v[k]); } }
+  };
+  walk(match.position);
+  return ((a >>> 0).toString(16).padStart(8, "0") + (b >>> 0).toString(16).padStart(8, "0"));
+}
+
+/**
+ * side: "host" (seat 0) or "guest" (seat 1). secret(): 32 fresh hex digits. game, options: what both play (a match is made only
+ * by the page). match(): the shared match now, or null before the deal. play(move, salt): the page plays one move on that match;
+ * it returns false when the rules refuse it (both sides then skip it). clock(match): whether the game's clock runs at this position.
+ * tick: the move a tick plays. sum(match): the check sent every SUM frames (quickSum when not given). now(): milliseconds, for the
+ * figures only. What the page is told: dealt(seed): a game not yet begun gets a fresh seed drawn by both; adopt(save): this side
+ * lost its game (a page reloaded) or holds an older copy, so it takes the other's, as a saved game, where both now stand; paused(on, side): the
+ * clock was paused or resumed, at the same frame on both sides; stop(text): live play stopped (a desync, a broken promise);
+ * note(text): something to say.
+ */
+function createLockstep({ side, secret, game, options, match, play, clock, tick = { do: "tick", n: 1 }, sum = quickSum, now = () => 0, dealt, adopt, paused, stop, note = () => {} }) {
+  const me = side === "host" ? 0 : 1, them = 1 - me;
+  let send = null, up = false, over = false, deal = null, theirDeal = null, asked = false;
+  let sent = 0, done = 0, run = 0, heard = 0, acked = 0, halted = false, ask = null, queue = [];
+  const mine = new Map(), theirs = new Map(), opens = new Map(), shown = new Set(), sums = new Map(), theirSums = new Map();
+  const figures = { rtt: [], lag: [], stalls: 0, checked: 0, frames: 0 };
+  const quit = (text) => { if (over) return; over = true; up = false; stop(text); };
+  const out = (x) => send?.(x);
+  const reset = () => {
+    sent = done = run = heard = acked = 0; halted = false; ask = null; queue = [];
+    for (const map of [mine, theirs, opens, sums, theirSums]) map.clear();
+    shown.clear();
+  };
+
+  function dealing() {
+    if (!deal) { const r = secret(); deal = { r, c: commitOf(r) }; }
+    out({ t: "deal", c: deal.c });
+  }
+  /** Whether side a must take side b's game: a has none, or a's live table is new (a page reloaded) and b's is not, or holds less. */
+  const needs = (a, b) => b.seed !== null && (a.seed === null || (a.seed === b.seed && a.fresh && (!b.fresh || a.moves < b.moves)));
+  function hello(h) {
+    const m = match();
+    if (h.v !== V) return quit("The other browser has a different version of live real-time play.");
+    if (h.side === side) return quit("Both browsers think they made this game, so live play stopped.");
+    if (h.game !== game.id || h.version !== game.version || canon(h.options) !== canon(options)) return quit("The other browser has a different game open, so live play stopped.");
+    if ((h.seed !== null && typeof h.seed !== "string") || typeof h.fresh !== "boolean" || !isF(h.moves)) return quit("The other browser sent a greeting this one cannot read, so live play stopped.");
+    const ours = m ? m.seed : null, us = { seed: ours, fresh: sent === 0 && done === 0, moves: m ? m.list.length : 0 };
+    if (ours === null && h.seed === null) { up = true; return dealing(); }
+    if (needs(us, h)) { up = true; asked = true; out({ t: "need" }); return undefined; }
+    if (needs(h, us)) { up = true; return undefined; } // they ask for our game, and take it
+    if (h.seed !== ours) return quit("The two browsers have different games, so live play stopped.");
+    if (!isF(h.done) || !isF(h.got) || h.got > sent || h.done > sent || done > h.sent || h.got < acked) return quit("The two browsers could not agree where the game stands, so live play stopped.");
+    acked = Math.max(acked, h.done);
+    // what they have not had: our frames from where they stopped hearing, and our secrets for frames they have not played
+    for (let f = h.got; f < sent; f++) out(frameOf(f));
+    for (const f of [...shown].sort((x, y) => x - y)) if (f >= h.done) out({ t: "r", f, r: mine.get(f).r });
+    up = true;
+    pump();
+    return undefined;
+  }
+  const frameOf = (f) => { const x = mine.get(f); return { t: "f", f, o: x.o, c: x.c, ...(x.x ? { x: x.x } : {}), a: done }; };
+  /** Show our secret for frame f once we hold their orders and commitment for it. */
+  function reveal(f) {
+    if (shown.has(f) || !mine.has(f) || !theirs.has(f)) return;
+    shown.add(f);
+    out({ t: "r", f, r: mine.get(f).r });
+  }
+  /** Frames sent but not played are taken back: our orders in them go out again from the frame both have played (the other side
+   *  is taking our game, and has none of them). */
+  function rollback() {
+    const back = [];
+    for (let f = done; f < sent; f++) { const x = mine.get(f); if (!x) continue; x.o.forEach((m, i) => back.push({ m, at: x.at[i] })); if (x.x) ask = x.x; mine.delete(f); shown.delete(f); }
+    queue = [...back, ...queue];
+    sent = heard = acked = done;
+    theirs.clear(); opens.clear(); sums.clear(); theirSums.clear();
+  }
+  function forget() {
+    for (const f of mine.keys()) if (f < acked && f < done) { mine.delete(f); shown.delete(f); }
+    for (const map of [theirs, opens]) for (const f of map.keys()) if (f < done) map.delete(f);
+    for (const map of [sums, theirSums]) for (const f of map.keys()) if (f < done - 8 * SUM) map.delete(f);
+  }
+
+  /** Play every frame both sides have sent and shown. */
+  function pump() {
+    while (!over && match()) {
+      const f = done, a = mine.get(f), b = theirs.get(f), r = opens.get(f);
+      if (!a || !b || r === undefined) return;
+      const [host, guest] = side === "host" ? [a, b] : [b, a], [hr, gr] = side === "host" ? [a.r, r] : [r, a.r];
+      for (const [x, who] of [[host.x, "host"], [guest.x, "guest"]]) {
+        if (x === "pause" && !halted) { halted = true; paused(true, who); } else if (x === "go" && halted) { halted = false; paused(false, who); }
+      }
+      for (const mv of [...host.o, ...guest.o]) play(mv, "");
+      if (!halted && clock(match())) { run++; if (run % TICK === 0) play(tick, saltOf(f, hr, gr)); }
+      done = f + 1;
+      figures.frames++;
+      for (const at of a.at) figures.lag.push(now() - at);
+      if (done % SUM === 0) { const h = sum(match()); sums.set(f, h); out({ t: "s", f, h }); compare(f); }
+      forget();
+    }
+  }
+  function compare(f) {
+    if (!sums.has(f) || !theirSums.has(f)) return;
+    if (sums.get(f) !== theirSums.get(f)) { quit("The two browsers see this game differently (their checks disagree), so live play stopped."); return; }
+    figures.checked++;
+    sums.delete(f); theirSums.delete(f);
+  }
+
+  const s = {
+    /** A channel is open: say where we stand. */
+    attach(o) {
+      send = o; up = false;
+      const m = match();
+      out({ t: "hello", v: V, side, game: game.id, version: game.version, options, seed: m ? m.seed : null, fresh: sent === 0 && done === 0, moves: m ? m.list.length : 0, done, sent, got: Math.max(done, heard) });
+    },
+    /** The channel is gone: the clock stalls here and on the other side alike, until it is joined again. */
+    detach() { send = null; up = false; },
+    get up() { return up && !over && !!match(); },
+    get stopped() { return over; },
+    get paused() { return halted; },
+    /** Frames played so far: the shared clock, a quarter of a second each. */
+    get frame() { return done; },
+    /** Whether the clock stands waiting for the other browser (its frame is not here yet). */
+    get waiting() { return !!match() && !over && (!up || sent >= done + DELAY); },
+    /** Orders queued, not yet sent. */
+    get queued() { return queue.length; },
+    /** Send this side's next frame, if the other side is not too far behind. The page calls this four times a second. */
+    step() {
+      if (!s.up || over || asked) return false;
+      if (sent >= done + DELAY) { figures.stalls++; return false; }
+      const f = sent, r = secret(), o = queue.splice(0, MOST), x = ask;
+      ask = null;
+      mine.set(f, { o: o.map((q) => q.m), at: o.map((q) => q.at), x, r, c: commitOf(r), sentAt: now() });
+      sent++;
+      out(frameOf(f));
+      reveal(f);
+      pump();
+      return true;
+    },
+    /** This side's person gives an order: it goes in the next frame sent, named as this side's seat. */
+    order(m) { if (!over) queue.push({ m: { ...m, by: me }, at: now() }); },
+    /** Pause or resume the clock for both sides: it takes effect at the frame it is sent in, on both sides. */
+    control(x) { if (CONTROLS.includes(x)) ask = x; },
+    receive(x) {
+      if (over || !x || typeof x !== "object" || !send) return;
+      if (x.t === "hello") { hello(x); return; }
+      if (!up || (asked && x.t !== "take")) return; // while this side waits for the other's game, nothing else of it counts
+      if (x.t === "need") {
+        const m = match();
+        if (!m || asked) return undefined;
+        rollback();
+        out({ t: "take", save: m.save(), done, run, halted });
+        note("Your friend's browser came back without the game, so it takes this one's, as it stands now.");
+        pump();
+      } else if (x.t === "take" && asked && typeof x.save === "string" && isF(x.done) && isF(x.run) && typeof x.halted === "boolean") {
+        asked = false;
+        try { adopt(x.save); } catch { return quit("The other browser's game could not be opened here, so live play stopped."); }
+        if (!match()) return quit("The other browser's game could not be opened here, so live play stopped.");
+        const q = queue;
+        reset();
+        queue = q;
+        sent = done = heard = acked = x.done; run = x.run; halted = x.halted;
+        if (halted) paused(true, side === "host" ? "guest" : "host");
+        pump();
+      } else if (x.t === "deal" && HASH.test(x.c)) {
+        if (match()) return;
+        if (theirDeal && theirDeal !== x.c) note("The other browser started the deal again.");
+        if (!deal) dealing();
+        theirDeal = x.c;
+        out({ t: "open", r: deal.r });
+      } else if (x.t === "open" && SECRET.test(x.r) && theirDeal && deal && !match()) {
+        if (commitOf(x.r) !== theirDeal) return quit("The other browser changed a secret it had promised, so live play stopped.");
+        const seed = seedOf(...(side === "host" ? [deal.r, x.r] : [x.r, deal.r]));
+        reset();
+        dealt(seed);
+        if (!match() || match().seed !== seed || !seed.startsWith(DEALT)) quit("This browser could not begin the game that was dealt.");
+      } else if (x.t === "f") {
+        const { f, o, c } = x;
+        if (!isF(f) || !Array.isArray(o) || o.length > MOST || !HASH.test(c) || (x.x !== undefined && !CONTROLS.includes(x.x)) || !isF(x.a)) return quit("The other browser sent a frame this one cannot read, so live play stopped.");
+        if (o.some((mv) => !mv || typeof mv !== "object" || Array.isArray(mv) || mv.by !== them)) return quit("The other browser sent an order for a seat that is not its own, so live play stopped.");
+        if (f > done + AHEAD) return quit("The other browser ran too far ahead, so live play stopped.");
+        acked = Math.max(acked, Math.min(x.a, sent));
+        if (f < done) { forget(); return; } // played already: a frame sent again after a drop
+        const had = theirs.get(f), now2 = { o, c, x: x.x };
+        if (had) { if (canon(had) !== canon(now2)) quit("The other browser changed a frame it had sent, so live play stopped."); return; }
+        theirs.set(f, now2);
+        while (theirs.has(heard) || heard < done) heard++;
+        reveal(f);
+        pump();
+      } else if (x.t === "r" && isF(x.f) && SECRET.test(x.r)) {
+        const c = theirs.get(x.f)?.c;
+        if (!c || opens.has(x.f) || x.f < done) return;
+        if (commitOf(x.r) !== c) return quit("The other browser changed a secret it had promised, so live play stopped.");
+        opens.set(x.f, x.r);
+        const at = mine.get(x.f)?.sentAt;
+        if (at !== undefined) figures.rtt.push(now() - at);
+        pump();
+      } else if (x.t === "s" && isF(x.f) && typeof x.h === "string" && x.h.length <= 128) {
+        if (x.f >= done + AHEAD) return;
+        theirSums.set(x.f, x.h);
+        compare(x.f);
+        for (const f of theirSums.keys()) if (f < done - 4 * SUM) theirSums.delete(f);
+      }
+      return undefined;
+    },
+    /** Timings for the record: round trips (a frame sent to the other's secret back), how long an order of ours took to be played,
+     *  how often the clock stood waiting for the other side, how many sums matched. */
+    figures() {
+      const mid = (l) => (l.length ? [...l].sort((x, y) => x - y)[Math.floor(l.length / 2)] : 0), top = (l) => (l.length ? [...l].sort((x, y) => x - y)[Math.floor(l.length * 0.95)] : 0);
+      return { frames: figures.frames, rtt: mid(figures.rtt), rtt95: top(figures.rtt), lag: mid(figures.lag), lag95: top(figures.lag), orders: figures.lag.length, stalls: figures.stalls, checked: figures.checked };
+    },
+  };
+  return s;
+}
+
+$x.FRAME_MS = FRAME_MS; $x.DELAY = DELAY; $x.TICK = TICK; $x.SUM = SUM; $x.quickSum = quickSum; $x.createLockstep = createLockstep;
+return $x; })({});
+$m[44] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// An Inch of Ink in real time, live between two browsers (ruling 155; the servers paper's real-time lockstep). Two people share one
+// map and the bots fill the other nations, played the same on both sides. The invitation and the reply are the live link's
+// (site/livelink.js): a link with a WebRTC offer, a reply link, then a data channel straight between the two browsers; the one outside
+// address is the STUN service in config.js, reached only after a player asks for live play. The exchange is src/core/lockstep.js:
+// orders in frames four times a second, a short input delay, the clock in game ticks, dice from both browsers' secrets, a check
+// every second, a pause both see, and joining again after a drop. If no direct path is found, the page says so and nothing is lost.
+const { Refusal, canon, createMatch, openSave, readOptions } = $m[3];
+const { DELAY, FRAME_MS, createLockstep } = $m[45];
+const { DEALT } = $m[9];
+const { inch } = $m[1];
+const { LIVE_ADDRESSES } = $m[27];
+const { makeLink, newId, readLink } = $m[29];
+const { PARTS, PRIVACY, canLive } = $m[36];
+const { $, el, sheet, toast } = $m[13];
+const { useInviter, useNet } = $m[41];
+
+const { GATHER, HAND, OPEN, blobOf, gathered, secret, squeeze, unsqueeze } = PARTS;
+const V = 1, INVITE = "capo-inch-live-invite", SIDE_KEY = "capo-inch-live", MOST = 400000;
+const FAIR_RT = "Both browsers play every tick by the same rules from the same orders and compare the game every second. Nobody can peek at the dice: the bots' chances each tick are drawn from secrets of both browsers, shown only after both have sent their orders. Both browsers hold the whole game, so live play is for friends.";
+const button = (text, cls, go) => { const b = el("button", text, cls); b.type = "button"; b.onclick = go; return b; };
+const closeSheet = () => { if ($("sheet").open) $("sheet").close(); };
+const cap = (t) => `${t[0].toUpperCase()}${t.slice(1)}`;
+const STYLE = { classic: "Traditional", ours: "Capo, The Ink Dries", custom: "Custom" }, MAP = { world: "the world map", continents: "a map of continents", islands: "a map of islands" }, RIVAL = { gentle: "gentle", even: "normal", hard: "hard" };
+const about = (o) => `${STYLE[o.style] || "Real time"}${o.style === "ours" ? "" : `, on ${MAP[o.map] || o.map}, ${o.nations} nations`}, ${RIVAL[o.rivals] || o.rivals} rivals.`;
+
+let T = null, game = null, wire = null, driver = 0, budget = 0, last = 0, hand = null, shown = "";
+const useNetLine = () => (game ? handle(game).line() : "");
+/** This browser's side in the live game with this seed, kept so a game brought back after a reload is played from the right seat. */
+const keepSide = (seed, side) => { try { localStorage.setItem(SIDE_KEY, JSON.stringify({ seed, side })); } catch { /* the seat is then asked of the other browser */ } };
+const sideOf = (seed) => { try { const k = JSON.parse(localStorage.getItem(SIDE_KEY) || "null"); return k?.seed === seed ? k.side : null; } catch { return null; } };
+
+/** The live table for one game: made once, kept across dropped connections, so promised secrets stay promised. */
+function lockFor(g) {
+  g.lock ??= createLockstep({
+    side: g.side, secret, game: inch, options: g.options, now: () => performance.now(),
+    match: () => (g.m && T.match === g.m && !T.demo ? g.m : null), // the game on the table, while it is this one
+    clock: (m) => m.position.phase === "play" && !m.position.over,
+    play: (mv, salt) => { try { T.flow(mv, salt); return true; } catch (e) { if (e instanceof Refusal) return false; throw e; } },
+    dealt: (seed) => { g.seed = seed; keepSide(seed, g.side); g.m = createMatch(inch, { seed, options: g.options }); T.begin(g.m, ["you"]); toast("Dealt live: both browsers drew the map together. Choose where to start."); },
+    adopt: (save) => {
+      const m = openSave(save, [inch]).match;
+      if (canon(m.options) !== canon(g.options) || !m.seed.startsWith(DEALT)) throw new Refusal("live", "the other browser sent another game");
+      g.seed = m.seed; g.m = m; keepSide(m.seed, g.side);
+      T.begin(m, ["you"]);
+      toast("Your browser took the game from your friend's, where it stands now.");
+    },
+    paused: (on, who) => { toast(on ? (who === g.side ? "You paused the clock for you both." : "Your friend paused the clock.") : who === g.side ? "The clock runs again." : "Your friend started the clock again."); T.refresh(); },
+    stop: (text) => { end(); stopped(text); },
+    note: (text) => toast(text),
+  });
+  return g.lock;
+}
+
+/** What the move panel asks of the live game (site/inchlive.js). */
+function handle(g) {
+  return {
+    seat: g.seat,
+    get alone() { return g.alone; },
+    joined: () => !g.alone && !!g.lock?.up,
+    order: (m) => { lockFor(g).order(m); if (!g.lock.up) toast("Your order waits until your friend's browser is joined again."); },
+    pause: () => g.lock.control(g.lock.paused ? "go" : "pause"),
+    paused: () => !!g.lock?.paused && !g.alone,
+    line() {
+      if (g.alone) return "Played on alone: your friend's nation stands still.";
+      const l = g.lock;
+      if (!l?.up) return wire && !wire.open ? "Joining your friend's browser..." : "Your friend's browser is not joined, so the clock waits for you both. Invite them back, or play on alone.";
+      if (l.frame > 0 && performance.now() - (g.moved || 0) > 1500) return "Waiting for your friend's browser..."; // no frame played for a while: the other side is slow or gone
+      const f = l.figures(), ms = f.lag || (DELAY + 1) * FRAME_MS;
+      return `${l.paused ? "Paused. Either of you can start the clock again. " : ""}Live with your friend: your orders reach both maps in about ${ms < 950 ? `${Math.round(ms / 50) * 50} ms` : `${(ms / 1000).toFixed(1)} seconds`}.`;
+    },
+    offers() {
+      if (g.alone) return [];
+      if (g.lock?.stopped) return [["Play on alone", () => alone()]];
+      if (g.lock?.up || (wire && !wire.open)) return [];
+      return [["Invite your friend back", () => invite()], ["Play on alone", () => alone()]];
+    },
+  };
+}
+
+function end() {
+  const w = wire;
+  wire = null;
+  clearInterval(driver); driver = 0;
+  game?.lock?.detach();
+  if (!w) return;
+  clearTimeout(w.timer);
+  try { w.dc?.close(); } catch { /* already closed */ }
+  try { w.pc.close(); } catch { /* already closed */ }
+}
+/** Four frames a second, by this browser's clock; a frame the other side has not answered waits, and a short backlog is caught up. */
+function drive() {
+  clearInterval(driver);
+  last = performance.now(); budget = 0;
+  driver = setInterval(() => {
+    const t = performance.now(), l = game?.lock;
+    budget = Math.min(budget + (t - last) / FRAME_MS, DELAY + 2); last = t;
+    while (l && budget >= 1 && l.step()) budget -= 1;
+    if (l && l.frame !== game.at) { game.at = l.frame; game.moved = t; }
+    const say = T.match?.position.people && !T.demo ? useNetLine() : "";
+    if (say !== shown) { shown = say; T.refresh(); } // the panel's live line follows the connection, without drawing every beat
+  }, 50);
+}
+function stopped(text) {
+  const box = el("div", undefined, "stack");
+  box.append(el("p", text), el("p", "The game stays here as it stands. Play on alone (your friend's nation stands still), or save it from the menu."), button("Play on alone", "main", () => { closeSheet(); alone(); }));
+  sheet("Live play stopped", box);
+  T.refresh();
+}
+function alone() {
+  if (!game) return;
+  end();
+  game.alone = true;
+  toast("Playing on alone. The clock is yours again; your friend's nation stands still.");
+  T.refresh();
+}
+function noPath() {
+  end();
+  const box = el("div", undefined, "stack");
+  box.append(el("p", "No direct path was found between the two browsers. About one pair of networks in five needs a relay, which this site does not have yet."));
+  if (game?.seed && T.match?.seed === game.seed) box.append(el("p", "The game waits here as it stands. Try again, or play on alone."), button("Try again", "main", () => invite()), button("Play on alone", "quiet", () => { closeSheet(); alone(); }));
+  else box.append(el("p", "Play on your own instead, or try again from another network."));
+  sheet("Not joined", box);
+}
+function dropped() {
+  if (!wire) return;
+  end();
+  toast("The live connection dropped. The clock waits for you both: invite your friend back from the move panel.");
+  T.refresh();
+}
+
+function fresh() {
+  end();
+  const pc = new RTCPeerConnection({ iceServers: LIVE_ADDRESSES.map((a) => ({ urls: a.url })) });
+  wire = { pc, dc: null, open: false, timer: 0, waiting: false };
+  const w = wire;
+  pc.addEventListener("connectionstatechange", () => {
+    if (wire !== w) return;
+    const s = pc.connectionState;
+    if (s === "failed" || s === "closed") { if (w.open) dropped(); else noPath(); }
+  });
+  return pc;
+}
+function channel(dc) {
+  const w = wire, g = game;
+  w.dc = dc;
+  dc.onopen = () => {
+    if (wire !== w) return;
+    clearTimeout(w.timer);
+    w.open = true;
+    useNet(handle(g));
+    lockFor(g).attach((x) => { if (dc.readyState === "open") dc.send(JSON.stringify(x)); });
+    closeSheet();
+    drive();
+    toast("Joined: your browsers talk straight to each other.");
+    T.refresh();
+  };
+  dc.onmessage = (e) => {
+    if (wire !== w || typeof e.data !== "string" || e.data.length > MOST) return;
+    let x;
+    try { x = JSON.parse(e.data); } catch { return; }
+    try { g.lock.receive(x); } catch (err) { if (!(err instanceof Refusal)) throw err; end(); stopped(`${cap(err.message)}.`); }
+  };
+  dc.onclose = () => { if (wire === w && w.open) dropped(); };
+}
+/** The text to copy, with a Copy button and the field selected for a long press. */
+function copyRow(url, what) {
+  const t = el("textarea"), row = el("div", undefined, "go");
+  t.value = url; t.rows = 3; t.readOnly = true; t.className = "paste"; t.setAttribute("aria-label", what); t.id = `live-${what}`;
+  const c = button(`Copy the ${what}`, "main", async () => { try { await navigator.clipboard.writeText(url); c.textContent = "Copied"; } catch { t.select(); toast("Select the text and copy it."); } });
+  row.append(c);
+  if (navigator.share) row.append(button("Share", "quiet", () => navigator.share({ url }).catch(() => {})));
+  return [t, row];
+}
+
+/** Invite a friend: to a new game on these rules (from a game of your own not yet begun), or back into the live game after a drop. */
+async function invite() {
+  if (!canLive()) { toast("This browser cannot play live."); return; }
+  const p = T.match?.position;
+  if (!p?.live) return;
+  if (!p.people) game = { id: newId(), side: "host", seat: 0, options: { ...T.match.options, people: 2 }, seed: null, m: null, lock: null, alone: false };
+  else if (!game || game.m !== T.match || game.alone || game.lock?.stopped) return;
+  const g = game, box = el("div", undefined, "stack"), say = el("p", "Making the invitation...");
+  box.append(say);
+  sheet(g.seed ? "Invite your friend back" : "Play live with a friend", box, "Not now");
+  const pc = fresh(), w = wire;
+  channel(pc.createDataChannel("capo-inch", { ordered: true }));
+  let url;
+  try {
+    await pc.setLocalDescription(await pc.createOffer());
+    await gathered(pc);
+    const terms = new TextEncoder().encode(canon({ v: V, options: g.options, seed: g.seed, side: g.side }));
+    url = `${(await makeLink("inch", g.id, terms)).replace("#t=", "#i=")}&o=${blobOf(await makeLink("inch", g.id, await squeeze(pc.localDescription.sdp)))}`;
+  } catch (e) { if (wire === w) { end(); say.textContent = e instanceof Refusal ? `${cap(e.message)}.` : "This browser could not make an invitation for live play."; } return; }
+  if (wire !== w) return;
+  w.waiting = true;
+  const reply = el("textarea"), named = el("label", undefined, "stack"), status = el("p", "", "line");
+  reply.rows = 2; reply.className = "paste"; reply.placeholder = "Paste the reply here"; reply.id = "live-reply-in";
+  named.append(el("span", "The reply from your friend"), reply);
+  say.textContent = g.seed ? "Send this invitation to your friend. Opening it brings their browser back into this game; their reply joins you again." : `Send this invitation to your friend: ${about(g.options)} Opening it on their side makes a reply link; when it comes back, open it or paste it here. The map is dealt by both browsers once you are joined.`;
+  box.append(...copyRow(url, "invitation"), named, button("Join", "main", () => answered(reply.value, status)), status, el("small", PRIVACY), el("small", FAIR_RT));
+  listen(status);
+}
+/** The reply has come back: join, or say so if no path is found. */
+async function answered(text, status) {
+  const w = wire;
+  if (!w || w.open || !w.waiting) return false;
+  const m = String(text).trim().match(/#a=([\w-]{12,60000})/);
+  if (!m) { status.textContent = "That is not a reply to this invitation."; return false; }
+  try {
+    const l = readLink(`#t=${m[1]}`);
+    if (l.id !== game.id) throw new Refusal("live", "that reply is for another game");
+    const sdp = await unsqueeze(await l.open(""));
+    w.waiting = false;
+    await w.pc.setRemoteDescription({ type: "answer", sdp });
+  } catch (e) { status.textContent = e instanceof Refusal ? `${cap(e.message)}.` : "That reply could not be read."; return false; }
+  status.textContent = "Joining...";
+  w.timer = setTimeout(() => { if (wire === w && !w.open) noPath(); }, OPEN);
+  return true;
+}
+/** A reply opened in another tab of this browser is handed to the tab that is waiting for it. */
+function listen(status) {
+  if (typeof BroadcastChannel !== "function") return;
+  hand?.close();
+  hand = new BroadcastChannel(HAND);
+  hand.onmessage = async (e) => { if (typeof e.data?.a === "string" && (await answered(e.data.a, status))) hand?.postMessage({ took: true }); };
+}
+
+/** Read an invitation link: { id, options, seed, side, o }, or a refusal. */
+async function readInvite(i, o) {
+  const l = readLink(`#t=${i}`);
+  let t;
+  try { t = JSON.parse(new TextDecoder().decode(await l.open(""))); } catch (e) { if (e instanceof Refusal) throw e; throw new Refusal("live", "that invitation is broken"); }
+  if (t?.v !== V || !["host", "guest"].includes(t.side) || (t.seed !== null && (typeof t.seed !== "string" || !t.seed.startsWith(DEALT)))) throw new Refusal("live", "that invitation is from another version of this game");
+  const options = readOptions(inch, t.options);
+  if (options.people !== 2 || canon(options) !== canon(t.options)) throw new Refusal("live", "that invitation is not for a live game");
+  return { id: l.id, options, seed: t.seed, side: t.side, o };
+}
+/** A page opened from an invitation. One for a game already open in another tab of this browser is handed to that tab. */
+async function arrive(hash) {
+  const m = String(hash).match(/^#i=([\w-]{12,60000})&o=([\w-]{12,60000})/);
+  if (!m) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  let inv;
+  try { inv = await readInvite(m[1], m[2]); } catch (e) { if (!(e instanceof Refusal)) throw e; sheet("Play live", el("p", `${cap(e.message)}.`)); return; }
+  if (inv.seed && !(game?.seed === inv.seed) && typeof BroadcastChannel === "function") {
+    const ch = new BroadcastChannel(INVITE);
+    const took = await new Promise((done) => { ch.onmessage = (e) => { if (e.data?.took === inv.seed) done(true); }; ch.postMessage({ seed: inv.seed, i: m[1], o: m[2] }); setTimeout(() => done(false), 600); });
+    ch.close();
+    if (took) { sheet("Invitation handed over", el("p", "Your game in the other tab has the invitation. You can close this tab.")); return; }
+  }
+  ask(inv);
+}
+function ask(inv) {
+  if (!canLive()) { sheet("Play live", el("p", "This browser cannot play live.")); return; }
+  const back = !!inv.seed, box = el("div", undefined, "stack");
+  box.append(el("p", back ? "Your friend asks you back into your live game of An Inch of Ink." : `Your friend asks you to play An Inch of Ink live with them, in real time: ${about(inv.options)} You each play a nation; the bots play the rest.`), el("small", PRIVACY), el("small", FAIR_RT));
+  const row = el("div", undefined, "go"), go = button(back ? "Join again" : "Play live", "main", () => reply(inv, box));
+  row.append(button("Not now", "quiet", () => closeSheet()), go);
+  box.append(row);
+  sheet(back ? "Join your friend again" : "Play live", box, null);
+  go.focus();
+}
+async function reply(inv, box) {
+  const side = inv.side === "host" ? "guest" : "host";
+  if (!game || game.seed !== inv.seed || inv.seed === null || game.alone || game.lock?.stopped) game = { id: inv.id, side, seat: side === "host" ? 0 : 1, options: inv.options, seed: inv.seed, m: null, lock: null, alone: false };
+  else game.id = inv.id;
+  const g = game, pc = fresh(), w = wire, say = el("p", "Making your reply...");
+  pc.addEventListener("datachannel", (e) => { if (wire === w) channel(e.channel); });
+  box.replaceChildren(say);
+  let url;
+  try {
+    const sdp = await unsqueeze(await readLink(`#t=${inv.o}`).open(""));
+    await pc.setRemoteDescription({ type: "offer", sdp });
+    await pc.setLocalDescription(await pc.createAnswer());
+    await gathered(pc);
+    url = (await makeLink("inch", g.id, await squeeze(pc.localDescription.sdp))).replace("#t=", "#a=");
+  } catch (e) { if (wire === w) { end(); say.textContent = e instanceof Refusal ? `${cap(e.message)}.` : "This browser could not answer the invitation."; } return; }
+  if (wire !== w) return;
+  say.textContent = "Send this reply to your friend. You are joined as soon as they open it.";
+  box.append(...copyRow(url, "reply"), el("p", "Waiting for your friend...", "line"), button("Not now", "quiet", () => { end(); closeSheet(); }));
+  w.timer = setTimeout(() => { if (wire === w && !w.open) noPath(); }, OPEN + GATHER);
+}
+
+/**
+ * Wires live play into the real-time table: the panel's invitation, invitations arriving by link or from another tab, and the
+ * live table for a game for two brought back by Continue or a saved file (played from the seat this browser had).
+ */
+function inchPlay(table) {
+  T = table;
+  useInviter(() => invite());
+  addEventListener("hashchange", () => arrive(location.hash));
+  if (typeof BroadcastChannel === "function") {
+    const ch = new BroadcastChannel(INVITE);
+    ch.onmessage = (e) => { const x = e.data; if (typeof x?.seed === "string" && game?.seed === x.seed && T.match?.seed === x.seed && !T.demo) { ch.postMessage({ took: x.seed }); readInvite(x.i, x.o).then(ask, () => {}); } };
+  }
+  arrive(location.hash);
+}
+/** The table began a game: a game for two not yet known here gets its live table (joined later by an invitation), any other ends live play. */
+function begun(table) {
+  const p = table.match?.position;
+  if (!p?.people) { if (game && !table.demo) { end(); game = null; useNet(null); } return; }
+  if (game?.seed === table.match.seed) {
+    // the same game brought back as another copy (Continue, a file): this side's live table starts afresh, and the next join takes the friend's game
+    if (game.m !== table.match) { end(); game.lock = null; game.m = table.match; }
+    useNet(handle(game));
+    return;
+  }
+  end();
+  const side = sideOf(table.match.seed) || "host";
+  game = { id: newId(), side, seat: side === "host" ? 0 : 1, options: table.match.options, seed: table.match.seed, m: table.match, lock: null, alone: false };
+  useNet(handle(game));
+}
+
+$x.FAIR_RT = FAIR_RT; $x.inchPlay = inchPlay; $x.begun = begun;
 return $x; })({});
 $m[0] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -7389,7 +8066,8 @@ const { NONE, boardOf, cellsOf, goalOf, growth, inch, liveBoardFor, poolLimit, s
 const { choose, thinking } = $m[12];
 const { $, NAMES, PAPER, RGB, createTable, radio, toast } = $m[13];
 const { hexBoard } = $m[40];
-const { board: liveBoard, continueText, ending: liveEnding, hold: liveHold, key: liveKey, leave: liveLeave, lineOf: liveLine, liveGoal, liveLand, nudge, panel: livePanel, record, rules: liveRules, seen: liveSeen, stats: liveStats, summary: liveSummary, time: liveTime } = $m[41];
+const { board: liveBoard, continueText, ending: liveEnding, hold: liveHold, key: liveKey, leave: liveLeave, lineOf: liveLine, liveGoal, liveLand, nudge, panel: livePanel, record, rules: liveRules, seen: liveSeen, stats: liveStats, summary: liveSummary, time: liveTime, view } = $m[41];
+const { begun: liveBegun, inchPlay } = $m[44];
 
 const SHARE = { quarter: "Quarter", third: "A third", half: "Half", most: "Most", all: "All" }, HILL = [201, 178, 140];
 const cells = (n) => `${n} ${n === 1 ? "cell" : "cells"}`, place = (to) => (to === NONE ? "empty land" : NAMES[to]);
@@ -7411,7 +8089,7 @@ function aim(T, i) {
   return T.refresh();
 }
 
-createTable({
+const table = createTable({
   game: inch, key: "inch", title: "An Inch of Ink", won: "The map is yours.", lengths: [], pace: () => 650,
   // your land and the land that wins, in words: "1525/1844" read as owned of the whole map
   landText: (c, goal) => `${c}, goal ${goal}`,
@@ -7454,7 +8132,7 @@ createTable({
   ],
   stats: (p, s) => p.live ? liveStats(p, s) : (() => { const c = cellsOf(p, s), x = p.pool[s]; return [["Strength", x], ["Grows", p.home[s] === NONE ? "out" : `+${Math.max(0, Math.min(growth(p, s), poolLimit(c) - x))}`]]; })(),
   line(e, p) {
-    if (p?.live) return liveLine(e, p);
+    if (p?.live) return liveLine(e, view(p)); // a game for two is told from this browser's seat
     const who = NAMES[e.seat];
     if (e.kind === "pour") return `${who} pours ${e.spent} over ${place(e.to)} and takes ${cells(e.taken.length)}.`;
     if (e.kind === "order" && e.turns.length > 2) return `Round ${e.round}: ${e.turns.map((s) => NAMES[s]).join(", then ")}.`;
@@ -7511,10 +8189,11 @@ createTable({
     coda: "Coda: legacy campaigns, coming soon.\nPlay a run of games where each one changes the next: the map, the rules and the pieces carry the marks of what happened. Start from a premade legacy story, one shared by other players, or design your own with an AI assistant. Campaigns can always be played on without AI.",
   },
   switches: [], // all of Custom's switches are choices above, so each shows only with the clock it belongs to
-  fresh: (T) => { liveLeave(); liveHold(T); },
+  fresh: (T) => { liveLeave(); liveHold(T); liveBegun(T); },
   more: record,
   rules: (classic, p) => (p ? p.live : classic || style === "ours") ? liveRules(p, !p && style === "ours") : ((p ? p.rule.growth === "rising" : classic) ? ["Your strength is one pool. The number on your tower shows it. It grows every turn: 3, and 1 for every 3 cells you hold, and a little more each round for everyone.", "Tap empty land or a rival, or choose it in the list, then choose how much to pour: the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A rival's land costs more when they hold a lot of strength on little land.", "The tower only shows whose land it is. If it is taken it moves.", "Reach the gold mark on the bar to win. If nobody has after 40 rounds, the most land wins.", "Whoever moves first changes every round. With three, the order of each round is drawn.", "Keys: 1 to 4 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."] : ["Your strength is one pool. The number on your tower shows it. It grows every turn: land grows it, and saving a little more.", "Tap empty land or a rival, or choose it in the list, then choose how much to pour: the cells you would take light up. What is left comes back to you.", "Hills cost 2, other ground 1. A cell with four of yours around it costs half.", "A rival's land costs more when they hold a lot of strength on little land. A home costs 3 more.", "Land cut off from your tower falls at the start of your turn. If your tower is taken, it moves to your largest piece of land.", "Reach the gold mark on the bar to win, or hold the most land after the last round. Whoever moves first changes every round.", "Keys: 1, 2, 3 choose how much, Tab and arrows choose where, Enter pours, W waits, U takes back."]),
 });
+inchPlay(table); // live play of the real-time game between two browsers (site/inchplay.js)
 
 
 return $x; })({});

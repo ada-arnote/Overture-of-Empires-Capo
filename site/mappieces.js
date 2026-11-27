@@ -3,7 +3,7 @@
 // the state the rules already keep (who holds what, might, wars, the people seated in command, missions); nothing here changes a game.
 // A piece: { m: model, at: province id or [x, y], owner: country code, dx, dy (in piece sizes), band: the zoom band it appears at
 // (0 the world, 1 a region, 2 a country), until: the last band it is shown at, sea: it floats, size, turn, pips: strength, rgb,
-// fit: the screen points its province must span before it shows }.
+// fit: the screen points its province must span before it shows, name and rank: a real city's, for its label }.
 import { KINDS } from "../src/story/missions.js";
 import { statusOf } from "../src/story/roster.js";
 
@@ -50,17 +50,21 @@ const PIN = { scout: [86, 150, 214], sabotage: [222, 118, 44], rescue: [232, 196
  * wars: [[a, b], ...], player: the player's country, staff: how many named people the player has seated in command (seven at most).
  * strength(code): might now, 1 to 10, for the pips (might when not given). g: the game, for its missions (read only).
  * The list carries `threads`: [[from, to, rgb], ...] in map units, a mission's line from home to where it goes.
+ * cities: the real world's cities ([{name, x, y, rank, at}], maps/cities.json), or none where the world is invented or an alternate history.
  */
-export function mapPieces({ world, homes, owner, might, wars = [], player = "", staff = 0, strength = null, g = null }) {
+export function mapPieces({ world, homes, owner, might, wars = [], player = "", staff = 0, strength = null, g = null, cities = null }) {
   const out = [], rank = [...homes].sort((a, b) => b[1].a - a[1].a), land = new Map(), known = new Map(), pips = (c) => { if (!known.has(c)) known.set(c, Math.max(1, Math.min(10, Math.round((strength || might)(c) || 1)))); return known.get(c); }; // once a country: strength reads the whole map
   for (const p of world.provinces.values()) { const c = owner(p.id); if (!land.has(c)) land.set(c, []); land.get(c).push(p); }
-  const seat = new Set();
+  const seat = new Set(), sat = new Set(), capital = new Map(); // mapdata hook: a country's real capital, its first in the file
+  for (const t of cities || []) { const c = world.provinces.get(t.at)?.country; if (t.rank === 0 && c && !capital.has(c)) capital.set(c, t); }
   rank.forEach(([c, h], i) => {
     if (owner(h.id) !== c) return; // its home has fallen: no capital stands there
     seat.add(h.id);
     const m = might(c) || 0, far = i < 36 ? 0 : 1; // the whole world shows the larger countries' capitals large, the rest small
-    out.push({ m: "keep", at: h.id, owner: c, band: far, size: 0.72 });
-    if (far) out.push({ m: "keep", at: h.id, owner: c, band: 0, until: 0, size: 0.4 }); // capomap: every capital, always
+    const cap = capital.get(c), held = cap && owner(cap.at) === c, at = held ? [cap.x, cap.y] : h.id, name = held ? { name: cap.name, rank: 0 } : {}; // mapdata hook: the keep stands in the real capital while the country holds it
+    if (held) { sat.add(cap); seat.add(cap.at); }
+    out.push({ m: "keep", at, owner: c, band: far, size: 0.72, ...name });
+    if (far) out.push({ m: "keep", at, owner: c, band: 0, until: 0, size: 0.4 }); // capomap: every capital, always
     if (m >= 3) out.push({ m: m >= 5 ? "armour" : "army", at: h.id, owner: c, dx: 0.95, dy: 0.3, band: m >= 4 ? 0 : 1, size: 0.78, pips: pips(c) }); // one block a country when seen from afar
     if (m >= 5) out.push({ m: "wing", at: h.id, owner: c, dx: -0.95, dy: -0.35, band: 1, size: 0.7 });
     if (m >= 4) { // a fleet, off the coast nearest its home
@@ -69,11 +73,17 @@ export function mapPieces({ world, homes, owner, might, wars = [], player = "", 
       if (sea) out.push({ m: "fleet", at: sea.at, turn: sea.turn, owner: c, sea: true, band: m >= 5 ? 0 : 1, size: 0.8, pips: pips(c) });
     }
   });
+  if (cities) { // mapdata hook: the real cities, by rank: other capitals always, the larger from the region band, the rest close in; a town where no city stands
+    const has = new Set(cities.map((t) => t.at));
+    for (const t of cities) if (!sat.has(t)) out.push({ m: "city", at: [t.x, t.y], band: t.rank, size: t.rank > 1 ? 0.45 : 0.55, name: t.name, rank: t.rank });
+    for (const id of world.provinces.keys()) if (!seat.has(id) && !has.has(id)) out.push({ m: "hamlet", at: id, band: 2, size: 0.6, fit: 70 });
+  } else {
   // capomap: great cities from the region band, the rest and towns from the country band, where no capital stands
-  const { great, cities, towns } = townsOf(world);
+  const { great, cities: more, towns } = townsOf(world);
   for (const id of great) if (!seat.has(id)) out.push({ m: "city", at: id, band: 1, size: 0.55 });
-  for (const id of cities) if (!seat.has(id)) out.push({ m: "city", at: id, band: 2, size: 0.55, fit: 36 });
+  for (const id of more) if (!seat.has(id)) out.push({ m: "city", at: id, band: 2, size: 0.55, fit: 36 });
   for (const id of towns) if (!seat.has(id)) out.push({ m: "hamlet", at: id, band: 2, size: 0.6, fit: 70 }); // fit: shown once its province is that many screen points across
+  }
   // a war: blocks face each other across the front, with guns behind them once you look closer
   let seats = Math.min(7, staff);
   for (const [a, b] of wars) {

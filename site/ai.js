@@ -9,6 +9,8 @@ import { formatOf, linesFrom, toolOf } from "../src/story/replyform.js";
 import { SHAPES, splitEvents } from "../src/story/wire.js";
 // mcp and plugins hook: the bridge to the player's own AI app, and data-only plugins (site/aimore.js)
 import { aiMore, bridgeAsk, bridgePart, pluginPart, voiceNow } from "./aimore.js";
+// guide hook (ruling 153.8): Choose an AI, the guide to the services, free routes first (site/aiguide.js)
+import { guidePart } from "./aiguide.js";
 
 /** The reply allowance in tokens for each kind of call (lane 2 review). A thinking model gets four times as much. */
 export const BUDGET = { turn: 1800, chat: 400, council: 500, ask: 500, character: 300, check: 300 };
@@ -18,13 +20,13 @@ export const allowance = (r, kind, tool) => Math.round((BUDGET[kind] || BUDGET.t
 // cors: "yes" it answers web pages; "check" not yet seen doing so; "local" on this computer, which must let this page in.
 const P = (id, name, shape, cors, models, about, more) => ({ id, name, shape, cors, tools: true, models, about, base: AI_BASES[id] || "", ...more });
 export const PRESETS = [
-  P("openrouter", "OpenRouter", "openai", "yes", ["openrouter/auto", "meta-llama/llama-3.3-70b-instruct:free"], "Many models on one key, some free: about 50 free calls a day. Give the key a spending limit."),
+  P("openrouter", "OpenRouter", "openai", "yes", ["openrouter/free", "openrouter/auto", "meta-llama/llama-3.3-70b-instruct:free"], "Many models on one key, some free: about 50 free calls a day. Give the key a spending limit."),
   P("groq", "Groq", "openai", "yes", ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "llama-3.1-8b-instant"], "Fast open models; a free tier limited by tokens a day."),
   P("openai", "OpenAI", "openai", "yes", ["gpt-5-mini", "gpt-4.1-mini", "gpt-5"], "Paid by use.", { limit: "max_completion_tokens" }),
   P("anthropic", "Anthropic (Claude)", "anthropic", "yes", ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-5"], "Paid by use."),
-  P("gemini", "Google Gemini", "gemini", "yes", ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"], "A free tier, where Google may use what you send to improve its products; its terms ask for 18 or over."),
+  P("gemini", "Google Gemini", "gemini", "yes", ["gemini-3.8-flash"], "A free tier, where Google may use what you send to improve its products; its terms ask for 18 or over."),
   P("mistral", "Mistral", "openai", "yes", ["mistral-small-latest", "mistral-large-latest"], "Needs billing: the free plan has no app access.", { choice: "any" }),
-  P("deepseek", "DeepSeek", "openai", "check", ["deepseek-chat", "deepseek-reasoner"], "Paid by use, cheap."),
+  P("deepseek", "DeepSeek", "openai", "check", ["deepseek-flash"], "Paid by use, cheap."),
   P("together", "Together AI", "openai", "check", ["meta-llama/Llama-3.3-70B-Instruct-Turbo"], "Paid by use."),
   P("cerebras", "Cerebras", "openai", "yes", ["llama-3.3-70b", "gpt-oss-120b"], "Very fast; a trial credit, then paid."),
   P("ollama", "Ollama, on this computer", "openai", "local", ["llama3.1", "qwen2.5"], "Free and private. Set OLLAMA_ORIGINS to this site's address, then restart Ollama.", { local: true }),
@@ -316,7 +318,7 @@ export function aiPanel(r, done = () => {}, o = {}) {
     const head = el("h3", o.title || "How Capo reaches an AI"), result = status(), p = presetOf(r);
     head.id = uid("head"); box.setAttribute("aria-labelledby", head.id); result.id = uid("result"); result.textContent = said; said = "";
     const out = [head, connected(r) ? el("p", `Connected: ${p.name}${r.model ? `, ${r.model}` : ""}. Capo asks it for each turn, chat and question.`, "note")
-      : el("p", "No AI is connected. Choose a service, give its key if it needs one, and press Check connection.", "note")];
+      : el("p", "No AI is connected. Choose a service, give its key if it needs one, and press Check connection.", "note"), guidePart(r, ui)]; // guide hook
     if (r.gone && !connected(r)) out.push(el("p", "Copying prompts into a chat and pasting replies back is no longer part of Capo. Connect a service or an AI on this computer here; a turn can also move by the rules alone.", "warn"));
     const pick = el("select", undefined, "plain"), groups = [["Hosted: your own key", (x) => !x.local && !x.custom], ["On this computer: no key", (x) => x.local || x.custom]];
     for (const [label, test] of groups) { const g = el("optgroup"); g.label = label; g.append(...PRESETS.filter(test).map((x) => new Option(x.name, x.id))); pick.append(g); }

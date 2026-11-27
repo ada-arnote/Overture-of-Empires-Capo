@@ -31,13 +31,24 @@ layout(location=0) in vec2 aP; layout(location=1) in vec2 aI;
 uniform sampler2D uTab; uniform float uRise;
 out vec2 vP; out vec4 vC; out float vZ;
 void main(){ int id=int(aI.x+.5); vC=texelFetch(uTab,ivec2(id&63,id>>6),0); vP=aP; vZ=aI.y; gl_Position=clip(vec3(aP,aI.y*uRise)); }`;
-const LAND_FS = `${HEAD}${COMMON}${SHADE}
+// mapdata hook: what grows on the real world (maps/cover.webp, a class a point, grey 16 a class), as a colour a class,
+// blended between neighbouring points and along a wavering line, so no square shows; mountains and ice keep their own look
+const BIOMES = [[0.3, 0.45, 0.24], [0.47, 0.51, 0.31], [0.33, 0.45, 0.28], [0.38, 0.5, 0.29], [0.31, 0.43, 0.29], [0.35, 0.43, 0.33], [0.64, 0.6, 0.39], [0.6, 0.6, 0.4], [0.43, 0.53, 0.4], [0.56, 0.55, 0.41], [0.58, 0.6, 0.52], [0.5, 0.53, 0.35], [0.79, 0.7, 0.5], [0.3, 0.44, 0.33]];
+const COVER = `
+uniform sampler2D uCover; uniform float uCov;
+const vec4 BIOME[16]=vec4[16](vec4(0.),${BIOMES.map((c) => `vec4(${c.map((v) => v.toFixed(2)).join(",")},1.)`).join(",")},vec4(0.));
+vec4 bio(ivec2 i){ ivec2 m=textureSize(uCover,0)-1; return BIOME[min(15,int(texelFetch(uCover,clamp(i,ivec2(0),m),0).r*15.9375+.5))]; }
+vec4 cov(vec2 p){ p+=vec2(nz(p*.45),nz(p*.45+7.))*1.6-.8; vec2 uv=p/uSize*vec2(textureSize(uCover,0))-.5,f=fract(uv); ivec2 i=ivec2(floor(uv));
+  vec4 a=bio(i),b=bio(i+ivec2(1,0)),e=bio(i+ivec2(0,1)),d=bio(i+ivec2(1,1)); a.rgb*=a.a; b.rgb*=b.a; e.rgb*=e.a; d.rgb*=d.a;
+  vec4 r=mix(mix(a,b,f.x),mix(e,d,f.x),f.y); r.rgb/=max(r.a,.001); return r; }`;
+const LAND_FS = `${HEAD}${COMMON}${SHADE}${COVER}
 uniform float uRise,uTint;
 in vec2 vP; in vec4 vC; in float vZ; out vec4 o;
 void main(){ float h=hgt(vP),t=clamp((h-.376)/.624,0.,1.); vec2 g=uDet>0.?slopeC(vP):slope(vP),gd=vec2(0.);
   if(uDet>0.){ vec3 d=fine(vP); float rough=clamp(length(g)*9.+smoothstep(.3,.7,t)*.4,0.,1.); gd=d.yz*(.0004+.01*rough*rough)*uDet*uSize.x/700.; t=clamp(t+d.x*.05*rough*uDet,0.,1.); } // capomap: fine relief
   // the land's own colour by its height: green plain, dry upland, brown mountain, snow
   vec3 c=mix(vec3(.47,.54,.37),vec3(.68,.62,.44),smoothstep(.02,.2,t)); c=mix(c,vec3(.5,.41,.33),smoothstep(.2,.48,t)); c=mix(c,vec3(.95,.96,.97),smoothstep(.56,.74,t));
+  if(uCov>0.){ vec4 k=cov(vP); c=mix(c,k.rgb,k.a*uCov*(1.-smoothstep(.3,.62,t))); } // mapdata hook: forest, grass, desert, tundra, marsh below the mountains
   c=mix(c,uWash.rgb,uWash.a);
   float glow=vC.a<.6?1.:0.,ice=uReal>0.?1.-smoothstep(.55,.95,texture(uRelief,vP/uSize).a):0.; // a province that is lit: chosen, or offered. Ice, where the world's picture marks it
   c=mix(c,vec3(.9,.94,.97),ice);
@@ -88,6 +99,7 @@ export class WorldGround {
     g.activeTexture(g.TEXTURE3); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, 1, 1, 0, g.RGBA, g.UNSIGNED_BYTE, new Uint8Array([92, 60, 40, 255]));
     this.vao = g.createVertexArray(); this.corners = g.createBuffer(); this.order = g.createBuffer(); this.real = 0; this.count = 0;
     this.lake = program(g, LAKE_VS, LAKE_FS); this.lvao = g.createVertexArray(); this.lpts = g.createBuffer(); this.lidx = g.createBuffer(); this.lcount = 0; // capomap: lakes
+    this.cov = tex(5, g.NEAREST, g.CLAMP_TO_EDGE); g.texImage2D(g.TEXTURE_2D, 0, g.R8, 1, 1, 0, g.RED, g.UNSIGNED_BYTE, new Uint8Array([0])); this.covered = 0; // mapdata hook: land cover
   }
   /**
    * The shapes. size: [wide, high]. provinces: [{ rings: [[[x, y], ...], ...] }] in the order of their numbers.
@@ -140,6 +152,8 @@ export class WorldGround {
   paint(bytes) { const g = this.g, all = new Uint8Array(64 * this.rows * 4); all.set(bytes.subarray(0, all.length)); g.activeTexture(g.TEXTURE0); g.bindTexture(g.TEXTURE_2D, this.tab); g.texSubImage2D(g.TEXTURE_2D, 0, 0, 0, 64, this.rows, g.RGBA, g.UNSIGNED_BYTE, all); }
   /** A picture of the world's heights (96 of 255 is the sea's surface; alpha under 255 marks ice), or nothing for heights made from noise. */
   relief(img) { const g = this.g; this.real = img ? 1 : 0; if (!img) return; g.activeTexture(g.TEXTURE1); g.bindTexture(g.TEXTURE_2D, this.heights); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, g.RGBA, g.UNSIGNED_BYTE, img); }
+  /** mapdata hook: what grows on the land (maps/cover.webp), or nothing: the ground then goes by height alone. */
+  cover(img) { const g = this.g; this.covered = img ? 1 : 0; if (!img) return; g.activeTexture(g.TEXTURE5); g.bindTexture(g.TEXTURE_2D, this.cov); g.pixelStorei(g.UNPACK_COLORSPACE_CONVERSION_WEBGL, g.NONE); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, g.RGBA, g.UNSIGNED_BYTE, img); g.pixelStorei(g.UNPACK_COLORSPACE_CONVERSION_WEBGL, g.BROWSER_DEFAULT_WEBGL); }
   wood(img) { const g = this.g; g.activeTexture(g.TEXTURE3); g.bindTexture(g.TEXTURE_2D, this.timber); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, g.RGBA, g.UNSIGNED_BYTE, img); g.generateMipmap(g.TEXTURE_2D); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR_MIPMAP_LINEAR); }
   /** o: style, relief (how strongly the heights are lit, 1 for the whole world, less close in where the picture runs out of detail), detail (0 to 1: fine relief added close in) and octaves (how many waves of it), rise (how far the land stands above the sea), tint (how much of the owner's colour lies over the land's own), lamp (the mesh layer's shadow settings, or nothing). */
   draw(cam, dpr, o) {
@@ -152,6 +166,7 @@ export class WorldGround {
       g.uniform1i(u.uTab, 0); g.uniform1i(u.uRelief, 1); g.uniform1i(u.uWood, 3); g.uniform2f(u.uSize, ...this.size); g.uniform1f(u.uReal, this.real); g.uniform1f(u.uSeed, this.seed);
       g.uniform3f(u.uSun, ...o.style.sun); g.uniform1f(u.uShOn, 0); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uRel, (o.relief ?? 1) * o.style.map.relief); g.uniform1f(u.uGloss, o.style.surface.gloss); g.uniform4f(u.uWash, ...o.style.map.wash.map((v, i) => (i < 3 ? v / 255 : v))); g.uniform1f(u.uDet, o.detail || 0); g.uniform1f(u.uOct, o.octaves ?? 4);
       g.uniform4f(u.uGrade, ...o.style.grade); g.uniform4f(u.uCont, ...o.style.surface.contour.map((v, i) => (i < 3 ? v / 255 : v))); // styles hook
+      g.uniform1i(u.uCover, 5); g.uniform1f(u.uCov, this.covered * this.real * (o.style.map.cover ?? 1)); // mapdata hook
       o.lamp?.(u);
       return u;
     };

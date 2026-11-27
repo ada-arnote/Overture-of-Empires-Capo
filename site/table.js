@@ -145,7 +145,7 @@ export function createTable(G) {
   send.id = "send"; send.hidden = skip.hidden = pass.hidden = true;
   sendRow.append(sendShare, sendCopy); send.append(sendSay, sendRow);
   $("act").append(send, skip);
-  $("title").querySelector(".links").append(linkButton);
+  if (G.links !== false) $("title").querySelector(".links").append(linkButton); // links hook: a game whose play by link is not ready yet says links: false
   Object.assign(passField, { type: "text", className: "field", placeholder: "None", autocomplete: "off", maxLength: 100 });
   passField.setAttribute("aria-label", "Password for the link, if you want one");
   pass.append(el("span", "Password"), passField);
@@ -417,8 +417,8 @@ export function createTable(G) {
   const keep = () => { if (T.link && !T.demo) linkGames.put(T.link.id, { game: G.key, save: T.match.save(), kinds: T.kinds, look: T.look, roles: T.link.roles, pass: T.link.pass, floor: T.link.floor, when: Date.now() }); else if (!T.demo && !lesson?.owns()) store(KEY, T.match.turn === null ? null : JSON.stringify({ save: T.match.save(), kinds: T.kinds, look: T.look })); };
 
   /** A tick of a real-time game: played at once, drawn without waiting, saved now and then. */
-  function flow(move) {
-    const events = T.match.play(move), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
+  function flow(move, salt) { // inchlive hook: a move played live in lockstep comes with the salt both browsers drew for its dice
+    const events = T.match.play(move, salt), words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
     log.push(...words);
     if (T.match.list.length % 10 === 0 || T.match.turn === null) { land.push(tally(T.match.position)); keep(); }
     G.seen?.(T, events);
@@ -773,7 +773,7 @@ export function createTable(G) {
   function menu(at = tab) {
     tab = at;
     if (!$("sheet").open || !$("sheet-body").contains(menuBox)) sheet(G.title, menuBox, T.demo ? "Close" : "Resume", "wide tabbed");
-    radio(tabs, [["game", "Game"], ["settings", "Settings"], ["link", "Link play"], ["about", "About"]].map(([value, label]) => ({ value, label })), tab, menu, true);
+    radio(tabs, [["game", "Game"], ["settings", "Settings"], ...(G.links === false ? [] : [["link", "Link play"]]), ["about", "About"]].map(([value, label]) => ({ value, label })), tab, menu, true); // links hook
     for (const b of tabs.children) b.setAttribute("aria-controls", pane.id);
     pane.setAttribute("aria-label", tabs.querySelector("[aria-selected=true]").textContent);
     pane.replaceChildren({ game: gameTab, settings: settingsTab, link: linkBox, about: aboutTab }[tab]());
@@ -826,6 +826,7 @@ export function createTable(G) {
     if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
     const reseat = () => { dress(); board?.recolour?.(); board?.show([], true); if (T.match && !T.demo) score(); }; // styles hook: seat colours follow the style until chosen
     if (board?.styles?.length) row("Board style", () => board.style, (v) => { board.setStyle(v); reseat(); }, board.styles); // 3D hook: styles are data (src/map/style.js)
+    for (const s of G.settings || []) { row(s.label, s.get, s.set, s.values); if (s.note) box.append(el("p", s.note, "about")); } // era hook: a game's own looks (Banners' era)
     row("Seat colours", () => seatSet(read(SEATS_KEY), read(STYLE_KEY)), (v) => { store(SEATS_KEY, v); reseat(); }, Object.entries(SEATS).map(([k, v]) => [k, v.name]));
     row("Letter keys", ...bind("keys"), CHOICES.keys);
     box.append(el("p", clock ? "This game's letter keys are in How to play. Off leaves Tab, arrows, Enter and Escape." : "E ends the turn (press twice), U takes back, and each game has a few more. Off leaves Tab, arrows, Enter and Escape.", "about"));
@@ -840,10 +841,11 @@ export function createTable(G) {
     const box = el("div", undefined, "stack"), src = el("a", "Read the source code"), where = el("p", /^https:\/\//.test(SOURCE_URL) ? undefined : "The source address is not set in this copy yet.");
     src.href = SOURCE_URL;
     box.append(
-      el("p", `${G.title}, one of the table games of Overture of Empires: Capo. Version ${VERSION}, build ${BUILD}.`),
+      el("p", `${G.title}, one of the table games of Overture of Empires: Capo, made by Arnote Studios. Version ${VERSION}, build ${BUILD}.`),
       ...(G.family || familyLine(G.key) ? [el("p", G.family || familyLine(G.key))] : []),
       where,
       el("p", "Free software under the GNU Affero General Public License, version 3 or later (AGPL-3.0-or-later): you may read, change and share it, and a changed copy that others use over a network must offer them its source."),
+      el("p", "© 2026 Ada Arnote, Arnote Studios."),
       el("p", "Credits: the rules, maps, emblems and sounds are the project's own work, and so are the pieces made in code; the sounds are made in code as the game runs. The coastlines are drawn from Natural Earth, which is in the public domain. Anything borrowed is listed with its licence in CREDITS.csv, ADAPTED.csv and NOTICES.md beside the source."),
       shelfCredits(), // figures hook: the sculpted pieces' credit lines
     );
@@ -859,7 +861,7 @@ export function createTable(G) {
     $("start").disabled = soon;
     $("start").textContent = soon ? "Coming soon" : "Begin";
     $("length-line").hidden = setup.style !== "ours" || !G.lengths.length;
-    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(setup.extra[c.key]); k.name = c.key; k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; titleCard(); more.querySelector(`select[name="${c.key}"]`)?.focus(); attract(); }; line.append(el("span", c.label), k); return line; };
+    const pickOf = (c) => { const line = el("label", undefined, "line"), k = el("select"); k.append(...c.values.map(([v, t]) => new Option(t, String(v)))); k.value = String(c.get ? c.get() : setup.extra[c.key]); k.name = c.key; k.onchange = () => { setup.extra[c.key] = c.values.find(([v]) => String(v) === k.value)[0]; c.set?.(setup.extra[c.key]); titleCard(); more.querySelector(`select[name="${c.key}"]`)?.focus(); if (!c.set) attract(); }; /* era hook: a choice the game keeps itself (get, set) changes the looks, not the game in view */ line.append(el("span", c.label), k); return line; };
     more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => (!c.only || c.only.includes(setup.style)) && (!c.when || c.when(setup.style, setup.extra))).map(pickOf)));
     if (setup.style === "custom") more.append(...G.switches.map(pickOf));
     if (G.expansions && !soon && (!G.expansionsFor || G.expansionsFor(setup.style, setup.extra))) {
@@ -880,7 +882,7 @@ export function createTable(G) {
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
       const li = el("li"), k = el("select");
-      k.append(...KINDS.filter(([v]) => (v !== "hard" || G.hard) && (v !== "master" || G.master)).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one
+      k.append(...KINDS.filter(([v]) => (v !== "hard" || G.hard) && (v !== "master" || G.master) && (v !== "away" || G.links !== false)).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one; links hook: no friend by link where links: false; stacking hook: master
       k.value = setup.who[s];
       k.setAttribute("aria-label", NAMES[s]);
       k.onchange = () => { setup.who[s] = k.value; passLine(); };

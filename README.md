@@ -1,6 +1,6 @@
 # Overture of Empires: Capo
 
-Table games on one shared map, in the browser, and Capo, a story game played with an AI you bring. Free software, AGPL-3.0-or-later.
+Table games on one shared map, in the browser, and Capo, a story game played with an AI you bring. Free software, AGPL-3.0-or-later. Made by Arnote Studios (Ada Arnote).
 
 An early build, at an unlisted address: https://ada-arnote.github.io/Overture-of-Empires-Capo/site/ . Four table games, with bots, saves, take-back and play by shared link: **Brass and Banners**, **The Island Fable**, **Grain and Glass** and **An Inch of Ink**. And **Capo**, the story game, as an early test: the whole world, any country, an AI you connect (a service with your own key, or one on your own computer) that writes the story, and rules that decide what is true. Expect all of it to change.
 
@@ -16,6 +16,7 @@ An early build, at an unlisted address: https://ada-arnote.github.io/Overture-of
 | `node tools/pack.mjs` | Makes `dist/` for a static host. Uploads nothing |
 | `node tools/capo-mcp.mjs` | The Capo bridge, optional: lets your own AI app (any MCP client) tell Capo's story, on this computer only. It prints a token to give Capo and how to add it to the app; `--tokens` shows them again |
 | `python -I tools/relief.py <ETOPO tif> <Natural Earth folder>` | Bakes Capo's relief (`maps/relief.webp`) and waters (`maps/waters.json`) from open data, offline |
+| `python -I tools/mapdata.py <Ecoregions 2017 folder> <Natural Earth populated places folder>` | Bakes Capo's land cover (`maps/cover.webp`) and real cities (`maps/cities.json`) from open data, offline |
 | `node tools/models.mjs out.bin list.json` | Converts CC0 models (glTF) into a small pack for `site/models/`, offline |
 
 | Folder | What |

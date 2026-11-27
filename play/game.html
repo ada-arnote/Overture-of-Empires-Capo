@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-aP1fzlMC6g5JNynkUP69RJf/O0C5JZ2QiBdclUqtfRg='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https://openrouter.ai https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.mistral.ai https://api.deepseek.com https://api.together.xyz https://api.cerebras.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-H7vtOutPIeiNJmOafAXeoHC1IoIA/NHaEMw+HIASeoc='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https://openrouter.ai https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.mistral.ai https://api.deepseek.com https://api.together.xyz https://api.cerebras.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo, the story game · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -397,6 +397,14 @@ button.connect { min-height: var(--tap); padding: 0 6px; border: 0; background: 
 
 /* AI wiring (p5-ai, site/ai.js) */
 .aipanel .field { display: grid; gap: 4px } .connectbox .aipanel { margin-top: 8px } .connectbox { scroll-margin-top: 64px } /* clear of the sheet's sticky head */ .choices { border: 0; padding: 0; display: grid; gap: 4px }
+/* guide hook: Choose an AI (site/aiguide.js) */
+@media (min-width: 821px) { dialog.aiguide { width: min(620px, calc((100vw - 32px) / var(--ui-scale))); max-height: min(calc(88vh / var(--ui-scale)), 820px) } }
+.aiguide { overflow-wrap: anywhere } .aiguide h3 { margin: 18px 0 6px; font: 700 var(--fs-1)/1.2 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; color: var(--accent) } .aiguide h4 { margin: 10px 0 4px; font-size: var(--fs-2) }
+.aiguide .route { border: 1px solid var(--edge-soft); border-radius: var(--r-1); margin: 6px 0; padding: 0 12px } .aiguide .route[open] { padding-bottom: 6px; background: var(--raise) }
+.aiguide summary { min-height: var(--tap); padding: 8px 0; cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; list-style: none } .aiguide summary::-webkit-details-marker { display: none } .aiguide summary .note { margin: 0 }
+.aiguide summary::before { content: "+"; width: 1em; color: var(--accent); font-weight: 700 } .aiguide .route[open] > summary::before { content: "\2212" } .aiguide .guide-close:first-child { margin-top: -10px }
+.aiguide ol { padding-left: 22px } .aiguide a { color: var(--accent-hi); display: inline-flex; align-items: center; min-height: var(--tap); overflow-wrap: anywhere }
+.aiguide dt { font-weight: 700; margin-top: 8px } .aiguide dd { margin: 2px 0 0 14px } .aiguide .guide-close { justify-content: flex-end }
 .stream { max-height: 9em; overflow: auto; white-space: pre-wrap; font-size: var(--fs-1); color: var(--text-2) }
 
 /* the province card */
@@ -454,7 +462,7 @@ button.connect { min-height: var(--tap); padding: 0 6px; border: 0; background: 
 <section id="guide" class="paper" role="dialog" aria-live="polite" aria-label="Guide"></section>
 <div id="toast" role="status" aria-live="polite"></div>
 <span id="homelink" hidden><a href="../site/" class="text">All games</a></span>
-<span class="credit">Made with Natural Earth</span>
+<span class="credit">Made with Natural Earth. Ecoregions 2017 © RESOLVE, CC BY 4.0</span>
 <script>
 (() => {
 "use strict";
@@ -5512,8 +5520,11 @@ const SHELF = {
   knight: { file: "knight.bin", tris: 2433, licence: "CC-BY-4.0", credit: "\"Knight Hospitaller - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/7975ee5c47a94d35abf98070bfdd1ea8), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
   legionary: { file: "legionary.bin", tris: 2415, licence: "CC-BY-4.0", credit: "\"Roman Soldier - fighting pose - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/5c29ca5803ad475eaaae12714e8f1dab), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
   redcoat: { file: "redcoat.bin", tris: 2448, licence: "CC-BY-4.0", credit: "\"Waterloo British Infantry - for animation\" by Andy Woodhead (sketchfab.com/3d-models/85a1a8205b2c447fb8d0419978f17b75), CC BY 4.0, modified (posed, cut down, repainted, re-encoded)." },
+  fusilier: { file: "fusilier.bin", tris: 2466, licence: "CC-BY-4.0", credit: "\"French Infantry - Franco-Prussian War\" by Andy Woodhead (sketchfab.com/3d-models/b935801d58874c72a27a3bd371286811), CC BY 4.0, modified (posed, cut down, repainted, re-encoded)." },
+  marine: { file: "marine.bin", tris: 2450, licence: "CC-BY-4.0", credit: "\"US Marine T pose - Vietnam\" by Andy Woodhead (sketchfab.com/3d-models/58d066644f8e47a6aed3470dfd5507a7), CC BY 4.0, modified (posed, cut down, repainted, re-encoded)." },
   general: { file: "general.bin", tris: 3980, licence: "CC-BY-4.0", credit: "\"Roman General - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/70d18b0518344b7bad3cd0979072a1c2), CC BY 4.0, modified (remeshed, cut down, painted as pewter, re-encoded)." },
   horse: { file: "horse.bin", tris: 2946, licence: "CC-BY-4.0", credit: "\"Galloping Horse - free download - 3d-printable\" by Andy Woodhead (sketchfab.com/3d-models/dfc6f5596aba48a0b08a44c31b97b368), CC BY 4.0, modified (base removed, cut down, repainted, re-encoded)." },
+  ballista: { file: "ballista.bin", tris: 2488, licence: "CC-BY-4.0", credit: "\"Roman Ballista - free game asset\" by Andy Woodhead (sketchfab.com/3d-models/a92a4eb4ab04409dbf40344f5f63925a), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
   cannon: { file: "cannon.bin", tris: 2309, licence: "CC-BY-4.0", credit: "\"British field cannon - 1815 - free download\" by Andy Woodhead (sketchfab.com/3d-models/c027cb2e6e764f4196f27c94b5f770d5), CC BY 4.0, modified (low-poly version, cut down, repainted, re-encoded)." },
   longboat: { file: "longboat.bin", tris: 2868, licence: "CC-BY-4.0", credit: "\"Gislinge Viking Boat\" by Opus Poly (sketchfab.com/3d-models/01098ad7973647a9b558f41d2ebc5193), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
   liner: { file: "liner.bin", tris: 4961, licence: "CC-BY-4.0", credit: "\"Ship of the line, c. 1700\", Swedish National Maritime and Transport Museums (sketchfab.com/3d-models/3afea352a40045b0a638c9900f669ed4), CC BY 4.0, modified (remeshed, cut down, repainted, re-encoded)." },
@@ -5539,7 +5550,7 @@ const ERAS = {
   ancient: { foot: "legionary", unit2: "legionary", gun: "ballista", horse: "horse", unit4: "general", leader: "general", ship: "longboat", fleet: "longboat" },
   medieval: { unit3: "knight", foot: "knight", horse: "horse", ship: "longboat", fleet: "longboat", town: "townhouse", depot: "cottage" },
   early: { foot: "redcoat", gun: "cannon", horse: "horse", ship: "liner", fleet: "liner", town: "townhouse", depot: "cottage" },
-  industrial: { foot: "fusilier", gun: "cannon", ship: "torpedo", fleet: "torpedo", town: "block", depot: "townhouse" },
+  industrial: { foot: "fusilier", gun: "cannon", horse: "horse", ship: "torpedo", fleet: "torpedo", town: "block", depot: "townhouse" },
   fable: { unit2: "legionary", unit3: "knight", unit4: "general", horse: "horse", town: "townhouse", depot: "cottage" }, // The Island Fable's guard, knight and marshal
   modern: { foot: "marine", ship: "destroyer", fleet: "destroyer", town: "block", depot: "block" },
 };
@@ -6577,6 +6588,8 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     setLight(v) { light = v === "lamp" ? "lamp" : "day"; look3 = wear(styleName, light); staged = false; dirty = true; redraw(); },
     /** styles hook: the seats' colours have changed; owned land takes them at the next show. */
     recolour() { show.forEach((c) => { if (c.owner >= 0) c.owner = -2; }); },
+    /** era hook: which era's sculpted pieces stand in 3D (a key of ERAS in figures.js); looks only. */
+    setEra(e) { fig.era = e; staged = false; redraw(); },
   };
 }
 
@@ -6588,7 +6601,7 @@ $m[48] = (($x) => {
 // land's dressing. Looks only: no rule reads any of it. Dressing is cheap by design: spots lie on a grid of cells that halve
 // as the map comes closer (each level keeps the spots of the levels above, so nothing jumps), each spot is worked out once
 // and kept, and only the spots in view are stood, up to a cap. What a spot shows comes from the province under it: its
-// terrain word (an invented world), or the heights and ice of the real one.
+// terrain word (an invented world), or the heights and ice of the real one, then what grows there (maps/cover.webp).
 const { bake, box, lathe, move, prism } = $m[41];
 const { SLOT } = $m[42];
 
@@ -6612,6 +6625,7 @@ const RECIPES = {
   grass(o) { for (const [x, y] of [[-0.18, 0.05], [0.06, -0.12], [0.2, 0.1]]) move(o, lathe([], [[0.07, 0], [0.04, 0.05], [0, 0.08]], 5, c("field", 118), 0, true), x, y); return o; },
   floe(o) { for (const [x, y, s, t] of [[-0.1, 0.02, 1, 0.3], [0.16, -0.08, 0.7, 1.4]]) move(o, prism([], [[-0.16, -0.1], [0.12, -0.14], [0.18, 0.06], [-0.04, 0.14], [-0.2, 0.04]], 0, 0.07, c("snow"), 0, 0.03), x, y, 0, s, t); return o; },
   ridge: (o) => { const r = lathe([], [[0.56, 0], [0.44, 0.05], [0.24, 0.1], [0, 0.12]], 9, c("leaf"), 3, true); for (let i = 0; i < r.length; i += 10) r[i] *= 1.6; return move(o, r); }, // a long low hill, in the ground's own colour
+  tundra(o) { for (const [x, y, s] of [[-0.16, 0.06, 1], [0.12, -0.1, 0.8], [0.2, 0.12, 0.6]]) move(o, lathe([], [[0.08, 0], [0.06, 0.025], [0, 0.035]], 6, c("leaf", 96), 0, true), x, y, 0, s); return move(o, lathe([], [[0.05, 0], [0.045, 0.03], [0, 0.045]], 5, c("metal", 120)), -0.02, -0.12); }, // mapdata hook: moss and a stone
   hamlet(o) { for (const [x, y, w, h] of [[-0.08, 0.03, 0.08, 0.12], [0.09, -0.05, 0.065, 0.16]]) { box(o, x - w, y - w, 0, x + w, y + w, h, c("wall")); move(o, prism([], [[-w - 0.01, 0], [w + 0.01, 0], [0, 0.07]], -w - 0.01, w + 0.01, c("roof"), 0), x, y, h, 1, 0, Math.PI / 2); } return o; },
 };
 for (let n = 1; n <= 10; n++) { RECIPES[`pips${n}`] = (o) => pips(o, n, 0.25); RECIPES[`fpips${n}`] = (o) => pips(o, n, 0.17); }
@@ -6624,13 +6638,19 @@ const WORDS = {
   forest: [["tree", 0.5, 0.44], ["oak", 0.25, 0.42]], hills: [["ridge", 0.3, 0.24]], mountain: [["peak", 0.4, 0.4]], desert: [["dune", 0.45, 0.5]],
   steppe: [["grass", 0.4, 0.45]], marsh: [["reeds", 0.5, 0.45]], plain: [["oak", 0.06, 0.4]], coast: [],
 };
+// mapdata hook: what each class of maps/cover.webp stands (the biomes of RESOLVE Ecoregions 2017 by their own numbers; 15 rock and ice stands nothing)
+const COVER = [null,
+  [["oak", 0.45, 0.46], ["tree", 0.2, 0.44]], [["oak", 0.3, 0.42], ["grass", 0.15, 0.4]], [["tree", 0.5, 0.44]], // tropical forests: moist, dry, conifer
+  [["oak", 0.4, 0.42], ["tree", 0.2, 0.42]], [["tree", 0.55, 0.44]], [["tree", 0.55, 0.4]], // temperate broadleaf, temperate conifer, boreal
+  [["grass", 0.35, 0.45], ["oak", 0.06, 0.38]], [["grass", 0.4, 0.45]], [["reeds", 0.5, 0.45]], [["grass", 0.3, 0.4]], // savanna, steppe, flooded grassland, montane grassland
+  [["tundra", 0.35, 0.45]], [["oak", 0.18, 0.36], ["grass", 0.15, 0.4]], [["dune", 0.45, 0.5]], [["reeds", 0.3, 0.45], ["oak", 0.25, 0.36]], null]; // tundra, Mediterranean, desert, mangrove
 const hash = (a, b, c) => { let h = (a * 374761393 + b * 668265263 + c * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 const inside = (x, y, rings) => { let n = false; for (const r of rings) for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const a = r[i], b = r[j]; if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) n = !n; } return n; };
 
 class Dressing {
   /** world: the unpacked map (provinces with poly, n and, for an invented world, terrain; lake outlines, if it has them). */
   constructor(world) {
-    this.world = world; this.lakes = (world.lakeRings || []).map((ring) => ({ ring, box: ring.reduce((b, [x, y]) => [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)], [Infinity, Infinity, -Infinity, -Infinity]) })); this.list = [...world.provinces.values()].sort((a, b) => a.n - b.n); this.kept = new Map(); this.heights = null;
+    this.world = world; this.lakes = (world.lakeRings || []).map((ring) => ({ ring, box: ring.reduce((b, [x, y]) => [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)], [Infinity, Infinity, -Infinity, -Infinity]) })); this.list = [...world.provinces.values()].sort((a, b) => a.n - b.n); this.kept = new Map(); this.heights = null; this.covers = null;
     // which province each small square of the map belongs to, filled row by row from the outlines; -1 for the sea, -2 where two meet
     const G = this.G = 4, w = this.w = Math.ceil(world.width / G), h = this.h = Math.ceil(world.height / G), of = this.of = new Int16Array(w * h).fill(-1);
     const xs = [];
@@ -6646,6 +6666,8 @@ class Dressing {
   }
   /** The real world's heights and ice, read once from its picture at a smaller size: {w, h, r: heights, a: ice}. */
   relief(r) { this.heights = r; this.kept.clear(); }
+  /** mapdata hook: what grows on the real world, one class a point: {w, h, k}. */
+  cover(k) { this.covers = k; this.kept.clear(); }
   /** What stands at one spot: null, or [model, size, turn]. Worked out once a spot. */
   at(x, y, seed) {
     const col = Math.floor(x / this.G), row = Math.floor(y / this.G);
@@ -6667,6 +6689,9 @@ class Dressing {
       const m = metres(H.r[cy * H.w + cx]), rough = metres(hi) - metres(lo);
       pick = H.a[cy * H.w + cx] < 200 ? [["floe", 0.4, 0.45]] : rough > 1300 || (m > 3200 && rough > 500) ? [["peak", 0.36, 0.4]] : m > 600 && rough > 800 ? [["ridge", 0.14, 0.24]] : null;
     }
+    const K = this.covers; // mapdata hook: then what grows there
+    const grows = K && !p.terrain ? COVER[K.k[Math.min(K.h - 1, Math.floor((y / this.world.height) * K.h)) * K.w + Math.min(K.w - 1, Math.floor((x / this.world.width) * K.w))]] : null;
+    if (grows) pick = !pick ? grows : pick[0][0] === "ridge" ? [...pick, ...grows.map(([m, n, s]) => [m, n * 0.6, s])] : pick; // hills keep some of their wood or grass
     if (!pick) return null;
     let roll = hash(Math.floor(x * 7), Math.floor(y * 7), 91);
     for (const [m, chance, size] of pick) { if (roll < chance) return [m, size * (0.85 + 0.3 * seed), turn]; roll -= chance; }
@@ -6735,13 +6760,24 @@ layout(location=0) in vec2 aP; layout(location=1) in vec2 aI;
 uniform sampler2D uTab; uniform float uRise;
 out vec2 vP; out vec4 vC; out float vZ;
 void main(){ int id=int(aI.x+.5); vC=texelFetch(uTab,ivec2(id&63,id>>6),0); vP=aP; vZ=aI.y; gl_Position=clip(vec3(aP,aI.y*uRise)); }`;
-const LAND_FS = `${HEAD}${COMMON}${SHADE}
+// mapdata hook: what grows on the real world (maps/cover.webp, a class a point, grey 16 a class), as a colour a class,
+// blended between neighbouring points and along a wavering line, so no square shows; mountains and ice keep their own look
+const BIOMES = [[0.3, 0.45, 0.24], [0.47, 0.51, 0.31], [0.33, 0.45, 0.28], [0.38, 0.5, 0.29], [0.31, 0.43, 0.29], [0.35, 0.43, 0.33], [0.64, 0.6, 0.39], [0.6, 0.6, 0.4], [0.43, 0.53, 0.4], [0.56, 0.55, 0.41], [0.58, 0.6, 0.52], [0.5, 0.53, 0.35], [0.79, 0.7, 0.5], [0.3, 0.44, 0.33]];
+const COVER = `
+uniform sampler2D uCover; uniform float uCov;
+const vec4 BIOME[16]=vec4[16](vec4(0.),${BIOMES.map((c) => `vec4(${c.map((v) => v.toFixed(2)).join(",")},1.)`).join(",")},vec4(0.));
+vec4 bio(ivec2 i){ ivec2 m=textureSize(uCover,0)-1; return BIOME[min(15,int(texelFetch(uCover,clamp(i,ivec2(0),m),0).r*15.9375+.5))]; }
+vec4 cov(vec2 p){ p+=vec2(nz(p*.45),nz(p*.45+7.))*1.6-.8; vec2 uv=p/uSize*vec2(textureSize(uCover,0))-.5,f=fract(uv); ivec2 i=ivec2(floor(uv));
+  vec4 a=bio(i),b=bio(i+ivec2(1,0)),e=bio(i+ivec2(0,1)),d=bio(i+ivec2(1,1)); a.rgb*=a.a; b.rgb*=b.a; e.rgb*=e.a; d.rgb*=d.a;
+  vec4 r=mix(mix(a,b,f.x),mix(e,d,f.x),f.y); r.rgb/=max(r.a,.001); return r; }`;
+const LAND_FS = `${HEAD}${COMMON}${SHADE}${COVER}
 uniform float uRise,uTint;
 in vec2 vP; in vec4 vC; in float vZ; out vec4 o;
 void main(){ float h=hgt(vP),t=clamp((h-.376)/.624,0.,1.); vec2 g=uDet>0.?slopeC(vP):slope(vP),gd=vec2(0.);
   if(uDet>0.){ vec3 d=fine(vP); float rough=clamp(length(g)*9.+smoothstep(.3,.7,t)*.4,0.,1.); gd=d.yz*(.0004+.01*rough*rough)*uDet*uSize.x/700.; t=clamp(t+d.x*.05*rough*uDet,0.,1.); } // capomap: fine relief
   // the land's own colour by its height: green plain, dry upland, brown mountain, snow
   vec3 c=mix(vec3(.47,.54,.37),vec3(.68,.62,.44),smoothstep(.02,.2,t)); c=mix(c,vec3(.5,.41,.33),smoothstep(.2,.48,t)); c=mix(c,vec3(.95,.96,.97),smoothstep(.56,.74,t));
+  if(uCov>0.){ vec4 k=cov(vP); c=mix(c,k.rgb,k.a*uCov*(1.-smoothstep(.3,.62,t))); } // mapdata hook: forest, grass, desert, tundra, marsh below the mountains
   c=mix(c,uWash.rgb,uWash.a);
   float glow=vC.a<.6?1.:0.,ice=uReal>0.?1.-smoothstep(.55,.95,texture(uRelief,vP/uSize).a):0.; // a province that is lit: chosen, or offered. Ice, where the world's picture marks it
   c=mix(c,vec3(.9,.94,.97),ice);
@@ -6792,6 +6828,7 @@ class WorldGround {
     g.activeTexture(g.TEXTURE3); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, 1, 1, 0, g.RGBA, g.UNSIGNED_BYTE, new Uint8Array([92, 60, 40, 255]));
     this.vao = g.createVertexArray(); this.corners = g.createBuffer(); this.order = g.createBuffer(); this.real = 0; this.count = 0;
     this.lake = program(g, LAKE_VS, LAKE_FS); this.lvao = g.createVertexArray(); this.lpts = g.createBuffer(); this.lidx = g.createBuffer(); this.lcount = 0; // capomap: lakes
+    this.cov = tex(5, g.NEAREST, g.CLAMP_TO_EDGE); g.texImage2D(g.TEXTURE_2D, 0, g.R8, 1, 1, 0, g.RED, g.UNSIGNED_BYTE, new Uint8Array([0])); this.covered = 0; // mapdata hook: land cover
   }
   /**
    * The shapes. size: [wide, high]. provinces: [{ rings: [[[x, y], ...], ...] }] in the order of their numbers.
@@ -6844,6 +6881,8 @@ class WorldGround {
   paint(bytes) { const g = this.g, all = new Uint8Array(64 * this.rows * 4); all.set(bytes.subarray(0, all.length)); g.activeTexture(g.TEXTURE0); g.bindTexture(g.TEXTURE_2D, this.tab); g.texSubImage2D(g.TEXTURE_2D, 0, 0, 0, 64, this.rows, g.RGBA, g.UNSIGNED_BYTE, all); }
   /** A picture of the world's heights (96 of 255 is the sea's surface; alpha under 255 marks ice), or nothing for heights made from noise. */
   relief(img) { const g = this.g; this.real = img ? 1 : 0; if (!img) return; g.activeTexture(g.TEXTURE1); g.bindTexture(g.TEXTURE_2D, this.heights); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, g.RGBA, g.UNSIGNED_BYTE, img); }
+  /** mapdata hook: what grows on the land (maps/cover.webp), or nothing: the ground then goes by height alone. */
+  cover(img) { const g = this.g; this.covered = img ? 1 : 0; if (!img) return; g.activeTexture(g.TEXTURE5); g.bindTexture(g.TEXTURE_2D, this.cov); g.pixelStorei(g.UNPACK_COLORSPACE_CONVERSION_WEBGL, g.NONE); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, g.RGBA, g.UNSIGNED_BYTE, img); g.pixelStorei(g.UNPACK_COLORSPACE_CONVERSION_WEBGL, g.BROWSER_DEFAULT_WEBGL); }
   wood(img) { const g = this.g; g.activeTexture(g.TEXTURE3); g.bindTexture(g.TEXTURE_2D, this.timber); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, g.RGBA, g.UNSIGNED_BYTE, img); g.generateMipmap(g.TEXTURE_2D); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR_MIPMAP_LINEAR); }
   /** o: style, relief (how strongly the heights are lit, 1 for the whole world, less close in where the picture runs out of detail), detail (0 to 1: fine relief added close in) and octaves (how many waves of it), rise (how far the land stands above the sea), tint (how much of the owner's colour lies over the land's own), lamp (the mesh layer's shadow settings, or nothing). */
   draw(cam, dpr, o) {
@@ -6856,6 +6895,7 @@ class WorldGround {
       g.uniform1i(u.uTab, 0); g.uniform1i(u.uRelief, 1); g.uniform1i(u.uWood, 3); g.uniform2f(u.uSize, ...this.size); g.uniform1f(u.uReal, this.real); g.uniform1f(u.uSeed, this.seed);
       g.uniform3f(u.uSun, ...o.style.sun); g.uniform1f(u.uShOn, 0); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uRel, (o.relief ?? 1) * o.style.map.relief); g.uniform1f(u.uGloss, o.style.surface.gloss); g.uniform4f(u.uWash, ...o.style.map.wash.map((v, i) => (i < 3 ? v / 255 : v))); g.uniform1f(u.uDet, o.detail || 0); g.uniform1f(u.uOct, o.octaves ?? 4);
       g.uniform4f(u.uGrade, ...o.style.grade); g.uniform4f(u.uCont, ...o.style.surface.contour.map((v, i) => (i < 3 ? v / 255 : v))); // styles hook
+      g.uniform1i(u.uCover, 5); g.uniform1f(u.uCov, this.covered * this.real * (o.style.map.cover ?? 1)); // mapdata hook
       o.lamp?.(u);
       return u;
     };
@@ -6938,7 +6978,9 @@ async function loadWorld(url, disputesUrl = "") {
   const world = unpackWorld(await res.json(), disputes);
   // the real world brings its relief (heights baked from open data, a picture) and its rivers and lakes; without them the map still works
   world.relief = url.replace(/[^/]+$/, "relief.webp");
-  const waters = await fetch(url.replace(/[^/]+$/, "waters.json")).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  world.cover = url.replace(/[^/]+$/, "cover.webp"); // mapdata hook: what grows on the land, and the real cities (tools/mapdata.py)
+  const near = (name) => fetch(url.replace(/[^/]+$/, name)).then((r) => (r.ok ? r.json() : null)).catch(() => null), [waters, towns] = await Promise.all([near("waters.json"), near("cities.json")]);
+  if (towns) world.cities = towns.cities.map(([name, x, y, rank, at]) => ({ name, x: x / 10, y: y / 10, rank, at })); // mapdata hook
   if (waters) {
     const line = (d, path, close) => { let x = 0, y = 0; for (let i = 0; i < d.length; i += 2) { x += d[i]; y += d[i + 1]; if (i) path.lineTo(x / 10, y / 10); else path.moveTo(x / 10, y / 10); } if (close) path.closePath(); };
     world.rivers = [0, 1, 2, 3].map(() => new Path2D()); world.lakes = new Path2D(); world.lakeRings = [];
@@ -7043,6 +7085,8 @@ function worldMap(canvas, world, o) {
     lit.ground.load([world.width, world.height], list.map((p) => ({ rings: p.poly })), coast, (world.arcs.length % 97) / 7);
     lit.ground.relief(null); lit.key = ""; lit.ground.lakes(world.lakeRings); lit.dress = null; lit.heights = null; // capomap: lakes; the dressing is made when first needed
     if (world.relief) { const img = new Image(), w = world; img.onload = () => { if (lit && world === w) { lit.ground.relief(img); lit.heights = img; redraw(); } }; img.src = world.relief; }
+    lit.ground.cover(null); lit.covers = null; // mapdata hook: what grows, on the real world
+    if (world.cover) { const img = new Image(), w = world; img.onload = () => { if (lit && world === w) { lit.ground.cover(img); lit.covers = img; redraw(); } }; img.src = world.cover; }
   }
   /** A colour as three numbers, whatever way it was written. */
   const rgbOf = (text) => {
@@ -7112,6 +7156,7 @@ function worldMap(canvas, world, o) {
     if (b === 2) {
       if (!lit.dress) lit.dress = new Dressing(world);
       if (lit.heights && !lit.dress.heights) lit.dress.relief(heightsOf(lit.heights));
+      if (lit.covers && !lit.dress.covers) lit.dress.cover(coverOf(lit.covers)); // mapdata hook
       list.push(...lit.dress.stand([box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad], view.s, k, phone ? 260 : 520, phone ? 66 : 76, style.models || {}));
     }
     lit.meshes.set(list);
@@ -7124,6 +7169,14 @@ function worldMap(canvas, world, o) {
     const d = x.getImageData(0, 0, w, h).data, r = new Uint8Array(w * h), a = new Uint8Array(w * h);
     for (let i = 0; i < w * h; i++) { r[i] = d[i * 4]; a[i] = d[i * 4 + 3]; }
     return { w, h, r, a };
+  }
+  /** mapdata hook: the land cover picture read back, one class a point. */
+  function coverOf(img) {
+    const c = document.createElement("canvas"), w = img.width, h = img.height, x = c.getContext("2d", { willReadFrequently: true });
+    c.width = w; c.height = h; x.drawImage(img, 0, 0);
+    const d = x.getImageData(0, 0, w, h).data, k = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) k[i] = Math.min(15, (d[i * 4] + 8) >> 4);
+    return { w, h, k };
   }
   /** One frame of the lit map. */
   function shine() {
@@ -7249,11 +7302,16 @@ function worldMap(canvas, world, o) {
       if (!b || a > b.a) biggest.set(who, { a, p });
     }
     let left = near ? 400 : 30; // the whole world names its thirty largest countries at most
-    for (const [who, { a, p }] of [...biggest].sort((m, n) => n[1].a - m[1].a)) if (left > 0 && a * s * s > (near ? 700 : 1500) && put(o.name?.(who) || world.countries[who] || who, p.label[0], p.label[1], near > 1 ? 14 : 12, 600)) left--;
+    const said = new Map(), once = (text, mx, my, ...a) => { const [x, y] = spot(mx, my), was = said.get(text) || []; if (was.some(([u, v]) => Math.hypot(u - x, v - y) < 160) || !put(text, mx, my, ...a)) return false; said.set(text, [...was, [x, y]]); return true; }; // mapdata hook: a name is not printed twice side by side
+    for (const [who, { a, p }] of [...biggest].sort((m, n) => n[1].a - m[1].a)) if (left > 0 && a * s * s > (near ? 700 : 1500) && once(o.name?.(who) || world.countries[who] || who, p.label[0], p.label[1], near > 1 ? 14 : 12, 600)) left--;
+    // mapdata hook: the real cities that stand are named under them, capitals and the larger first, the rest after the provinces
+    const towns = lit && near > 0 ? (pieces ||= o.pieces?.() || []).filter((p) => p.name && (p.band || 0) <= near && (p.until ?? 9) >= near) : [], town = (p) => once(p.name, p.at[0], p.at[1], p.rank > 1 ? 10 : 11, p.rank > 1 ? "italic 500" : "italic 600", false, -11);
+    for (const p of towns) if (p.rank < 2) town(p);
     if (near > 0) {
       const least = near > 1 ? 46 : 110; // a region names only its large provinces
-      for (const p of world.provinces.values()) { const [x0, y0, x1, y1] = p.box; if ((x1 - x0) * s > least && (y1 - y0) * s > 14) put(p.name, p.label[0], p.label[1], 11, 500, false, lit ? 13 : 0); } // capomap: above the town that stands there
+      for (const p of world.provinces.values()) { const [x0, y0, x1, y1] = p.box; if ((x1 - x0) * s > least && (y1 - y0) * s > 14) once(p.name, p.label[0], p.label[1], 11, 500, false, lit ? 13 : 0); } // capomap: above the town that stands there
     }
+    for (const p of towns) if (p.rank > 1) town(p); // mapdata hook
   }
 
   // a page out of sight may get no animation frames, so a timer stands in when none comes
@@ -7324,7 +7382,7 @@ $m[51] = (($x) => {
 // the state the rules already keep (who holds what, might, wars, the people seated in command, missions); nothing here changes a game.
 // A piece: { m: model, at: province id or [x, y], owner: country code, dx, dy (in piece sizes), band: the zoom band it appears at
 // (0 the world, 1 a region, 2 a country), until: the last band it is shown at, sea: it floats, size, turn, pips: strength, rgb,
-// fit: the screen points its province must span before it shows }.
+// fit: the screen points its province must span before it shows, name and rank: a real city's, for its label }.
 const { KINDS } = $m[15];
 const { statusOf } = $m[6];
 
@@ -7371,17 +7429,21 @@ const PIN = { scout: [86, 150, 214], sabotage: [222, 118, 44], rescue: [232, 196
  * wars: [[a, b], ...], player: the player's country, staff: how many named people the player has seated in command (seven at most).
  * strength(code): might now, 1 to 10, for the pips (might when not given). g: the game, for its missions (read only).
  * The list carries `threads`: [[from, to, rgb], ...] in map units, a mission's line from home to where it goes.
+ * cities: the real world's cities ([{name, x, y, rank, at}], maps/cities.json), or none where the world is invented or an alternate history.
  */
-function mapPieces({ world, homes, owner, might, wars = [], player = "", staff = 0, strength = null, g = null }) {
+function mapPieces({ world, homes, owner, might, wars = [], player = "", staff = 0, strength = null, g = null, cities = null }) {
   const out = [], rank = [...homes].sort((a, b) => b[1].a - a[1].a), land = new Map(), known = new Map(), pips = (c) => { if (!known.has(c)) known.set(c, Math.max(1, Math.min(10, Math.round((strength || might)(c) || 1)))); return known.get(c); }; // once a country: strength reads the whole map
   for (const p of world.provinces.values()) { const c = owner(p.id); if (!land.has(c)) land.set(c, []); land.get(c).push(p); }
-  const seat = new Set();
+  const seat = new Set(), sat = new Set(), capital = new Map(); // mapdata hook: a country's real capital, its first in the file
+  for (const t of cities || []) { const c = world.provinces.get(t.at)?.country; if (t.rank === 0 && c && !capital.has(c)) capital.set(c, t); }
   rank.forEach(([c, h], i) => {
     if (owner(h.id) !== c) return; // its home has fallen: no capital stands there
     seat.add(h.id);
     const m = might(c) || 0, far = i < 36 ? 0 : 1; // the whole world shows the larger countries' capitals large, the rest small
-    out.push({ m: "keep", at: h.id, owner: c, band: far, size: 0.72 });
-    if (far) out.push({ m: "keep", at: h.id, owner: c, band: 0, until: 0, size: 0.4 }); // capomap: every capital, always
+    const cap = capital.get(c), held = cap && owner(cap.at) === c, at = held ? [cap.x, cap.y] : h.id, name = held ? { name: cap.name, rank: 0 } : {}; // mapdata hook: the keep stands in the real capital while the country holds it
+    if (held) { sat.add(cap); seat.add(cap.at); }
+    out.push({ m: "keep", at, owner: c, band: far, size: 0.72, ...name });
+    if (far) out.push({ m: "keep", at, owner: c, band: 0, until: 0, size: 0.4 }); // capomap: every capital, always
     if (m >= 3) out.push({ m: m >= 5 ? "armour" : "army", at: h.id, owner: c, dx: 0.95, dy: 0.3, band: m >= 4 ? 0 : 1, size: 0.78, pips: pips(c) }); // one block a country when seen from afar
     if (m >= 5) out.push({ m: "wing", at: h.id, owner: c, dx: -0.95, dy: -0.35, band: 1, size: 0.7 });
     if (m >= 4) { // a fleet, off the coast nearest its home
@@ -7390,11 +7452,17 @@ function mapPieces({ world, homes, owner, might, wars = [], player = "", staff =
       if (sea) out.push({ m: "fleet", at: sea.at, turn: sea.turn, owner: c, sea: true, band: m >= 5 ? 0 : 1, size: 0.8, pips: pips(c) });
     }
   });
+  if (cities) { // mapdata hook: the real cities, by rank: other capitals always, the larger from the region band, the rest close in; a town where no city stands
+    const has = new Set(cities.map((t) => t.at));
+    for (const t of cities) if (!sat.has(t)) out.push({ m: "city", at: [t.x, t.y], band: t.rank, size: t.rank > 1 ? 0.45 : 0.55, name: t.name, rank: t.rank });
+    for (const id of world.provinces.keys()) if (!seat.has(id) && !has.has(id)) out.push({ m: "hamlet", at: id, band: 2, size: 0.6, fit: 70 });
+  } else {
   // capomap: great cities from the region band, the rest and towns from the country band, where no capital stands
-  const { great, cities, towns } = townsOf(world);
+  const { great, cities: more, towns } = townsOf(world);
   for (const id of great) if (!seat.has(id)) out.push({ m: "city", at: id, band: 1, size: 0.55 });
-  for (const id of cities) if (!seat.has(id)) out.push({ m: "city", at: id, band: 2, size: 0.55, fit: 36 });
+  for (const id of more) if (!seat.has(id)) out.push({ m: "city", at: id, band: 2, size: 0.55, fit: 36 });
   for (const id of towns) if (!seat.has(id)) out.push({ m: "hamlet", at: id, band: 2, size: 0.6, fit: 70 }); // fit: shown once its province is that many screen points across
+  }
   // a war: blocks face each other across the front, with guns behind them once you look closer
   let seats = Math.min(7, staff);
   for (const [a, b] of wars) {
@@ -7442,9 +7510,37 @@ $m[53] = (($x) => {
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-const VERSION = "0.10.2";
+const VERSION = "0.10.6";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "76dba107";
+const BUILD = "c33b29a2";
+// guide hook (ruling 153.8): each AI service's own pages, for links in the Choose an AI guide (site/aiguide.js). A player
+// follows them in a new tab; the page never fetches them, and its rule does not reach them. Kept above the list of services
+// the page may call, because the gate reads every address after that list's name as one the page calls.
+const AI_LINKS = {
+  openrouterKeys: "https://openrouter.ai/settings/keys",
+  openrouterPrivacy: "https://openrouter.ai/docs/features/privacy-and-logging",
+  openrouterLimits: "https://openrouter.ai/docs/api-reference/limits",
+  geminiKey: "https://aistudio.google.com/apikey",
+  geminiLimits: "https://aistudio.google.com/rate-limit",
+  geminiPricing: "https://aistudio.google.com/docs/pricing",
+  groqKeys: "https://console.groq.com/keys",
+  groqLimits: "https://console.groq.com/settings/limits",
+  ollama: "https://ollama.com/download",
+  ollamaHelp: "https://docs.ollama.com/faq",
+  lmstudio: "https://lmstudio.ai",
+  lmstudioServer: "https://lmstudio.ai/docs/developer/core/server/settings",
+  node: "https://nodejs.org",
+  openaiKeys: "https://platform.openai.com/api-keys",
+  openaiPricing: "https://developers.openai.com/api/docs/pricing",
+  anthropicKeys: "https://platform.claude.com/settings/keys",
+  anthropicPricing: "https://platform.claude.com/docs/en/about-claude/pricing",
+  deepseekKeys: "https://platform.deepseek.com/api_keys",
+  deepseekPricing: "https://api-docs.deepseek.com/quick_start/pricing/",
+  mistralKeys: "https://console.mistral.ai/api-keys",
+  cerebras: "https://cloud.cerebras.ai",
+  cerebrasLimits: "https://inference-docs.cerebras.ai/support/rate-limits",
+  together: "https://www.together.ai",
+};
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -7473,7 +7569,7 @@ const PLAY_ADDRESSES = [
   { name: "worker", address: "", reason: "room codes, a relay for pairs that cannot connect directly, play by turn with a 'your turn' notice, and saves by code (server/worker/)" },
 ];
 
-$x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_BASES = AI_BASES; $x.LIVE_ADDRESSES = LIVE_ADDRESSES; $x.PLAY_ADDRESSES = PLAY_ADDRESSES;
+$x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_LINKS = AI_LINKS; $x.AI_BASES = AI_BASES; $x.LIVE_ADDRESSES = LIVE_ADDRESSES; $x.PLAY_ADDRESSES = PLAY_ADDRESSES;
 return $x; })({});
 $m[54] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -8071,6 +8167,205 @@ function pluginPart(r, ui) {
 
 $x.aiMore = aiMore; $x.BRIDGE = BRIDGE; $x.bridgeBase = bridgeBase; $x.bridgeAsk = bridgeAsk; $x.bridgeCheck = bridgeCheck; $x.aiHost = aiHost; $x.hear = hear; $x.unhear = unhear; $x.proposals = proposals; $x.bridgePart = bridgePart; $x.openPlugin = openPlugin; $x.dropPlugin = dropPlugin; $x.choosePlugin = choosePlugin; $x.pluginsNow = pluginsNow; $x.voiceNow = voiceNow; $x.pluginPart = pluginPart;
 return $x; })({});
+$m[59] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Choose an AI (ruling 153.8): a guide to the services Capo can reach, free routes first, then paid ones. Each says
+// where to get a key, what to paste where, what it costs, what to expect, and what its pages did not confirm, with
+// links that open the service's own pages in a new tab (the page never fetches them). "Use this" fills in How Capo
+// reaches an AI; nothing is sent until the player presses Check connection there. Built from elements and text, never markup.
+const { AI_LINKS, SOURCE_URL } = $m[53];
+
+/** The day each service's free tier, limits and steps were read on its own pages. */
+const CHECKED = "27 November 2026";
+const KEEP = (n) => `Your key stays in this browser and goes only to ${n}. Capo has no server, and never puts a key in a save, a file or a web address.`;
+const CHECK = "Press Check connection. When it answers, the AI is connected.";
+const origin = () => (/^https?:/.test(globalThis.location?.origin || "") ? location.origin : "the address this page is opened from");
+
+// group: free (a free tier, nothing to install), home (on this computer), paid. preset: the service in site/ai.js; model: what Use this fills in.
+// unsure: what the service's own pages did not confirm on the day above.
+const R = (group, preset, model, name, tag, more) => ({ group, preset, model, name, tag, unsure: [], links: [], ...more });
+const ROUTES = [
+  R("free", "openrouter", "openrouter/free", "OpenRouter, free models", "Free, nothing to install, many models", {
+    cost: "Free models (their names end in :free): 20 calls a minute and 50 a day. Once you have bought 10 credits (10 US dollars) in all, 1,000 a day. Its other models cost per use.",
+    steps: ["Make an account at OpenRouter.", "Open Keys and create a key. Give it a small credit limit, so it can never spend much.", "Copy the key: it starts with sk-or-v1-.",
+      "Here: press Use OpenRouter below, then paste the key into Key. The model is set to openrouter/free, which picks a free model for each call; or write any model whose name ends in :free.", CHECK],
+    expect: "Quality and speed change with the free model it picks. At busy hours a free model may be slow or say too many requests; Capo waits and tries again. Each turn, chat message and council question is one call.",
+    privacy: "Some free models are run by providers who keep or learn from what you send. OpenRouter's privacy settings choose which providers it may use.",
+    links: [["Get a key", "openrouterKeys"], ["Free limits", "openrouterLimits"], ["Privacy and logging", "openrouterPrivacy"]] }),
+  R("free", "gemini", "gemini-3.8-flash", "Google Gemini, free tier", "Free, nothing to install, good stories", {
+    cost: "Free of charge for Gemini 3.8 Flash, 3.6 Flash and the Flash-Lite models, up to daily limits Google shows in AI Studio. Paid use of 3.8 Flash costs 0.75 US dollars per million tokens sent and 3.75 per million received (until 31 December 2026).",
+    steps: ["Sign in to Google AI Studio with a Google account. Google's terms ask that you are 18 or over.", "Open Get API key and create a key. Copy it.",
+      "Here: press Use Google Gemini below, then paste the key into Key. The model is set to gemini-3.8-flash; gemini-3.5-flash-lite is lighter and quicker.", CHECK],
+    expect: "Good stories and quick replies. When the day's free limit is used up, Capo says too many requests or today's free limit is used up: wait for the next day, or choose another route. Older names such as gemini-2.5-flash move to newer models on 1 December 2026.",
+    privacy: "On the free tier Google may use what you send to improve its products. On a paid account it does not.",
+    unsure: ["The free tier's numbers for each model: Google's public page sends you to AI Studio for them."],
+    links: [["Get a key", "geminiKey"], ["Your limits", "geminiLimits"], ["Prices", "geminiPricing"]] }),
+  R("free", "groq", "openai/gpt-oss-120b", "Groq", "Free plan, very fast", {
+    cost: "A free plan with limits for each model: calls a minute and a day, and tokens a day. Past them Groq answers too many requests; it does not charge you.",
+    steps: ["Make an account at GroqCloud.", "Open API Keys and create a key. Copy it.",
+      "Here: press Use Groq below, then paste the key into Key. The model is set to openai/gpt-oss-120b; openai/gpt-oss-20b is quicker.", CHECK],
+    expect: "Replies come very fast. The gpt-oss models think before they write, so Capo allows them a longer reply.",
+    privacy: "Groq's pages did not say how free-plan requests are used.",
+    unsure: ["The free plan's numbers: Groq's page shows its paid Developer plan (30 calls a minute, 1,000 a day for gpt-oss-120b) and sends you to your own Limits page. Others report the same 1,000 a day on the free plan."],
+    links: [["Get a key", "groqKeys"], ["Your limits", "groqLimits"]] }),
+  R("home", "ollama", "", "Ollama, on this computer", "Free and private, needs a capable computer", {
+    cost: "Free: your own computer does the work.",
+    steps: ["Install Ollama from its site.", "In a terminal, fetch a model, for example: ollama pull llama3.1 (its library lists others; bigger models need more memory).",
+      [`Let this page in: set OLLAMA_ORIGINS to ${origin()}, then restart Ollama.`, [
+        "Windows: quit Ollama from the taskbar, search Settings for environment variables, choose Edit environment variables for your account, add OLLAMA_ORIGINS, then start Ollama again.",
+        `macOS: run launchctl setenv OLLAMA_ORIGINS "${origin()}" and restart Ollama.`,
+        `Linux: run systemctl edit ollama.service, add Environment="OLLAMA_ORIGINS=${origin()}" under [Service], then run systemctl daemon-reload and systemctl restart ollama.`]],
+      "Here: press Use Ollama below and write the model's name as you fetched it. No key.", `${CHECK} If your browser asks whether this page may reach devices on your network, allow it.`],
+    expect: "Speed and quality depend on your computer and the model. A small model answers quickly but tells plainer stories and slips more often; the rules check every reply anyway.",
+    privacy: "Nothing leaves your computer.",
+    links: [["Download Ollama", "ollama"], ["Ollama's help on settings", "ollamaHelp"]] }),
+  R("home", "lmstudio", "", "LM Studio, on this computer", "Free and private, an app with buttons", {
+    cost: "Free: your own computer does the work.",
+    steps: ["Install LM Studio and download a model in it.", "Open its server settings, turn on Enable CORS, and start the server (it listens on port 1234). In a terminal, lms server start --cors does the same.",
+      "Here: press Use LM Studio below. Check connection lists the models it has loaded: copy one into Model. No key.", `${CHECK} If your browser asks whether this page may reach devices on your network, allow it.`],
+    expect: "As with Ollama, speed and quality depend on your computer and the model you load.",
+    privacy: "Nothing leaves your computer.",
+    links: [["Download LM Studio", "lmstudio"], ["Its server settings", "lmstudioServer"]] }),
+  R("home", "bridge", "", "Your own AI app, through the bridge", "No key: the AI app you already use", {
+    cost: "Nothing more to pay: your AI app's own plan does the writing, within that plan's limits.",
+    steps: ["Get Capo's source and Node 22 or newer.", "In a terminal there, run: node tools/capo-mcp.mjs. It prints a page token and how to add the bridge to your AI app (any app that takes MCP tools).",
+      "Here: press Use the bridge below and paste the page token.", "Press Check the bridge. Then start a turn, and tell your AI app: play my Capo turn."],
+    expect: "You switch to your AI app for each turn. The story is as good as the model your app uses.",
+    privacy: "Your AI app sees each prompt and a short summary of the game, under its own terms. The bridge stays on this computer and calls nowhere.",
+    links: [["Capo's source", "source"], ["Node", "node"]] }),
+  R("paid", "openai", "gpt-5-mini", "OpenAI", "Paid by use", {
+    cost: "gpt-5-mini: 0.25 US dollars per million tokens sent, 2 per million received. gpt-5-nano, the cheapest: 0.05 and 0.40. No free tier for these.",
+    steps: ["Make an account on OpenAI's platform and add billing.", "Open API keys and create a key. Copy it.", "Here: press Use OpenAI below and paste the key. The model is set to gpt-5-mini.", CHECK],
+    expect: "Strong, steady stories. gpt-5 models think first, so a reply can take a little while.",
+    links: [["Get a key", "openaiKeys"], ["Prices", "openaiPricing"]] }),
+  R("paid", "anthropic", "claude-haiku-5-5", "Anthropic", "Paid by use", {
+    cost: "claude-haiku-5-5: from 0.10 US dollars per million tokens sent and 0.50 per million received. claude-sonnet-5-5: 2 and 10. New accounts get some free credit to try it.",
+    steps: ["Make an account on Anthropic's platform and buy credit.", "Open API keys and create a key. Copy it.", "Here: press Use Anthropic below and paste the key. The model is set to claude-haiku-5-5.", CHECK],
+    expect: "Strong stories; haiku is quick and cheap, sonnet writes more richly. An organization set to keep no data cannot be called from a web page.",
+    unsure: ["How much free credit a new account gets: the page does not say."],
+    links: [["Get a key", "anthropicKeys"], ["Prices", "anthropicPricing"]] }),
+  R("paid", "deepseek", "deepseek-flash", "DeepSeek", "Paid by use, cheap", {
+    cost: "deepseek-flash: 0.30 US dollars per million tokens sent and 1.20 per million received, half that outside its busy hours.",
+    steps: ["Make an account on DeepSeek's platform and top up.", "Open API keys and create a key. Copy it.", "Here: press Use DeepSeek below and paste the key. The model is set to deepseek-flash.", CHECK],
+    expect: "Good stories for little money.",
+    unsure: ["Whether it answers calls from a web page: Capo has not seen it do so yet. Check connection tells."],
+    links: [["Get a key", "deepseekKeys"], ["Prices", "deepseekPricing"]] }),
+  R("paid", "cerebras", "gpt-oss-120b", "Cerebras", "A trial credit, then paid; very fast", {
+    cost: "Add a payment method for a one-time trial credit of 5 US dollars, kept 30 days. On the trial, gpt-oss-120b allows 5 calls a minute. Then paid by use.",
+    steps: ["Make an account on Cerebras Cloud and add a payment method.", "Open API Keys and create a key. Copy it.", "Here: press Use Cerebras below and paste the key. The model is set to gpt-oss-120b.", CHECK],
+    expect: "Among the fastest replies there are.",
+    links: [["Get a key", "cerebras"], ["Limits", "cerebrasLimits"]] }),
+  R("paid", "mistral", "mistral-small-latest", "Mistral", "Paid by use", {
+    cost: "Paid by use: its free plan has no API access, so billing must be on before a key works.",
+    steps: ["Make an account on Mistral's console and turn on billing.", "Open API keys and create a key. Copy it.", "Here: press Use Mistral below and paste the key. The model is set to mistral-small-latest.", CHECK],
+    expect: "Good, quick stories.",
+    unsure: ["Its prices today: not read for this guide."],
+    links: [["Get a key", "mistralKeys"]] }),
+  R("paid", "together", "", "Together AI", "Paid by use", {
+    cost: "Paid by use.",
+    steps: ["Make an account at Together AI and add billing.", "Create a key in its settings. Copy it.", "Here: press Use Together AI below and paste the key.", CHECK],
+    expect: "Many open models.",
+    unsure: ["Its free offer, prices and steps were not checked for this guide.", "Whether it answers calls from a web page: Capo has not seen it do so yet. Check connection tells."],
+    links: [["Its site", "together"]] }),
+];
+
+/** What to do when How Capo reaches an AI shows an error: by its kind (the kinds site/ai.js gives), the start of its words and the fix. */
+const HELP = [
+  ["key", "refused the key", "Copy the whole key again from the service's key page, with no space before or after it. Check it is for the service chosen, and was not deleted."],
+  ["credit", "has no credit, or no billing", "Add credit or billing at the service, or choose a free route above."],
+  ["rate", "says too many requests", "Capo waits and tries again three times. Free limits come back after a minute or the next day; or choose another route."],
+  ["model", "does not know the model", "Press Check connection: the Model field then offers the service's own names. Copy one exactly."],
+  ["blocked", "was blocked or did not get through", "Check your connection, and that no extension blocks this page. A service Capo has not seen answer web pages may turn them away."],
+  ["local", "Nothing answered at", "On this computer: is the server running? Ollama needs OLLAMA_ORIGINS set and a restart; LM Studio needs Enable CORS. Allow the browser's question about devices on your network."],
+  ["denied", "refused this request", "The key may not be allowed this model, or the service is not offered where you are. Try another model."],
+  ["busy", "is busy or having trouble", "Capo tries again. If it goes on, try later or another model."],
+  ["time", "sent nothing for two minutes", "A model on this computer may be too big for it: try a smaller one."],
+  ["cut", "spent its whole allowance", "Tick Thinking model, then ask again."],
+  ["tools", "refused a structured reply", "Capo asks again for plain lines and remembers. You can also untick Structured replies."],
+  ["filter", "safety filter stopped the reply", "Ask again, or choose another model or service."],
+];
+
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
+const button = (text, on, cls = "plain") => { const b = el("button", text, cls); b.type = "button"; b.onclick = on; return b; };
+const link = (text, key) => {
+  const a = el("a", `${text} (opens its site)`), href = key === "source" ? SOURCE_URL : AI_LINKS[key];
+  Object.assign(a, { href, target: "_blank", rel: "noopener noreferrer" });
+  return a;
+};
+const short = (name) => name.split(",")[0].replace(/^Your own AI app.*/, "the bridge");
+
+/** One route, folded: its tag shows, and opening it shows cost, steps, what to expect, privacy, links and Use this. */
+function routePart(x, use) {
+  const d = el("details", undefined, "route"), s = el("summary"), steps = el("ol");
+  s.append(el("b", x.name), el("span", ` ${x.tag}`, "note"));
+  for (const t of x.steps) {
+    if (typeof t === "string") { steps.append(el("li", t)); continue; }
+    const li = el("li", t[0]), sub = el("ul"); // a step with a line for each kind of computer
+    for (const s of t[1]) sub.append(el("li", s));
+    li.append(sub); steps.append(li);
+  }
+  const links = el("div", undefined, "row"), row = el("div", undefined, "row");
+  links.append(...x.links.map(([t, k]) => link(t, k)));
+  row.append(button(`Use ${short(x.name)}`, () => use(x)));
+  const say = (label, text) => { const p = el("p"); p.append(el("b", `${label}: `), text); return p; };
+  d.append(s, say("Cost", x.cost), el("h4", "Set it up"), steps, say("What to expect", x.expect),
+    say("Privacy", `${x.privacy ? `${x.privacy} ` : ""}${x.group === "home" ? "" : KEEP(short(x.name))}`.trim()),
+    ...x.unsure.map((u) => el("p", `Not confirmed on its pages: ${u}`, "note")), links, row);
+  return d;
+}
+
+/** The whole guide, as elements. use(route) is pressed by Use this; close() by Close. */
+function guideParts(use, close) {
+  const head = el("h2", "Choose an AI");
+  head.tabIndex = -1;
+  const picks = el("ul");
+  for (const t of ["Free, nothing to install: OpenRouter's free models, or Google Gemini.", "Free and very fast: Groq.", "Free and private, nothing leaves your computer: Ollama or LM Studio.",
+    "You already use an AI app: the bridge, no key.", "Paid by use, for the steadiest stories: OpenAI, Anthropic, Gemini on a paid account, or DeepSeek for less."]) picks.append(el("li", t));
+  const out = [head, el("p", "You do not need an AI: Advance moves the world by the rules. An AI tells each turn as a story and answers your chats and council. Choose one here; Use this fills in the settings, and nothing is sent until you press Check connection."),
+    el("h3", "In short"), picks];
+  for (const [g, title] of [["free", "Free to start"], ["home", "Free and private, on your computer"], ["paid", "Paid by use"]]) out.push(el("h3", title), ...ROUTES.filter((x) => x.group === g).map((x) => routePart(x, use)));
+  const help = el("dl");
+  for (const [, said, fix] of HELP) help.append(el("dt", `When it says "${said}"`), el("dd", fix));
+  out.push(el("h3", "If something goes wrong"), help,
+    el("p", `Checked on each service's own pages on ${CHECKED}. Free tiers change often: the service's page has the last word. Capo itself never asks for money and keeps no key anywhere but this browser.`, "note"), closeRow(close));
+  return { head, parts: [closeRow(close), ...out] };
+}
+const closeRow = (close) => { const r = el("div", undefined, "row guide-close"); r.append(button("Close", close)); return r; };
+
+/**
+ * Opens the guide over the page. r is the route object of How Capo reaches an AI; ui lends its keep(), draw(focus)
+ * and done(text). Use this sets the service and model there and closes the guide; Escape, Close or a tap outside close it.
+ */
+function openGuide(r, ui) {
+  const d = el("dialog", undefined, "panel aiguide"), back = document.activeElement;
+  const close = () => d.close();
+  const use = (x) => {
+    r.preset = x.preset; r.model = x.model; ui.keep();
+    d.close();
+    ui.draw(x.group === "home" && x.preset !== "bridge" ? "model" : "key");
+    const who = short(x.name);
+    ui.done(`${who[0].toUpperCase()}${who.slice(1)} chosen.${x.group === "home" && x.preset !== "bridge" ? "Write the model's name" : x.preset === "bridge" ? "Paste the page token" : "Paste your key"}, then check the connection.`);
+  };
+  const { head, parts } = guideParts(use, close);
+  head.id = `aiguide-${Date.now()}`; d.setAttribute("aria-labelledby", head.id);
+  d.onclose = () => { d.remove(); if (back?.isConnected) back.focus({ preventScroll: true }); };
+  d.onclick = (e) => { if (e.target === d) d.close(); };
+  d.append(...parts);
+  document.body.append(d); d.showModal(); head.focus({ preventScroll: true });
+  return d;
+}
+
+/** guide hook: the line How Capo reaches an AI shows, with the button that opens the guide. */
+function guidePart(r, ui) {
+  const p = el("p", "Not sure which to choose? ", "note");
+  const b = button("Choose an AI: a guide", () => openGuide(r, ui));
+  b.dataset.k = "guide";
+  p.append(b);
+  return p;
+}
+
+$x.CHECKED = CHECKED; $x.ROUTES = ROUTES; $x.HELP = HELP; $x.guideParts = guideParts; $x.openGuide = openGuide; $x.guidePart = guidePart;
+return $x; })({});
 $m[52] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // How Capo reaches an AI: a service the player connects with their own key, or a server on the player's computer
@@ -8083,6 +8378,8 @@ const { formatOf, linesFrom, toolOf } = $m[54];
 const { SHAPES, splitEvents } = $m[55];
 // mcp and plugins hook: the bridge to the player's own AI app, and data-only plugins (site/aimore.js)
 const { aiMore, bridgeAsk, bridgePart, pluginPart, voiceNow } = $m[56];
+// guide hook (ruling 153.8): Choose an AI, the guide to the services, free routes first (site/aiguide.js)
+const { guidePart } = $m[59];
 
 /** The reply allowance in tokens for each kind of call (lane 2 review). A thinking model gets four times as much. */
 const BUDGET = { turn: 1800, chat: 400, council: 500, ask: 500, character: 300, check: 300 };
@@ -8092,13 +8389,13 @@ const allowance = (r, kind, tool) => Math.round((BUDGET[kind] || BUDGET.turn) * 
 // cors: "yes" it answers web pages; "check" not yet seen doing so; "local" on this computer, which must let this page in.
 const P = (id, name, shape, cors, models, about, more) => ({ id, name, shape, cors, tools: true, models, about, base: AI_BASES[id] || "", ...more });
 const PRESETS = [
-  P("openrouter", "OpenRouter", "openai", "yes", ["openrouter/auto", "meta-llama/llama-3.3-70b-instruct:free"], "Many models on one key, some free: about 50 free calls a day. Give the key a spending limit."),
+  P("openrouter", "OpenRouter", "openai", "yes", ["openrouter/free", "openrouter/auto", "meta-llama/llama-3.3-70b-instruct:free"], "Many models on one key, some free: about 50 free calls a day. Give the key a spending limit."),
   P("groq", "Groq", "openai", "yes", ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "llama-3.1-8b-instant"], "Fast open models; a free tier limited by tokens a day."),
   P("openai", "OpenAI", "openai", "yes", ["gpt-5-mini", "gpt-4.1-mini", "gpt-5"], "Paid by use.", { limit: "max_completion_tokens" }),
   P("anthropic", "Anthropic (Claude)", "anthropic", "yes", ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-5"], "Paid by use."),
-  P("gemini", "Google Gemini", "gemini", "yes", ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"], "A free tier, where Google may use what you send to improve its products; its terms ask for 18 or over."),
+  P("gemini", "Google Gemini", "gemini", "yes", ["gemini-3.8-flash"], "A free tier, where Google may use what you send to improve its products; its terms ask for 18 or over."),
   P("mistral", "Mistral", "openai", "yes", ["mistral-small-latest", "mistral-large-latest"], "Needs billing: the free plan has no app access.", { choice: "any" }),
-  P("deepseek", "DeepSeek", "openai", "check", ["deepseek-chat", "deepseek-reasoner"], "Paid by use, cheap."),
+  P("deepseek", "DeepSeek", "openai", "check", ["deepseek-flash"], "Paid by use, cheap."),
   P("together", "Together AI", "openai", "check", ["meta-llama/Llama-3.3-70B-Instruct-Turbo"], "Paid by use."),
   P("cerebras", "Cerebras", "openai", "yes", ["llama-3.3-70b", "gpt-oss-120b"], "Very fast; a trial credit, then paid."),
   P("ollama", "Ollama, on this computer", "openai", "local", ["llama3.1", "qwen2.5"], "Free and private. Set OLLAMA_ORIGINS to this site's address, then restart Ollama.", { local: true }),
@@ -8390,7 +8687,7 @@ function aiPanel(r, done = () => {}, o = {}) {
     const head = el("h3", o.title || "How Capo reaches an AI"), result = status(), p = presetOf(r);
     head.id = uid("head"); box.setAttribute("aria-labelledby", head.id); result.id = uid("result"); result.textContent = said; said = "";
     const out = [head, connected(r) ? el("p", `Connected: ${p.name}${r.model ? `, ${r.model}` : ""}. Capo asks it for each turn, chat and question.`, "note")
-      : el("p", "No AI is connected. Choose a service, give its key if it needs one, and press Check connection.", "note")];
+      : el("p", "No AI is connected. Choose a service, give its key if it needs one, and press Check connection.", "note"), guidePart(r, ui)]; // guide hook
     if (r.gone && !connected(r)) out.push(el("p", "Copying prompts into a chat and pasting replies back is no longer part of Capo. Connect a service or an AI on this computer here; a turn can also move by the rules alone.", "warn"));
     const pick = el("select", undefined, "plain"), groups = [["Hosted: your own key", (x) => !x.local && !x.custom], ["On this computer: no key", (x) => x.local || x.custom]];
     for (const [label, test] of groups) { const g = el("optgroup"); g.label = label; g.append(...PRESETS.filter(test).map((x) => new Option(x.name, x.id))); pick.append(g); }
@@ -8462,7 +8759,7 @@ aiMore({ PRESETS, keyOf, setKey, setKeep }); // mcp and plugins hook: adds the b
 
 $x.BUDGET = BUDGET; $x.thinks = thinks; $x.allowance = allowance; $x.PRESETS = PRESETS; $x.NEEDS_PROXY = NEEDS_PROXY; $x.WORKS = WORKS; $x.CONNECT = CONNECT; $x.reachable = reachable; $x.connected = connected; $x.loadRoute = loadRoute; $x.saveRoute = saveRoute; $x.keyOf = keyOf; $x.setKey = setKey; $x.setKeep = setKeep; $x.forgetKeys = forgetKeys; $x.scrub = scrub; $x.presetOf = presetOf; $x.baseOf = baseOf; $x.explain = explain; $x.ask = ask; $x.check = check; $x.watch = watch; $x.waitBox = waitBox; $x.connectBox = connectBox; $x.aiPanel = aiPanel;
 return $x; })({});
-$m[59] = (($x) => {
+$m[60] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
 // Daylight or lamplight, as the table games' Light setting last left it; every page starts here. The front page has one theme.
@@ -8482,7 +8779,7 @@ function guard() {
 
 $x.guard = guard;
 return $x; })({});
-$m[62] = (($x) => {
+$m[63] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The council convened: two or three advisers argue one decision in front of the player. Words only.
 // The rules choose who argues: the member the state of the country pleases most, the one it pleases least (their
@@ -8540,7 +8837,7 @@ function readDebate(text, members) {
 
 $x.debaters = debaters; $x.debatePrompt = debatePrompt; $x.readDebate = readDebate;
 return $x; })({});
-$m[63] = (($x) => {
+$m[64] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What the map views show, read from what the rules keep: no drawing here, so any map (flat or 3D) can paint it.
 // Each gives, for a province or a country, a short word the page turns into a colour and a legend line.
@@ -8614,7 +8911,7 @@ const knownView = (g, c, near) => knowledge(g, c, near).tier;
 
 $x.fronts = fronts; $x.changed = changed; $x.claims = claims; $x.sphereView = sphereView; $x.pactView = pactView; $x.clauseWords = clauseWords; $x.knownView = knownView;
 return $x; })({});
-$m[61] = (($x) => {
+$m[62] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's page for the second round of what the rules keep: home politics and unrest, what you know of others,
 // scenes, the scale of play and your own means, the council convened, pacts and spheres, a scenario's own beats,
@@ -8626,9 +8923,9 @@ const { CARES, moodOf, quellPlan, termsFor } = $m[22];
 const { fogLines, knowledge, seenGauge, seenWords, setFog } = $m[24];
 const { chooseScene, openScene, readScene, scenePlan, sceneProblem, scenePrompt, sceneWith } = $m[25];
 const { MEANS, SCALES, meansOf, meansTarget, scaleProblem, switchScale } = $m[20];
-const { debatePrompt, debaters, readDebate } = $m[62];
+const { debatePrompt, debaters, readDebate } = $m[63];
 const { PACT, pactAnswer, pactOf, spheres, tributeOf } = $m[9];
-const { changed, claims, clauseWords, fronts, knownView, pactView, sphereView } = $m[63];
+const { changed, claims, clauseWords, fronts, knownView, pactView, sphereView } = $m[64];
 const { PACE, paceOf, setPace } = $m[14];
 const { landsOf, rebelLand } = $m[23];
 const { WHEN, keepScript } = $m[21];
@@ -8908,7 +9205,7 @@ function viewsInit(select, x, shown) {
 
 $x.knownLine = knownLine; $x.reads = reads; $x.knownFor = knownFor; $x.dimBox = dimBox; $x.realmMore = realmMore; $x.sceneSheet = sceneSheet; $x.councilMore = councilMore; $x.gameMore = gameMore; $x.cardMore = cardMore; $x.VIEWS = VIEWS; $x.viewFill = viewFill; $x.viewTint = viewTint; $x.viewsInit = viewsInit;
 return $x; })({});
-$m[60] = (($x) => {
+$m[61] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's page for what the rules keep about your country: its three gauges, your ambition, an open crisis, causes
 // for war, the press, the reckoning, and every past turn in full. The rules live in src/story (state.js,
@@ -8921,9 +9218,9 @@ const { ambitionsFor, chooseAmbition, progress, reckoning } = $m[19];
 const { papers } = $m[21];
 const { NOTE, NOTE2 } = $m[18];
 const { pactAnswer } = $m[9];
-const { cardMore, reads, realmMore, sceneSheet } = $m[61];
+const { cardMore, reads, realmMore, sceneSheet } = $m[62];
 $x.backMore = $m[18].backMore; $x.keepMore = $m[18].keepMore;
-$x.councilMore = $m[61].councilMore; $x.dimBox = $m[61].dimBox; $x.gameMore = $m[61].gameMore; $x.knownFor = $m[61].knownFor; $x.viewFill = $m[61].viewFill; $x.viewTint = $m[61].viewTint; $x.viewsInit = $m[61].viewsInit;
+$x.councilMore = $m[62].councilMore; $x.dimBox = $m[62].dimBox; $x.gameMore = $m[62].gameMore; $x.knownFor = $m[62].knownFor; $x.viewFill = $m[62].viewFill; $x.viewTint = $m[62].viewTint; $x.viewsInit = $m[62].viewsInit;
 /** The words a converted game is told, once: which round of rules it was saved before. */
 const noteOf = (g) => (g.told === 2 ? NOTE2 : NOTE);
 /** The sheets this lane adds to the page: the country's, and the scene. */
@@ -9015,7 +9312,7 @@ function turnsTab(box, x) {
 
 $x.noteOf = noteOf; $x.moreSheets = moreSheets; $x.realmSheet = realmSheet; $x.notices = notices; $x.cardExtras = cardExtras; $x.demandBox = demandBox; $x.turnsTab = turnsTab;
 return $x; })({});
-$m[65] = (($x) => {
+$m[66] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Keeping a game small enough to keep (Phase 4, storage that cannot silently fill). Rules only: no page, no clock.
 // A browser gives one site about five million characters, shared by every game and scenario kept there. So:
@@ -9068,13 +9365,13 @@ const sizeWords = (n) => (n >= 1000000 ? `${Math.floor(n / 100000) / 10} MB` : `
 
 $x.ROOM = ROOM; $x.STEPS = STEPS; $x.slim = slim; $x.fatten = fatten; $x.shortTurn = shortTurn; $x.pressure = pressure; $x.compact = compact; $x.compactNote = compactNote; $x.sizeWords = sizeWords;
 return $x; })({});
-$m[64] = (($x) => {
+$m[65] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's save, kept so that it cannot fill the browser without saying so. The rules of it are in
 // src/story/keep.js; this file does the measuring, the writing, the warning and the file.
 // keeper(key, x) -> {save(state, past) -> past, rows(state, past) -> elements for the Game sheet, file(state), state()}.
 // x is what the game page lends: {el, button, toast}.
-const { ROOM, compact, compactNote, pressure, sizeWords } = $m[65];
+const { ROOM, compact, compactNote, pressure, sizeWords } = $m[66];
 const { RULES } = $m[7];
 
 const PROMISE = `The save promise: this game is saved under rules version ${RULES}. Until launch one a save may end when the rules version changes; this build brings older games up to date where it can, and says so. From launch one, a game saved under the previous rules version will always load.`;
@@ -9139,7 +9436,7 @@ function keeper(key, x, store = own()) {
 
 $x.keeper = keeper;
 return $x; })({});
-$m[66] = (($x) => {
+$m[67] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's page for solo missions (ruling 124, step M1): the order on a province card with its odds before it is
 // given, the roster on the council sheet, and each mission step by step in the Ledger. The rules are in
@@ -9217,7 +9514,7 @@ function missionReports(turn, x) {
 
 $x.keepMissions = keepMissions; $x.missionBox = missionBox; $x.rosterRows = rosterRows; $x.missionReports = missionReports;
 return $x; })({});
-$m[67] = (($x) => {
+$m[68] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The content floor's last parts (road map 5, decision 9): one accept step before a first story game, "Fiction" on
 // newspapers and on anything copied out of the story, and one sentence that each AI service's own rules bind the
@@ -9280,7 +9577,7 @@ function fictionCopy(doc = document) {
 
 $x.AI_RULES = AI_RULES; $x.FICTION_MARK = FICTION_MARK; $x.accepted = accepted; $x.acceptStep = acceptStep; $x.fictionTag = fictionTag; $x.fictionCopy = fictionCopy;
 return $x; })({});
-$m[69] = (($x) => {
+$m[70] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The community shelf (ruling 155, option D): scenarios, Capo stories and table-game replays players share as files,
 // kept in the repository's shelf/ folder and read by the pages from their own site. This is the shelf's format and
@@ -9399,13 +9696,13 @@ function makeEntry(meta, data, result) {
 
 $x.KIND = KIND; $x.INDEX = INDEX; $x.TYPES = TYPES; $x.GAMES = GAMES; $x.LICENCES = LICENCES; $x.LIMIT = LIMIT; $x.textsOf = textsOf; $x.refused = refused; $x.idFor = idFor; $x.checkEntry = checkEntry; $x.cardOf = cardOf; $x.readIndex = readIndex; $x.indexOf = indexOf; $x.DASH = DASH; $x.storyOf = storyOf; $x.makeEntry = makeEntry;
 return $x; })({});
-$m[68] = (($x) => {
+$m[69] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The community shelf in the pages (ruling 155, option D): browse what players have shared and open it, and make a
 // shelf file from your own scenario, story or replay. The shelf is read from this site's own shelf/ folder; this page
 // never sends anything. Offering a file is done by the player, on GitHub, with their own account, if they choose to.
 // Used by Capo's first screen and Game menu (site/game.js) and by every table game's menu (site/table.js).
-const { GAMES, LICENCES, LIMIT, TYPES, checkEntry, makeEntry, readIndex } = $m[69];
+const { GAMES, LICENCES, LIMIT, TYPES, checkEntry, makeEntry, readIndex } = $m[70];
 const { SOURCE_URL } = $m[53];
 
 const HOME = "../shelf/", BRANCH = "main"; // the folder beside site/ and play/; the branch offers are made against
@@ -9572,21 +9869,21 @@ const { sampleReply } = $m[54];
 const { BUILD, SOURCE_URL, VERSION } = $m[53];
 // figures hook
 const { shelfCredits } = $m[50];
-const { guard } = $m[59];
+const { guard } = $m[60];
 // mcp and plugins hook: orders an AI app proposes through the bridge, and scenario packs (site/aimore.js, src/story/plugins.js)
 const { aiHost } = $m[56];
 const { checkPack } = $m[58];
 // features hook: the country sheet, crises, ambitions, the Turns tab (site/realm.js)
-const { backMore, cardExtras, councilMore, demandBox, dimBox, gameMore, keepMore, knownFor, moreSheets, noteOf, notices, realmSheet, turnsTab, viewFill, viewTint, viewsInit } = $m[60];
+const { backMore, cardExtras, councilMore, demandBox, dimBox, gameMore, keepMore, knownFor, moreSheets, noteOf, notices, realmSheet, turnsTab, viewFill, viewTint, viewsInit } = $m[61];
 // phase 4 hook: storage that says when it is full (site/keep.js), solo missions (site/missions.js), the accept step and "Fiction" (site/accept.js)
-const { keeper } = $m[64];
-const { fatten, slim } = $m[65];
-const { keepMissions, missionBox, missionReports, rosterRows } = $m[66];
+const { keeper } = $m[65];
+const { fatten, slim } = $m[66];
+const { keepMissions, missionBox, missionReports, rosterRows } = $m[67];
 const { unfit } = $m[6];
-const { AI_RULES, acceptStep, accepted, fictionCopy, fictionTag } = $m[67];
+const { AI_RULES, acceptStep, accepted, fictionCopy, fictionTag } = $m[68];
 // shelf hook: the community shelf, to browse and open scenarios and stories and to share your own (site/community.js, ruling 155)
-const { shareView, shelfView } = $m[68];
-const { storyOf } = $m[69];
+const { shareView, shelfView } = $m[69];
+const { storyOf } = $m[70];
 
 const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);
@@ -9661,7 +9958,7 @@ async function enter(ref) {
   on = key; stagedKey = null; if (!made) rebase(world, null); index(); claimsOf.clear(); claims(); map?.world(world);
   if (first) earthOnce(); // alternate histories: the real map's countries and disputes, and the presets laid over it, once
   stage();
-  document.querySelector(".credit").textContent = made ? "A world of our own, made from a seed" : "Made with Natural Earth";
+  document.querySelector(".credit").textContent = made ? "A world of our own, made from a seed" : "Made with Natural Earth. Ecoregions 2017 © RESOLVE, CC BY 4.0"; // mapdata hook: the land cover's credit line
   return true;
 }
 /** Choose where the story starts, and move to that world. A world of our own may be made again from another seed. */
@@ -10578,7 +10875,7 @@ function askCouncil(members) {
 
 /** Which build this is, and where its source can be read (the AGPL asks that every copy says so). */
 function about() {
-  const p = el("p", `Overture of Empires: Capo, version ${VERSION}, build ${BUILD}. Free software under the GNU AGPL. `, "note"), a = el("a", "Source code");
+  const p = el("p", `Overture of Empires: Capo, made by Arnote Studios (© 2026 Ada Arnote). Version ${VERSION}, build ${BUILD}. Free software under the GNU AGPL. `, "note"), a = el("a", "Source code");
   a.href = SOURCE_URL; a.target = "_blank"; a.rel = "noopener"; p.append(a);
   return p;
 }
@@ -10742,7 +11039,7 @@ async function start() {
     // 3D hook: fronts as lines, and capitals, armies, fleets, air wings and commanders as pieces, all read off the state
     wars: () => (state ? state.wars.map((w) => w.pair.split("|")) : []),
     pieces: () => mapPieces({ world, homes, owner: ownerOf, might: (c) => mightOf(geo(), c), wars: state ? state.wars.map((w) => w.pair.split("|")) : [], player: state?.player, staff: state ? commanders(state).filter((x) => !x.off && x.seat !== "generals").length : 0,
-      strength: state ? (c) => strengthOf(state, geo(), c) : null, g: state }) }); // capomap hook: strength pips, and missions read off the game for pins
+      strength: state ? (c) => strengthOf(state, geo(), c) : null, g: state, cities: on === "" && !(state || scen())?.alt ? world.cities : null }) }); // capomap hook: strength pips, and missions read off the game for pins; mapdata hook: real cities on the real map only
   $("view").onchange = (e) => { view = e.target.value; map.refresh(); };
   legend = viewsInit($("view"), X, () => view); // features hook: more map views, and their legend
   $("in").onclick = () => map.zoomBy(1.6);

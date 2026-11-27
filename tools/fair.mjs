@@ -22,11 +22,13 @@ import { glass } from "../src/games/glass/rules.js";
 import { choose as glassBot } from "../src/games/glass/bot.js";
 import { inch } from "../src/games/inch/rules.js";
 import { choose as inchBot } from "../src/games/inch/bot.js";
+import { margins } from "../src/games/margins/rules.js"; // margins hook: early and unlisted, but measured like the others
+import { choose as marginsBot } from "../src/games/margins/bot.js";
 // stacking hook: the stacking game, played only when named (node tools/fair.mjs stacking): its Traditional games run long
 import { stacking } from "../src/games/stacking/rules.js";
 import { choose as stackingBot } from "../src/games/stacking/bot.js";
 
-export const GAMES = { banners: [banners, bannersBot], fable: [fable, fableBot], glass: [glass, glassBot], inch: [inch, inchBot], stacking: [stacking, stackingBot] };
+export const GAMES = { banners: [banners, bannersBot], fable: [fable, fableBot], glass: [glass, glassBot], inch: [inch, inchBot], margins: [margins, marginsBot], stacking: [stacking, stackingBot] };
 const NAMED = ["stacking"]; // stacking hook
 export const STYLES = { classic: "Traditional", ours: "Capo" };
 export const LINE = 10; // points between the best and worst seat

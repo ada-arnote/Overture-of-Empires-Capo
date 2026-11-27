@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-BYRLoIksV7jDB7KOV9BbJ2cG6eForeL6eo7TLbpkuow='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-BGS0SMH1whRsq8eqqtNuXEYGgB83gz6WZWD2Y0BYH48='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>The world map · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -378,7 +378,7 @@ html, body { height: 100%; margin: 0; overflow: hidden }
 <div class="zoom"><button type="button" class="plain" id="in" aria-label="Zoom in">+</button><button type="button" class="plain" id="out" aria-label="Zoom out">&minus;</button><button type="button" class="plain" id="home" aria-label="Whole world">&#8962;</button><button type="button" class="plain" id="relief" aria-label="Relief map with pieces. Press for the flat map." aria-pressed="true" hidden>&#9651;</button></div>
 <section id="card" class="glass" aria-live="polite"></section>
 <p id="note">Loading the map...</p>
-<span class="credit">Made with Natural Earth</span>
+<span class="credit">Made with Natural Earth. Ecoregions 2017 © RESOLVE, CC BY 4.0</span>
 </main>
 <script>
 (() => {
@@ -1113,8 +1113,11 @@ const SHELF = {
   knight: { file: "knight.bin", tris: 2433, licence: "CC-BY-4.0", credit: "\"Knight Hospitaller - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/7975ee5c47a94d35abf98070bfdd1ea8), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
   legionary: { file: "legionary.bin", tris: 2415, licence: "CC-BY-4.0", credit: "\"Roman Soldier - fighting pose - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/5c29ca5803ad475eaaae12714e8f1dab), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
   redcoat: { file: "redcoat.bin", tris: 2448, licence: "CC-BY-4.0", credit: "\"Waterloo British Infantry - for animation\" by Andy Woodhead (sketchfab.com/3d-models/85a1a8205b2c447fb8d0419978f17b75), CC BY 4.0, modified (posed, cut down, repainted, re-encoded)." },
+  fusilier: { file: "fusilier.bin", tris: 2466, licence: "CC-BY-4.0", credit: "\"French Infantry - Franco-Prussian War\" by Andy Woodhead (sketchfab.com/3d-models/b935801d58874c72a27a3bd371286811), CC BY 4.0, modified (posed, cut down, repainted, re-encoded)." },
+  marine: { file: "marine.bin", tris: 2450, licence: "CC-BY-4.0", credit: "\"US Marine T pose - Vietnam\" by Andy Woodhead (sketchfab.com/3d-models/58d066644f8e47a6aed3470dfd5507a7), CC BY 4.0, modified (posed, cut down, repainted, re-encoded)." },
   general: { file: "general.bin", tris: 3980, licence: "CC-BY-4.0", credit: "\"Roman General - 3d printable\" by Andy Woodhead (sketchfab.com/3d-models/70d18b0518344b7bad3cd0979072a1c2), CC BY 4.0, modified (remeshed, cut down, painted as pewter, re-encoded)." },
   horse: { file: "horse.bin", tris: 2946, licence: "CC-BY-4.0", credit: "\"Galloping Horse - free download - 3d-printable\" by Andy Woodhead (sketchfab.com/3d-models/dfc6f5596aba48a0b08a44c31b97b368), CC BY 4.0, modified (base removed, cut down, repainted, re-encoded)." },
+  ballista: { file: "ballista.bin", tris: 2488, licence: "CC-BY-4.0", credit: "\"Roman Ballista - free game asset\" by Andy Woodhead (sketchfab.com/3d-models/a92a4eb4ab04409dbf40344f5f63925a), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
   cannon: { file: "cannon.bin", tris: 2309, licence: "CC-BY-4.0", credit: "\"British field cannon - 1815 - free download\" by Andy Woodhead (sketchfab.com/3d-models/c027cb2e6e764f4196f27c94b5f770d5), CC BY 4.0, modified (low-poly version, cut down, repainted, re-encoded)." },
   longboat: { file: "longboat.bin", tris: 2868, licence: "CC-BY-4.0", credit: "\"Gislinge Viking Boat\" by Opus Poly (sketchfab.com/3d-models/01098ad7973647a9b558f41d2ebc5193), CC BY 4.0, modified (cut down, repainted, re-encoded)." },
   liner: { file: "liner.bin", tris: 4961, licence: "CC-BY-4.0", credit: "\"Ship of the line, c. 1700\", Swedish National Maritime and Transport Museums (sketchfab.com/3d-models/3afea352a40045b0a638c9900f669ed4), CC BY 4.0, modified (remeshed, cut down, repainted, re-encoded)." },
@@ -1140,7 +1143,7 @@ const ERAS = {
   ancient: { foot: "legionary", unit2: "legionary", gun: "ballista", horse: "horse", unit4: "general", leader: "general", ship: "longboat", fleet: "longboat" },
   medieval: { unit3: "knight", foot: "knight", horse: "horse", ship: "longboat", fleet: "longboat", town: "townhouse", depot: "cottage" },
   early: { foot: "redcoat", gun: "cannon", horse: "horse", ship: "liner", fleet: "liner", town: "townhouse", depot: "cottage" },
-  industrial: { foot: "fusilier", gun: "cannon", ship: "torpedo", fleet: "torpedo", town: "block", depot: "townhouse" },
+  industrial: { foot: "fusilier", gun: "cannon", horse: "horse", ship: "torpedo", fleet: "torpedo", town: "block", depot: "townhouse" },
   fable: { unit2: "legionary", unit3: "knight", unit4: "general", horse: "horse", town: "townhouse", depot: "cottage" }, // The Island Fable's guard, knight and marshal
   modern: { foot: "marine", ship: "destroyer", fleet: "destroyer", town: "block", depot: "block" },
 };
@@ -2178,6 +2181,8 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     setLight(v) { light = v === "lamp" ? "lamp" : "day"; look3 = wear(styleName, light); staged = false; dirty = true; redraw(); },
     /** styles hook: the seats' colours have changed; owned land takes them at the next show. */
     recolour() { show.forEach((c) => { if (c.owner >= 0) c.owner = -2; }); },
+    /** era hook: which era's sculpted pieces stand in 3D (a key of ERAS in figures.js); looks only. */
+    setEra(e) { fig.era = e; staged = false; redraw(); },
   };
 }
 
@@ -2189,7 +2194,7 @@ $m[14] = (($x) => {
 // land's dressing. Looks only: no rule reads any of it. Dressing is cheap by design: spots lie on a grid of cells that halve
 // as the map comes closer (each level keeps the spots of the levels above, so nothing jumps), each spot is worked out once
 // and kept, and only the spots in view are stood, up to a cap. What a spot shows comes from the province under it: its
-// terrain word (an invented world), or the heights and ice of the real one.
+// terrain word (an invented world), or the heights and ice of the real one, then what grows there (maps/cover.webp).
 const { bake, box, lathe, move, prism } = $m[7];
 const { SLOT } = $m[8];
 
@@ -2213,6 +2218,7 @@ const RECIPES = {
   grass(o) { for (const [x, y] of [[-0.18, 0.05], [0.06, -0.12], [0.2, 0.1]]) move(o, lathe([], [[0.07, 0], [0.04, 0.05], [0, 0.08]], 5, c("field", 118), 0, true), x, y); return o; },
   floe(o) { for (const [x, y, s, t] of [[-0.1, 0.02, 1, 0.3], [0.16, -0.08, 0.7, 1.4]]) move(o, prism([], [[-0.16, -0.1], [0.12, -0.14], [0.18, 0.06], [-0.04, 0.14], [-0.2, 0.04]], 0, 0.07, c("snow"), 0, 0.03), x, y, 0, s, t); return o; },
   ridge: (o) => { const r = lathe([], [[0.56, 0], [0.44, 0.05], [0.24, 0.1], [0, 0.12]], 9, c("leaf"), 3, true); for (let i = 0; i < r.length; i += 10) r[i] *= 1.6; return move(o, r); }, // a long low hill, in the ground's own colour
+  tundra(o) { for (const [x, y, s] of [[-0.16, 0.06, 1], [0.12, -0.1, 0.8], [0.2, 0.12, 0.6]]) move(o, lathe([], [[0.08, 0], [0.06, 0.025], [0, 0.035]], 6, c("leaf", 96), 0, true), x, y, 0, s); return move(o, lathe([], [[0.05, 0], [0.045, 0.03], [0, 0.045]], 5, c("metal", 120)), -0.02, -0.12); }, // mapdata hook: moss and a stone
   hamlet(o) { for (const [x, y, w, h] of [[-0.08, 0.03, 0.08, 0.12], [0.09, -0.05, 0.065, 0.16]]) { box(o, x - w, y - w, 0, x + w, y + w, h, c("wall")); move(o, prism([], [[-w - 0.01, 0], [w + 0.01, 0], [0, 0.07]], -w - 0.01, w + 0.01, c("roof"), 0), x, y, h, 1, 0, Math.PI / 2); } return o; },
 };
 for (let n = 1; n <= 10; n++) { RECIPES[`pips${n}`] = (o) => pips(o, n, 0.25); RECIPES[`fpips${n}`] = (o) => pips(o, n, 0.17); }
@@ -2225,13 +2231,19 @@ const WORDS = {
   forest: [["tree", 0.5, 0.44], ["oak", 0.25, 0.42]], hills: [["ridge", 0.3, 0.24]], mountain: [["peak", 0.4, 0.4]], desert: [["dune", 0.45, 0.5]],
   steppe: [["grass", 0.4, 0.45]], marsh: [["reeds", 0.5, 0.45]], plain: [["oak", 0.06, 0.4]], coast: [],
 };
+// mapdata hook: what each class of maps/cover.webp stands (the biomes of RESOLVE Ecoregions 2017 by their own numbers; 15 rock and ice stands nothing)
+const COVER = [null,
+  [["oak", 0.45, 0.46], ["tree", 0.2, 0.44]], [["oak", 0.3, 0.42], ["grass", 0.15, 0.4]], [["tree", 0.5, 0.44]], // tropical forests: moist, dry, conifer
+  [["oak", 0.4, 0.42], ["tree", 0.2, 0.42]], [["tree", 0.55, 0.44]], [["tree", 0.55, 0.4]], // temperate broadleaf, temperate conifer, boreal
+  [["grass", 0.35, 0.45], ["oak", 0.06, 0.38]], [["grass", 0.4, 0.45]], [["reeds", 0.5, 0.45]], [["grass", 0.3, 0.4]], // savanna, steppe, flooded grassland, montane grassland
+  [["tundra", 0.35, 0.45]], [["oak", 0.18, 0.36], ["grass", 0.15, 0.4]], [["dune", 0.45, 0.5]], [["reeds", 0.3, 0.45], ["oak", 0.25, 0.36]], null]; // tundra, Mediterranean, desert, mangrove
 const hash = (a, b, c) => { let h = (a * 374761393 + b * 668265263 + c * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 const inside = (x, y, rings) => { let n = false; for (const r of rings) for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const a = r[i], b = r[j]; if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) n = !n; } return n; };
 
 class Dressing {
   /** world: the unpacked map (provinces with poly, n and, for an invented world, terrain; lake outlines, if it has them). */
   constructor(world) {
-    this.world = world; this.lakes = (world.lakeRings || []).map((ring) => ({ ring, box: ring.reduce((b, [x, y]) => [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)], [Infinity, Infinity, -Infinity, -Infinity]) })); this.list = [...world.provinces.values()].sort((a, b) => a.n - b.n); this.kept = new Map(); this.heights = null;
+    this.world = world; this.lakes = (world.lakeRings || []).map((ring) => ({ ring, box: ring.reduce((b, [x, y]) => [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)], [Infinity, Infinity, -Infinity, -Infinity]) })); this.list = [...world.provinces.values()].sort((a, b) => a.n - b.n); this.kept = new Map(); this.heights = null; this.covers = null;
     // which province each small square of the map belongs to, filled row by row from the outlines; -1 for the sea, -2 where two meet
     const G = this.G = 4, w = this.w = Math.ceil(world.width / G), h = this.h = Math.ceil(world.height / G), of = this.of = new Int16Array(w * h).fill(-1);
     const xs = [];
@@ -2247,6 +2259,8 @@ class Dressing {
   }
   /** The real world's heights and ice, read once from its picture at a smaller size: {w, h, r: heights, a: ice}. */
   relief(r) { this.heights = r; this.kept.clear(); }
+  /** mapdata hook: what grows on the real world, one class a point: {w, h, k}. */
+  cover(k) { this.covers = k; this.kept.clear(); }
   /** What stands at one spot: null, or [model, size, turn]. Worked out once a spot. */
   at(x, y, seed) {
     const col = Math.floor(x / this.G), row = Math.floor(y / this.G);
@@ -2268,6 +2282,9 @@ class Dressing {
       const m = metres(H.r[cy * H.w + cx]), rough = metres(hi) - metres(lo);
       pick = H.a[cy * H.w + cx] < 200 ? [["floe", 0.4, 0.45]] : rough > 1300 || (m > 3200 && rough > 500) ? [["peak", 0.36, 0.4]] : m > 600 && rough > 800 ? [["ridge", 0.14, 0.24]] : null;
     }
+    const K = this.covers; // mapdata hook: then what grows there
+    const grows = K && !p.terrain ? COVER[K.k[Math.min(K.h - 1, Math.floor((y / this.world.height) * K.h)) * K.w + Math.min(K.w - 1, Math.floor((x / this.world.width) * K.w))]] : null;
+    if (grows) pick = !pick ? grows : pick[0][0] === "ridge" ? [...pick, ...grows.map(([m, n, s]) => [m, n * 0.6, s])] : pick; // hills keep some of their wood or grass
     if (!pick) return null;
     let roll = hash(Math.floor(x * 7), Math.floor(y * 7), 91);
     for (const [m, chance, size] of pick) { if (roll < chance) return [m, size * (0.85 + 0.3 * seed), turn]; roll -= chance; }
@@ -2336,13 +2353,24 @@ layout(location=0) in vec2 aP; layout(location=1) in vec2 aI;
 uniform sampler2D uTab; uniform float uRise;
 out vec2 vP; out vec4 vC; out float vZ;
 void main(){ int id=int(aI.x+.5); vC=texelFetch(uTab,ivec2(id&63,id>>6),0); vP=aP; vZ=aI.y; gl_Position=clip(vec3(aP,aI.y*uRise)); }`;
-const LAND_FS = `${HEAD}${COMMON}${SHADE}
+// mapdata hook: what grows on the real world (maps/cover.webp, a class a point, grey 16 a class), as a colour a class,
+// blended between neighbouring points and along a wavering line, so no square shows; mountains and ice keep their own look
+const BIOMES = [[0.3, 0.45, 0.24], [0.47, 0.51, 0.31], [0.33, 0.45, 0.28], [0.38, 0.5, 0.29], [0.31, 0.43, 0.29], [0.35, 0.43, 0.33], [0.64, 0.6, 0.39], [0.6, 0.6, 0.4], [0.43, 0.53, 0.4], [0.56, 0.55, 0.41], [0.58, 0.6, 0.52], [0.5, 0.53, 0.35], [0.79, 0.7, 0.5], [0.3, 0.44, 0.33]];
+const COVER = `
+uniform sampler2D uCover; uniform float uCov;
+const vec4 BIOME[16]=vec4[16](vec4(0.),${BIOMES.map((c) => `vec4(${c.map((v) => v.toFixed(2)).join(",")},1.)`).join(",")},vec4(0.));
+vec4 bio(ivec2 i){ ivec2 m=textureSize(uCover,0)-1; return BIOME[min(15,int(texelFetch(uCover,clamp(i,ivec2(0),m),0).r*15.9375+.5))]; }
+vec4 cov(vec2 p){ p+=vec2(nz(p*.45),nz(p*.45+7.))*1.6-.8; vec2 uv=p/uSize*vec2(textureSize(uCover,0))-.5,f=fract(uv); ivec2 i=ivec2(floor(uv));
+  vec4 a=bio(i),b=bio(i+ivec2(1,0)),e=bio(i+ivec2(0,1)),d=bio(i+ivec2(1,1)); a.rgb*=a.a; b.rgb*=b.a; e.rgb*=e.a; d.rgb*=d.a;
+  vec4 r=mix(mix(a,b,f.x),mix(e,d,f.x),f.y); r.rgb/=max(r.a,.001); return r; }`;
+const LAND_FS = `${HEAD}${COMMON}${SHADE}${COVER}
 uniform float uRise,uTint;
 in vec2 vP; in vec4 vC; in float vZ; out vec4 o;
 void main(){ float h=hgt(vP),t=clamp((h-.376)/.624,0.,1.); vec2 g=uDet>0.?slopeC(vP):slope(vP),gd=vec2(0.);
   if(uDet>0.){ vec3 d=fine(vP); float rough=clamp(length(g)*9.+smoothstep(.3,.7,t)*.4,0.,1.); gd=d.yz*(.0004+.01*rough*rough)*uDet*uSize.x/700.; t=clamp(t+d.x*.05*rough*uDet,0.,1.); } // capomap: fine relief
   // the land's own colour by its height: green plain, dry upland, brown mountain, snow
   vec3 c=mix(vec3(.47,.54,.37),vec3(.68,.62,.44),smoothstep(.02,.2,t)); c=mix(c,vec3(.5,.41,.33),smoothstep(.2,.48,t)); c=mix(c,vec3(.95,.96,.97),smoothstep(.56,.74,t));
+  if(uCov>0.){ vec4 k=cov(vP); c=mix(c,k.rgb,k.a*uCov*(1.-smoothstep(.3,.62,t))); } // mapdata hook: forest, grass, desert, tundra, marsh below the mountains
   c=mix(c,uWash.rgb,uWash.a);
   float glow=vC.a<.6?1.:0.,ice=uReal>0.?1.-smoothstep(.55,.95,texture(uRelief,vP/uSize).a):0.; // a province that is lit: chosen, or offered. Ice, where the world's picture marks it
   c=mix(c,vec3(.9,.94,.97),ice);
@@ -2393,6 +2421,7 @@ class WorldGround {
     g.activeTexture(g.TEXTURE3); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, 1, 1, 0, g.RGBA, g.UNSIGNED_BYTE, new Uint8Array([92, 60, 40, 255]));
     this.vao = g.createVertexArray(); this.corners = g.createBuffer(); this.order = g.createBuffer(); this.real = 0; this.count = 0;
     this.lake = program(g, LAKE_VS, LAKE_FS); this.lvao = g.createVertexArray(); this.lpts = g.createBuffer(); this.lidx = g.createBuffer(); this.lcount = 0; // capomap: lakes
+    this.cov = tex(5, g.NEAREST, g.CLAMP_TO_EDGE); g.texImage2D(g.TEXTURE_2D, 0, g.R8, 1, 1, 0, g.RED, g.UNSIGNED_BYTE, new Uint8Array([0])); this.covered = 0; // mapdata hook: land cover
   }
   /**
    * The shapes. size: [wide, high]. provinces: [{ rings: [[[x, y], ...], ...] }] in the order of their numbers.
@@ -2445,6 +2474,8 @@ class WorldGround {
   paint(bytes) { const g = this.g, all = new Uint8Array(64 * this.rows * 4); all.set(bytes.subarray(0, all.length)); g.activeTexture(g.TEXTURE0); g.bindTexture(g.TEXTURE_2D, this.tab); g.texSubImage2D(g.TEXTURE_2D, 0, 0, 0, 64, this.rows, g.RGBA, g.UNSIGNED_BYTE, all); }
   /** A picture of the world's heights (96 of 255 is the sea's surface; alpha under 255 marks ice), or nothing for heights made from noise. */
   relief(img) { const g = this.g; this.real = img ? 1 : 0; if (!img) return; g.activeTexture(g.TEXTURE1); g.bindTexture(g.TEXTURE_2D, this.heights); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, g.RGBA, g.UNSIGNED_BYTE, img); }
+  /** mapdata hook: what grows on the land (maps/cover.webp), or nothing: the ground then goes by height alone. */
+  cover(img) { const g = this.g; this.covered = img ? 1 : 0; if (!img) return; g.activeTexture(g.TEXTURE5); g.bindTexture(g.TEXTURE_2D, this.cov); g.pixelStorei(g.UNPACK_COLORSPACE_CONVERSION_WEBGL, g.NONE); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, g.RGBA, g.UNSIGNED_BYTE, img); g.pixelStorei(g.UNPACK_COLORSPACE_CONVERSION_WEBGL, g.BROWSER_DEFAULT_WEBGL); }
   wood(img) { const g = this.g; g.activeTexture(g.TEXTURE3); g.bindTexture(g.TEXTURE_2D, this.timber); g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, g.RGBA, g.UNSIGNED_BYTE, img); g.generateMipmap(g.TEXTURE_2D); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR_MIPMAP_LINEAR); }
   /** o: style, relief (how strongly the heights are lit, 1 for the whole world, less close in where the picture runs out of detail), detail (0 to 1: fine relief added close in) and octaves (how many waves of it), rise (how far the land stands above the sea), tint (how much of the owner's colour lies over the land's own), lamp (the mesh layer's shadow settings, or nothing). */
   draw(cam, dpr, o) {
@@ -2457,6 +2488,7 @@ class WorldGround {
       g.uniform1i(u.uTab, 0); g.uniform1i(u.uRelief, 1); g.uniform1i(u.uWood, 3); g.uniform2f(u.uSize, ...this.size); g.uniform1f(u.uReal, this.real); g.uniform1f(u.uSeed, this.seed);
       g.uniform3f(u.uSun, ...o.style.sun); g.uniform1f(u.uShOn, 0); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uRel, (o.relief ?? 1) * o.style.map.relief); g.uniform1f(u.uGloss, o.style.surface.gloss); g.uniform4f(u.uWash, ...o.style.map.wash.map((v, i) => (i < 3 ? v / 255 : v))); g.uniform1f(u.uDet, o.detail || 0); g.uniform1f(u.uOct, o.octaves ?? 4);
       g.uniform4f(u.uGrade, ...o.style.grade); g.uniform4f(u.uCont, ...o.style.surface.contour.map((v, i) => (i < 3 ? v / 255 : v))); // styles hook
+      g.uniform1i(u.uCover, 5); g.uniform1f(u.uCov, this.covered * this.real * (o.style.map.cover ?? 1)); // mapdata hook
       o.lamp?.(u);
       return u;
     };
@@ -2539,7 +2571,9 @@ async function loadWorld(url, disputesUrl = "") {
   const world = unpackWorld(await res.json(), disputes);
   // the real world brings its relief (heights baked from open data, a picture) and its rivers and lakes; without them the map still works
   world.relief = url.replace(/[^/]+$/, "relief.webp");
-  const waters = await fetch(url.replace(/[^/]+$/, "waters.json")).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  world.cover = url.replace(/[^/]+$/, "cover.webp"); // mapdata hook: what grows on the land, and the real cities (tools/mapdata.py)
+  const near = (name) => fetch(url.replace(/[^/]+$/, name)).then((r) => (r.ok ? r.json() : null)).catch(() => null), [waters, towns] = await Promise.all([near("waters.json"), near("cities.json")]);
+  if (towns) world.cities = towns.cities.map(([name, x, y, rank, at]) => ({ name, x: x / 10, y: y / 10, rank, at })); // mapdata hook
   if (waters) {
     const line = (d, path, close) => { let x = 0, y = 0; for (let i = 0; i < d.length; i += 2) { x += d[i]; y += d[i + 1]; if (i) path.lineTo(x / 10, y / 10); else path.moveTo(x / 10, y / 10); } if (close) path.closePath(); };
     world.rivers = [0, 1, 2, 3].map(() => new Path2D()); world.lakes = new Path2D(); world.lakeRings = [];
@@ -2644,6 +2678,8 @@ function worldMap(canvas, world, o) {
     lit.ground.load([world.width, world.height], list.map((p) => ({ rings: p.poly })), coast, (world.arcs.length % 97) / 7);
     lit.ground.relief(null); lit.key = ""; lit.ground.lakes(world.lakeRings); lit.dress = null; lit.heights = null; // capomap: lakes; the dressing is made when first needed
     if (world.relief) { const img = new Image(), w = world; img.onload = () => { if (lit && world === w) { lit.ground.relief(img); lit.heights = img; redraw(); } }; img.src = world.relief; }
+    lit.ground.cover(null); lit.covers = null; // mapdata hook: what grows, on the real world
+    if (world.cover) { const img = new Image(), w = world; img.onload = () => { if (lit && world === w) { lit.ground.cover(img); lit.covers = img; redraw(); } }; img.src = world.cover; }
   }
   /** A colour as three numbers, whatever way it was written. */
   const rgbOf = (text) => {
@@ -2713,6 +2749,7 @@ function worldMap(canvas, world, o) {
     if (b === 2) {
       if (!lit.dress) lit.dress = new Dressing(world);
       if (lit.heights && !lit.dress.heights) lit.dress.relief(heightsOf(lit.heights));
+      if (lit.covers && !lit.dress.covers) lit.dress.cover(coverOf(lit.covers)); // mapdata hook
       list.push(...lit.dress.stand([box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad], view.s, k, phone ? 260 : 520, phone ? 66 : 76, style.models || {}));
     }
     lit.meshes.set(list);
@@ -2725,6 +2762,14 @@ function worldMap(canvas, world, o) {
     const d = x.getImageData(0, 0, w, h).data, r = new Uint8Array(w * h), a = new Uint8Array(w * h);
     for (let i = 0; i < w * h; i++) { r[i] = d[i * 4]; a[i] = d[i * 4 + 3]; }
     return { w, h, r, a };
+  }
+  /** mapdata hook: the land cover picture read back, one class a point. */
+  function coverOf(img) {
+    const c = document.createElement("canvas"), w = img.width, h = img.height, x = c.getContext("2d", { willReadFrequently: true });
+    c.width = w; c.height = h; x.drawImage(img, 0, 0);
+    const d = x.getImageData(0, 0, w, h).data, k = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) k[i] = Math.min(15, (d[i * 4] + 8) >> 4);
+    return { w, h, k };
   }
   /** One frame of the lit map. */
   function shine() {
@@ -2850,11 +2895,16 @@ function worldMap(canvas, world, o) {
       if (!b || a > b.a) biggest.set(who, { a, p });
     }
     let left = near ? 400 : 30; // the whole world names its thirty largest countries at most
-    for (const [who, { a, p }] of [...biggest].sort((m, n) => n[1].a - m[1].a)) if (left > 0 && a * s * s > (near ? 700 : 1500) && put(o.name?.(who) || world.countries[who] || who, p.label[0], p.label[1], near > 1 ? 14 : 12, 600)) left--;
+    const said = new Map(), once = (text, mx, my, ...a) => { const [x, y] = spot(mx, my), was = said.get(text) || []; if (was.some(([u, v]) => Math.hypot(u - x, v - y) < 160) || !put(text, mx, my, ...a)) return false; said.set(text, [...was, [x, y]]); return true; }; // mapdata hook: a name is not printed twice side by side
+    for (const [who, { a, p }] of [...biggest].sort((m, n) => n[1].a - m[1].a)) if (left > 0 && a * s * s > (near ? 700 : 1500) && once(o.name?.(who) || world.countries[who] || who, p.label[0], p.label[1], near > 1 ? 14 : 12, 600)) left--;
+    // mapdata hook: the real cities that stand are named under them, capitals and the larger first, the rest after the provinces
+    const towns = lit && near > 0 ? (pieces ||= o.pieces?.() || []).filter((p) => p.name && (p.band || 0) <= near && (p.until ?? 9) >= near) : [], town = (p) => once(p.name, p.at[0], p.at[1], p.rank > 1 ? 10 : 11, p.rank > 1 ? "italic 500" : "italic 600", false, -11);
+    for (const p of towns) if (p.rank < 2) town(p);
     if (near > 0) {
       const least = near > 1 ? 46 : 110; // a region names only its large provinces
-      for (const p of world.provinces.values()) { const [x0, y0, x1, y1] = p.box; if ((x1 - x0) * s > least && (y1 - y0) * s > 14) put(p.name, p.label[0], p.label[1], 11, 500, false, lit ? 13 : 0); } // capomap: above the town that stands there
+      for (const p of world.provinces.values()) { const [x0, y0, x1, y1] = p.box; if ((x1 - x0) * s > least && (y1 - y0) * s > 14) once(p.name, p.label[0], p.label[1], 11, 500, false, lit ? 13 : 0); } // capomap: above the town that stands there
     }
+    for (const p of towns) if (p.rank > 1) town(p); // mapdata hook
   }
 
   // a page out of sight may get no animation frames, so a timer stands in when none comes
@@ -2925,9 +2975,37 @@ $m[17] = (($x) => {
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-const VERSION = "0.10.2";
+const VERSION = "0.10.6";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "44064cc5";
+const BUILD = "a1229f99";
+// guide hook (ruling 153.8): each AI service's own pages, for links in the Choose an AI guide (site/aiguide.js). A player
+// follows them in a new tab; the page never fetches them, and its rule does not reach them. Kept above the list of services
+// the page may call, because the gate reads every address after that list's name as one the page calls.
+const AI_LINKS = {
+  openrouterKeys: "https://openrouter.ai/settings/keys",
+  openrouterPrivacy: "https://openrouter.ai/docs/features/privacy-and-logging",
+  openrouterLimits: "https://openrouter.ai/docs/api-reference/limits",
+  geminiKey: "https://aistudio.google.com/apikey",
+  geminiLimits: "https://aistudio.google.com/rate-limit",
+  geminiPricing: "https://aistudio.google.com/docs/pricing",
+  groqKeys: "https://console.groq.com/keys",
+  groqLimits: "https://console.groq.com/settings/limits",
+  ollama: "https://ollama.com/download",
+  ollamaHelp: "https://docs.ollama.com/faq",
+  lmstudio: "https://lmstudio.ai",
+  lmstudioServer: "https://lmstudio.ai/docs/developer/core/server/settings",
+  node: "https://nodejs.org",
+  openaiKeys: "https://platform.openai.com/api-keys",
+  openaiPricing: "https://developers.openai.com/api/docs/pricing",
+  anthropicKeys: "https://platform.claude.com/settings/keys",
+  anthropicPricing: "https://platform.claude.com/docs/en/about-claude/pricing",
+  deepseekKeys: "https://platform.deepseek.com/api_keys",
+  deepseekPricing: "https://api-docs.deepseek.com/quick_start/pricing/",
+  mistralKeys: "https://console.mistral.ai/api-keys",
+  cerebras: "https://cloud.cerebras.ai",
+  cerebrasLimits: "https://inference-docs.cerebras.ai/support/rate-limits",
+  together: "https://www.together.ai",
+};
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -2956,7 +3034,7 @@ const PLAY_ADDRESSES = [
   { name: "worker", address: "", reason: "room codes, a relay for pairs that cannot connect directly, play by turn with a 'your turn' notice, and saves by code (server/worker/)" },
 ];
 
-$x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_BASES = AI_BASES; $x.LIVE_ADDRESSES = LIVE_ADDRESSES; $x.PLAY_ADDRESSES = PLAY_ADDRESSES;
+$x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_LINKS = AI_LINKS; $x.AI_BASES = AI_BASES; $x.LIVE_ADDRESSES = LIVE_ADDRESSES; $x.PLAY_ADDRESSES = PLAY_ADDRESSES;
 return $x; })({});
 $m[18] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later

@@ -1,8 +1,9 @@
 {
   "name": "capo",
-  "version": "0.10.2",
+  "version": "0.10.6",
   "private": true,
   "type": "module",
+  "author": "Arnote Studios",
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "test": "node --test test/*.test.mjs",

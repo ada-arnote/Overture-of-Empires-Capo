@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Margins of Trust (early): the map, the one-pass reveal with a reason for every order, the season and winter, the end,
-// replay from seed and moves, and bots that play legal, complete games without reading anyone's sheet.
+// Margins of Trust (early): the map, the one-pass reveal with a reason for every order, the talk and its bargains, the
+// season and winter, the ledger, the end, replay from seed and moves, and bots that bargain by their stated characters
+// and play legal, complete games without reading anyone's sheet.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { canon, chance, createMatch, packGame, seedState, unpackGame } from "../src/core/index.js";
 import { mapOf } from "../src/games/margins/map.js";
 import { resolve } from "../src/games/margins/resolve.js";
-import { NONE, alive, boardOf, margins, mineOf, ordersAt, portsOf, reason, strengthOf, supplyOf, toWin } from "../src/games/margins/rules.js";
-import { TIERS, choose, plan } from "../src/games/margins/bot.js";
-import { FORMS, judge } from "../src/games/margins/forms.js";
+import { LEADS, NONE, WORDS, alive, boardOf, formsOf, ledgerFor, margins, mineOf, ordersAt, pending, portsOf, reason, strengthOf, supplyOf, toWin, wordOf } from "../src/games/margins/rules.js";
+import { TIERS, characterOf, choose, plan, record } from "../src/games/margins/bot.js";
+import { CAST, FORMS, formText, judge } from "../src/games/margins/forms.js";
 import { inList, refused, replays, sameEachStep } from "./fixtures/bots.js";
 
 const B = mapOf(4); // 32 provinces; ports 0, 1, 2 in seat 0's march, 8, 9, 10 in seat 1's, and so on round the sea
@@ -178,9 +179,15 @@ test("reveal: turning the board one march turns the result one march", () => {
 });
 
 const start = (seats = 3, style = "classic", seed = "m", more = {}) => createMatch(margins, { seed, options: { seats, style, ...more } });
+/** Nobody says anything: every seat ends its talk. */
+const quiet = (m) => { while (m.turn !== null && m.position.stage === "talk") m.play({ do: "done" }); };
 
 test("orders: one a province, leaving 1 behind, only your own; the quick check agrees with the full list", () => {
   const m = start(4);
+  assert.equal(m.position.stage, "talk");
+  assert.throws(() => m.play({ do: "order", at: 4, kind: "hold" }), refused("illegal"), "no orders in the talk");
+  quiet(m);
+  assert.equal(m.position.stage, "write");
   assert.equal(m.turn, 0);
   assert.throws(() => m.play({ do: "order", at: 4, kind: "move", to: 5, n: 3 }), refused("illegal"), "all three cannot leave");
   assert.throws(() => m.play({ do: "order", at: 12, kind: "hold" }), refused("illegal"), "not yours");
@@ -202,6 +209,7 @@ test("orders: one a province, leaving 1 behind, only your own; the quick check a
 
 test("a season: the last seal reveals every order at once, then spring turns to autumn", () => {
   const m = start(3);
+  quiet(m);
   m.play({ do: "order", at: 4, kind: "move", to: 5, n: 2 });
   m.play({ do: "done" });
   m.play({ do: "done" });
@@ -211,13 +219,103 @@ test("a season: the last seal reveals every order at once, then spring turns to 
   assert.equal(ev.filter((e) => e.kind === "order").length, 9, "every province held, ordered or not");
   assert.deepEqual(ev.filter((e) => e.kind === "take").map((e) => [e.at, e.seat]), [[5, 0]]);
   const p = m.position;
-  assert.deepEqual([p.half, p.year, p.round, p.seat], [1, 1, 2, 0]);
+  assert.deepEqual([p.half, p.year, p.round, p.seat, p.stage], [1, 1, 2, 0, "talk"]);
   assert.deepEqual(p.orders, [[], [], []]);
+});
+
+test("talk: promises and asks, at most a few a season; the quick check agrees with the full list", () => {
+  const m = start(4), d = chance(seedState("talk"));
+  const list = margins.moves(m.position);
+  assert.ok(list.some((x) => x.do === "promise" && x.to === -1) && list.some((x) => x.do === "ask" && x.to === 1));
+  assert.ok(!list.some((x) => x.do === "ask" && x.to === -1), "nobody is asked in public");
+  for (let k = 0; k < 300; k++) {
+    const p = m.position, all = margins.moves(p), x = d.pick(all);
+    assert.ok(margins.allows(p, JSON.parse(canon(x))));
+    for (const bent of [{ ...x, at: 999 }, { ...x, to: 7 }, { ...x, extra: 1 }]) assert.equal(margins.allows(p, bent), inList(all, bent));
+  }
+  assert.throws(() => m.play({ do: "promise", form: "stand", to: 1, at: 12 }), refused("illegal"), "you hold only your own");
+  assert.throws(() => m.play({ do: "promise", form: "back-move", to: -1, at: 5 }), refused("illegal"), "a support is promised to a seat");
+  m.play({ do: "promise", form: "no-strike", to: 1 });
+  assert.throws(() => m.play({ do: "promise", form: "no-strike", to: 1 }), refused("illegal"), "said once");
+  for (let k = 1; k < WORDS; k++) m.play({ do: "promise", form: "stand", to: k % 2 ? -1 : 2, at: [4, 1, 6, 4, 1][k - 1] });
+  assert.equal(m.position.talk[0].length, WORDS);
+  assert.deepEqual(margins.moves(m.position), [{ do: "done" }], "no more words this season");
+  assert.deepEqual(m.events, [], "talk is private until the answers");
+});
+
+test("bargains: accepted, both sides' promises stand; declined, neither does; gifts and public pledges always stand", () => {
+  const m = start(3);
+  // Amber offers Blue a pact and asks Blue's support; gives Teal a gift; pledges in public
+  m.play({ do: "promise", form: "no-strike", to: 1 });
+  m.play({ do: "ask", form: "back-move", to: 1, at: 7 });
+  m.play({ do: "promise", form: "keep-out", to: 2, at: 23 });
+  m.play({ do: "promise", form: "stand", to: -1, at: 4 });
+  m.play({ do: "done" });
+  // Blue asks Teal for a pact, offering one
+  m.play({ do: "promise", form: "no-strike", to: 2 });
+  m.play({ do: "ask", form: "no-strike", to: 2 });
+  m.play({ do: "done" });
+  const ev = m.play({ do: "done" });
+  assert.deepEqual(ev, [], "answers are due first");
+  assert.equal(m.position.stage, "answer");
+  assert.deepEqual([m.turn, pending(m.position, 1), pending(m.position, 2)], [1, [0], [1]]);
+  assert.throws(() => m.play({ do: "done" }), refused("illegal"), "an answer is yes or no");
+  m.play({ do: "answer", from: 0, yes: true });
+  const end = m.play({ do: "answer", from: 1, yes: false });
+  assert.equal(m.position.stage, "write");
+  assert.deepEqual(end, [{ kind: "talked", open: 1, closed: 3 }]);
+  assert.deepEqual(m.position.pledges, [
+    { form: "stand", to: -1, at: 4, by: 0 }, { form: "no-strike", to: 1, by: 0 },
+    { form: "back-move", to: 0, at: 7, by: 1 }, { form: "keep-out", to: 2, at: 23, by: 0 },
+  ]);
+});
+
+test("the ledger: after the reveal every promise in force is marked from the orders; private marks only for their two seats", () => {
+  const m = start(3);
+  m.play({ do: "promise", form: "no-strike", to: 1 });
+  m.play({ do: "ask", form: "keep-out", to: 1, at: 13 });
+  m.play({ do: "promise", form: "stand", to: -1, at: 4 });
+  m.play({ do: "done" });
+  m.play({ do: "promise", form: "keep-out", to: 2, at: 11 });
+  m.play({ do: "done" });
+  m.play({ do: "done" });
+  m.play({ do: "answer", from: 0, yes: true });
+  m.play({ do: "order", at: 4, kind: "move", to: 5, n: 2 }); // Amber moves out of the home it pledged in public to hold
+  m.play({ do: "done" });
+  m.play({ do: "order", at: 12, kind: "move", to: 13, n: 2 }); // Blue enters the land it promised Amber to keep out of
+  m.play({ do: "done" });
+  const ev = m.play({ do: "done" }), marks = ev.filter((e) => e.kind === "promise");
+  assert.deepEqual(marks.map((e) => [e.by, e.to, e.form, e.mark]), [[0, -1, "stand", "broken"], [0, 1, "no-strike", "kept"], [1, 0, "keep-out", "broken"], [1, 2, "keep-out", "kept"]]);
+  assert.ok(ev.indexOf(marks[0]) > ev.findLastIndex((e) => e.kind === "order"), "marked after the orders");
+  const p = m.position, owner = m.at(m.list.length - 1).owner, results = ev.filter((x) => x.kind === "order").map((x) => x.r);
+  assert.equal(p.ledger.length, 4);
+  for (const e of p.ledger) assert.equal(e.mark, judge(e, results, owner), "the same mark from the orders alone");
+  assert.deepEqual(ledgerFor(p, 2).map((e) => e.form), ["stand", "keep-out"], "Teal sees the public pledge and its own");
+  assert.deepEqual(ledgerFor(p, 0).map((e) => e.form), ["stand", "no-strike", "keep-out"]);
+  for (let s = 0; s < 3; s++) for (const e of ledgerFor(p, s)) assert.ok(e.to < 0 || e.by === s || e.to === s);
+  assert.deepEqual([wordOf(p, 0), wordOf(p, 1), wordOf(p, 2)], [0, 0, 0]);
+  assert.deepEqual(p.pledges, [], "a new season starts with no promises");
+  assert.equal(formText(p.ledger[2], (i) => `P${i}`), "I will not enter P13 this season.");
+  assert.equal(formText(p.ledger[2], (i) => `P${i}`, true), "Do not enter P13 this season.");
+  assert.equal(formText({ form: "no-strike", to: -1 }, String), "I will not move into anyone's province this season.");
+  assert.equal(formText({ form: "back-move", to: 1, at: 5 }, (i) => `P${i}`), "I will support your move into P5.");
+});
+
+test("forms: what can be promised follows the board", () => {
+  const p = start(3).position;
+  for (let to = -1; to < 3; to++) for (const f of formsOf(p, 0, to)) {
+    assert.equal(f.to, to);
+    if (f.form === "stand") assert.equal(p.owner[f.at], 0);
+    if (f.form === "keep-out") assert.notEqual(p.owner[f.at], 0);
+    if (f.form === "back-hold") assert.equal(p.owner[f.at], to);
+    if (to < 0) assert.ok(["keep-out", "stand", "no-strike"].includes(f.form), "in public: keep out, hold, no strikes");
+  }
+  assert.deepEqual(formsOf(p, 0, 0), [], "not to yourself");
 });
 
 test("winter: each port grows 1, and strength past supply is lost from the strongest", () => {
   const m = start(3);
-  for (let k = 0; k < 6; k++) m.play({ do: "done" }); // spring and autumn, everything holding
+  for (let k = 0; k < 12; k++) m.play({ do: "done" }); // spring and autumn, nothing said, everything holding
   const p = m.position, w = m.events.filter((e) => e.kind === "winter");
   assert.equal(w.length, 3);
   for (const e of w) assert.deepEqual([e.grew, e.lost, e.supply], [1, 1, 5]);
@@ -226,7 +324,7 @@ test("winter: each port grows 1, and strength past supply is lost from the stron
   assert.deepEqual([p.year, p.half], [2, 0]);
 });
 
-test("the end: Traditional at more than half the ports, or the most ports when the years run out; Capo by points", () => {
+test("the end: Traditional at more than half the ports, or the most ports alone from the third winter, or when the years run out; Capo by points", () => {
   const short = start(3, "classic", "end", { years: 2 });
   while (short.turn !== null) short.play({ do: "done" });
   assert.deepEqual(short.result.winners, [0, 1, 2], "all level: shared");
@@ -236,15 +334,25 @@ test("the end: Traditional at more than half the ports, or the most ports when t
   const p = structuredClone(big.position);
   for (const at of [0, 2, 8, 9, 10]) { p.owner[at] = 0; p.str[at] = 1; }
   p.half = 1;
+  p.stage = "write";
   p.done = [false, false, false];
   let q = p;
   for (let s = 0; s < 3; s++) q = margins.apply(q, { do: "done" }).position;
   assert.ok(portsOf(q, 0) >= toWin(q));
   assert.deepEqual(q.over.winners, [0]);
+  // one port ahead: not enough before the third winter, enough from it
+  const lead = (year) => { const x = structuredClone(big.position); x.owner[0] = 0; x.str[0] = 1; Object.assign(x, { half: 1, year, stage: "write" }); let y = x; for (let s = 0; s < 3; s++) y = margins.apply(y, { do: "done" }).position; return y; };
+  assert.equal(lead(LEADS - 1).over, null);
+  assert.deepEqual(lead(LEADS).over, { winners: [0], why: "held the most ports, 2, at a winter" });
   const capo = start(3, "ours", "capo", { years: 2 });
   while (capo.turn !== null) capo.play({ do: "done" });
   assert.deepEqual(capo.position.points, [2 * (1 + 3), 2 * (1 + 3), 2 * (1 + 3)], "1 a port, 3 for the most of a land, each winter");
   assert.deepEqual(capo.result.winners, [0, 1, 2]);
+  // level on points and ports: the better word wins
+  const word = start(3, "ours", "word", { years: 2 });
+  word.play({ do: "promise", form: "stand", to: -1, at: 4 });
+  while (word.turn !== null) word.play({ do: "done" });
+  assert.deepEqual(word.result, { winners: [0], why: "scored the most points, and kept its word better" });
 });
 
 test("forms: each promise is judged kept, broken or void from the orders", () => {
@@ -268,7 +376,8 @@ function botGame(seats, style, tiers, seed, check = true) {
   const m = start(seats, style, seed), d = chance(seedState(`bots/${seed}`));
   while (m.turn !== null && m.list.length < 3000) {
     const move = choose(m.position, d, tiers[m.turn % tiers.length]);
-    if (check) assert.ok(m.isLegal(move), `a bot chose a move that is not in the list: ${canon(move)}`);
+    // a word is checked by the quick check, which the talk test holds to the full list: the full list of words is long
+    if (check) assert.ok(move.do === "promise" || move.do === "ask" ? margins.allows(m.position, move) : m.isLegal(move), `a bot chose a move that is not in the list: ${canon(move)}`);
     m.play(move);
   }
   return m;
@@ -317,6 +426,7 @@ test("bots treat every seat alike: no seat number wins by itself", () => {
   // the same sheet for every seat, turned to its own march, keeps the whole game turned alike to the end
   const seats = 4, m = start(seats, "classic", "fair"), b = boardOf(m.position), rot = (i, k) => (i + 8 * k) % b.n;
   while (m.turn !== null) {
+    if (m.position.stage === "talk") { quiet(m); continue; }
     const p = m.position, mine = plan(p, 0, "normal");
     for (let s = 0; s < seats; s++) {
       for (const o of mine) {
@@ -336,4 +446,41 @@ test("bots treat every seat alike: no seat number wins by itself", () => {
   }
   assert.deepEqual(m.result.winners, [0, 1, 2, 3]);
   for (let s = 0; s < seats; s++) assert.ok(alive(m.position, s));
+});
+
+test("bots bargain, and keep or break their promises exactly as their characters' lines say", () => {
+  assert.equal(CAST.length, 6);
+  const tally = Object.fromEntries(CAST.map((c) => [c.id, { kept: 0, broken: 0 }]));
+  let pledges = 0, bargains = 0;
+  for (const seats of [3, 4, 5]) for (let g = 0; g < 2; g++) {
+    const m = botGame(seats, g % 2 ? "ours" : "classic", ["normal", "hard"], `word/${seats}/${g}`, false);
+    assert.equal(new Set(m.position.cast).size, seats, "no two seats share a character");
+    const again = start(seats, g % 2 ? "ours" : "classic", `word/${seats}/${g}`);
+    for (const move of m.list) {
+      const before = again.position;
+      again.play(move);
+      const after = again.position;
+      if (after.ledger.length === before.ledger.length) continue;
+      for (const e of after.ledger.slice(before.ledger.length)) {
+        pledges++;
+        if (e.to >= 0 && before.talk[e.to]?.some((w) => w.say === "ask" && w.to === e.by)) bargains++;
+        const c = characterOf(before, e.by).id, r = e.to >= 0 ? record(before, e.to, e.by) : null;
+        if (e.mark !== "void") tally[c][e.mark]++;
+        if (e.mark !== "broken") continue;
+        assert.notEqual(c, "steward", "the Steward keeps every promise");
+        if (c === "herald") assert.ok(e.to >= 0, "the Herald never breaks a public pledge");
+        if (c === "merchant") assert.ok(r && r.broken > 0, "the Merchant breaks only to a seat that broke a promise to it");
+        if (c === "elder") assert.ok(r && r.broken >= 2, "the Elder forgives one");
+        if (c === "climber") assert.ok(e.to >= 0 && portsOf(before, e.to) > portsOf(before, e.by), "the Climber breaks only to a seat that leads it");
+      }
+    }
+  }
+  assert.ok(pledges > 100 && bargains > 20, `bots talk: ${pledges} promises, ${bargains} from bargains`);
+  assert.ok(tally.steward.kept > 0 && tally.gambler.kept + tally.gambler.broken > 0);
+});
+
+test("easy bots say nothing and accept nothing; every character's line is shown in plain words", () => {
+  const m = start(3), d = chance(seedState("easy"));
+  assert.deepEqual(choose(m.position, d, "easy"), { do: "done" });
+  for (const c of CAST) assert.match(c.line, /^[A-Z][^\u2014]*\.$/);
 });

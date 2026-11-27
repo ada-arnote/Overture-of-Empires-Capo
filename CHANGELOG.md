@@ -26,6 +26,93 @@ What changed in each tagged version of Overture of Empires: Capo, newest first. 
 - Ladder, Capo: Bot beats Easy in 98% of 56 games, Bot beats the two-ply step in 91% of 56, Hard beats Bot in 64% of 140, Strongest beats Hard in only 45% of 84 (19% draws). Speed on a desktop: Bot 25 ms a move, Hard 160 ms, Strongest 400 to 450 ms; a review of a 30-turn game 2.3 s in the worker.
 - `test/stacking.test.mjs`: 28 tests, adding the Capo set, Traditional unchanged, the count and its tie-break, free placement, Custom, the search against the rules and make and unmake, node budgets and the same move twice, the puzzles (one answer each, by trying every line; the hard bot finds and finishes each), the ladder, hints and the review.
 
+## v0.10.6 (2026-11-27): real land and real cities on Capo's map
+
+### The real world's land cover and cities on Capo's map (ruling 157)
+
+**Players**
+- **What grows on the land.** Close in on the real world, the ground is coloured by what grows there, and the dressing stands it: forests (broadleaf and conifer, tropical, temperate and boreal), grassland and savanna, desert dunes, tundra (moss and stones, a new small model), and reeds in flooded grassland and mangrove. Mountains, hills and ice keep their own look; hills keep some of their wood or grass. Culled and capped as before; a style's own model rules still apply (Campaign map and Modern command stand no hills or peaks).
+- **Real cities.** On the real map, the guessed great cities give way to real ones, named in italic under their pieces: each country's keep stands in its real capital while it holds it (and goes home if it falls), other capitals show always, cities of a million and a half or more from the region zoom, and others of 300,000 or more from the country zoom. A town still stands in every province with no city. A name already printed close by is not printed again. Invented worlds and alternate histories keep their own cities and towns.
+- The map's credit line and the front page's credits name the land cover: Ecoregions 2017 © RESOLVE, CC BY 4.0.
+
+**Contributors**
+- `tools/mapdata.py` (new, offline, beside `tools/relief.py`; NumPy and Pillow, as relief.py, never shipped): reads RESOLVE Ecoregions 2017 and Natural Earth 1:10m populated places (simple, 5.1.2) and writes `maps/cover.webp` (2048 by 1500 on the relief's grid and projection, one class a point as grey 16 a class, lossless, 43.1 kB) and `maps/cities.json` (1,425 cities: 200 capitals, 490 major, 735 other; name, position in tenths of a map unit, rank and province; 53.3 kB, 23.3 kB compressed). Cities in the sea are snapped onto their province's land; a capital stands in its own country however small.
+- `src/map/world.js`: the ground reads the cover (texture unit 5, `cover(img)`), blends a colour a biome between points along a wavering line, and fades it out above about 1,000 to 2,800 m. `src/map/dress.js`: `cover(k)`, a table of what each biome stands, and the `tundra` model. `site/worldmap.js`: loads both files beside the relief, and names the cities. `site/mappieces.js`: `mapPieces({ cities })`. `site/game.js`: passes the cities on the real map only. All marked "mapdata hook".
+- `tools/check.mjs`: a CC BY file in `maps/` must be named in NOTICES.md with its credit line, and a baked picture in `maps/` needs its row in CREDITS.csv. CREDITS.csv and NOTICES.md: rows and lines for both files.
+- `test/mapdata.test.mjs` (3 tests). Code 2.6 kB larger compressed; the two map files add 96.4 kB (66.4 kB compressed), fetched only by the map pages. Frame times in headless Edge on the GPU, median ms over 50 frames, two runs each, before then after: desktop 1440 by 900 world 5.6 to 5.9 then 4.7 to 6.8, region 5.3 to 6.9 then 5.4 to 5.5, country 4.6 to 5.0 then 4.9 to 5.3, close 5.4 to 6.5 then 4.8 to 5.8; phone 375 by 812 world 4.2 to 5.9 then 4.7 to 6.6, region 4.1 to 4.5 then 3.5 to 5.2, country 3.7 to 6.9 then 3.4 to 5.5, close 5.3 to 7.0 then 4.8 to 5.2. No change beyond the noise of a busy machine. The flat layer's paint once the view is still stays 20 to 30 ms at the region zoom; the first such paint after entering a zoom band can take 50 to 230 ms once.
+
+## v0.10.5 (2026-11-27): a guide to choosing an AI, real-time Inch with a friend, and Margins of Trust keeps its word
+
+### An Inch of Ink in real time, live between two browsers
+
+**Players**
+- **Play live with a friend.** In a real-time game of An Inch of Ink (Traditional, Capo's The Ink Dries, or Custom on the clock), before you choose where to start, press Play live with a friend in the move panel. Send the invitation; your friend's page makes a reply link; when it comes back (opened in a tab of yours, or pasted), the two browsers join straight to each other, as live play does for the turn games. The map is dealt by both browsers together. You each play a nation and the bots play all the rest, the same in both browsers.
+- **One clock for you both.** It starts when you have both chosen where to start and runs at one speed. Your orders reach both maps in under a second (about 0.75 seconds, measured between two tabs). Pause stops it for both of you, at the same moment on both maps, and either of you can start it again; orders still go while it is paused.
+- **Drops and reloads.** If the connection drops, the clock waits for you both; Invite your friend back in the move panel (either of you can) joins you again where you stood, and whatever was in flight is sent again. A browser that reloaded brings the game back with Continue, then takes the other's game as it stands when you join again. If no direct path is found, the page says so; the game waits as it stands, and Play on alone carries on with your friend's nation standing still.
+- **Fair dice, checked games.** The bots' chances each tick are drawn from secrets of both browsers, shown only once both have sent their orders, so neither side can know them early. Both browsers compare the game every second; if they ever differ, live play stops and says so. Both hold the whole game, so live play is for friends.
+- **Privacy.** As for the turn games: nothing is contacted until you choose live play, and then only the public address service `stun.cloudflare.com`.
+
+**Contributors**
+- `src/core/lockstep.js` (new, transport-neutral): frames four a second (`FRAME_MS` 250), each side's orders sent `DELAY` (2) frames ahead, frame f played when both sides' frames are in: pause or resume, the host's orders, the guest's, then a game tick every `TICK` (2) frames while the clock runs, its dice salted from both frames' secrets (a side shows its secret only after it holds the other's orders and commitment for that frame). An order the rules no longer allow when its frame comes is skipped by both. `quickSum` every `SUM` (4) frames; a mismatch stops (a desync). Hello on every join: frames and secrets the other has not had are sent again; a side with no game, or a new live table holding less, asks (`need`) and takes the other's save (`take`) after the other takes back its unplayed frames. Plain stops for a changed secret, an order for the other's seat, a changed frame, a frame it cannot read, and another game. Wall time only paces the page's driver and the figures, never the rules.
+- Inch rules, version 12 unchanged: a game for two is the open option `people` (2), so every game for one keeps its options, positions and fingerprints (checked against fingerprints taken before the change). Two people are seats 0 and 1 (`p.people`, `p.pacts`, nations named for both); each order names its person (`by`), applied from that seat; both start where they choose (the game waits in the start phase for both); people grow at full rate, the bots' truce, pile and spare rules and soaking protect each person; one truce each with a bot, none between people. `liveMovesOf(p, b, seat)`, `person`, `peopleOf`, `pactIn`, `pactOn(p, seat)`.
+- `site/inchplay.js` (new): invitations (`#i=` terms and offer) and replies made as the live link's, a rejoin invitation carrying the seed and handed to the tab holding that game (`BroadcastChannel`), the driver (four frames a second, a short backlog caught up), the move panel's live line and buttons, Play on alone, and the side kept per seed so a reloaded page plays from its own seat. Marked "inchlive hook" lines: `site/table.js` (`flow(move, salt)`), `site/livelink.js` (`PARTS`, its invitation helpers shared), `src/games/inch/rules.js` (the `people` option); in `site/inchlive.js` every position is read from this browser's seat (`view`), orders go through `act`, the clock and the pause are shared in a game for two.
+- `test/inchlive.test.mjs` (11 tests) and `test/fixtures/inchscript.js`: the one-person fingerprints, the rules for two, and two fake browsers joined by a channel the test slows, cuts and tampers with: dealing, the same game on both sides and a replay from seed and moves, salts, the shared pause, a drop and rejoin, a reload that takes the other's game, a deliberate tamper caught by the next sum (within a second), and the plain stops.
+- Checked in the built-in browser between `localhost` and `127.0.0.1` tabs (two origins): a live Traditional game dealt, started and played from both sides, a dropped channel joined again from the guest's side, the guest's page reloaded and caught up from the host's, a shared pause and resume, and a failed join answered with the fallback; the two move lists and salts matched each time, and no console errors from these builds.
+
+### Margins of Trust, early: promises in play, a ledger, bots with characters, a reveal you step through
+
+Still unlisted: reached only by `play/margins.html`.
+
+**Players**
+- **Talk.** Each season now opens with talk: in turn, each seat may say up to six things in the six fixed forms (keep out of a province, back a move, back a hold, hold a province, no strikes, carry a crossing), to one seat or to everyone as a public pledge, and may ask a seat for a promise in return. The page builds each one from whom, which form and where, and reads it back as a sentence before it is said.
+- **Bargains.** A seat that was asked for something accepts or declines all that was said to it. Accepted, both sides' promises stand for the season; declined, none of them does. A promise with nothing asked always stands.
+- **The ledger.** After every reveal each promise in force is marked kept, broken or void (it could not apply), from the orders alone. A private promise's mark is shown only to its two seats; a public pledge's to everyone; at the end, all of it, with each seat's kept, broken and void, and the first promise broken. The game never enforces a promise.
+- **Bots with characters.** Each bot seat has one of six characters, shown at the table and on its seat: the Steward keeps every promise; the Merchant breaks its word only to a seat that broke a promise to it; the Elder forgives one; the Climber turns on whoever leads it in ports; the Gambler breaks a promise that stands in its way one time in two; the Herald never breaks a public pledge. Normal and hard bots offer pacts of no strikes to the seats they are not pressing, ask for support for their attack, and count promises made to them as far as they trust the seat. Easy bots say nothing.
+- **The reveal, step by step.** The reveal now plays in the move panel: the sheets, then supports and transports (cuts), then the moves meeting, then the board after, then the ledger, then winter, each with its sentences and the board drawn as it stood. Back, Next, a scrubber, Skip to the end, and the whole reveal to read. Tap an arrow for its sentence.
+- **A lesson** (the shared coach): a short guided first game, offered at the first Play and in the menu: a promise and an ask, a bargain answered, a move and a seal, the reveal stepped through, the ledger.
+- **Traditional ends sooner.** From the third winter, holding more ports than every other seat wins (more than half the ports still wins at any winter). Capo ties now go to more ports, then the better word (promises kept less broken), then more provinces.
+- No "A friend, by link" for this game, and no link play in its menu, until sealed sheets by link exist.
+
+**Contributors**
+- Margins rules are version 2 (saves and links from version 1 do not open as version 2). `rules.js`: stages `talk`, `answer`, `write`; moves `{ do: "promise" | "ask", form, to, at | a, b }` (at most `WORDS`, 6, a season), `{ do: "answer", from, yes }`; `formsOf`, `pending`, `offerOf`, `ledgerFor`, `wordOf`; `p.cast`, `p.talk`, `p.replies`, `p.pledges`, `p.ledger`; events `talked` and `promise`; `LEADS` (3). `forms.js`: `CAST`, `formText`. `bot.js`: `victimOf`, `talkOf`, `accepts`, `sheetOf`, `record`, `characterOf`; plans massed on one rival, with promises kept as constraints; plans memoised by position. Winter growth (1 a port) and supply stay as they were: the series did not need them changed.
+- `site/table.js`: a game may say `links: false` (marked "links hook"): no "A friend, by link", no Link games on the title, no Link play tab.
+- `tools/fair.mjs` measures margins (marked "margins hook").
+- Fairness, `node tools/fair.mjs margins`, 1,000 normal-bot games a row, wins by seat in %: Traditional 25.3 / 32.4 / 29.9 (3), 20.6 / 23.7 / 24.8 / 20.4 (4), 16.6 / 21.2 / 19.4 / 19.0 / 16.2 (5), widest gaps 7.1, 4.4, 5.0; Capo 29.6 / 34.9 / 31.0, 23.1 / 24.1 / 27.0 / 21.3, 18.3 / 20.3 / 20.3 / 19.6 / 14.5, gaps 5.3, 5.7, 5.8. All within 10 points.
+- How games end: Traditional before the year limit 87.6% (3 seats), 89.5% (4), 92.4% (5), median 10, 10 and 8 seasons; before, 6%, 1% and 0% (bots held their own marches to the limit). Capo shared wins 4.5%, 4.5%, 7.0%; before, 95%, 92% and 93% (200 games a row then). The word decides 57%, 52% and 40% of Capo games, a sign that Capo's points still sit level too often.
+- Characters over 180 games of normal bots: kept shares Steward, Merchant, Elder and Climber 100%, Gambler 97.7%, Herald 96.5%: bots rarely find a promise in their way, so breaks are mostly answers to broken promises.
+- `test/margins.test.mjs` (26 tests): talk and its quick check against the full list, bargains accepted and declined, the ledger against an independent judge and each seat's view, forms by the board, the lead and word endings, characters held to their lines over bot games at 3, 4 and 5 seats, easy bots silent.
+
+### Choose an AI: a guide to the services Capo can reach (ruling 153.8)
+
+**Players**
+- **Choose an AI: a guide**, a button in How Capo reaches an AI, so it is in the Game menu and on the connect step of a turn. It opens over the page and says first that no AI is needed: Advance moves the world by the rules. Then the routes, free ones first: OpenRouter's free models, Google Gemini's free tier and Groq; Ollama and LM Studio on your own computer; your own AI app through the bridge; then paid by use: OpenAI, Anthropic, DeepSeek, Cerebras (a trial credit), Mistral and Together AI.
+- Each route, folded until you open it: what it costs, the steps (where to get a key, what to paste where), what to expect, privacy (your key stays in this browser and goes only to that service), and what its own pages did not confirm. Links open the service's own pages in a new tab. **Use this** fills in the service and a model in the settings and puts you in the Key field; nothing is sent until you press Check connection.
+- **If something goes wrong**: what to do for each error the page shows (a refused key, no credit, too many requests, an unknown model, a blocked call, a server on this computer that does not answer, a reply cut short, and more).
+- Facts checked on each service's own pages on 27 November 2026; services change their free tiers often, so their page has the last word.
+
+**Contributors**
+- `site/aiguide.js` (new): `ROUTES` (group, preset, model, cost, steps, expect, privacy, unsure, links), `HELP` (by the error kinds of `site/ai.js`), `guideParts`, `openGuide`, `guidePart`. Built from elements and text.
+- `site/config.js`: `AI_LINKS`, the services' own pages the guide links to, kept above the services the page calls, so the gate and the page rule are unchanged.
+- Marked "guide hook" lines: `site/ai.js` (the import, and the guide line in the settings), `site/game.html` (the guide's styles). `site/game.js` is unchanged.
+- `test/aiguide.test.mjs` (4 tests).
+
+## v0.10.4 (2026-11-27): Brass and Banners in five eras
+
+### An era for Brass and Banners (ruling 154)
+
+**Players**
+- **Era** in Brass and Banners: Ancient, Medieval, Gunpowder (the look so far, and still the start), Industrial or Modern. It chooses which sculpted pieces stand on the board in 3D: Roman legionaries with a general and ballistae, knights, redcoats with cannon, French infantry of 1870, or Vietnam-era marines. Where an era has no sculpted piece for a role, the piece made in code stands. Choose it under Choose your own or in Settings; it takes effect at once and this browser remembers it. Looks only: the rules, links and saved games are the same in every era, and each player sees the era they chose.
+- Three more sculpted pieces on the shelf, each fetched only when a board shows it: "French Infantry - Franco-Prussian War", "US Marine T pose - Vietnam" and "Roman Ballista - free game asset", all by Andy Woodhead, CC BY 4.0, credited in About.
+
+**Contributors**
+- `site/models/`: `fusilier.bin`, `marine.bin`, `ballista.bin` (31 to 32 kB each, 93 kB in all), no longer held in `tools/figures.json`; `src/map/shelf.js`, `CREDITS.csv` and `NOTICES.md` written again by `tools/models.mjs --records`. The four Jaca scans stay held (ruling 150).
+- Marked "era hook" lines: `site/banners.js` (the setting, kept as `capo-banners-era`), `src/map/board.js` (`setEra`), `site/hexboard.js` (`setEra`), `site/table.js` (a choice the game keeps itself, with `get` and `set`, changes the looks without restarting the game behind the title; `G.settings`, a game's own rows in Settings). No rules version change.
+- `test/models.test.mjs`: each era's soldier is on the shelf, the ancient gun is the ballista, and no era stands a Jaca scan.
+
+## v0.10.3 (2026-11-27): made by Arnote Studios
+
+- The maker is named as Arnote Studios (ruling 156), with copyright to Ada Arnote, on the front page, in every game's About, in Capo's Game menu, in README, NOTICES, CONTRIBUTING and package.json. The three starting shelf entries now credit Arnote Studios. The room-server guide names the Cloudflare account and suggests the workers.dev name.
+
 ## v0.10.2 (2026-11-27): play live by two links, a community shelf, and a room server ready to deploy
 
 ### The community shelf: scenarios, stories and replays players share (ruling 155, option D)
