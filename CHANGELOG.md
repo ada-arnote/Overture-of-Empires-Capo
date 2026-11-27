@@ -2,6 +2,18 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.10.0 (2026-11-27): the first new game takes root, early and unlisted
+
+### The garden game: the basic structure (early, not public)
+
+**Contributors**
+- A new original game for two, built to its first playable stage (owner ruling 153.14). Not on the front page or in the list of games: reached only by its own address, `play/garden.html`, and marked "Early" on its title card, in How to play and in About. "The Garden" is a working title until the name is checked.
+- `src/games/garden/rules.js`: a hex bed round a pond, five kinds of plant on one wheel (link, overgrow, overgrown), sow or shift, overgrowth back to the pouch, links along lines, the free sow after a new link, the swap after the first sow, the called ring in one move, and the ring round the pond found by a parity test in whole numbers. Traditional (91 cells, home beds, reach 3, most links after 40 turns each), Capo (61 cells, rim sowing, reach 2, points at the limit) and Custom (nine switches). Version "1"; no clock, no page, no chance: a seed and the move list replay.
+- `src/games/garden/bot.js`: easy (one move, noisy), normal (also checks its best moves for a ring the rival could close next) and hard (reads the rival's best reply). Legal and sensible, not strong yet.
+- `site/garden.html`, `site/garden.js`, `site/gardenboard.js`: the page on the shared table shell, with its own flat board drawn in code (round bases for the first gardener, square for the second, an outline for each kind, links as lines, six stones in the pond for the pond meter) and the wheel as a small dial in the move panel. Against a bot or a friend on one device, or by link as the shell allows.
+- `tools/bundle.mjs`: one marked "garden hook" line builds `play/garden.html` with the others.
+- `test/garden.test.mjs`: the wheel, the bed, sowing, shifting, overgrowth, links, the ring, the free sow, the swap, the called ring, the count at the limit, replay, and bots of every tier finishing legal games. No win rates written down yet: rings come quickly in Capo (often by round 10) and seldom in Traditional, to be measured and tuned before release.
+
 ## v0.9.9 (2026-11-27): campaigns for Brass and Banners, early
 
 ### Brass and Banners: legacy campaigns, early
