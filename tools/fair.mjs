@@ -22,8 +22,10 @@ import { glass } from "../src/games/glass/rules.js";
 import { choose as glassBot } from "../src/games/glass/bot.js";
 import { inch } from "../src/games/inch/rules.js";
 import { choose as inchBot } from "../src/games/inch/bot.js";
+import { margins } from "../src/games/margins/rules.js"; // margins hook: early and unlisted, but measured like the others
+import { choose as marginsBot } from "../src/games/margins/bot.js";
 
-export const GAMES = { banners: [banners, bannersBot], fable: [fable, fableBot], glass: [glass, glassBot], inch: [inch, inchBot] };
+export const GAMES = { banners: [banners, bannersBot], fable: [fable, fableBot], glass: [glass, glassBot], inch: [inch, inchBot], margins: [margins, marginsBot] };
 export const STYLES = { classic: "Traditional", ours: "Capo" };
 export const LINE = 10; // points between the best and worst seat
 const CAP = 20000, CHUNK = 20;

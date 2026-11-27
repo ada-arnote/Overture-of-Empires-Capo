@@ -33,6 +33,7 @@ Copy this into the pull request or your notes and tick it as you go.
 - [ ] One double-click page from `dist/` (made by the bundle) opens with no server and starts.
 
 **Out**
+- [ ] If the AI guide (`site/aiguide.js`) or the services' default models (`site/ai.js`) were last checked more than a month ago, re-check each service's own pages, update the facts and models, and set `CHECKED` to today. Free tiers change often.
 - [ ] Commit, with the version in the title: `Short summary of the release (vX.Y.Z)`.
 - [ ] Tag that commit: `git tag -a vX.Y.Z -m "Short summary"`.
 - [ ] Push `main` and the tag to the public repository (for example `git push origin main` and `git push origin vX.Y.Z`).

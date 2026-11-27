@@ -20,13 +20,13 @@ export const allowance = (r, kind, tool) => Math.round((BUDGET[kind] || BUDGET.t
 // cors: "yes" it answers web pages; "check" not yet seen doing so; "local" on this computer, which must let this page in.
 const P = (id, name, shape, cors, models, about, more) => ({ id, name, shape, cors, tools: true, models, about, base: AI_BASES[id] || "", ...more });
 export const PRESETS = [
-  P("openrouter", "OpenRouter", "openai", "yes", ["openrouter/auto", "meta-llama/llama-3.3-70b-instruct:free"], "Many models on one key, some free: about 50 free calls a day. Give the key a spending limit."),
+  P("openrouter", "OpenRouter", "openai", "yes", ["openrouter/free", "openrouter/auto", "meta-llama/llama-3.3-70b-instruct:free"], "Many models on one key, some free: about 50 free calls a day. Give the key a spending limit."),
   P("groq", "Groq", "openai", "yes", ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "llama-3.1-8b-instant"], "Fast open models; a free tier limited by tokens a day."),
   P("openai", "OpenAI", "openai", "yes", ["gpt-5-mini", "gpt-4.1-mini", "gpt-5"], "Paid by use.", { limit: "max_completion_tokens" }),
   P("anthropic", "Anthropic (Claude)", "anthropic", "yes", ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-5"], "Paid by use."),
-  P("gemini", "Google Gemini", "gemini", "yes", ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"], "A free tier, where Google may use what you send to improve its products; its terms ask for 18 or over."),
+  P("gemini", "Google Gemini", "gemini", "yes", ["gemini-3.8-flash"], "A free tier, where Google may use what you send to improve its products; its terms ask for 18 or over."),
   P("mistral", "Mistral", "openai", "yes", ["mistral-small-latest", "mistral-large-latest"], "Needs billing: the free plan has no app access.", { choice: "any" }),
-  P("deepseek", "DeepSeek", "openai", "check", ["deepseek-chat", "deepseek-reasoner"], "Paid by use, cheap."),
+  P("deepseek", "DeepSeek", "openai", "check", ["deepseek-flash"], "Paid by use, cheap."),
   P("together", "Together AI", "openai", "check", ["meta-llama/Llama-3.3-70B-Instruct-Turbo"], "Paid by use."),
   P("cerebras", "Cerebras", "openai", "yes", ["llama-3.3-70b", "gpt-oss-120b"], "Very fast; a trial credit, then paid."),
   P("ollama", "Ollama, on this computer", "openai", "local", ["llama3.1", "qwen2.5"], "Free and private. Set OLLAMA_ORIGINS to this site's address, then restart Ollama.", { local: true }),

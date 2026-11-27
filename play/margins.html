@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-n0R7Ut+oIRnM8WXv9U1AUc1WRLTfhaUWjoR1ZRM2lzo='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xfVMy3SRDsJfiXkdwHIrppJNl1wFg+nHSpc4HRin+fY='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Margins of Trust · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -368,13 +368,24 @@ body.side #toast { top: calc(var(--bar-b, 56px) / var(--ui-scale) + 50px); botto
 .rings .arrow { fill: none; stroke-width: 1.4; stroke-linecap: round }
 .rings .arrow.support { stroke-dasharray: 1.6 1.4; stroke-width: 1.1 }
 .rings .arrow.transport { stroke-dasharray: .4 1.4; stroke-width: 1.4 }
-.rings .arrow.failed { opacity: .45 }
+.rings .arrow.failed { opacity: .45; stroke-dasharray: 1 1.6 }
+.rings .arrow.lit { stroke-width: 2 }
+.rings .arrow { cursor: pointer }
 #kinds button, #counts button { min-height: 40px }
 .early { display: inline-block; width: fit-content; align-self: flex-start; margin: 0 0 10px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); font: 700 var(--fs-1)/1.4 var(--sans); letter-spacing: var(--caps); text-transform: uppercase }
 .reveal h3 { display: flex; align-items: center; gap: 8px; margin: 14px 0 4px } .reveal h3 canvas { width: 22px; height: 22px }
 .reveal ul { padding-left: 20px } .reveal li { margin: 2px 0 } .reveal .quiet-holds { color: var(--text-3); font-size: var(--fs-2) }
 .reveal li.bad { color: var(--danger) }
 #cover { text-align: center } #cover p { margin-bottom: 10px }
+/* talk, answers, the reveal step by step, the ledger */
+.cast { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 4px; font-size: var(--fs-1); color: var(--text-2) } .cast li { display: flex; gap: 6px; align-items: baseline } .cast canvas { width: 18px; height: 18px; flex: none; align-self: center } .cast b { color: var(--text) }
+.vows { margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--edge-soft); border-radius: var(--r-1); font-size: var(--fs-1) } .vows b { display: block; color: var(--accent); margin-bottom: 4px } .vows p { margin: 2px 0 }
+.said { min-height: 2.6em; margin: 0 0 8px; font-style: italic }
+.words { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 4px } .words li { display: flex; gap: 8px; align-items: center; justify-content: space-between; font-size: var(--fs-2) } .words button { min-height: 36px; padding: 0 10px; flex: none }
+.offer { margin: 0 0 12px; padding: 10px; border: 1px solid var(--edge-soft); border-radius: var(--r-1) } .offer h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px } .offer h3 canvas { width: 22px; height: 22px } .offer ul { padding-left: 20px; margin: 0 0 8px } .offer p { margin: 0 0 2px; color: var(--text-2) }
+#replay-bar { width: 100%; margin: 4px 0 8px; accent-color: var(--accent) } #replay-lines { padding-left: 20px; margin: 0 0 10px; max-height: 32vh; overflow-y: auto; font-size: var(--fs-2) } #replay-lines li { margin: 2px 0 } #replay-all { margin-top: 6px }
+.broken, #replay-lines .bad { color: var(--danger) } .void { color: var(--text-3) }
+.ledger h3 { margin: 12px 0 4px } .ledger ul { padding-left: 20px } .ledger .ranks th canvas { width: 18px; height: 18px; vertical-align: -3px; margin-right: 6px }
 </style>
 </head>
 <body class="menu">
@@ -397,12 +408,36 @@ body.side #toast { top: calc(var(--bar-b, 56px) / var(--ui-scale) + 50px); botto
   <p id="status" role="status"></p>
   <div id="cover" hidden><p id="cover-say"></p><div class="go"><button id="open-sheet" type="button" class="main"></button></div></div>
   <div id="choice">
-    <p id="info"></p>
-    <div class="pick strip" id="sources" role="radiogroup" aria-label="Your provinces"></div>
-    <div class="pick small" id="kinds" role="radiogroup" aria-label="Order"></div>
-    <div class="pick strip" id="targets" role="radiogroup" aria-label="Where to"></div>
-    <div class="pick small" id="counts" role="radiogroup" aria-label="How many"></div>
-    <div class="go"><button id="clear" type="button" class="quiet">Clear</button><button id="do" type="button" class="main">Seal my orders</button></div>
+    <div id="replay" hidden>
+      <p id="replay-title" class="cap"></p>
+      <input id="replay-bar" type="range" min="0" max="4" step="1" value="0" aria-label="Step through the reveal">
+      <p id="replay-say"></p>
+      <ul id="replay-lines"></ul>
+      <div class="go"><button id="replay-back" type="button" class="quiet">Back</button><button id="replay-skip" type="button" class="quiet">Skip to the end</button><button id="replay-next" type="button" class="main">Next</button></div>
+      <button id="replay-all" type="button" class="text">Read the whole reveal</button>
+    </div>
+    <div id="talk" hidden>
+      <p id="talk-say"></p>
+      <ul id="talk-cast" class="cast" aria-label="At this table" hidden></ul>
+      <div id="talk-last" class="vows" hidden></div>
+      <div class="pick small" id="talk-mode" role="radiogroup" aria-label="Promise or ask"></div>
+      <div class="pick strip" id="talk-who" role="radiogroup" aria-label="To whom"></div>
+      <div class="pick strip" id="talk-form" role="radiogroup" aria-label="Which form"></div>
+      <div class="pick strip" id="talk-where" role="radiogroup" aria-label="Where"></div>
+      <p id="talk-preview" class="said"></p>
+      <ul id="talk-list" class="words"></ul>
+      <div class="go"><button id="talk-add" type="button" class="quiet">Say it</button><button id="talk-done" type="button" class="main">Say nothing this season</button></div>
+    </div>
+    <div id="answer" hidden></div>
+    <div id="orders" hidden>
+      <p id="info"></p>
+      <div id="vows" class="vows" hidden></div>
+      <div class="pick strip" id="sources" role="radiogroup" aria-label="Your provinces"></div>
+      <div class="pick small" id="kinds" role="radiogroup" aria-label="Order"></div>
+      <div class="pick strip" id="targets" role="radiogroup" aria-label="Where to"></div>
+      <div class="pick small" id="counts" role="radiogroup" aria-label="How many"></div>
+      <div class="go"><button id="clear" type="button" class="quiet">Clear</button><button id="do" type="button" class="main">Seal my orders</button></div>
+    </div>
   </div>
   <button id="last" type="button" class="quiet" hidden>The last reveal</button>
   <div id="after" hidden class="go"><button id="review" type="button" class="quiet">See the board</button><button id="again" type="button" class="main">Play again</button></div>
@@ -439,6 +474,80 @@ body.side #toast { top: calc(var(--bar-b, 56px) / var(--ui-scale) + 50px); botto
 "use strict";
 const $m = [];
 $m[2] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Promise forms: the fixed shapes a promise can take, so the game can judge it against the orders after a reveal.
+// A form is a small piece of data: { form, by, to, at, a, b }. `to` is a seat, or -1 for a promise made to everyone
+// (a public pledge). The game records promises and marks them kept, broken or void after the reveal; it never
+// enforces one. Free talk, aloud or anywhere else, is never read by the rules.
+
+const FORMS = {
+  "keep-out": "I will not enter {at} this season.",
+  "back-move": "I will support your move into {at}.",
+  "back-hold": "I will support your hold of {at}.",
+  "stand": "I will hold {at}.",
+  "no-strike": "I will not move into any province of yours.",
+  "carry": "I will carry your move from {a} to {b}.",
+};
+/** The same forms, said of the speaker by someone else (an ask) or to everyone (a public pledge). */
+const ASKED = {
+  "keep-out": "Do not enter {at} this season.",
+  "back-move": "Support my move into {at}.",
+  "back-hold": "Support my hold of {at}.",
+  "stand": "Hold {at}.",
+  "no-strike": "Do not move into any province of mine.",
+  "carry": "Carry my move from {a} to {b}.",
+};
+const PUBLIC = { "no-strike": "I will not move into anyone's province this season." };
+const MARKS = ["kept", "broken", "void"];
+
+/**
+ * The bots' characters: each has a name and one plain public line, shown before and during the game, so a solo player
+ * is reading people, not noise. What each does is in bot.js, and the line says it exactly. A person's seat has none.
+ */
+const CAST = [
+  { id: "steward", name: "the Steward", line: "Keeps every promise it makes." },
+  { id: "merchant", name: "the Merchant", line: "Keeps faith with every seat that has kept faith with it; breaks its word to any seat that broke a promise to it." },
+  { id: "elder", name: "the Elder", line: "Forgives each seat one broken promise; after a second, it breaks its own word to that seat." },
+  { id: "climber", name: "the Climber", line: "Keeps its word, except to a seat that leads it in ports." },
+  { id: "gambler", name: "the Gambler", line: "When a promise stands in its way, it breaks it one time in two." },
+  { id: "herald", name: "the Herald", line: "Never breaks a public pledge; breaks a private promise whenever it stands in its way." },
+];
+
+/** A form in words. name(i): a place's name. asked: said as an ask of someone else. */
+function formText(f, name, asked = false) {
+  const t = (f.to < 0 && PUBLIC[f.form]) || (asked ? ASKED : FORMS)[f.form] || f.form;
+  return t.replace("{at}", f.at !== undefined ? name(f.at) : "").replace("{a}", f.a !== undefined ? name(f.a) : "").replace("{b}", f.b !== undefined ? name(f.b) : "");
+}
+
+/**
+ * Was a promise kept? results: the season's orders as the reveal gave them (one per province held, `of` the seat that wrote it),
+ * owner: who held what when the orders were written. Returns "kept", "broken" or "void" (it could not apply).
+ */
+function judge(f, results, owner) {
+  const mine = results.filter((r) => r.of === f.by), theirs = results.filter((r) => r.of === f.to);
+  const pair = (r) => (r.a === f.a && r.b === f.b) || (r.a === f.b && r.b === f.a);
+  switch (f.form) {
+    case "keep-out": return mine.some((r) => r.kind === "move" && r.to === f.at) ? "broken" : "kept";
+    case "back-move":
+      if (!theirs.some((r) => r.kind === "move" && r.to === f.at)) return "void";
+      return mine.some((r) => r.kind === "support" && r.to === f.at && r.seat === f.to) ? "kept" : "broken";
+    case "back-hold":
+      if (owner[f.at] !== f.to) return "void";
+      return mine.some((r) => r.kind === "support" && r.to === f.at && r.seat === f.to) ? "kept" : "broken";
+    case "stand":
+      if (owner[f.at] !== f.by) return "void";
+      return mine.some((r) => r.at === f.at && r.kind === "move") ? "broken" : "kept";
+    case "no-strike": return mine.some((r) => r.kind === "move" && owner[r.to] >= 0 && (f.to < 0 ? owner[r.to] !== f.by : owner[r.to] === f.to)) ? "broken" : "kept";
+    case "carry":
+      if (!theirs.some((r) => r.kind === "move" && r.sea && ((r.at === f.a && r.to === f.b) || (r.at === f.b && r.to === f.a)))) return "void";
+      return mine.some((r) => r.kind === "transport" && pair(r)) ? "kept" : "broken";
+    default: return "void";
+  }
+}
+
+$x.FORMS = FORMS; $x.MARKS = MARKS; $x.CAST = CAST; $x.formText = formText; $x.judge = judge;
+return $x; })({});
+$m[3] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The land of Margins of Trust: rings of provinces round an inner sea, one equal share (a march) for each seat.
 // Every march has the same shape, turned about the sea, so each seat has two neighbours and nobody sits in a corner.
@@ -483,7 +592,7 @@ const bySea = (map, a, b) => a !== b && map.port[a] && map.port[b] && !map.near[
 
 $x.RINGS = RINGS; $x.HOME = HOME; $x.START = START; $x.SEA = SEA; $x.mapOf = mapOf; $x.bySea = bySea;
 return $x; })({});
-$m[3] = (($x) => {
+$m[4] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The season's reveal: every sheet at once, in one pass, with one plain reason for every order.
 // Movers always leave 1 behind and support adds 1, so what stays to defend never hangs on another move:
@@ -614,28 +723,38 @@ $x.resolve = resolve;
 return $x; })({});
 $m[1] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Margins of Trust: three to five seats round an inner sea. Each season every seat writes one order for each province
-// it holds, in secret; when the last sheet is sealed, all are revealed and resolved at once (resolve.js), each order
-// with its reason. Spring, autumn, then winter: ports grow, supply trims. Whole numbers only, no dice, no clock.
+// Margins of Trust: three to five seats round an inner sea. Each season has three stages. Talk: each seat in turn may
+// make promises, in the fixed forms of forms.js, to one seat or to everyone, and ask promises of a seat in return.
+// Answers: a seat asked for something accepts or declines each bargain (accepted, both sides' promises stand;
+// declined, neither does). Orders: every seat writes one order for each province it holds, in secret; when the last
+// sheet is sealed, all are revealed and resolved at once (resolve.js), each order with its reason, and every promise
+// in force is marked kept, broken or void in the ledger. Spring, autumn, then winter: ports grow, supply trims.
+// Whole numbers only, no dice, no clock. The game records promises; it never enforces one.
 //
-// A move is one order, { do: "order", at, kind, ... }, then { do: "done" } seals the sheet. The seat to write is the
-// lowest one still in that has not sealed. Unordered provinces hold.
+// Talk: { do: "promise", form, to, at | a, b } and { do: "ask", form, to, at | a, b }, at most WORDS a season, then
+// { do: "done" }. Answers: { do: "answer", from, yes }. Orders: one order a move ({ do: "order", at, kind, ... }), then
+// { do: "done" } seals the sheet. In each stage the seat to act is the lowest one still in that has not finished.
+// Unordered provinces hold.
 //   hold                      { kind: "hold" }
 //   move n to a neighbour     { kind: "move", to, n }      leaving at least 1; port to port across the sea needs a transport
 //   support a seat            { kind: "support", to, seat } its move into `to`, or its hold of `to` if it holds it
 //   transport (ports only)    { kind: "transport", a, b }  carries a move between two ports, a < b
-// Traditional: more than half the ports at a winter wins; when the years run out, the most ports (ties shared).
+// Traditional: more than half the ports at a winter wins; from the third winter, so does holding more ports than
+// every other seat; when the years run out, the most ports (ties shared).
 // Capo: points at each winter (1 a port; in each land, 3 for the most provinces and 1 for the next); the most after
-// the last winter wins, more ports breaking a tie.
-const { bySea, mapOf } = $m[2];
-const { resolve } = $m[3];
+// the last winter wins; ties go to more ports, then the better word (promises kept less broken), then more provinces.
+const { CAST, FORMS, judge } = $m[2];
+const { bySea, mapOf } = $m[3];
+const { resolve } = $m[4];
 
-$x.mapOf = $m[2].mapOf; $x.bySea = $m[2].bySea;
-const VERSION = "1";
+$x.mapOf = $m[3].mapOf; $x.bySea = $m[3].bySea;
+const VERSION = "2";
 const NONE = -1;
 const YEARS = { classic: 8, ours: 4 };
 const HALVES = ["Spring", "Autumn"];
 const KINDS = ["hold", "move", "support", "transport"];
+const STAGES = ["talk", "answer", "write"];
+const WORDS = 6; // promises and asks one seat may make in a season
 
 const boardOf = (p) => mapOf(p.seats);
 const nameOf = (p, i) => boardOf(p).names[i];
@@ -646,9 +765,16 @@ const alive = (p, s) => p.owner.includes(s);
 /** Supply: what a seat may keep through winter. 1 for each province, 2 more for each port. */
 const supplyOf = (p, s) => mineOf(p, s).length + 2 * portsOf(p, s);
 const toWin = (p) => Math.floor(boardOf(p).ports / 2) + 1;
+/** Traditional: from this winter on, holding more ports than every other seat wins. */
+const LEADS = 3;
 const seasonText = (p) => `${HALVES[p.half]}, year ${p.year} of ${p.years}`;
+/** A seat's word: promises it kept, less those it broke, over the game so far. */
+/** The ledger as one seat may see it: public pledges, and private promises it made or was made. */
+const ledgerFor = (p, s) => p.ledger.filter((e) => e.to < 0 || e.by === s || e.to === s);
+const wordOf = (p, s) => p.ledger.reduce((n, e) => n + (e.by === s ? (e.mark === "kept" ? 1 : e.mark === "broken" ? -1 : 0) : 0), 0);
 
-const copy = (p) => ({ ...p, owner: [...p.owner], str: [...p.str], orders: p.orders.map((l) => l.map((o) => ({ ...o }))), done: [...p.done], points: p.points && [...p.points] });
+// the ledger only grows, by a new list each season, so it is shared between copies and never changed in place
+const copy = (p) => ({ ...p, owner: [...p.owner], str: [...p.str], orders: p.orders.map((l) => l.map((o) => ({ ...o }))), done: [...p.done], points: p.points && [...p.points], talk: p.talk.map((l) => l.map((w) => ({ ...w }))), replies: p.replies.map((r) => ({ ...r })), pledges: p.pledges.map((f) => ({ ...f })) });
 const next = (p) => { for (let s = 0; s < p.seats; s++) if (!p.done[s]) return s; return NONE; };
 const isInt = (v) => Number.isSafeInteger(v);
 
@@ -668,12 +794,91 @@ function ordersAt(p, at) {
 /** A quick yes or no for one order, the same answer the full list gives. */
 function orderOk(p, o) {
   const b = boardOf(p), s = p.seat, keys = Object.keys(o).sort().join();
-  if (!o || !isInt(o.at) || o.at < 0 || o.at >= b.n || p.owner[o.at] !== s || p.orders[s].some((x) => x.at === o.at)) return false;
+  if (!o || p.stage !== "write" || !isInt(o.at) || o.at < 0 || o.at >= b.n || p.owner[o.at] !== s || p.orders[s].some((x) => x.at === o.at)) return false;
   if (o.kind === "hold") return keys === "at,do,kind";
   if (o.kind === "move") return keys === "at,do,kind,n,to" && isInt(o.to) && isInt(o.n) && o.n >= 1 && o.n < p.str[o.at] && o.to >= 0 && o.to < b.n && (b.near[o.at].includes(o.to) || bySea(b, o.at, o.to));
   if (o.kind === "support") return keys === "at,do,kind,seat,to" && isInt(o.to) && isInt(o.seat) && b.near[o.at].includes(o.to) && o.seat >= 0 && o.seat < p.seats && alive(p, o.seat);
   if (o.kind === "transport") return keys === "a,at,b,do,kind" && b.port[o.at] && isInt(o.a) && isInt(o.b) && o.a < o.b && o.a >= 0 && o.b < b.n && bySea(b, o.a, o.b);
   return false;
+}
+
+// ---- talk ----
+const sorted = (set) => [...set].sort((x, y) => x - y);
+const wordKey = (w) => `${w.form}/${w.at ?? ""}/${w.a ?? ""}/${w.b ?? ""}`;
+const WORD_KEYS = { carry: "a,b,do,form,to", "no-strike": "do,form,to" };
+
+/** Every promise seat `by` may make to `to` (a seat, or -1 for everyone) on this board, as { form, to, at | a, b }. */
+function formsOf(p, by, to) {
+  const b = boardOf(p), mine = mineOf(p, by), out = [];
+  if (!alive(p, by) || to === by || to < -1 || to >= p.seats || (to >= 0 && !alive(p, to))) return out;
+  const near = new Set(mine.flatMap((i) => b.near[i])), reach = new Set(near);
+  for (const i of mine) if (b.port[i]) for (let j = 0; j < b.n; j++) if (bySea(b, i, j)) reach.add(j);
+  for (const at of sorted(reach)) if (p.owner[at] !== by) out.push({ form: "keep-out", to, at });
+  if (to >= 0) {
+    for (const at of sorted(near)) if (p.owner[at] !== by && p.owner[at] !== to) out.push({ form: "back-move", to, at });
+    for (const at of sorted(near)) if (p.owner[at] === to) out.push({ form: "back-hold", to, at });
+  }
+  for (const at of mine) out.push({ form: "stand", to, at });
+  out.push({ form: "no-strike", to });
+  if (to >= 0 && mine.some((i) => b.port[i])) for (let a = 0; a < b.n; a++) for (let c = a + 1; c < b.n; c++) if (bySea(b, a, c) && (p.owner[a] === to || p.owner[c] === to)) out.push({ form: "carry", to, a, b: c });
+  return out;
+}
+
+/** What seat s may still say this season: promises to a seat or to everyone, and asks of a seat. */
+function wordsOf(p, s) {
+  if (p.talk[s].length >= WORDS) return [];
+  const said = new Set(p.talk[s].map((w) => `${w.say}|${w.to}|${wordKey(w)}`)), out = [];
+  for (let to = -1; to < p.seats; to++) {
+    if (to === s || (to >= 0 && !alive(p, to))) continue;
+    for (const f of formsOf(p, s, to)) out.push({ do: "promise", ...f });
+    if (to >= 0) for (const f of formsOf(p, to, s)) out.push({ do: "ask", ...f, to });
+  }
+  return out.filter((m) => !said.has(`${m.do}|${m.to}|${wordKey(m)}`));
+}
+
+function wordOk(p, m) {
+  const s = p.seat, keys = Object.keys(m).sort().join();
+  if (p.stage !== "talk" || p.talk[s].length >= WORDS || !isInt(m.to) || keys !== (WORD_KEYS[m.form] || "at,do,form,to") || !Object.hasOwn(FORMS, m.form)) return false;
+  if (m.do === "ask" && (m.to < 0 || m.to === s)) return false;
+  if (p.talk[s].some((w) => w.say === m.do && w.to === m.to && wordKey(w) === wordKey(m))) return false;
+  const list = m.do === "ask" ? formsOf(p, m.to, s) : formsOf(p, s, m.to);
+  return list.some((f) => wordKey(f) === wordKey(m));
+}
+
+/** The seats whose bargains seat t has still to answer: each asked t for something this season. */
+function pending(p, t) {
+  const out = [];
+  for (let s = 0; s < p.seats; s++) if (s !== t && p.talk[s].some((w) => w.say === "ask" && w.to === t) && !p.replies.some((r) => r.from === s && r.to === t)) out.push(s);
+  return out;
+}
+
+/** A bargain s offered t: what s promises t and what s asks of t. */
+function offerOf(p, s, t) {
+  const words = p.talk[s].filter((w) => w.to === t), strip = ({ say: _, ...w }) => w;
+  return { give: words.filter((w) => w.say === "promise").map(strip), ask: words.filter((w) => w.say === "ask").map(strip) };
+}
+
+/** The talk is over: the bargains answered become the promises in force this season. */
+function settle(p, events) {
+  const out = [];
+  for (let s = 0; s < p.seats; s++) for (let t = -1; t < p.seats; t++) {
+    if (t === s) continue;
+    const { give, ask } = offerOf(p, s, t), yes = !ask.length || p.replies.some((r) => r.from === s && r.to === t && r.yes);
+    if (!yes) continue;
+    for (const w of [...give.map((w) => ({ ...w, by: s, to: t })), ...ask.map((w) => ({ ...w, by: t, to: s }))]) if (!out.some((f) => f.by === w.by && f.to === w.to && wordKey(f) === wordKey(w))) out.push(w); // the same promise twice is one promise
+  }
+  p.pledges = out;
+  p.stage = "write";
+  p.done = Array.from({ length: p.seats }, (_, s) => !alive(p, s));
+  p.seat = next(p);
+  events.push({ kind: "talked", open: out.filter((f) => f.to < 0).length, closed: out.filter((f) => f.to >= 0).length });
+}
+
+function toAnswers(p, events) {
+  p.stage = "answer";
+  p.done = Array.from({ length: p.seats }, (_, s) => !alive(p, s) || !pending(p, s).length);
+  p.seat = next(p);
+  if (p.seat === NONE) settle(p, events);
 }
 
 /** Winter: each port held grows 1 there; then strength past supply is lost from the strongest provinces, never below 1
@@ -721,12 +926,20 @@ function ending(p, winterNow) {
   if (p.style === "classic") {
     const big = left.find((s) => portsOf(p, s) >= toWin(p));
     if (big !== undefined) return { winners: [big], why: `held ${portsOf(p, big)} of the ${boardOf(p).ports} ports at a winter` };
-    if (p.year >= p.years) return { winners: most(p, (s) => portsOf(p, s)), why: "held the most ports when the years ran out" };
+    const top = most(p, (s) => portsOf(p, s));
+    if (top.length === 1 && p.year >= LEADS) return { winners: top, why: `held the most ports, ${portsOf(p, top[0])}, at a winter` };
+    if (p.year >= p.years) return { winners: top, why: "held the most ports when the years ran out" };
     return null;
   }
   if (p.year < p.years) return null;
-  const top = most(p, (s) => p.points[s]), best = top.length > 1 ? top.filter((s) => portsOf(p, s) === Math.max(...top.map((x) => portsOf(p, x)))) : top;
-  return { winners: best, why: best.length > 1 ? "share the most points and ports" : top.length > 1 ? "scored the most points, and held more ports" : "scored the most points" };
+  // ties: more ports, then the better word, then more provinces
+  let best = most(p, (s) => p.points[s]), why = "scored the most points";
+  for (const [f, said] of [[(s) => portsOf(p, s), "scored the most points, and held more ports"], [(s) => wordOf(p, s), "scored the most points, and kept its word better"], [(s) => mineOf(p, s).length, "scored the most points, and held more provinces"]]) {
+    if (best.length < 2) break;
+    const top = Math.max(...best.map(f)), fewer = best.filter((s) => f(s) === top);
+    if (fewer.length < best.length) { best = fewer; why = said; }
+  }
+  return { winners: best, why: best.length > 1 ? "share the most points, ports, word and provinces" : why };
 }
 
 /** All sheets are in: reveal them, then winter after autumn, then the next season. */
@@ -735,6 +948,9 @@ function season(p, events) {
   events.push({ kind: "reveal", year: p.year, half: p.half });
   for (const x of r.results) events.push({ kind: "order", seat: x.of, r: x });
   for (const t of r.takes) events.push({ kind: "take", ...t });
+  const marks = p.pledges.map((f) => ({ year: p.year, half: p.half, ...f, mark: judge(f, r.results, p.owner) }));
+  for (const e of marks) events.push({ kind: "promise", ...e });
+  p.ledger = [...p.ledger, ...marks];
   const was = Array.from({ length: p.seats }, (_, s) => alive(p, s));
   p.owner = r.owner;
   p.str = r.str;
@@ -742,10 +958,11 @@ function season(p, events) {
   if (winterNow) winter(p, events);
   for (let s = 0; s < p.seats; s++) if (was[s] && !alive(p, s)) events.push({ kind: "out", seat: s });
   p.over = ending(p, winterNow);
-  if (p.over) { p.seat = NONE; p.orders = p.orders.map(() => []); return; }
+  if (p.over) { Object.assign(p, { seat: NONE, orders: p.orders.map(() => []), talk: p.talk.map(() => []), replies: [], pledges: [] }); return; }
   if (winterNow) { p.year++; p.half = 0; } else p.half = 1;
   p.round++;
   p.orders = p.orders.map(() => []);
+  Object.assign(p, { stage: "talk", talk: p.talk.map(() => []), replies: [], pledges: [] });
   p.done = Array.from({ length: p.seats }, (_, s) => !alive(p, s));
   p.seat = next(p);
 }
@@ -756,19 +973,40 @@ const margins = {
 
   setup(o, dice) {
     // key: drawn from the seed, for the bots' own choices; the land and the starts are the same in every game
-    const b = mapOf(o.seats), p = { key: dice.below(0x40000000), style: o.style, classic: o.style === "classic", seats: o.seats, years: o.years || YEARS[o.style], year: 1, half: 0, round: 1, owner: Array(b.n).fill(NONE), str: Array(b.n).fill(0), orders: Array.from({ length: o.seats }, () => []), done: Array(o.seats).fill(false), seat: 0, points: o.style === "ours" ? Array(o.seats).fill(0) : null, over: null };
+    // cast: each seat's character, for a bot that sits there (forms.js CAST), drawn without repeats
+    const b = mapOf(o.seats), p = { key: dice.below(0x40000000), cast: dice.shuffle(CAST.map((_, i) => i)).slice(0, o.seats), style: o.style, classic: o.style === "classic", seats: o.seats, years: o.years || YEARS[o.style], year: 1, half: 0, round: 1, owner: Array(b.n).fill(NONE), str: Array(b.n).fill(0), orders: Array.from({ length: o.seats }, () => []), done: Array(o.seats).fill(false), seat: 0, points: o.style === "ours" ? Array(o.seats).fill(0) : null, over: null, stage: "talk", talk: Array.from({ length: o.seats }, () => []), replies: [], pledges: [], ledger: [] };
     b.starts.forEach((list, s) => { for (const [at, n] of list) { p.owner[at] = s; p.str[at] = n; } });
     return p;
   },
   turn: (p) => (p.over ? null : p.seat),
   moves(p) {
     if (p.over) return [];
+    if (p.stage === "talk") return [{ do: "done" }, ...wordsOf(p, p.seat)];
+    if (p.stage === "answer") return pending(p, p.seat).flatMap((from) => [{ do: "answer", from, yes: true }, { do: "answer", from, yes: false }]);
     const s = p.seat, written = new Set(p.orders[s].map((o) => o.at));
     return [{ do: "done" }, ...mineOf(p, s).filter((at) => !written.has(at)).flatMap((at) => ordersAt(p, at).map((o) => ({ do: "order", ...o })))];
   },
-  allows: (p, m) => !p.over && !!m && (m.do === "done" ? Object.keys(m).length === 1 : m.do === "order" && orderOk(p, m)),
+  allows(p, m) {
+    if (p.over || !m || typeof m !== "object") return false;
+    if (m.do === "done") return Object.keys(m).length === 1 && p.stage !== "answer";
+    if (m.do === "promise" || m.do === "ask") return wordOk(p, m);
+    if (m.do === "answer") return p.stage === "answer" && Object.keys(m).sort().join() === "do,from,yes" && typeof m.yes === "boolean" && pending(p, p.seat).includes(m.from);
+    return m.do === "order" && orderOk(p, m);
+  },
   apply(before, m) {
     const p = copy(before), events = [], s = p.seat;
+    if (m.do === "promise" || m.do === "ask") { const { do: say, ...w } = m; p.talk[s].push({ say, ...w }); return { position: p, events }; } // said in private until the answers
+    if (m.do === "answer") {
+      p.replies.push({ from: m.from, to: s, yes: m.yes });
+      if (!pending(p, s).length) { p.done[s] = true; p.seat = next(p); if (p.seat === NONE) settle(p, events); }
+      return { position: p, events };
+    }
+    if (p.stage === "talk") {
+      p.done[s] = true;
+      p.seat = next(p);
+      if (p.seat === NONE) toAnswers(p, events);
+      return { position: p, events };
+    }
     if (m.do === "order") {
       const { do: _, ...o } = m;
       p.orders[s].push(o);
@@ -818,9 +1056,9 @@ function orderText(o, name, who) {
   return "Hold";
 }
 
-$x.VERSION = VERSION; $x.NONE = NONE; $x.YEARS = YEARS; $x.HALVES = HALVES; $x.KINDS = KINDS; $x.boardOf = boardOf; $x.nameOf = nameOf; $x.mineOf = mineOf; $x.portsOf = portsOf; $x.strengthOf = strengthOf; $x.alive = alive; $x.supplyOf = supplyOf; $x.toWin = toWin; $x.seasonText = seasonText; $x.ordersAt = ordersAt; $x.orderOk = orderOk; $x.margins = margins; $x.reason = reason; $x.orderText = orderText;
+$x.VERSION = VERSION; $x.NONE = NONE; $x.YEARS = YEARS; $x.HALVES = HALVES; $x.KINDS = KINDS; $x.STAGES = STAGES; $x.WORDS = WORDS; $x.boardOf = boardOf; $x.nameOf = nameOf; $x.mineOf = mineOf; $x.portsOf = portsOf; $x.strengthOf = strengthOf; $x.alive = alive; $x.supplyOf = supplyOf; $x.toWin = toWin; $x.LEADS = LEADS; $x.seasonText = seasonText; $x.ledgerFor = ledgerFor; $x.wordOf = wordOf; $x.ordersAt = ordersAt; $x.orderOk = orderOk; $x.formsOf = formsOf; $x.pending = pending; $x.offerOf = offerOf; $x.margins = margins; $x.reason = reason; $x.orderText = orderText;
 return $x; })({});
-$m[6] = (($x) => {
+$m[7] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // One exact way to write a value as text, the same on every machine.
 // Only whole numbers, text, true, false, null, lists and plain objects are allowed:
@@ -883,10 +1121,10 @@ function deepFreeze(v) {
 
 $x.canon = canon; $x.deepFreeze = deepFreeze;
 return $x; })({});
-$m[8] = (($x) => {
+$m[9] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SHA-256, written out so that it also works on a page without https.
-const { canon } = $m[6];
+const { canon } = $m[7];
 
 const K = new Uint32Array(64);
 const START = new Uint32Array(8);
@@ -945,11 +1183,11 @@ const fingerprint = (value) => sha256(new TextEncoder().encode(canon(value))).sl
 
 $x.sha256 = sha256; $x.fingerprint = fingerprint;
 return $x; })({});
-$m[10] = (($x) => {
+$m[11] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Seeded chance, in whole numbers only. The state is four numbers kept beside the position,
 // so a replay rolls the same dice.
-const { sha256 } = $m[8];
+const { sha256 } = $m[9];
 
 function seedState(seed) {
   const hex = sha256(new TextEncoder().encode("capo/" + String(seed)));
@@ -992,7 +1230,7 @@ function chance(state) {
 
 $x.seedState = seedState; $x.next = next; $x.chance = chance;
 return $x; })({});
-$m[9] = (($x) => {
+$m[10] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // One game being played. It keeps the options, the seed and the list of moves; everything else follows from them.
 //
@@ -1007,9 +1245,9 @@ $m[9] = (($x) => {
 //   apply(position, move, dice) -> { position, events }
 //   result(position)     { winners: [seat], why } when over, else null
 //   allows(position, move) optional: a quick yes or no, for games whose list of moves is long
-const { canon, deepFreeze } = $m[6];
-const { fingerprint } = $m[8];
-const { chance, seedState } = $m[10];
+const { canon, deepFreeze } = $m[7];
+const { fingerprint } = $m[9];
+const { chance, seedState } = $m[11];
 
 const FORMAT = 1;
 const MAX_MOVES = 20000, MAX_FILE = 2000000;
@@ -1167,13 +1405,13 @@ function openSave(text, games) {
 
 $x.FORMAT = FORMAT; $x.Refusal = Refusal; $x.checkGame = checkGame; $x.readOptions = readOptions; $x.createMatch = createMatch; $x.whenReplayFails = whenReplayFails; $x.openSave = openSave;
 return $x; })({});
-$m[7] = (($x) => {
+$m[8] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A whole game as a few hundred bytes, small enough for one chat message. Each move is stored as its place in the
 // list of legal moves, so a link cannot hold a move that is not allowed.
-const { canon } = $m[6];
-const { fingerprint } = $m[8];
-const { Refusal, createMatch } = $m[9];
+const { canon } = $m[7];
+const { fingerprint } = $m[9];
+const { Refusal, createMatch } = $m[10];
 
 const LAYOUT = 2, SALTED = 3, MOST_MOVES = 4000, MOST_BYTES = 32000, CHECK = 8;
 const ROLES = ["host", "friend", "normal", "easy", "hard"];
@@ -1276,16 +1514,16 @@ function compareGames(ours, theirs) {
 
 $x.packGame = packGame; $x.unpackGame = unpackGame; $x.compareGames = compareGames;
 return $x; })({});
-$m[11] = (($x) => {
+$m[12] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A table played live between two browsers, over any channel that carries plain messages in order (site/livelink.js uses WebRTC).
 // Both sides keep the whole game and check every move by the rules, so neither can send a move that is not allowed.
 // Nobody can peek at the dice: before each move each side commits to a secret (sends only its hash). The mover sends the move
 // with its secret, the other answers with its own, and that move's dice are mixed with both (the match's salts). A game dealt
 // live gets its seed the same way, so neither side chooses the deal. Hidden things (cards in hand) are still in both browsers.
-const { canon } = $m[6];
-const { sha256 } = $m[8];
-const { Refusal, createMatch } = $m[9];
+const { canon } = $m[7];
+const { sha256 } = $m[9];
+const { Refusal, createMatch } = $m[10];
 
 const V = 1, SECRET = /^[0-9a-f]{32}$/, HASH = /^[0-9a-f]{64}$/, MOST = 20000;
 const hex = (text) => sha256(new TextEncoder().encode(text));
@@ -1466,39 +1704,76 @@ function createSession({ side, owns, secret, moved, dealt, adopt, trouble }) {
 
 $x.commitOf = commitOf; $x.saltOf = saltOf; $x.DEALT = DEALT; $x.seedOf = seedOf; $x.createSession = createSession;
 return $x; })({});
-$m[5] = (($x) => {
+$m[6] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-$x.canon = $m[6].canon; $x.deepFreeze = $m[6].deepFreeze;
-$x.compareGames = $m[7].compareGames; $x.packGame = $m[7].packGame; $x.unpackGame = $m[7].unpackGame;
-$x.fingerprint = $m[8].fingerprint; $x.sha256 = $m[8].sha256;
-$x.chance = $m[10].chance; $x.next = $m[10].next; $x.seedState = $m[10].seedState;
-$x.FORMAT = $m[9].FORMAT; $x.Refusal = $m[9].Refusal; $x.checkGame = $m[9].checkGame; $x.readOptions = $m[9].readOptions; $x.createMatch = $m[9].createMatch; $x.openSave = $m[9].openSave; $x.whenReplayFails = $m[9].whenReplayFails;
-$x.DEALT = $m[11].DEALT; $x.commitOf = $m[11].commitOf; $x.createSession = $m[11].createSession; $x.saltOf = $m[11].saltOf; $x.seedOf = $m[11].seedOf;
+$x.canon = $m[7].canon; $x.deepFreeze = $m[7].deepFreeze;
+$x.compareGames = $m[8].compareGames; $x.packGame = $m[8].packGame; $x.unpackGame = $m[8].unpackGame;
+$x.fingerprint = $m[9].fingerprint; $x.sha256 = $m[9].sha256;
+$x.chance = $m[11].chance; $x.next = $m[11].next; $x.seedState = $m[11].seedState;
+$x.FORMAT = $m[10].FORMAT; $x.Refusal = $m[10].Refusal; $x.checkGame = $m[10].checkGame; $x.readOptions = $m[10].readOptions; $x.createMatch = $m[10].createMatch; $x.openSave = $m[10].openSave; $x.whenReplayFails = $m[10].whenReplayFails;
+$x.DEALT = $m[12].DEALT; $x.commitOf = $m[12].commitOf; $x.createSession = $m[12].createSession; $x.saltOf = $m[12].saltOf; $x.seedOf = $m[12].seedOf;
 
 
 return $x; })({});
-$m[4] = (($x) => {
+$m[5] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Sheet bots for Margins of Trust. A bot plans its whole sheet from the open board alone (who holds what, how strong,
-// the season), then writes it one order at a time and seals it. It never reads anyone's sheet, its own excepted, so
-// sealed sheets cannot sway it; the same board always gives the same sheet.
-//   easy: takes empty land and pokes at the weakest neighbour, keeping nothing back.
-//   normal: weighs ports, keeps back half of what could strike each province, supports its own attacks and holds,
-//           and leans on whoever leads.
-//   hard: keeps back all of it, and also crosses the sea with a transport of its own.
-// Promises (forms.js) are not made or answered yet: bots play without talk for now.
-const { chance, seedState } = $m[5];
-const { NONE, alive, boardOf, bySea, mineOf, portsOf } = $m[1];
+// Bots for Margins of Trust. A bot plans from the open board, the talk and the ledger alone. It never reads anyone's
+// sheet, its own excepted, so sealed sheets cannot sway it; the same board and talk always give the same choices.
+//   easy: says nothing, accepts no bargain, takes empty land and pokes at the weakest neighbour, keeping nothing back.
+//   normal: picks one rival to press (whoever leads it in ports, else the weakest front), offers the others a pact of
+//           no strikes and asks them to back its attack; keeps back half of what could strike each province, masses
+//           on the rival it presses, supports its own attacks and holds.
+//   hard: the same, keeping back all of it, counting the defender's supports, and crossing the sea with a transport.
+// Every bot seat has a character (forms.js CAST), drawn at the start and shown to all. The character decides, when a
+// promise stands in the bot's way, whether it keeps it or breaks it, exactly as its public line says; and which
+// bargains it offers and accepts. Promises made to a bot count as far as it trusts the seat that made them: a seat
+// trusted not to strike is not guarded against, and a support promised to a bot's attack is counted.
+const { chance, seedState } = $m[6];
+const { CAST } = $m[2];
+const { NONE, WORDS, alive, boardOf, bySea, mineOf, offerOf, pending, portsOf, strengthOf } = $m[1];
 
 const TIERS = ["easy", "normal", "hard"];
 const CARE = { easy: 0, normal: 1, hard: 2, gentle: 0 }; // halves of the threat kept back at home
 
-/** For each province, the most one rival seat could bring against it by land next season. */
-function threats(p, seat) {
+/** The character of the bot at a seat. */
+const characterOf = (p, seat) => CAST[p.cast[seat]];
+
+/** What seat `to` has seen of `by`'s word: promises `by` made to it, or to everyone, marked kept and broken. */
+function record(p, by, to) {
+  let kept = 0, broken = 0;
+  for (const e of p.ledger) if (e.by === by && (e.to === to || e.to < 0)) { if (e.mark === "kept") kept++; else if (e.mark === "broken") broken++; }
+  return { kept, broken };
+}
+/** Does `seat` count on `other`'s promises? Yes, until `other` has broken more than a third of those it made to it. */
+const trusts = (p, seat, other) => { const r = record(p, other, seat); return 2 * r.broken <= r.kept; };
+/** Does `s` lead `than` in ports, with the most of anyone? */
+const leads = (p, s, than) => { const top = Math.max(...Array.from({ length: p.seats }, (_, k) => (alive(p, k) ? portsOf(p, k) : 0))); return portsOf(p, s) === top && top > portsOf(p, than); };
+
+/** Will this character keep a promise that stands in its way? Its public line, as a rule. */
+function keeps(p, seat, f, dice) {
+  const who = characterOf(p, seat).id, r = f.to >= 0 ? record(p, f.to, seat) : { kept: 0, broken: 0 };
+  if (who === "steward") return true;
+  if (who === "merchant") return r.broken === 0;
+  if (who === "elder") return r.broken < 2;
+  if (who === "climber") return f.to < 0 || !leads(p, f.to, seat);
+  if (who === "gambler") return dice.below(2) === 1;
+  return f.to < 0; // the herald
+}
+/** Will this character bargain with `other` at all? Not with a seat its line says it breaks its word to. */
+function bargains(p, seat, other) {
+  const who = characterOf(p, seat).id, r = record(p, other, seat);
+  if (who === "merchant") return r.broken === 0;
+  if (who === "elder") return r.broken < 2;
+  if (who === "climber") return !leads(p, other, seat);
+  return true;
+}
+
+/** For each province, the most one rival seat could bring against it by land next season. Seats in `allies` are not counted. */
+function threats(p, seat, allies = new Set(), safe = new Map()) {
   const b = boardOf(p), out = Array(b.n).fill(0);
   for (let t = 0; t < b.n; t++) {
     const by = new Map();
-    for (const j of b.near[t]) { const o = p.owner[j]; if (o >= 0 && o !== seat && p.str[j] > 1) by.set(o, (by.get(o) || 0) + p.str[j] - 1); }
+    for (const j of b.near[t]) { const o = p.owner[j]; if (o >= 0 && o !== seat && !allies.has(o) && !safe.get(t)?.has(o) && p.str[j] > 1) by.set(o, (by.get(o) || 0) + p.str[j] - 1); }
     out[t] = Math.max(0, ...by.values());
   }
   return out;
@@ -1510,67 +1785,185 @@ function leaders(p, seat) {
   return most > portsOf(p, seat) ? ports.flatMap((v, s) => (v === most ? [s] : [])) : [];
 }
 
-/** Steps from each province to the nearest one this seat does not hold. */
-function toFront(p, seat) {
-  const b = boardOf(p), d = Array(b.n).fill(-1), list = [];
-  for (let i = 0; i < b.n; i++) if (p.owner[i] !== seat) { d[i] = 0; list.push(i); }
+/** Steps from each province to the nearest one worth pressing: the pressed rival's, else any not held by this seat or a trusted ally. */
+function toFront(p, seat, allies = new Set(), victim = NONE) {
+  const b = boardOf(p), d = Array(b.n).fill(-1), list = [], open = (o) => o !== seat && !allies.has(o);
+  const aim = victim >= 0 && p.owner.includes(victim) ? (o) => o === victim || o === NONE : open;
+  for (let i = 0; i < b.n; i++) if (aim(p.owner[i])) { d[i] = 0; list.push(i); }
+  if (!list.length) for (let i = 0; i < b.n; i++) if (open(p.owner[i])) { d[i] = 0; list.push(i); }
   for (let k = 0; k < list.length; k++) for (const j of b.near[list[k]]) if (d[j] < 0) { d[j] = d[list[k]] + 1; list.push(j); }
   return d;
 }
 
-/** The whole sheet: a list of orders, holds left out (an unordered province holds). */
-function plan(p, seat, tier = "normal") {
-  const b = boardOf(p), threat = threats(p, seat), lead = leaders(p, seat), care = CARE[tier] ?? 1;
+const diceFor = (p, seat, what) => chance(seedState(`margins-bot/${what}/${p.key}/${p.seats}/${p.year}/${p.half}/${seat}/${p.owner.join()}/${p.str.join()}`));
+
+/**
+ * The rival to press this season: whoever leads this seat in ports, else the one whose front against it is weakest,
+ * a seat that broke its word to it first. From the board and the ledger only, so talk and orders agree on it.
+ */
+function victimOf(p, seat) {
+  const b = boardOf(p), mine = mineOf(p, seat), lead = leaders(p, seat), dice = diceFor(p, seat, "victim");
+  const near = [...new Set(mine.flatMap((i) => b.near[i]).map((j) => p.owner[j]).filter((o) => o >= 0 && o !== seat))];
+  if (!near.length) return NONE;
+  const front = (v) => Math.min(...mine.flatMap((i) => b.near[i]).filter((j) => p.owner[j] === v).map((j) => p.str[j]));
+  const climber = characterOf(p, seat).id === "climber", score = (v) => (lead.includes(v) ? (climber ? 1000 : 15) : 0) + 100 * record(p, v, seat).broken - 10 * front(v) + dice.below(10);
+  return near.map((v) => [v, score(v)]).sort((x, y) => y[1] - x[1])[0][0];
+}
+
+/**
+ * A whole sheet: a list of orders, holds left out (an unordered province holds). mind: what the bot believes and what
+ * it has promised. { victim, allies: seats trusted not to strike, safe: province -> seats trusted to keep out, help:
+ * province -> supports promised to its move there, avoid: provinces it will not enter, stay: provinces it will not move
+ * out of, backs: [{ to, seat }] supports it gives, carries: [{ a, b }] crossings it carries }.
+ */
+function plan(p, seat, tier = "normal", mind = {}) {
+  const b = boardOf(p), threat = threats(p, seat, mind.allies, mind.safe), lead = leaders(p, seat), care = CARE[tier] ?? 1;
   const dice = chance(seedState(`margins-bot/${p.key}/${p.seats}/${p.year}/${p.half}/${seat}/${tier}/${p.owner.join()}/${p.str.join()}`));
-  const spare = (i) => Math.max(0, p.str[i] - 1 - Math.floor((threat[i] * care) / 2));
+  const avoid = mind.avoid || new Set(), stay = mind.stay || new Set(), victim = mind.victim ?? NONE, easy = tier === "easy";
+  const spare = (i) => (stay.has(i) ? 0 : Math.max(0, p.str[i] - 1 - Math.floor((threat[i] * care) / 2)));
   const used = new Set(), sheet = [];
   // every list is walked in a random order of the game's own, never by number: numbers run round the sea from seat 0,
   // so walking by number would treat seat 0's march differently from the others
   const rank = dice.shuffle(b.names.map((_, i) => i)), tie = (x, y) => rank.indexOf(x) - rank.indexOf(y), mine = mineOf(p, seat).sort(tie);
-  const worth = (t) => (b.port[t] ? 30 : 10) + (lead.includes(p.owner[t]) ? 12 : 0) + (p.owner[t] === NONE ? 6 : 0) + dice.below(tier === "easy" ? 24 : 12);
-  // attacks: the best targets first, each from the neighbour with most to spare, backed by others beside it
-  const targets = [...new Set(mine.flatMap((i) => b.near[i]).filter((t) => p.owner[t] !== seat))].sort(tie);
-  const ranked = targets.map((t) => ({ t, need: (p.owner[t] === NONE ? 0 : p.str[t]) + 1, v: worth(t) })).sort((x, y) => y.v * x.need - x.v * y.need || tie(x.t, y.t));
+  // promises kept come first: a support or a transport from the province with least else to do
+  for (const k of mind.backs || []) {
+    const from = mine.filter((i) => !used.has(i) && b.near[i].includes(k.to)).sort((x, y) => spare(x) - spare(y) || tie(x, y))[0];
+    if (from !== undefined) { used.add(from); sheet.push({ at: from, kind: "support", to: k.to, seat: k.seat }); }
+  }
+  for (const k of mind.carries || []) {
+    const from = mine.filter((i) => !used.has(i) && b.port[i]).sort((x, y) => spare(x) - spare(y) || tie(x, y))[0];
+    if (from !== undefined) { used.add(from); sheet.push({ at: from, kind: "transport", a: k.a, b: k.b }); }
+  }
+  const worth = (t) => (b.port[t] ? 30 : 10) + (lead.includes(p.owner[t]) ? 12 : 0) + (p.owner[t] === victim && victim >= 0 ? 18 : 0) + (p.owner[t] === NONE ? 6 : 0) + dice.below(easy ? 24 : 12);
+  // what a defender could add: its own neighbours of the target, each a support (the hard bot counts them all)
+  const guard = (t) => { const d = p.owner[t]; if (d < 0 || easy) return 0; const k = b.near[t].filter((j) => p.owner[j] === d).length; return tier === "hard" ? k : Math.min(1, k); };
+  // attacks: the best targets first, from every neighbour with strength to spare, backed by the others beside it
+  const targets = [...new Set(mine.flatMap((i) => b.near[i]).filter((t) => p.owner[t] !== seat && !avoid.has(t)))].sort(tie);
+  const ranked = targets.map((t) => ({ t, need: (p.owner[t] === NONE ? 0 : p.str[t] + guard(t)) + 1, v: worth(t) })).sort((x, y) => y.v * x.need - x.v * y.need || tie(x.t, y.t));
   for (const { t, need } of ranked) {
-    const from = b.near[t].filter((i) => p.owner[i] === seat && !used.has(i) && spare(i) > 0).sort((x, y) => spare(y) - spare(x) || tie(x, y));
+    const near = b.near[t].filter((i) => p.owner[i] === seat && !used.has(i)), from = near.filter((i) => spare(i) > 0).sort((x, y) => spare(y) - spare(x) || tie(x, y));
     if (!from.length) continue;
-    const go = from[0], helpers = tier === "easy" ? [] : b.near[t].filter((i) => p.owner[i] === seat && !used.has(i) && i !== go).sort(tie);
-    const n = Math.min(spare(go), need + (tier === "easy" ? 0 : 1)), backing = Math.max(0, need - n);
-    if (n + Math.min(backing, helpers.length) < need) continue;
-    used.add(go);
-    sheet.push({ at: go, kind: "move", to: t, n });
-    for (const h of helpers.slice(0, backing)) { used.add(h); sheet.push({ at: h, kind: "support", to: t, seat }); }
+    const goers = [], help = mind.help?.get(t) || 0;
+    let n = 0;
+    for (const i of easy ? from.slice(0, 1) : from) { if (n + help >= need + (easy ? 0 : 1)) break; goers.push(i); n += spare(i); }
+    const backers = easy ? [] : near.filter((i) => !goers.includes(i)), backing = Math.min(backers.length, Math.max(0, need - n - help));
+    if (n + help + backing < need) continue;
+    let left = need + (easy ? 0 : 1) - help - backing; // what to send: enough, and one more
+    for (const i of goers) { const k = Math.max(1, Math.min(spare(i), left)); left -= k; used.add(i); sheet.push({ at: i, kind: "move", to: t, n: k }); }
+    for (const h of backers.slice(0, backing)) { used.add(h); sheet.push({ at: h, kind: "support", to: t, seat }); }
   }
   // the hard bot crosses the sea: a port with strength to spare, a weak port across the water, and its own transport
   if (tier === "hard") {
     const ports = mine.filter((i) => b.port[i] && !used.has(i));
     for (const go of ports) {
       if (used.has(go) || spare(go) < 2) continue;
-      const aim = b.port.map((x, t) => t).filter((t) => bySea(b, go, t) && p.owner[t] !== seat && p.str[t] + 1 <= spare(go)).sort((x, y) => p.str[x] - p.str[y] || tie(x, y))[0];
+      const aim = b.port.map((x, t) => t).filter((t) => bySea(b, go, t) && p.owner[t] !== seat && !avoid.has(t) && p.str[t] + 1 <= spare(go)).sort((x, y) => p.str[x] - p.str[y] || tie(x, y))[0];
       const carrier = ports.find((c) => c !== go && !used.has(c));
       if (aim === undefined || carrier === undefined) continue;
       used.add(go); used.add(carrier);
       sheet.push({ at: go, kind: "move", to: aim, n: spare(go) }, { at: carrier, kind: "transport", a: Math.min(go, aim), b: Math.max(go, aim) });
     }
   }
-  // what is left: back up a neighbour in danger, or send strength from safe land towards the front
-  const front = toFront(p, seat);
+  // what is left: back up a neighbour in danger, or send strength from safe land towards the front, the pressed rival's first
+  const front = toFront(p, seat, mind.allies, victim), facing = (i) => (b.near[i].some((j) => p.owner[j] === victim) ? 0 : 1);
   for (const i of mine) {
     if (used.has(i)) continue;
-    const danger = tier === "easy" ? undefined : [...b.near[i]].sort(tie).find((j) => p.owner[j] === seat && threat[j] >= p.str[j] && threat[j] > 0 && !sheet.some((o) => o.at === j && o.kind === "move"));
+    const danger = easy ? undefined : [...b.near[i]].sort(tie).find((j) => p.owner[j] === seat && threat[j] >= p.str[j] && threat[j] > 0 && !sheet.some((o) => o.at === j && o.kind === "move"));
     if (danger !== undefined && threat[i] === 0) { used.add(i); sheet.push({ at: i, kind: "support", to: danger, seat }); continue; }
-    if (front[i] > 1 && p.str[i] > 1) {
-      const to = b.near[i].filter((j) => p.owner[j] === seat).sort((x, y) => front[x] - front[y] || tie(x, y))[0];
-      if (to !== undefined && front[to] < front[i]) { used.add(i); sheet.push({ at: i, kind: "move", to, n: p.str[i] - 1 }); }
+    if (front[i] > 1 && p.str[i] > 1 && !stay.has(i)) {
+      const to = b.near[i].filter((j) => p.owner[j] === seat).sort((x, y) => front[x] - front[y] || facing(x) - facing(y) || tie(x, y))[0];
+      const n = easy ? p.str[i] - 1 : spare(i);
+      if (to !== undefined && front[to] < front[i] && n > 0) { used.add(i); sheet.push({ at: i, kind: "move", to, n }); }
     }
   }
   return sheet.sort((x, y) => x.at - y.at);
 }
 
-/** The next move: the next planned order not yet written, else seal. */
+/** Does a sheet already keep a promise? For a support or a transport: is there a province with nothing to do that could give it. */
+function fits(p, seat, f, sheet) {
+  const b = boardOf(p), moves = sheet.filter((o) => o.kind === "move"), idle = mineOf(p, seat).filter((i) => !sheet.some((o) => o.at === i));
+  if (f.form === "keep-out") return !moves.some((o) => o.to === f.at);
+  if (f.form === "no-strike") return !moves.some((o) => p.owner[o.to] >= 0 && p.owner[o.to] !== seat && (f.to < 0 || p.owner[o.to] === f.to));
+  if (f.form === "stand") return !moves.some((o) => o.at === f.at);
+  if (f.form === "carry") return idle.some((i) => b.port[i]);
+  return idle.some((i) => b.near[i].includes(f.at)); // back-move, back-hold
+}
+
+/** What this seat believes from the promises made to it this season, as far as it trusts each seat. */
+function belief(p, seat) {
+  const allies = new Set(), safe = new Map(), help = new Map();
+  for (const f of p.pledges) {
+    if (f.by === seat || (f.to !== seat && f.to >= 0) || !trusts(p, seat, f.by)) continue;
+    if (f.form === "no-strike") allies.add(f.by);
+    else if (f.form === "keep-out") (safe.get(f.at) || safe.set(f.at, new Set()).get(f.at)).add(f.by);
+    else if (f.form === "back-move" && f.to === seat) help.set(f.at, (help.get(f.at) || 0) + 1);
+  }
+  return { allies, safe, help };
+}
+
+const memo = new Map();
+const remember = (k, make) => { if (!memo.has(k)) { if (memo.size > 200) memo.clear(); memo.set(k, make()); } return memo.get(k); };
+const stamp = (p, seat, tier, what) => `${what}|${p.key}|${p.seats}|${p.round}|${seat}|${tier}|${p.owner.join()}|${p.str.join()}|${JSON.stringify(p.pledges)}|${p.ledger.length}`;
+
+/** The sheet this seat writes: planned freely, then held to the promises its character keeps. */
+function sheetOf(p, seat, tier = "normal") {
+  return remember(stamp(p, seat, tier, "sheet"), () => {
+    const mind = { victim: tier === "easy" ? NONE : victimOf(p, seat), ...(tier === "easy" ? {} : belief(p, seat)) }, free = plan(p, seat, tier, mind);
+    const mine = p.pledges.filter((f) => f.by === seat);
+    if (!mine.length) return free;
+    const dice = diceFor(p, seat, "word"), held = mine.filter((f) => fits(p, seat, f, free) || keeps(p, seat, f, dice)), avoid = new Set(), stay = new Set(), backs = [], carries = [];
+    for (const f of held) {
+      if (f.form === "keep-out") avoid.add(f.at);
+      else if (f.form === "no-strike") p.owner.forEach((o, i) => { if (o >= 0 && o !== seat && (f.to < 0 || o === f.to)) avoid.add(i); });
+      else if (f.form === "stand") stay.add(f.at);
+      else if (f.form === "carry") carries.push({ a: f.a, b: f.b });
+      else backs.push({ to: f.at, seat: f.to });
+    }
+    return plan(p, seat, tier, { ...mind, avoid, stay, backs, carries });
+  });
+}
+
+/** What a bot says in the talk: pacts of no strikes with the seats it is not pressing, and help asked for its attack. */
+function talkOf(p, seat, tier = "normal") {
+  if (tier === "easy") return [];
+  return remember(stamp(p, seat, tier, "talk"), () => {
+    const b = boardOf(p), v = victimOf(p, seat), free = plan(p, seat, tier, { victim: v }), out = [];
+    const aim = free.find((o) => o.kind === "move" && v >= 0 && p.owner[o.to] === v)?.to;
+    const mine = mineOf(p, seat), touching = (o) => mine.some((i) => b.near[i].some((j) => p.owner[j] === o));
+    const others = Array.from({ length: p.seats }, (_, o) => o).filter((o) => o !== seat && o !== v && alive(p, o) && bargains(p, seat, o)).sort((x, y) => touching(y) - touching(x) || record(p, y, seat).kept - record(p, x, seat).kept || ((x - seat + p.seats) % p.seats) - ((y - seat + p.seats) % p.seats));
+    for (const o of others) {
+      if (out.length + 2 > WORDS) break;
+      out.push({ do: "promise", form: "no-strike", to: o }, { do: "ask", form: "no-strike", to: o });
+      if (aim !== undefined && out.length < WORDS && b.near[aim].some((j) => p.owner[j] === o) && !out.some((w) => w.form === "back-move")) out.push({ do: "ask", form: "back-move", to: o, at: aim });
+    }
+    // the herald pledges in public to hold a province it means to hold anyway
+    if (characterOf(p, seat).id === "herald" && out.length < WORDS) {
+      const quiet = mine.filter((i) => !free.some((o) => o.at === i && o.kind === "move")).sort((x, y) => p.str[y] - p.str[x] || x - y)[0];
+      if (quiet !== undefined) out.push({ do: "promise", form: "stand", to: -1, at: quiet });
+    }
+    return out;
+  });
+}
+
+/** Does a bot accept the bargain `from` offers it? Not from the rival it presses, unless its character breaks its word when it pays. */
+function accepts(p, seat, from, tier = "normal") {
+  if (tier === "easy" || !bargains(p, seat, from)) return false;
+  const who = characterOf(p, seat).id, { give, ask } = offerOf(p, from, seat);
+  if (victimOf(p, seat) === from) return who === "gambler" || who === "herald";
+  const gain = give.reduce((n, f) => n + (f.form === "back-move" || f.form === "back-hold" ? 2 : 1), 0), cost = ask.filter((f) => f.form !== "no-strike" && f.form !== "back-move").length;
+  return gain >= cost;
+}
+
+/** The next move: in the talk, its next word; then its answers; then the next planned order not yet written, else seal. */
 function choose(p, dice, tier = "normal") {
-  const seat = p.seat, done = new Set(p.orders[seat].map((o) => o.at));
-  const o = plan(p, seat, tier).find((x) => !done.has(x.at));
+  const seat = p.seat;
+  if (p.stage === "talk") {
+    const said = p.talk[seat].length, w = talkOf(p, seat, tier)[said];
+    return w && p.talk[seat].length < WORDS ? w : { do: "done" };
+  }
+  if (p.stage === "answer") { const from = pending(p, seat)[0]; return { do: "answer", from, yes: accepts(p, seat, from, tier) }; }
+  const done = new Set(p.orders[seat].map((o) => o.at));
+  const o = sheetOf(p, seat, tier).find((x) => !done.has(x.at));
   return o ? { do: "order", ...o } : { do: "done" };
 }
 
@@ -1578,9 +1971,9 @@ function* thinking(p, dice, kind) {
   return choose(p, dice, kind);
 }
 
-$x.TIERS = TIERS; $x.threats = threats; $x.plan = plan; $x.choose = choose; $x.thinking = thinking;
+$x.TIERS = TIERS; $x.characterOf = characterOf; $x.record = record; $x.threats = threats; $x.victimOf = victimOf; $x.plan = plan; $x.sheetOf = sheetOf; $x.talkOf = talkOf; $x.accepts = accepts; $x.choose = choose; $x.thinking = thinking;
 return $x; })({});
-$m[14] = (($x) => {
+$m[15] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // One camera for every look. Board point (x, y) in board pixels, height Z in screen pixels.
 // The *To methods write into fields and make no objects, so picking makes no garbage.
@@ -1649,7 +2042,7 @@ function pick(cam, m, sx, sy, top, unit, most) {
 
 $x.Camera = Camera; $x.pick = pick;
 return $x; })({});
-$m[15] = (($x) => {
+$m[16] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Turns a list of hexes into what the painter needs: a picture of cell numbers and a picture of heights.
 const ROOT3 = Math.sqrt(3);
@@ -1701,7 +2094,7 @@ function hexPicture(cells, rough, sea = [], size = 44) {
 
 $x.noise = noise; $x.hexPicture = hexPicture;
 return $x; })({});
-$m[16] = (($x) => {
+$m[17] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The mesh layer: real shapes standing on the ground, shared by every game. Each model is sent to the graphics card once and
 // drawn many times (instanced), lit by the same lamp as the ground, hidden by raised cells through the depth the ground writes,
@@ -1879,7 +2272,7 @@ class Meshes {
 
 $x.HEAD = HEAD; $x.SHADE = SHADE; $x.program = program; $x.DEPTH = DEPTH; $x.aim = aim; $x.Meshes = Meshes;
 return $x; })({});
-$m[18] = (($x) => {
+$m[19] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The geometry kit: models made in code, our own work. A shape is a flat list of corners, three to a triangle,
 // ten numbers a corner: place (x, y, z with z up), which way it faces, colour (a slot in the style's palette, a shade about 128, and a spare), and finish
@@ -1980,7 +2373,7 @@ function bake(v) {
 
 $x.ears = ears; $x.lathe = lathe; $x.prism = prism; $x.box = box; $x.move = move; $x.bake = bake;
 return $x; })({});
-$m[19] = (($x) => {
+$m[20] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Styles, as data. A style is a palette, a set of finishes, a lamp, a surface, a table to lie on and a named set of models:
 // nothing in the grounds, the mesh layer or the recipes knows one style from another, so a new style is a new entry here
@@ -2127,13 +2520,13 @@ function seatsOf(chosen, style) { const s = styleOf(style), set = SEATS[seatSet(
 
 $x.SLOT = SLOT; $x.STYLES = STYLES; $x.STYLE_KEY = STYLE_KEY; $x.styleOf = styleOf; $x.wear = wear; $x.SEATS = SEATS; $x.SEATS_KEY = SEATS_KEY; $x.LANDS = LANDS; $x.washed = washed; $x.darkBoard = darkBoard; $x.seatSet = seatSet; $x.seatsOf = seatsOf;
 return $x; })({});
-$m[17] = (($x) => {
+$m[18] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The recipes: every model the boards stand on the table, made in code with the kit (our own work, in the manner of painted
 // war-game miniatures: metal bases, matte paint, the owner's colour as enamel). One cell's radius is 1; z is up; +y is toward the player.
 // A recipe paints with the style's palette slots, so another style recolours all of them at once.
-const { bake, box, lathe, move, prism } = $m[18];
-const { SLOT } = $m[19];
+const { bake, box, lathe, move, prism } = $m[19];
+const { SLOT } = $m[20];
 
 const c = (slot, shade = 128) => [SLOT[slot], shade, 0], TAU = Math.PI * 2, UP = Math.PI / 2;
 const ring = (n, r, f) => { for (let i = 0; i < n; i++) { const a = (i / n) * TAU; f(Math.cos(a) * r, Math.sin(a) * r, a, i); } };
@@ -2301,7 +2694,7 @@ function models(kit = {}) {
 
 $x.unpack = unpack; $x.models = models;
 return $x; })({});
-$m[21] = (($x) => {
+$m[22] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Made by tools/models.mjs from tools/figures.json; do not edit by hand. The sculpted models on the shelf (site/models/), each
 // fetched only when a board in 3D shows it, with its licence and the credit line the credits panel shows players.
@@ -2326,13 +2719,13 @@ const SHELF = {
 
 $x.SHELF = SHELF;
 return $x; })({});
-$m[20] = (($x) => {
+$m[21] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Sculpted pieces in place of the recipes made in code, where they are better: which model stands for a piece in each era and
 // region, and fetching each one only when a board in 3D first shows it. Looks only: no rule ever reads a model. The recipes stay
 // as the fallback (Flat, a page with no shelf, a style that keeps to its own set, a model not yet arrived) and nothing waits on one.
-const { SHELF } = $m[21];
-const { unpack } = $m[17];
+const { SHELF } = $m[22];
+const { unpack } = $m[18];
 
 /** Which shelf model takes a recipe's place, by era. A name missing here, or from the shelf, keeps its recipe. */
 const ERAS = {
@@ -2387,11 +2780,11 @@ function figures(era, fetch, got) {
 
 $x.ERAS = ERAS; $x.REGIONS = REGIONS; $x.SORT = SORT; $x.eraOf = eraOf; $x.figures = figures;
 return $x; })({});
-$m[22] = (($x) => {
+$m[23] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The painter: WebGL2 by hand. One full-screen triangle; the shader undoes the camera and walks down to the first cell top.
 // It writes the depth of what it found, so that the mesh layer's real shapes are hidden by raised cells, and it takes their shadows.
-const { DEPTH, SHADE } = $m[16];
+const { DEPTH, SHADE } = $m[17];
 const VS = `#version 300 es
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS = `#version 300 es
@@ -2594,13 +2987,13 @@ class Painter {
 
 $x.Painter = Painter;
 return $x; })({});
-$m[23] = (($x) => {
+$m[24] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Reading a board at a glance: the goods' own symbols and their key, pips under a number, a port's rate on a plate by its flag,
 // a seat's routes as links between hexes, and flags on what can still act. Our own simple shapes, drawn in code.
 // Looks only: no rule ever reads them.
-const { bake, box } = $m[18];
-const { SLOT } = $m[19];
+const { bake, box } = $m[19];
+const { SLOT } = $m[20];
 
 const TAU = Math.PI * 2, INK = "#1a1411", PALE = "#fdf6e4";
 const oval = (c, x, y, rx, ry, a = 0) => { c.moveTo(x + rx * Math.cos(a), y + rx * Math.sin(a)); c.ellipse(x, y, rx, ry, a, 0, TAU); c.closePath(); };
@@ -2758,7 +3151,7 @@ function legend(items, title = "Goods") {
 
 $x.GLYPHS = GLYPHS; $x.glyph = glyph; $x.stamp = stamp; $x.pips = pips; $x.portPlate = portPlate; $x.flag = flag; $x.linkModels = linkModels; $x.linkEnds = linkEnds; $x.stageLinks = stageLinks; $x.drawLinks = drawLinks; $x.legend = legend;
 return $x; })({});
-$m[24] = (($x) => {
+$m[25] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Names on the map and number plates that keep out of each other's way. A plate that would cover another is moved to the
 // nearest free place and tied back to its piece by a thin line; a name that has no room, or no room in its province, is left out.
@@ -2850,21 +3243,21 @@ function drawNames(ctx, cam, m, show, unit, places, taken, hover, plates, tall) 
 
 $x.spread = spread; $x.tie = tie; $x.reach = reach; $x.nameFont = nameFont; $x.word = word; $x.drawNames = drawNames;
 return $x; })({});
-$m[13] = (($x) => {
+$m[14] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A hex board on a page: the painted surface, standing pieces and emblems, picking, looks and animation.
 // It never changes a game. It is told what to show and says which cell was pointed at.
-const { Camera, pick } = $m[14];
-const { hexPicture } = $m[15];
-const { Meshes } = $m[16];
-const { models, unpack } = $m[17];
+const { Camera, pick } = $m[15];
+const { hexPicture } = $m[16];
+const { Meshes } = $m[17];
+const { models, unpack } = $m[18];
 // figures hook
-const { figures } = $m[20];
-const { Painter } = $m[22];
-const { STYLES, styleOf, wear } = $m[19];
+const { figures } = $m[21];
+const { Painter } = $m[23];
+const { STYLES, styleOf, wear } = $m[20];
 // reading hook (p10-reading): the goods, pips, ports, links and flags; names and plates that keep clear of each other
-const { drawLinks, flag, linkModels, pips, portPlate, stageLinks, stamp } = $m[23];
-const { drawNames, spread, tie } = $m[24];
+const { drawLinks, flag, linkModels, pips, portPlate, stageLinks, stamp } = $m[24];
+const { drawNames, spread, tie } = $m[25];
 
 const DEG = Math.PI / 180;
 const LOOKS = {
@@ -3382,15 +3775,15 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
 
 $x.LOOKS = LOOKS; $x.EMBLEMS = EMBLEMS; $x.emblem = emblem; $x.seatPattern = seatPattern; $x.canDraw = canDraw; $x.createBoard = createBoard;
 return $x; })({});
-$m[26] = (($x) => {
+$m[27] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Where this copy's source code can be read. Anyone who runs a changed copy puts their own address here.
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-const VERSION = "0.10.4";
+const VERSION = "0.10.5";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "d2259c8d";
+const BUILD = "8c5636ce";
 // guide hook (ruling 153.8): each AI service's own pages, for links in the Choose an AI guide (site/aiguide.js). A player
 // follows them in a new tab; the page never fetches them, and its rule does not reach them. Kept above the list of services
 // the page may call, because the gate reads every address after that list's name as one the page calls.
@@ -3449,7 +3842,7 @@ const PLAY_ADDRESSES = [
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_LINKS = AI_LINKS; $x.AI_BASES = AI_BASES; $x.LIVE_ADDRESSES = LIVE_ADDRESSES; $x.PLAY_ADDRESSES = PLAY_ADDRESSES;
 return $x; })({});
-$m[27] = (($x) => {
+$m[28] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
 // Daylight or lamplight, as the table games' Light setting last left it; every page starts here. The front page has one theme.
@@ -3469,10 +3862,10 @@ function guard() {
 
 $x.guard = guard;
 return $x; })({});
-$m[25] = (($x) => {
+$m[26] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-const { BUILD, SOURCE_URL, VERSION } = $m[26];
-const { guard } = $m[27];
+const { BUILD, SOURCE_URL, VERSION } = $m[27];
+const { guard } = $m[28];
 
 /** Every page shows its version and where its source can be read. */
 function footer() {
@@ -3488,12 +3881,12 @@ function footer() {
 
 $x.footer = footer;
 return $x; })({});
-$m[28] = (($x) => {
+$m[29] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Games played by pasting a link. The whole game is in the part after #, which browsers do not send to the host.
 // With a password the game is locked (AES-GCM, the key made from the password by PBKDF2) before it goes in the link.
-const { Refusal } = $m[5];
-const { SITE_URL } = $m[26];
+const { Refusal } = $m[6];
+const { SITE_URL } = $m[27];
 
 const ID = 6, SALT = 16, IV = 12, ROUNDS = 250000, PLACE = "capo-link-";
 const broken = () => new Refusal("link", "that link is broken or not complete");
@@ -3553,7 +3946,7 @@ const linkGames = {
 
 $x.canLock = canLock; $x.newId = newId; $x.makeLink = makeLink; $x.readLink = readLink; $x.linkGames = linkGames;
 return $x; })({});
-$m[29] = (($x) => {
+$m[30] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The coach: a guided first game. A game gives a fixed seed, a short preset and a few steps. Each step points at a place
 // on the board or a control, says one plain sentence, and goes on when the player does the thing (or presses Next, for a step
@@ -3695,11 +4088,11 @@ function coach(T, L, key, go) {
 
 $x.coach = coach;
 return $x; })({});
-$m[30] = (($x) => {
+$m[31] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The model shelf as the pages reach it: a sculpted piece is fetched from site/models/ only when a board in 3D first shows it,
 // and the credits players can read from every game's About (CC BY asks for a credit line they can reach).
-const { SHELF } = $m[21];
+const { SHELF } = $m[22];
 
 // the built pages point this at the site's own shelf when served, and at nothing when a page is opened by double-click (no fetching there)
 const SHELF_URL = "../site/models/";
@@ -3724,7 +4117,7 @@ function shelfCredits() {
 
 $x.shelf = shelf; $x.shelfCredits = shelfCredits;
 return $x; })({});
-$m[31] = (($x) => {
+$m[32] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What the table games' screen keeps for the player: settings, sounds made in code, and the order of places at the end.
 // No page is touched when this is loaded, so its plain parts are tested in Node (test/shell.test.mjs).
@@ -3826,13 +4219,13 @@ function cue(events) {
 
 $x.SETTINGS_KEY = SETTINGS_KEY; $x.CHOICES = CHOICES; $x.DEFAULTS = DEFAULTS; $x.SETTINGS_V = SETTINGS_V; $x.PACE = PACE; $x.SCALE = SCALE; $x.parseSettings = parseSettings; $x.settings = settings; $x.saveSettings = saveSettings; $x.takeBack = takeBack; $x.turnKey = turnKey; $x.ranked = ranked; $x.resultText = resultText; $x.wake = wake; $x.audio = audio; $x.sfx = sfx; $x.cue = cue;
 return $x; })({});
-$m[33] = (($x) => {
+$m[34] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Motion over a board: dice that tumble and settle, pieces that travel, a ring where land changes hands, a flourish where
 // something is built, pennants for a win. Drawn on one canvas above the board, and only while something moves.
 // It never changes a game and never holds one up: the board already shows the new position, and motion only follows it.
 // Places are asked for every frame (where(i, dx, dy) gives a point and a piece's size there), so a board that pans keeps them.
-const { emblem } = $m[13];
+const { emblem } = $m[14];
 
 const out3 = (k) => 1 - (1 - k) ** 3, smooth = (k) => k * k * (3 - 2 * k), clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, k) => a + (b - a) * k, shade = (rgb, f, add = 0) => `rgb(${rgb.map((v) => Math.round(clamp(v * f + add, 0, 255)))})`;
@@ -4041,11 +4434,11 @@ function pennants(colours, box, { ms = 2600, many = 34 } = {}) {
 
 $x.createMotion = createMotion; $x.travel = travel; $x.dice = dice; $x.capture = capture; $x.build = build; $x.pulse = pulse; $x.sweep = sweep; $x.pennants = pennants;
 return $x; })({});
-$m[34] = (($x) => {
+$m[35] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The table games' cues, made here with the Web Audio API as they are needed: no sound files. Short and quiet, under the
 // player's sound switch and volume (site/shell.js), and silent until a press has woken them.
-const { audio, settings } = $m[31];
+const { audio, settings } = $m[32];
 
 const last = new Map();
 /** One voice: a tone that swells and dies away, gliding to `to` hertz if given. */
@@ -4135,15 +4528,15 @@ function voice(key, events, move, p, moving) {
 
 $x.CUES = CUES; $x.play = play; $x.cuesOf = cuesOf; $x.voice = voice;
 return $x; })({});
-$m[32] = (($x) => {
+$m[33] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Motion and sound for the table games: what each game's events look like as they happen, played over the board.
 // The rules have already moved when this is called, and the board already shows where things stand: nothing here waits for an
 // animation, holds up a move or changes a position. With motion reduced (the setting, or the system's wish) nothing moves;
 // with the sound off nothing sounds. The camera follows a rival's move only while the player has not moved the map lately.
-const { build, capture, createMotion, dice, pennants, pulse, sweep, travel } = $m[33];
-const { settings } = $m[31];
-const { voice } = $m[34];
+const { build, capture, createMotion, dice, pennants, pulse, sweep, travel } = $m[34];
+const { settings } = $m[32];
+const { voice } = $m[35];
 
 let layer = null, touched = -1e9, fight = null, glide = null, RGB = [], ICONS = []; // the seats' colours and emblems, as the table dressed them
 const PALE = [206, 196, 170], GOODS = [[226, 196, 96], [176, 208, 216], [196, 120, 82], [228, 226, 214]];
@@ -4287,16 +4680,16 @@ function hail(box, colours) {
 
 $x.moving = moving; $x.frames = frames; $x.throwDice = throwDice; $x.bannersDice = bannersDice; $x.stir = stir; $x.hail = hail;
 return $x; })({});
-$m[35] = (($x) => {
+$m[36] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Live play by two pasted links (ruling 155; option A of the servers paper). A game by link is upgraded: its invitation is the
 // game's own link with a WebRTC offer added, the friend's page answers with a reply link, and the two browsers then talk straight
 // to each other over a data channel. No server of ours is involved; the one outside address is the STUN service in config.js,
 // reached only after a player asks for live play. If no direct path is found, nothing is lost: the game goes on by links.
 // The rules of the exchange (dealing, salted dice, checks, catching up) are in src/core/session.js.
-const { Refusal, createMatch, createSession, openSave, packGame } = $m[5];
-const { LIVE_ADDRESSES } = $m[26];
-const { makeLink, readLink } = $m[28];
+const { Refusal, createMatch, createSession, openSave, packGame } = $m[6];
+const { LIVE_ADDRESSES } = $m[27];
+const { makeLink, readLink } = $m[29];
 
 const GATHER = 4000, OPEN = 25000, SHAKY = 7000, HAND = "capo-live-reply", MOST = 2000000;
 const canLive = () => typeof RTCPeerConnection === "function" && !!globalThis.crypto?.getRandomValues;
@@ -4563,7 +4956,7 @@ function liveLink({ T, G, begin, sheet, closeSheet, toast, el, names, send }) {
 
 $x.canLive = canLive; $x.PRIVACY = PRIVACY; $x.FAIR = FAIR; $x.liveLink = liveLink;
 return $x; })({});
-$m[38] = (($x) => {
+$m[39] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Two small things every part of Capo's story game shares: the hard line, and repeatable chance.
 
@@ -4596,13 +4989,13 @@ const draw100 = (seed, label) => (hash32(seed, label) % 100) + 1;
 
 $x.crosses = crosses; $x.crossesLine = crossesLine; $x.hash32 = hash32; $x.draw100 = draw100;
 return $x; })({});
-$m[37] = (($x) => {
+$m[38] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The community shelf (ruling 155, option D): scenarios, Capo stories and table-game replays players share as files,
 // kept in the repository's shelf/ folder and read by the pages from their own site. This is the shelf's format and
 // the checks every entry passes, the same in the pages and in the gate (tools/shelf.mjs), before any game reader sees
 // its data. Data only: nothing in an entry is ever run, and nothing in it may name a web address or an email address.
-const { crosses } = $m[38];
+const { crosses } = $m[39];
 
 const KIND = "capo-shelf", INDEX = "capo-shelf-index";
 /** What an entry is. A scenario and a story are Capo's; a replay is a table game's, from its seed and moves. */
@@ -4715,14 +5108,14 @@ function makeEntry(meta, data, result) {
 
 $x.KIND = KIND; $x.INDEX = INDEX; $x.TYPES = TYPES; $x.GAMES = GAMES; $x.LICENCES = LICENCES; $x.LIMIT = LIMIT; $x.textsOf = textsOf; $x.refused = refused; $x.idFor = idFor; $x.checkEntry = checkEntry; $x.cardOf = cardOf; $x.readIndex = readIndex; $x.indexOf = indexOf; $x.DASH = DASH; $x.storyOf = storyOf; $x.makeEntry = makeEntry;
 return $x; })({});
-$m[36] = (($x) => {
+$m[37] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The community shelf in the pages (ruling 155, option D): browse what players have shared and open it, and make a
 // shelf file from your own scenario, story or replay. The shelf is read from this site's own shelf/ folder; this page
 // never sends anything. Offering a file is done by the player, on GitHub, with their own account, if they choose to.
 // Used by Capo's first screen and Game menu (site/game.js) and by every table game's menu (site/table.js).
-const { GAMES, LICENCES, LIMIT, TYPES, checkEntry, makeEntry, readIndex } = $m[37];
-const { SOURCE_URL } = $m[26];
+const { GAMES, LICENCES, LIMIT, TYPES, checkEntry, makeEntry, readIndex } = $m[38];
+const { SOURCE_URL } = $m[27];
 
 const HOME = "../shelf/", BRANCH = "main"; // the folder beside site/ and play/; the branch offers are made against
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
@@ -4860,26 +5253,26 @@ function shareView({ type, game, data, result, from, title = "", about = "", wha
 
 $x.loadIndex = loadIndex; $x.loadEntry = loadEntry; $x.shelfView = shelfView; $x.shareView = shareView;
 return $x; })({});
-$m[12] = (($x) => {
+$m[13] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What every table game's screen shares: title, seats, score bar, words, taking back, saving, bots' turns and the end.
 // A game gives its rules, its board and its own move panel.
-const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } = $m[5];
-const { EMBLEMS, emblem } = $m[13];
-const { SEATS, SEATS_KEY, STYLE_KEY, seatSet, seatsOf } = $m[19];
-const { footer } = $m[25];
-const { canLock, linkGames, makeLink, newId, readLink } = $m[28];
-const { BUILD, SOURCE_URL, VERSION } = $m[26];
-const { coach } = $m[29];
+const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } = $m[6];
+const { EMBLEMS, emblem } = $m[14];
+const { SEATS, SEATS_KEY, STYLE_KEY, seatSet, seatsOf } = $m[20];
+const { footer } = $m[26];
+const { canLock, linkGames, makeLink, newId, readLink } = $m[29];
+const { BUILD, SOURCE_URL, VERSION } = $m[27];
+const { coach } = $m[30];
 // figures hook
-const { shelfCredits } = $m[30];
-const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } = $m[31];
+const { shelfCredits } = $m[31];
+const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } = $m[32];
 // motion hook: motion and sound that follow each move (site/motion.js, site/sound.js)
-const { hail, stir } = $m[32];
+const { hail, stir } = $m[33];
 // livelink hook: live play by two pasted links, straight between two browsers (site/livelink.js)
-const { liveLink } = $m[35];
+const { liveLink } = $m[36];
 // shelf hook: the community shelf, to browse and open replays and to share this game as one (site/community.js)
-const { shareView, shelfView } = $m[36];
+const { shareView, shelfView } = $m[37];
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -5008,7 +5401,7 @@ function createTable(G) {
   send.id = "send"; send.hidden = skip.hidden = pass.hidden = true;
   sendRow.append(sendShare, sendCopy); send.append(sendSay, sendRow);
   $("act").append(send, skip);
-  $("title").querySelector(".links").append(linkButton);
+  if (G.links !== false) $("title").querySelector(".links").append(linkButton); // links hook: a game whose play by link is not ready yet says links: false
   Object.assign(passField, { type: "text", className: "field", placeholder: "None", autocomplete: "off", maxLength: 100 });
   passField.setAttribute("aria-label", "Password for the link, if you want one");
   pass.append(el("span", "Password"), passField);
@@ -5635,7 +6028,7 @@ function createTable(G) {
   function menu(at = tab) {
     tab = at;
     if (!$("sheet").open || !$("sheet-body").contains(menuBox)) sheet(G.title, menuBox, T.demo ? "Close" : "Resume", "wide tabbed");
-    radio(tabs, [["game", "Game"], ["settings", "Settings"], ["link", "Link play"], ["about", "About"]].map(([value, label]) => ({ value, label })), tab, menu, true);
+    radio(tabs, [["game", "Game"], ["settings", "Settings"], ...(G.links === false ? [] : [["link", "Link play"]]), ["about", "About"]].map(([value, label]) => ({ value, label })), tab, menu, true); // links hook
     for (const b of tabs.children) b.setAttribute("aria-controls", pane.id);
     pane.setAttribute("aria-label", tabs.querySelector("[aria-selected=true]").textContent);
     pane.replaceChildren({ game: gameTab, settings: settingsTab, link: linkBox, about: aboutTab }[tab]());
@@ -5744,7 +6137,7 @@ function createTable(G) {
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
       const li = el("li"), k = el("select");
-      k.append(...KINDS.filter(([v]) => v !== "hard" || G.hard).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one
+      k.append(...KINDS.filter(([v]) => (v !== "hard" || G.hard) && (v !== "away" || G.links !== false)).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one; links hook: no friend by link where links: false
       k.value = setup.who[s];
       k.setAttribute("aria-label", NAMES[s]);
       k.onchange = () => { setup.who[s] = k.value; passLine(); };
@@ -5910,27 +6303,42 @@ $x.COLOURS = COLOURS; $x.NAMES = NAMES; $x.RGB = RGB; $x.ICONS = ICONS; $x.PAPER
 return $x; })({});
 $m[0] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Margins of Trust on the table (early): write your orders in secret, seal them, and read the reveal, where every
-// order says what happened to it and why. A flat board of three rings round an inner sea, drawn here in SVG.
-const { HALVES, NONE, YEARS, alive, boardOf, margins, mineOf, nameOf, orderText, ordersAt, portsOf, reason, seasonText, strengthOf, supplyOf, toWin } = $m[1];
-const { choose, thinking, threats } = $m[4];
-const { SEA } = $m[2];
-const { $, NAMES, RGB, createTable, el, radio, sheet, sign, toast } = $m[12];
+// Margins of Trust on the table (early): talk in the fixed promise forms, answer the bargains offered you, write your
+// orders in secret and seal them, then step through the reveal, where every order says what happened to it and why,
+// and the ledger marks every promise kept, broken or void. A flat board of three rings round an inner sea, drawn here in SVG.
+const { HALVES, LEADS, NONE, WORDS, YEARS, alive, boardOf, formsOf, ledgerFor, margins, mineOf, nameOf, offerOf, orderText, ordersAt, pending, portsOf, reason, seasonText, strengthOf, toWin } = $m[1];
+const { characterOf, choose, thinking, threats } = $m[5];
+const { formText } = $m[2];
+const { SEA } = $m[3];
+const { resolve } = $m[4];
+const { $, NAMES, RGB, createTable, el, radio, sheet, sign, toast } = $m[13];
 
 const PAPER = [233, 221, 190], INK = "#2b2219";
 const BAD = ["lost", "held-off", "tie", "outdone", "swap", "no-transport", "cut", "void", "fell"];
-// what is being written: the orders so far (by province), for which season and seat, and what is chosen
+const FORM_NAMES = { "keep-out": "Keep out of", "back-move": "Back a move into", "back-hold": "Back the hold of", stand: "Hold", "no-strike": "No strikes", carry: "Carry" };
+const MARK_WORDS = { kept: "Kept", broken: "Broken", void: "Void: it could not apply" };
+// what is being written: the orders so far (by province), for which stage, season and seat, and what is chosen
 let draft = new Map(), draftKey = "", chosen = null, kind = "move", opened = "", reveal = null;
-const keyOf = (p) => `${p.round}/${p.seat}`;
+// the talk being written: words not yet said, and the form being put together
+let said = [], mode = "promise", whom = null, form = null, where = null, shell = null;
+const keyOf = (p) => `${p.round}/${p.stage}/${p.seat}`;
 const named = (p) => (i) => nameOf(p, i), who = (s) => NAMES[s];
 const covered = (T) => !T.solo() && opened !== keyOf(T.match.position);
-const writing = (T) => T.ready() && !covered(T) && draftKey === keyOf(T.match.position);
+const writing = (T) => T.ready() && !covered(T) && !replaying(T) && T.match.position.stage === "write" && draftKey === keyOf(T.match.position);
+const replaying = (T) => !!reveal && !reveal.done && !T.demo && T.ready();
 const mix = (rgb, k) => rgb.map((v, i) => Math.round(v * k + PAPER[i] * (1 - k)));
 const inkOn = (rgb) => (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114 > 140000 ? INK : "#fdf6e4");
+const button = (text, cls, go) => { const b = el("button", text, cls); b.type = "button"; b.onclick = go; return b; };
+/** The seat whose private promises this screen may show: the one person in a solo game; with several people, none (public only). */
+const viewer = (T) => (T.solo() ? T.kinds.indexOf("you") : -1);
+const isBot = (T, s) => ["easy", "normal", "hard"].includes(T.kinds[s]);
+/** The panel's first line: plain for one person; with the seat's name first when several share the device. */
+const headline = (T, s, text) => (T.solo() ? `${text[0].toUpperCase()}${text.slice(1)}` : `${NAMES[s]}: ${text}`);
+const castLine = (T, p, s) => (T.kinds[s] === "easy" ? "An easy bot: says nothing, accepts no bargain." : `${characterOf(p, s).name[0].toUpperCase()}${characterOf(p, s).name.slice(1)}: ${characterOf(p, s).line}`);
 
 function sync(T) {
   const k = keyOf(T.match.position);
-  if (k !== draftKey) { draftKey = k; draft = new Map(); chosen = null; kind = "move"; }
+  if (k !== draftKey) { draftKey = k; draft = new Map(); chosen = null; kind = "move"; said = []; form = where = null; }
 }
 
 // ---- the board ----
@@ -5949,14 +6357,14 @@ function ringBoard(T, stage) {
     const [x0, y0] = pt(r1, a0), [x1, y1] = pt(r1, a1), [x2, y2] = pt(r0, a1), [x3, y3] = pt(r0, a0);
     return `M${f(x0)} ${f(y0)}A${r1} ${r1} 0 ${big} 1 ${f(x1)} ${f(y1)}L${f(x2)} ${f(y2)}A${r0} ${r0} 0 ${big} 0 ${f(x3)} ${f(y3)}Z`;
   }
-  /** The arrows to draw: your own orders while you write them, else the last reveal's, for everyone. */
-  function arrows(p) {
-    if (writing(T)) return [...draft].map(([at, o]) => ({ ...o, at, of: p.seat }));
-    if (!reveal) return [];
-    return reveal.events.filter((e) => e.kind === "order" && e.r.kind !== "hold").map((e) => ({ ...e.r, failed: BAD.includes(e.r.code) }));
+  /** What to draw: a step of the reveal while it is stepped through; else the board, with your own orders while you write them, or the last reveal's. */
+  function view(p) {
+    if (replaying(T)) { const s = reveal.steps[reveal.step]; return { owner: s.board.owner, str: s.board.str, arrows: s.arrows }; }
+    const arrows = writing(T) ? [...draft].map(([at, o]) => ({ ...o, at, of: p.seat })) : reveal ? reveal.steps[0].arrows.map((a) => ({ ...a, failed: BAD.includes(a.code) })) : [];
+    return { owner: p.owner, str: p.str, arrows };
   }
   function draw() {
-    const p = T.match.position, g = geo(), { b } = g, defs = make("defs");
+    const p = T.match.position, g = geo(), { b } = g, defs = make("defs"), v = view(p);
     for (let s = 0; s < p.seats; s++) {
       const m = make("marker", { id: `head-${s}`, viewBox: "0 0 10 10", refX: 7, refY: 5, markerWidth: 3.2, markerHeight: 3.2, orient: "auto-start-reverse" });
       m.append(make("path", { d: "M0 0L10 5L0 10z", fill: `rgb(${RGB[s]})` }));
@@ -5968,10 +6376,10 @@ function ringBoard(T, stage) {
     label.textContent = SEA;
     const parts = [defs, sea, label], tops = [];
     for (let i = 0; i < b.n; i++) {
-      const o = p.owner[i], fill = o === NONE ? mix([206, 190, 150], 0.35 + 0.1 * (b.land[i] % 2)) : mix(RGB[o], 0.62), path = make("path", { d: wedge(g, i), fill: `rgb(${fill})`, class: `prov${hi.cells.includes(i) ? " can" : ""}${hi.ring === i ? " chosen" : ""}` });
+      const o = v.owner[i], fill = o === NONE ? mix([206, 190, 150], 0.35 + 0.1 * (b.land[i] % 2)) : mix(RGB[o], 0.62), path = make("path", { d: wedge(g, i), fill: `rgb(${fill})`, class: `prov${hi.cells.includes(i) ? " can" : ""}${hi.ring === i ? " chosen" : ""}` });
       path.addEventListener("click", () => tap(T, i));
       const title = make("title");
-      title.textContent = `${nameOf(p, i)}${b.port[i] ? ", a port" : ""}: ${o === NONE ? "nobody's" : `${NAMES[o]}, ${p.str[i]} strong`}`;
+      title.textContent = `${nameOf(p, i)}${b.port[i] ? ", a port" : ""}: ${o === NONE ? "nobody's" : `${NAMES[o]}, ${v.str[i]} strong`}`;
       path.append(title);
       parts.push(path);
       const [x, y] = g.mid(i);
@@ -5983,24 +6391,25 @@ function ringBoard(T, stage) {
         const rgb = RGB[o];
         tops.push(make("circle", { cx: x.toFixed(2), cy: (y - 0.8).toFixed(2), r: 3.6, fill: `rgb(${rgb})`, stroke: INK, "stroke-width": 0.4 }));
         const n = make("text", { x: x.toFixed(2), y: (y - 0.6).toFixed(2), class: "count", fill: inkOn(rgb) });
-        n.textContent = String(p.str[i]);
+        n.textContent = String(v.str[i]);
         tops.push(n);
       }
     }
-    for (const a of arrows(p)) {
-      const s = a.of, [x0, y0] = g.mid(a.at), cls = `arrow ${a.kind}${a.failed ? " failed" : ""}`, stroke = `rgb(${RGB[s]})`;
-      if (a.kind === "transport") {
-        const [xa, ya] = g.mid(a.a), [xb, yb] = g.mid(a.b);
-        parts.push(make("path", { d: `M${xa.toFixed(1)} ${ya.toFixed(1)}Q0 0 ${xb.toFixed(1)} ${yb.toFixed(1)}`, class: cls, stroke }));
-        continue;
+    for (const a of v.arrows) {
+      const s = a.of, [x0, y0] = g.mid(a.at), cls = `arrow ${a.kind}${a.failed ? " failed" : ""}${a.lit ? " lit" : ""}`, stroke = `rgb(${RGB[s]})`;
+      let d;
+      if (a.kind === "transport") { const [xa, ya] = g.mid(a.a), [xb, yb] = g.mid(a.b); d = `M${xa.toFixed(1)} ${ya.toFixed(1)}Q0 0 ${xb.toFixed(1)} ${yb.toFixed(1)}`; } else {
+        const [x1, y1] = g.mid(a.to), dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1, cut = 4.5 / len, sx = x0 + dx * cut, sy = y0 + dy * cut, ex = x1 - dx * cut, ey = y1 - dy * cut;
+        const bySea = a.kind === "move" && !b.near[a.at].includes(a.to);
+        d = bySea ? `M${sx.toFixed(1)} ${sy.toFixed(1)}Q${((x0 + x1) * 0.2).toFixed(1)} ${((y0 + y1) * 0.2).toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}` : `M${sx.toFixed(1)} ${sy.toFixed(1)}L${ex.toFixed(1)} ${ey.toFixed(1)}`;
       }
-      const [x1, y1] = g.mid(a.to), dx = x1 - x0, dy = y1 - y0, d = Math.hypot(dx, dy) || 1, cut = 4.5 / d, sx = x0 + dx * cut, sy = y0 + dy * cut, ex = x1 - dx * cut, ey = y1 - dy * cut;
-      const sea = a.kind === "move" && !b.near[a.at].includes(a.to);
-      const path = sea ? `M${sx.toFixed(1)} ${sy.toFixed(1)}Q${((x0 + x1) * 0.2).toFixed(1)} ${((y0 + y1) * 0.2).toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}` : `M${sx.toFixed(1)} ${sy.toFixed(1)}L${ex.toFixed(1)} ${ey.toFixed(1)}`;
-      parts.push(make("path", { d: path, class: cls, stroke, "marker-end": `url(#${a.kind === "move" ? "head" : "dot"}-${s})` }));
+      const path = make("path", { d, class: cls, stroke, ...(a.kind === "transport" ? {} : { "marker-end": `url(#${a.kind === "move" ? "head" : "dot"}-${s})` }) });
+      // a revealed order says what happened to it: hover, or tap
+      if (a.code) { const t = make("title"), said = reason(a, named(p), who); t.textContent = said; path.append(t); path.addEventListener("click", (e) => { e.stopPropagation(); toast(said); }); }
+      parts.push(path);
     }
     svg.classList.toggle("tight", Math.min(svg.clientWidth, svg.clientHeight) < 520);
-    svg.setAttribute("aria-label", `The board: ${b.n} provinces in three rings round ${SEA}. ${Array.from({ length: p.seats }, (_, s) => `${NAMES[s]} holds ${mineOf(p, s).length}, ${portsOf(p, s)} ports`).join("; ")}.`);
+    svg.setAttribute("aria-label", `The board: ${b.n} provinces in three rings round ${SEA}. ${Array.from({ length: p.seats }, (_, s) => `${NAMES[s]} holds ${v.owner.filter((o) => o === s).length}, ${v.owner.filter((o, i) => o === s && b.port[i]).length} ports`).join("; ")}.`);
     svg.replaceChildren(...parts, ...tops);
   }
   const fit = () => Object.assign(svg.style, { left: `${room.left || 0}px`, top: `${room.top || 0}px`, width: `calc(100% - ${(room.left || 0) + (room.right || 0)}px)`, height: `calc(100% - ${(room.top || 0) + (room.bottom || 0)}px)` });
@@ -6051,13 +6460,116 @@ function tap(T, i) {
 
 function seal(T) {
   if (!writing(T)) return;
-  const p = T.match.position;
   for (const [at, o] of [...draft].sort((x, y) => x[0] - y[0])) if (o.kind !== "hold") T.match.play({ do: "order", at, ...o });
   draft = new Map(); chosen = null;
   T.play({ do: "done" });
 }
 
-// ---- the reveal ----
+// ---- the talk ----
+/** A promise in words: who to whom, the form, and its mark when it has one. */
+function pledgeText(p, f, viewer = -1) {
+  const by = f.by === viewer ? "You" : NAMES[f.by], to = f.to < 0 ? "everyone" : f.to === viewer ? "you" : NAMES[f.to];
+  return `${by} to ${to}: ${formText(f, named(p))}${f.mark ? ` ${MARK_WORDS[f.mark]}.` : ""}`;
+}
+function talkPanel(T) {
+  const p = T.match.position, s = p.seat, asking = mode === "ask", seats = Array.from({ length: p.seats }, (_, k) => k).filter((k) => k !== s && alive(p, k));
+  const left = WORDS - said.length;
+  $("status").textContent = headline(T, s, "talk, before anyone writes");
+  $("talk-say").textContent = `${seasonText(p)}. Promise, or ask a promise in return. A seat you ask accepts or declines all you said to it. Promises are marked kept or broken after the reveal, never enforced. ${left ? `${left} more this season.` : "That is all for this season."}`;
+  // who sits here, for a solo player reading the bots
+  const cast = seats.filter((k) => isBot(T, k)).map((k) => { const li = el("li"); li.append(sign(k), el("b", NAMES[k]), ` ${castLine(T, p, k)}`); return li; });
+  $("talk-cast").replaceChildren(...cast);
+  $("talk-cast").hidden = !cast.length;
+  const last = p.ledger.filter((e) => (e.by === s || e.to === s) && e.year === (p.half ? p.year : p.year - 1) && e.half === 1 - p.half);
+  $("talk-last").replaceChildren(...(last.length ? [el("b", "Last season"), ...last.map((e) => el("p", pledgeText(p, e, s), e.mark))] : []));
+  $("talk-last").hidden = !last.length;
+  radio($("talk-mode"), [{ value: "promise", label: "I promise" }, { value: "ask", label: "I ask" }], mode, (v) => { mode = v; if (v === "ask" && whom === -1) whom = null; form = where = null; T.refresh(); });
+  const to = [...(asking ? [] : [{ value: -1, label: "Everyone", note: "a public pledge" }]), ...seats.map((k) => ({ value: k, label: NAMES[k], rgb: RGB[k], note: T.kinds[k] === "you" ? "a person" : isBot(T, k) ? characterOf(p, k).name : "" }))];
+  if (whom !== null && !to.some((x) => x.value === whom)) whom = null;
+  radio($("talk-who"), to, whom, (v) => { whom = v; form = where = null; T.refresh(); });
+  const list = whom === null ? [] : asking ? formsOf(p, whom, s) : formsOf(p, s, whom), kinds = [...new Set(list.map((f) => f.form))];
+  if (form !== null && !kinds.includes(form)) form = where = null;
+  $("talk-form").hidden = whom === null;
+  radio($("talk-form"), kinds.map((k) => ({ value: k, label: FORM_NAMES[k] })), form, (v) => { form = v; where = null; T.refresh(); });
+  const places = list.filter((f) => f.form === form), needs = places.length > 1 || (places[0] && (places[0].at !== undefined || places[0].a !== undefined));
+  const placeOf = (f) => (f.form === "carry" ? `${f.a}:${f.b}` : f.at ?? "");
+  $("talk-where").hidden = !form || !needs;
+  radio($("talk-where"), places.map((f) => ({ value: placeOf(f), label: f.form === "carry" ? `${nameOf(p, f.a)} and ${nameOf(p, f.b)}` : nameOf(p, f.at), rgb: f.at !== undefined && p.owner[f.at] >= 0 ? RGB[p.owner[f.at]] : null })), where, (v) => { where = v; T.refresh(); });
+  const word = form && (needs ? places.find((f) => placeOf(f) === where) : places[0]);
+  const dup = word && said.some((w) => w.do === mode && w.to === whom && w.form === word.form && placeOf(w) === placeOf(word));
+  $("talk-preview").textContent = word ? `${asking ? `You ask ${NAMES[whom]}: ` : whom < 0 ? "You pledge to everyone: " : `You promise ${NAMES[whom]}: `}${formText({ ...word, to: whom }, named(p), asking)}` : "Choose whom, then a form.";
+  $("talk-add").disabled = !word || dup || !left;
+  $("talk-add").textContent = dup ? "Already said" : "Say it";
+  $("talk-add").onclick = () => { if (!word || dup || !left) return; said.push({ do: mode, ...word, to: whom }); form = where = null; T.refresh(); };
+  $("talk-list").replaceChildren(...said.map((w, i) => { const li = el("li"); li.append(el("span", `${w.do === "ask" ? `Ask ${NAMES[w.to]}` : w.to < 0 ? "To everyone" : `To ${NAMES[w.to]}`}: ${formText(w, named(p), w.do === "ask")}`), button("Take back", "quiet", () => { said.splice(i, 1); T.refresh(); })); return li; }));
+  $("talk-done").textContent = said.length ? `Say ${said.length === 1 ? "it" : `these ${said.length}`} and finish` : "Say nothing this season";
+  $("talk-done").onclick = () => finishTalk(T);
+  T.board.clear();
+}
+function finishTalk(T) {
+  if (!T.ready() || T.match.position.stage !== "talk") return;
+  for (const { do: d, ...w } of said) T.match.play({ do: d, ...w });
+  said = [];
+  T.play({ do: "done" });
+}
+
+function answerPanel(T) {
+  const p = T.match.position, s = p.seat, from = pending(p, s);
+  $("status").textContent = headline(T, s, "answer the bargains offered you");
+  $("answer").replaceChildren(el("p", "Accept, and both sides' promises stand this season. Decline, and none of them does."), ...from.map((k) => {
+    const box = el("div", undefined, "offer"), { give, ask } = offerOf(p, k, s), h = el("h3");
+    h.append(sign(k), NAMES[k], ...(isBot(T, k) ? [el("small", ` ${characterOf(p, k).name}`)] : []));
+    box.append(h);
+    if (give.length) { const u = el("ul"); u.append(...give.map((f) => el("li", formText(f, named(p))))); box.append(el("p", `${NAMES[k]} promises you:`), u); }
+    { const u = el("ul"); u.append(...ask.map((f) => el("li", formText({ ...f, to: k }, named(p), true)))); box.append(el("p", `${NAMES[k]} asks of you:`), u); }
+    const row = el("div", undefined, "go");
+    row.append(button("Decline", "quiet", () => T.play({ do: "answer", from: k, yes: false })), button("Accept", "main", () => T.play({ do: "answer", from: k, yes: true })));
+    box.append(row);
+    return box;
+  }));
+  T.board.clear();
+}
+
+// ---- the reveal, step by step ----
+/** The reveal as steps: the sheets, supports and transports, the moves meeting, the board after, the ledger, winter. */
+function stepsOf(T, p, events, before) {
+  const name = named(p), b = boardOf(p), orders = events.filter((e) => e.kind === "order").map((e) => e.r), r = resolve(b, before.owner, before.str, before.orders);
+  const shown = orders.filter((o) => o.kind !== "hold"), helps = (o) => o.kind === "support" || o.kind === "transport";
+  const sentence = (o) => `${NAMES[o.of]}: ${reason(o, name, who)}`, me = viewer(T);
+  const steps = [
+    { title: "The sheets", say: shown.length ? "Every order at once, as written. Nothing has happened yet. Tap an arrow for its sentence." : "Every province held: nobody wrote an order.", board: before, arrows: shown.map((o) => ({ ...o })), lines: [] },
+    { title: "Supports and transports", say: "First, an attack on a supporter or a carrier cuts it, unless it comes from where the support is aimed.", board: before, arrows: shown.map((o) => ({ ...o, failed: helps(o) && BAD.includes(o.code), lit: helps(o) })), lines: orders.filter(helps).map(sentence) },
+    { title: "The moves meet", say: "Then the moves: the strongest arrival takes a province only if it beats the defence and every other arrival.", board: before, arrows: shown.map((o) => ({ ...o, failed: BAD.includes(o.code), lit: o.kind === "move" })), lines: orders.filter((o) => o.kind === "move" || (o.kind === "hold" && o.code !== "held")).map(sentence) },
+    { title: "After the reveal", say: "Takers advance; whoever bounced comes home one weaker.", board: { owner: r.owner, str: r.str }, arrows: shown.filter((o) => o.code === "took" || o.code === "joined").map((o) => ({ ...o, lit: true })), lines: events.filter((e) => e.kind === "take").map((e) => `${NAMES[e.seat]} takes ${name(e.at)}${e.was >= 0 ? ` from ${NAMES[e.was]}` : ""}, and ${e.n} stand there now.`) },
+  ];
+  const marks = events.filter((e) => e.kind === "promise" && (e.to < 0 || (me >= 0 && (e.by === me || e.to === me))));
+  const hidden = events.filter((e) => e.kind === "promise").length - marks.length;
+  if (marks.length || hidden) steps.push({ title: "The ledger", say: "Every promise in force is marked from the orders: kept, broken, or void when it could not apply.", board: { owner: r.owner, str: r.str }, arrows: [], lines: [...marks.map((e) => pledgeText(p, e, me)), ...(hidden ? [`${hidden} private promise${hidden === 1 ? " was" : "s were"} marked too: only the two seats of each see how.`] : [])], marks: marks.map((e) => e.mark) });
+  const winter = events.filter((e) => ["winter", "score", "out"].includes(e.kind));
+  if (winter.length) steps.push({ title: "Winter", say: "Each port grows 1; strength past supply is lost.", board: { owner: [...p.owner], str: [...p.str] }, arrows: [], lines: winter.map((e) => line(e, p)) });
+  return steps;
+}
+function replayPanel(T) {
+  const p = T.match.position, n = reveal.steps.length, s = reveal.steps[reveal.step];
+  $("status").textContent = `The reveal: ${reveal.title}`;
+  $("replay-title").textContent = `Step ${reveal.step + 1} of ${n}: ${s.title}`;
+  $("replay-say").textContent = s.say;
+  const bar = $("replay-bar");
+  bar.max = String(n - 1); bar.value = String(reveal.step);
+  bar.setAttribute("aria-valuetext", `Step ${reveal.step + 1} of ${n}: ${s.title}`);
+  bar.oninput = () => { reveal.step = Number(bar.value); T.refresh(); T.board.show(); };
+  $("replay-lines").replaceChildren(...(s.lines.length || !reveal.step ? [] : [el("li", "Nothing of this kind this season.", "void")]), ...s.lines.map((t, i) => el("li", t, s.marks ? s.marks[i] || "" : /bounced|was cut|went unused|could not cross|was taken by|fell to/.test(t) ? "bad" : "")));
+  $("replay-back").disabled = reveal.step === 0;
+  $("replay-back").onclick = () => { reveal.step--; T.refresh(); T.board.show(); };
+  $("replay-next").textContent = reveal.step === n - 1 ? (p.stage === "talk" ? "On to the talk" : "Done") : "Next";
+  $("replay-next").onclick = () => { if (reveal.step < n - 1) reveal.step++; else reveal.done = true; T.refresh(); T.board.show(); };
+  $("replay-skip").hidden = reveal.step === n - 1;
+  $("replay-skip").onclick = () => { reveal.done = true; T.refresh(); T.board.show(); };
+  $("replay-all").onclick = () => showReveal(T);
+  T.board.light([]);
+}
+
+// ---- the record ----
 function revealBody(T) {
   const box = el("div", undefined, "reveal");
   if (!reveal) { box.append(el("p", "Nothing has been revealed yet. When every sheet is sealed, all orders are shown at once.")); return box; }
@@ -6065,24 +6577,50 @@ function revealBody(T) {
   for (let s = 0; s < seats; s++) {
     const mine = ev.filter((e) => e.kind === "order" && e.seat === s);
     if (!mine.length) continue;
-    const h = el("h3"), u = el("ul"), quiet = mine.filter((e) => e.r.kind === "hold" && e.r.code === "held");
+    const h = el("h3"), u = el("ul"), still = mine.filter((e) => e.r.kind === "hold" && e.r.code === "held");
     h.append(sign(s), NAMES[s]);
-    u.append(...mine.filter((e) => !quiet.includes(e)).map((e) => el("li", reason(e.r, name, who), BAD.includes(e.r.code) ? "bad" : "")));
-    if (quiet.length) u.append(el("li", `Held quietly: ${quiet.map((e) => name(e.r.at)).join(", ")}.`, "quiet-holds"));
+    u.append(...mine.filter((e) => !still.includes(e)).map((e) => el("li", reason(e.r, name, who), BAD.includes(e.r.code) ? "bad" : "")));
+    if (still.length) u.append(el("li", `Held quietly: ${still.map((e) => name(e.r.at)).join(", ")}.`, "quiet-holds"));
     box.append(h, u);
   }
-  const takes = ev.filter((e) => e.kind === "take"), winter = ev.filter((e) => ["winter", "score", "out"].includes(e.kind));
-  if (takes.length) { const u = el("ul"); u.append(...takes.map((e) => el("li", `${NAMES[e.seat]} takes ${name(e.at)}${e.was >= 0 ? ` from ${NAMES[e.was]}` : ""}, and ${e.n} stand there now.`))); box.append(el("h3", "Changed hands"), u); }
-  if (winter.length) { const u = el("ul"); u.append(...winter.map((e) => el("li", line(e, p)))); box.append(el("h3", "Winter"), u); }
+  for (const s of reveal.steps.slice(3)) if (s.lines.length) { const u = el("ul"); u.append(...s.lines.map((t, i) => el("li", t, s.marks?.[i] || ""))); box.append(el("h3", s.title === "After the reveal" ? "Changed hands" : s.title), u); }
   return box;
 }
 function showReveal(T) { if (reveal) sheet(`The reveal: ${reveal.title}`, revealBody(T), "Close", "paper"); }
 
+/** The ledger, season by season: all of it once the game is over, else what this screen may show. */
+function ledgerBody(T, all = false, seasons = true) {
+  const p = T.match.position, me = viewer(T), list = all ? p.ledger : me >= 0 ? ledgerFor(p, me) : p.ledger.filter((e) => e.to < 0), box = el("div", undefined, "ledger");
+  if (!list.length) { box.append(el("p", all ? "No promise was made in this game." : "No promise you can see has been marked yet.")); return box; }
+  const sum = el("table"), head = el("tr");
+  head.append(...["Seat", "Kept", "Broken", "Void"].map((t) => el("th", t)));
+  sum.append(head, ...Array.from({ length: p.seats }, (_, s) => { const tr = el("tr"), th = el("th"); th.append(sign(s), NAMES[s]); tr.append(th, ...["kept", "broken", "void"].map((m) => el("td", String(list.filter((e) => e.by === s && e.mark === m).length)))); return tr; }));
+  const scroll = el("div", undefined, "ranks");
+  scroll.append(sum);
+  box.append(scroll);
+  const first = list.find((e) => e.mark === "broken");
+  box.append(el("p", first ? `The first promise broken: ${HALVES[first.half]}, year ${first.year}. ${pledgeText(p, first, all ? -1 : me)}` : "No promise was broken.", "about"));
+  if (!seasons) { box.append(el("p", "Season by season: the menu, The reveal and the ledger.", "about")); return box; }
+  for (const key of [...new Set(list.map((e) => `${e.year}/${e.half}`))]) {
+    const [y, h] = key.split("/").map(Number), u = el("ul");
+    u.append(...list.filter((e) => e.year === y && e.half === h).map((e) => el("li", pledgeText(p, e, all ? -1 : me), e.mark)));
+    box.append(el("h3", `${HALVES[h]}, year ${y}`), u);
+  }
+  return box;
+}
+function castBody(T) {
+  const p = T.match.position, u = el("ul", undefined, "cast");
+  u.append(...Array.from({ length: p.seats }, (_, s) => { const li = el("li"); li.append(sign(s), el("b", NAMES[s]), ` ${T.kinds[s] === "you" ? "A person." : castLine(T, p, s)}`); return li; }));
+  return u;
+}
+
 function line(e, p) {
   const name = named(p);
   if (e.kind === "sealed") return `${NAMES[e.seat]} sealed its orders.`;
+  if (e.kind === "talked") return `The talk is over: ${e.open} promise${e.open === 1 ? "" : "s"} in public, ${e.closed} in private.`;
   if (e.kind === "reveal") return `The reveal: ${HALVES[e.half]}, year ${e.year}.`;
   if (e.kind === "order") return e.r.kind === "hold" && e.r.code === "held" ? "" : `${NAMES[e.seat]}: ${reason(e.r, name, who)}`;
+  if (e.kind === "promise") return e.to < 0 ? `${NAMES[e.by]}'s public pledge, "${formText(e, name)}": ${MARK_WORDS[e.mark].toLowerCase()}.` : "";
   if (e.kind === "take") return `${NAMES[e.seat]} takes ${name(e.at)}${e.was >= 0 ? ` from ${NAMES[e.was]}` : ""}.`;
   if (e.kind === "winter") return `${NAMES[e.seat]}: ${e.grew} grew at its ports${e.lost ? `, and ${e.lost} were lost past its supply of ${e.supply}` : ""}.`;
   if (e.kind === "score") return `${NAMES[e.seat]} scores ${e.n}: ${e.all} points.`;
@@ -6090,56 +6628,85 @@ function line(e, p) {
   return "";
 }
 
+// ---- the lesson: a short guided game (site/coach.js) ----
+const HOME = 4, BESIDE = 5; // Amber's home, and the empty midland beside it
+const LESSON = {
+  seed: "margins lesson 1", options: { style: "classic", seats: 3, years: 4 }, kinds: ["you", "normal", "normal"],
+  steps: [
+    { say: () => `Each season begins with talk. A promise is a fixed form, said to one seat or to everyone. Choose ${NAMES[1]}, then No strikes: a promise not to move into ${NAMES[1]}'s land.`, at: () => $("talk-who"), when: (T) => T.match.position.stage === "talk", done: (T) => T.match.position.stage !== "talk" || said.length > 0 || form === "no-strike" },
+    { say: () => `Press Say it, then ask ${NAMES[1]} for the same in return: I ask, ${NAMES[1]}, No strikes, Say it. A seat you ask answers yes or no to everything you said to it.`, at: () => (said.length ? $("talk-mode") : $("talk-add")), when: (T) => T.match.position.stage === "talk", done: (T) => T.match.position.stage !== "talk" || said.some((w) => w.do === "ask"), next: (T) => T.match.position.stage !== "talk" },
+    { say: "Finish the talk. Words are said only now, and nobody sees a promise made to someone else.", at: () => $("talk-done"), when: (T) => T.match.position.stage === "talk", done: (T) => T.match.position.stage !== "talk" },
+    { say: "A bot offers you a bargain. Read what it promises and what it asks, then accept or decline.", at: () => $("answer").querySelector("button.main"), when: (T) => T.match.position.stage === "answer", pass: (T) => T.match.position.stage === "write", done: (T) => T.match.position.stage === "write" },
+    { say: "Now the orders, in secret. Choose your home, the province with 3: on the board, or in the list.", at: (T) => (T.match.position.owner[HOME] === 0 ? HOME : undefined), or: () => $("sources"), when: (T) => T.match.position.stage === "write", done: (T) => chosen === HOME || draft.size > 0 },
+    { say: "Tap the lit empty land beside it to move there. One always stays behind.", at: () => BESIDE, or: () => $("targets"), when: (T) => T.match.position.stage === "write", done: () => [...draft.values()].some((o) => o.kind === "move") },
+    { say: "Seal your orders. Nobody sees them until every sheet is sealed; then all are revealed at once.", at: () => $("do"), when: (T) => T.match.position.stage === "write", done: () => !!reveal },
+    { say: "Step through the reveal. Every order says what happened to it and why. Tap an arrow for its sentence.", at: () => $("replay-next"), when: () => !!reveal && !reveal.done, done: () => !!reveal && (reveal.done || reveal.steps[reveal.step].title === "The ledger") },
+    { say: "The ledger marks every promise kept, broken or void, beside the orders that decided it. The game never enforces a promise: whom you trust is your call. Play on.", next: true },
+  ],
+};
+
 const table = createTable({
   game: margins, key: "margins", title: "Margins of Trust", won: "The ports are yours.", seats: [3, 4, 5], normal: 4, lengths: [], hard: true, nameOf, unit: "Ports",
+  links: false, // play by link waits for sealed sheets (the plan's stage 2): until then no friend by link here
   family: "Inspired by the family of negotiation games where everyone writes orders in secret and all are revealed at once. Not affiliated with or endorsed by the makers of any of them: the rules, names, map and art are our own.",
   quick: { style: "classic", seats: 3, years: 4 },
+  lesson: LESSON,
   outOf: (p, s) => !alive(p, s),
   cellsOf: portsOf, landOf: (p) => boardOf(p).ports, goalOf: toWin,
   placeOf: (p, s) => (p.points ? 1000 * p.points[s] : 0) + 100 * portsOf(p, s) + mineOf(p, s).length,
-  roundText: seasonText,
-  pace: () => 40, // a bot writes its sheet quickly; the reveal is what is read
+  roundText: (p) => `${seasonText(p)}${p.over ? "" : `: ${{ talk: "talk", answer: "answers", write: "orders" }[p.stage]}`}`,
+  pace: (p) => (p.stage === "write" ? 40 : 25), // a bot talks and writes quickly; the reveal is what is read
   choose, thinking,
   summary: (T) => { const r = T.match.result; return `${r.winners.map((s) => NAMES[s]).join(" and ")} ${r.why}.`; },
+  report(T) { const box = el("div", undefined, "paper-note"); box.append(el("h3", "The ledger"), ledgerBody(T, true, false), el("h3", "At this table"), castBody(T)); return box; },
   about: {
-    classic: "Traditional: the classic shape.\nThree to five powers round an inner sea. Each season everyone writes an order for every province, in secret; then all are revealed at once, and every order says what happened to it and why. No dice. Ports grow strength each winter. Hold more than half the ports at a winter to win; when the years run out, the most ports wins.\nOur own game: our own map, names and rules. Early: promises, the ledger and the 3D table come later.",
-    ours: "Capo: our own evening game.\nFour scored years. At each winter you score 1 for each port you hold, and in each land 3 for holding the most provinces there and 1 for the next most. The most points after the last winter wins; more ports break a tie.\nEarly: coin, depots and public pledges come later.",
+    classic: `Traditional: the classic shape.\nThree to five powers round an inner sea. Before each season everyone may make promises in fixed forms, and bargain; then everyone writes an order for every province, in secret, and all are revealed at once. Every order says what happened to it and why, and a ledger marks every promise kept or broken. No dice. Hold more than half the ports at a winter, or from the ${["", "first", "second", "third", "fourth"][LEADS]} winter more ports than anyone else, to win.\nOur own game: our own map, names and rules. Early: the 3D table and play by link come later.`,
+    ours: "Capo: our own evening game.\nFour scored years. At each winter you score 1 for each port you hold, and in each land 3 for holding the most provinces there and 1 for the next most. The most points after the last winter wins; more ports, then the better word (promises kept less broken), break a tie.\nEarly: coin, depots and standing come later.",
   },
   choices: [{ key: "years", label: "Length", normal: 0, values: [[0, `The rules' own (${YEARS.classic} years, Capo ${YEARS.ours})`], [2, "2 years"], [3, "3 years"], [4, "4 years"], [6, "6 years"], [8, "8 years"]] }],
-  stats: (p, s) => [["Provinces", mineOf(p, s).length], ["Strength", strengthOf(p, s)], ...(p.points ? [["Points", p.points[s]]] : [])],
+  stats: (p, s) => [["Provinces", mineOf(p, s).length], ["Strength", strengthOf(p, s)], ...(p.points ? [["Points", p.points[s]]] : []), ...(shell && isBot(shell, s) && shell.kinds[s] !== "easy" ? [["Bot", characterOf(p, s).name.replace(/^the /, "")]] : [])],
   line,
   seen(T, events) {
     const r = events.find((e) => e.kind === "reveal");
     if (!r) return;
-    reveal = { events: events.slice(events.indexOf(r)), title: `${HALVES[r.half]}, year ${r.year}` };
+    const m = T.match, evs = events.slice(events.indexOf(r)), before = m.at(m.list.length - 1);
+    reveal = { events: evs, title: `${HALVES[r.half]}, year ${r.year}`, step: 0, done: T.demo || !T.kinds.includes("you") || m.turn === null, steps: stepsOf(T, m.position, evs, before) };
     $("last").hidden = T.demo;
-    if (!T.demo && !T.catching && T.kinds.includes("you") && !T.match.result) showReveal(T);
   },
-  fresh() { draft = new Map(); draftKey = ""; chosen = null; kind = "move"; opened = ""; reveal = null; $("last").hidden = true; },
+  fresh() { draft = new Map(); draftKey = ""; chosen = null; kind = "move"; opened = ""; reveal = null; said = []; mode = "promise"; whom = form = where = null; $("last").hidden = true; },
   order: (events) => events.flatMap((e) => (e.kind === "take" ? [e.at] : [])),
   board: (T, stage) => ringBoard(T, stage),
   panel(T) {
     sync(T);
-    const p = T.match.position, s = p.seat, cover = covered(T);
+    const p = T.match.position, s = p.seat, replay = replaying(T), cover = !replay && covered(T);
+    for (const id of ["replay", "talk", "answer", "orders"]) $(id).hidden = true;
+    $("last").hidden = T.demo || !reveal || replay;
     $("cover").hidden = !cover;
     $("choice").hidden = cover;
+    if (replay) { $("replay").hidden = false; replayPanel(T); return; }
     if (cover) {
       $("status").textContent = `Pass to ${NAMES[s]}`;
-      $("cover-say").textContent = `${NAMES[s]} writes next, in secret. Only ${NAMES[s]} should look until the sheet is sealed.`;
-      $("open-sheet").textContent = `I am ${NAMES[s]}: open my sheet`;
+      $("cover-say").textContent = `${NAMES[s]} ${p.stage === "talk" ? "talks" : p.stage === "answer" ? "answers" : "writes"} next, in secret. Only ${NAMES[s]} should look until ${p.stage === "write" ? "the sheet is sealed" : "it is done"}.`;
+      $("open-sheet").textContent = `I am ${NAMES[s]}: open`;
       $("open-sheet").onclick = () => { opened = keyOf(T.match.position); T.refresh(); };
       T.board.clear();
       return;
     }
+    if (p.stage === "talk") { $("talk").hidden = false; talkPanel(T); return; }
+    if (p.stage === "answer") { $("answer").hidden = false; answerPanel(T); return; }
+    $("orders").hidden = false;
     const mine = mineOf(p, s), b = boardOf(p), threat = threats(p, s);
     if (chosen !== null && p.owner[chosen] !== s) chosen = null;
-    $("status").textContent = `${T.solo() ? "" : `${NAMES[s]}: `}write your orders`;
+    $("status").textContent = headline(T, s, "write your orders");
     const o = chosen === null ? null : offers(p, chosen), now = chosen === null ? null : draft.get(chosen) || { kind: "hold" };
     const kinds = chosen === null ? [] : ["hold", ...(o.move.length ? ["move"] : []), ...(o.support.length ? ["support"] : []), ...(o.transport.length ? ["transport"] : [])];
     if (chosen !== null && !kinds.includes(kind)) kind = now.kind;
     $("info").textContent = chosen === null
       ? `${seasonText(p)}. ${draft.size ? `${draft.size} of ${mine.length} provinces have orders; the rest hold.` : "Provinces you give no order hold."} Choose a province of yours, on the map or in the list, then seal your sheet.`
       : `${nameOf(p, chosen)}: ${p.str[chosen]} strong${b.port[chosen] ? ", a port" : ""}${threat[chosen] ? `; a rival beside it could bring ${threat[chosen]}` : ""}. Order: ${orderText(now, named(p), who)}.`;
+    const vows = p.pledges.filter((f) => f.by === s || f.to === s || f.to < 0);
+    $("vows").replaceChildren(...(vows.length ? [el("b", "Promises this season"), ...vows.map((f) => el("p", pledgeText(p, f, s)))] : []));
+    $("vows").hidden = !vows.length;
     const front = (i) => b.near[i].some((j) => p.owner[j] !== s);
     radio($("sources"), [...mine].sort((x, y) => front(y) - front(x) || p.str[y] - p.str[x] || x - y).map((i) => ({ value: i, label: nameOf(p, i), note: `${p.str[i]}${b.port[i] ? ", port" : ""}: ${draft.has(i) ? orderText(draft.get(i), named(p), who) : "hold"}`, rgb: RGB[s] })), chosen, (v) => { chosen = v; kind = draft.get(v)?.kind || (p.str[v] > 1 ? "move" : "support"); T.refresh(); });
     $("kinds").hidden = chosen === null;
@@ -6165,27 +6732,34 @@ const table = createTable({
   changed() {},
   listing: (T) => { const p = T.match.position, b = boardOf(p); return { head: ["Province", "Whose", "Strong", "Port", "Land", "Borders"], rows: p.owner.map((o, i) => [nameOf(p, i), o === NONE ? "Nobody's" : NAMES[o], p.str[i], b.port[i] ? "Port" : "", b.lands[b.land[i]], b.near[i].map((j) => nameOf(p, j)).join(", ")]) }; },
   keys(T, k) {
-    if (k === "escape") { chosen = null; T.refresh(); } else if (k === "e") seal(T);
+    if (replaying(T)) { if (k === "n" || k === "arrowright") $("replay-next").click(); else if (k === "arrowleft" && reveal.step) $("replay-back").click(); return; }
+    if (k === "escape") { chosen = null; T.refresh(); } else if (k === "e") { if (T.match.position.stage === "talk") finishTalk(T); else seal(T); }
   },
-  more: { label: "The last reveal", body: revealBody },
+  more: { label: "The reveal and the ledger", body: (T) => { const box = el("div"); box.append(revealBody(T), el("h3", "The ledger"), ledgerBody(T, T.match.turn === null), el("h3", "At this table"), castBody(T)); return box; } },
   rules: (_, p) => {
     const style = p?.style || "classic", years = p?.years || YEARS[style];
     return [
-      "Early: Margins of Trust is new. The rules, the map and the bots are in. Promises made in the game, a ledger of kept and broken promises, a sandbox and the 3D table come next.",
+      "Early: Margins of Trust is new. The rules, the map, the promises, the ledger and the bots are in. A sandbox, the 3D table and play by link come next.",
       `Three to five seats share a land of three rings round ${SEA}: ports on the shore, midlands, then uplands. Each seat starts in its own march with three provinces: a home with 3, a port and an upland with 1 each.`,
-      "A year has a spring and an autumn. Each season every seat writes one order for each province it holds, in secret. A province with no order holds. When the last sheet is sealed, every order is revealed at once, and each one says what happened to it and why.",
+      "A year has a spring and an autumn. Each season has three parts: talk, answers, orders.",
+      `Talk: each seat in turn may say up to ${WORDS} things, in fixed forms: I will not enter a province; I will support your move into a province; I will support your hold of one; I will hold one; I will not move into any province of yours; I will carry your move across the sea. A promise goes to one seat, or to everyone as a public pledge. You may also ask a seat for a promise in return.`,
+      "Answers: a seat you asked for something accepts or declines all you said to it. Accepted, both sides' promises stand for the season; declined, none of them does. A promise with nothing asked always stands.",
+      "Orders: everyone writes one order for each province they hold, in secret. A province with no order holds. When the last sheet is sealed, every order is revealed at once, and each one says what happened to it and why. Step through the reveal, or skip it.",
+      "The ledger: after the reveal every promise in force is marked kept, broken, or void when it could not apply. The game never enforces a promise. A private promise's mark is seen only by its two seats; a public pledge's by everyone; at the end, all of it.",
+      "Bots each have a character, shown at the table: one keeps every promise, one breaks its word only to a seat that broke a promise to it, one forgives once, one turns on whoever leads, one breaks a promise that stands in its way one time in two, one never breaks a public pledge. Easy bots say nothing.",
       "Move: send some of a province's strength to a neighbour, always leaving 1 behind. Into empty land it simply arrives; into a rival's province it attacks. A port may also move to a port across the sea, if a transport carries it.",
       "Support: a province adds 1 to a seat's move into a neighbouring province, or to the hold of one. An attack on the supporter by land cuts it, unless the attack comes from the province the support is aimed at.",
       "Transport: a port carries a move between two ports across the sea, for anyone. An attack on the port by land cuts it.",
       "Who takes a province: what stays there, with its own seat's arrivals and supports, defends. The strongest arrival (the strength moved, plus supports) takes it only if it is stronger than the defence and than every other arrival. The defenders are lost, and the taker loses half of what stood there. Everyone else bounces home one weaker, or is lost if home was taken meanwhile.",
       "Two seats moving into each other's provinces by land meet head on: the weaker bounces, both when equal.",
       "Winter, after autumn: each port you hold grows 1. Your supply is 1 for each province and 2 more for each port; strength past it is lost from your strongest provinces.",
-      style === "classic" ? `To win: hold more than half the ports at a winter. After ${years} years, the most ports wins, ties shared. A seat with no land is out.` : `To win: points at each winter, 1 for each port, and in each land 3 for the most provinces there and 1 for the next most. After ${years} years the most points wins; more ports break a tie.`,
-      "Several people on one device: before each sheet the panel asks for the device to be passed, and opens the sheet only when its writer says so. A save, or a link to a friend, holds the sheets already sealed this season, so share them after a reveal.",
-      "Keys: Tab and arrows choose, Enter acts, Escape lets go, E twice seals your sheet.",
+      style === "classic" ? `To win: hold more than half the ports at a winter; or, from the ${["", "first", "second", "third", "fourth"][LEADS]} winter, hold more ports than every other seat. After ${years} years, the most ports wins, ties shared. A seat with no land is out.` : `To win: points at each winter, 1 for each port, and in each land 3 for the most provinces there and 1 for the next most. After ${years} years the most points wins; a tie goes to more ports, then the better word (promises kept less broken), then more provinces.`,
+      "Several people on one device: before each turn the panel asks for the device to be passed, and opens only when its owner says so. A save holds what was said and sealed this season, so keep it to yourself until the reveal.",
+      "Keys: Tab and arrows choose, Enter acts, Escape lets go, E twice finishes your talk or seals your sheet; in the reveal, N or the right arrow steps on.",
     ];
   },
 });
+shell = table;
 $("last").onclick = () => showReveal(table);
 
 

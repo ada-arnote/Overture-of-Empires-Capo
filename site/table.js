@@ -145,7 +145,7 @@ export function createTable(G) {
   send.id = "send"; send.hidden = skip.hidden = pass.hidden = true;
   sendRow.append(sendShare, sendCopy); send.append(sendSay, sendRow);
   $("act").append(send, skip);
-  $("title").querySelector(".links").append(linkButton);
+  if (G.links !== false) $("title").querySelector(".links").append(linkButton); // links hook: a game whose play by link is not ready yet says links: false
   Object.assign(passField, { type: "text", className: "field", placeholder: "None", autocomplete: "off", maxLength: 100 });
   passField.setAttribute("aria-label", "Password for the link, if you want one");
   pass.append(el("span", "Password"), passField);
@@ -772,7 +772,7 @@ export function createTable(G) {
   function menu(at = tab) {
     tab = at;
     if (!$("sheet").open || !$("sheet-body").contains(menuBox)) sheet(G.title, menuBox, T.demo ? "Close" : "Resume", "wide tabbed");
-    radio(tabs, [["game", "Game"], ["settings", "Settings"], ["link", "Link play"], ["about", "About"]].map(([value, label]) => ({ value, label })), tab, menu, true);
+    radio(tabs, [["game", "Game"], ["settings", "Settings"], ...(G.links === false ? [] : [["link", "Link play"]]), ["about", "About"]].map(([value, label]) => ({ value, label })), tab, menu, true); // links hook
     for (const b of tabs.children) b.setAttribute("aria-controls", pane.id);
     pane.setAttribute("aria-label", tabs.querySelector("[aria-selected=true]").textContent);
     pane.replaceChildren({ game: gameTab, settings: settingsTab, link: linkBox, about: aboutTab }[tab]());
@@ -881,7 +881,7 @@ export function createTable(G) {
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
       const li = el("li"), k = el("select");
-      k.append(...KINDS.filter(([v]) => v !== "hard" || G.hard).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one
+      k.append(...KINDS.filter(([v]) => (v !== "hard" || G.hard) && (v !== "away" || G.links !== false)).map(([v, t]) => new Option(t, v))); // a hard bot only where the game has one; links hook: no friend by link where links: false
       k.value = setup.who[s];
       k.setAttribute("aria-label", NAMES[s]);
       k.onchange = () => { setup.who[s] = k.value; passLine(); };

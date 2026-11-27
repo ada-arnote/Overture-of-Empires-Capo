@@ -2,7 +2,30 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
-## Unreleased
+## v0.10.5 (2026-11-27): a guide to choosing an AI, and Margins of Trust keeps its word
+
+### Margins of Trust, early: promises in play, a ledger, bots with characters, a reveal you step through
+
+Still unlisted: reached only by `play/margins.html`.
+
+**Players**
+- **Talk.** Each season now opens with talk: in turn, each seat may say up to six things in the six fixed forms (keep out of a province, back a move, back a hold, hold a province, no strikes, carry a crossing), to one seat or to everyone as a public pledge, and may ask a seat for a promise in return. The page builds each one from whom, which form and where, and reads it back as a sentence before it is said.
+- **Bargains.** A seat that was asked for something accepts or declines all that was said to it. Accepted, both sides' promises stand for the season; declined, none of them does. A promise with nothing asked always stands.
+- **The ledger.** After every reveal each promise in force is marked kept, broken or void (it could not apply), from the orders alone. A private promise's mark is shown only to its two seats; a public pledge's to everyone; at the end, all of it, with each seat's kept, broken and void, and the first promise broken. The game never enforces a promise.
+- **Bots with characters.** Each bot seat has one of six characters, shown at the table and on its seat: the Steward keeps every promise; the Merchant breaks its word only to a seat that broke a promise to it; the Elder forgives one; the Climber turns on whoever leads it in ports; the Gambler breaks a promise that stands in its way one time in two; the Herald never breaks a public pledge. Normal and hard bots offer pacts of no strikes to the seats they are not pressing, ask for support for their attack, and count promises made to them as far as they trust the seat. Easy bots say nothing.
+- **The reveal, step by step.** The reveal now plays in the move panel: the sheets, then supports and transports (cuts), then the moves meeting, then the board after, then the ledger, then winter, each with its sentences and the board drawn as it stood. Back, Next, a scrubber, Skip to the end, and the whole reveal to read. Tap an arrow for its sentence.
+- **A lesson** (the shared coach): a short guided first game, offered at the first Play and in the menu: a promise and an ask, a bargain answered, a move and a seal, the reveal stepped through, the ledger.
+- **Traditional ends sooner.** From the third winter, holding more ports than every other seat wins (more than half the ports still wins at any winter). Capo ties now go to more ports, then the better word (promises kept less broken), then more provinces.
+- No "A friend, by link" for this game, and no link play in its menu, until sealed sheets by link exist.
+
+**Contributors**
+- Margins rules are version 2 (saves and links from version 1 do not open as version 2). `rules.js`: stages `talk`, `answer`, `write`; moves `{ do: "promise" | "ask", form, to, at | a, b }` (at most `WORDS`, 6, a season), `{ do: "answer", from, yes }`; `formsOf`, `pending`, `offerOf`, `ledgerFor`, `wordOf`; `p.cast`, `p.talk`, `p.replies`, `p.pledges`, `p.ledger`; events `talked` and `promise`; `LEADS` (3). `forms.js`: `CAST`, `formText`. `bot.js`: `victimOf`, `talkOf`, `accepts`, `sheetOf`, `record`, `characterOf`; plans massed on one rival, with promises kept as constraints; plans memoised by position. Winter growth (1 a port) and supply stay as they were: the series did not need them changed.
+- `site/table.js`: a game may say `links: false` (marked "links hook"): no "A friend, by link", no Link games on the title, no Link play tab.
+- `tools/fair.mjs` measures margins (marked "margins hook").
+- Fairness, `node tools/fair.mjs margins`, 1,000 normal-bot games a row, wins by seat in %: Traditional 25.3 / 32.4 / 29.9 (3), 20.6 / 23.7 / 24.8 / 20.4 (4), 16.6 / 21.2 / 19.4 / 19.0 / 16.2 (5), widest gaps 7.1, 4.4, 5.0; Capo 29.6 / 34.9 / 31.0, 23.1 / 24.1 / 27.0 / 21.3, 18.3 / 20.3 / 20.3 / 19.6 / 14.5, gaps 5.3, 5.7, 5.8. All within 10 points.
+- How games end: Traditional before the year limit 87.6% (3 seats), 89.5% (4), 92.4% (5), median 10, 10 and 8 seasons; before, 6%, 1% and 0% (bots held their own marches to the limit). Capo shared wins 4.5%, 4.5%, 7.0%; before, 95%, 92% and 93% (200 games a row then). The word decides 57%, 52% and 40% of Capo games, a sign that Capo's points still sit level too often.
+- Characters over 180 games of normal bots: kept shares Steward, Merchant, Elder and Climber 100%, Gambler 97.7%, Herald 96.5%: bots rarely find a promise in their way, so breaks are mostly answers to broken promises.
+- `test/margins.test.mjs` (26 tests): talk and its quick check against the full list, bargains accepted and declined, the ledger against an independent judge and each seat's view, forms by the board, the lead and word endings, characters held to their lines over bot games at 3, 4 and 5 seats, easy bots silent.
 
 ### Choose an AI: a guide to the services Capo can reach (ruling 153.8)
 
