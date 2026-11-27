@@ -16,6 +16,7 @@ An early build, at an unlisted address: https://ada-arnote.github.io/Overture-of
 | `node tools/pack.mjs` | Makes `dist/` for a static host. Uploads nothing |
 | `node tools/capo-mcp.mjs` | The Capo bridge, optional: lets your own AI app (any MCP client) tell Capo's story, on this computer only. It prints a token to give Capo and how to add it to the app; `--tokens` shows them again |
 | `python -I tools/relief.py <ETOPO tif> <Natural Earth folder>` | Bakes Capo's relief (`maps/relief.webp`) and waters (`maps/waters.json`) from open data, offline |
+| `python -I tools/mapdata.py <Ecoregions 2017 folder> <Natural Earth populated places folder>` | Bakes Capo's land cover (`maps/cover.webp`) and real cities (`maps/cities.json`) from open data, offline |
 | `node tools/models.mjs out.bin list.json` | Converts CC0 models (glTF) into a small pack for `site/models/`, offline |
 
 | Folder | What |
