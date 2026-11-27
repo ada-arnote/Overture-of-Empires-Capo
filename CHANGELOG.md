@@ -2,6 +2,17 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### The stacking game, early: its basic structure
+
+**Contributors**
+- `src/games/stacking/rules.js` (version 1): the plan's one settled rule set on a radius-4 hex board. Twelve stones a side (Lodestone, Warden, two Couriers, two Slingers, six Pebbles), a set opening drawn from the seed out of three mirrored layouts (or chosen by the `layout` option), stacks up to three high where only the top stone acts and climbs one tier at a time, a Courier's slide and a Slinger's range of 2 plus 1 for each tier above the first, strikes into the pouch (no more than one tier up), topple, drops beside your own stacks (never beside the rival Lodestone), and the swap after the first move (`swap` option). You may not leave your Lodestone open to a strike; no legal move loses; 30 quiet turns each or 200 turns each draws. Whole numbers, no clock, no page: a seed and the moves replay.
+- `src/games/stacking/bot.js`: `easy` (one move ahead, seeded noise) and `normal` (every reply, a plain count of stones, height, Pebbles forward and the Lodestone's room and safety), as a generator that yields between moves.
+- `site/stacking.html`, `site/stacking.js`: a page on the shared shell with a flat SVG board (stones drawn stacked with a lip, the top stone's mark, height pips, the last move ringed; a solo player's side at the foot), a tower strip in the move panel (the stack last touched, top first, every tower on the board, both pouches), How to play, and the shell's end screen and review. Marked early. Reached only by `play/stacking.html`: not on the front page or the game list.
+- Marked "stacking hook" lines: `site/table.js` takes `G.style` as the title card's starting rule set; `tools/bundle.mjs` builds `stacking`; `site/source.js` sends the served source page to the built one.
+- `test/stacking.test.mjs`: openings, each stone's moves, the height rule, strikes, slings, topples, drops, the swap, the Lodestone rule and both kinds of loss, the draws, replay and saves, and bots playing whole legal games.
+
 ## v0.9.5 (2026-11-27): dice that roll, armies that march, and sound
 
 ### The table games move and sound
