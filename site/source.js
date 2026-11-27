@@ -3,6 +3,7 @@
 // script out of them). Served from this computer they run as they are, for work on them; served from the public
 // site they send the player to the built page, which is the one that is kept whole.
 if (location.protocol === "https:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
-  const built = location.pathname.replace(/\/site\/(banners|fable|glass|inch|game|world|stacking)\.html$/, "/play/$1.html"); // stacking hook
+  // new-game hooks (stacking, margins, garden, tile): their source pages send visitors to the built pages too
+  const built = location.pathname.replace(/\/site\/(banners|fable|glass|inch|game|world|stacking|margins|garden|tile)\.html$/, "/play/$1.html");
   if (built !== location.pathname) location.replace(built + location.search + location.hash);
 }

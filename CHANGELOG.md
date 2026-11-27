@@ -2,7 +2,15 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
-## v0.10.0 (2026-11-27): three new games take root, and nobody is knocked out
+## v0.10.0 (2026-11-27): four new games take root, and nobody is knocked out
+
+### Margins of Trust, early: the basic structure
+
+**Contributors**
+- `src/games/margins/`: a new original game for three to five seats, reached only by `play/margins.html` (not on the front page or the game list) and marked early. `map.js`: one fixed land for each number of seats, three rings of provinces round an inner sea, the same eight-province march for every seat (three ports, three midlands, two uplands), so each seat has two neighbours and no corner. `resolve.js`: the one-pass reveal (movers leave 1, support adds 1, cut by a land attack except from the target, transports for crossings, head on, strictly strongest arrival, bounce home one weaker) with one reason code for every order. `rules.js`: the `margins` game (version 1): one order a move (`{ do: "order", at, kind, ... }`), `{ do: "done" }` seals a sheet, the last seal reveals; winter growth at ports and supply; Traditional (more than half the ports at a winter, else the most ports after 8 years) and Capo (points at each winter over 4 years); `reason()` turns a result into a sentence. `forms.js`: the six promise forms and `judge()` (kept, broken, void), not yet in play. `bot.js`: sheet bots (easy, normal, hard) that plan from the open board only, walk every list in a random order of their own so no seat number is favoured, and write one order a move.
+- `site/margins.html`, `site/margins.js`: the page on the shared shell, with a flat SVG board drawn in the page: order entry by province, kind and target, a cover card between people sharing one device, the reveal sheet with every order's reason, How to play and the shell's end screen.
+- Marked "margins hook" lines: `tools/bundle.mjs` builds `play/margins.html`; `site/source.js` sends the source page to the built one.
+- `test/margins.test.mjs`: named reveal cases (standoffs, three-way bounces, support given, cut and void, head on, crossings with and without a standing transport, reinforcements that fall), a reason for every order on random seasons, order-independence, strength never grows, turning the board turns the result, winter, both ends, the forms, bots' legal complete games at 3, 4 and 5 seats that replay and travel by link, bot blindness, and a whole game kept symmetric when every seat plays the same sheet.
 
 ### Brass and Banners: nobody is knocked out in Capo
 
