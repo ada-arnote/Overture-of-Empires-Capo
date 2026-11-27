@@ -2,7 +2,7 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
-## Unreleased
+## v0.10.0 (2026-11-27): three new games take root, and nobody is knocked out
 
 ### Brass and Banners: nobody is knocked out in Capo
 
@@ -35,8 +35,6 @@ What changed in each tagged version of Overture of Empires: Capo, newest first. 
 - `site/stacking.html`, `site/stacking.js`: a page on the shared shell with a flat SVG board (stones drawn stacked with a lip, the top stone's mark, height pips, the last move ringed; a solo player's side at the foot), a tower strip in the move panel (the stack last touched, top first, every tower on the board, both pouches), How to play, and the shell's end screen and review. Marked early. Reached only by `play/stacking.html`: not on the front page or the game list.
 - Marked "stacking hook" lines: `site/table.js` takes `G.style` as the title card's starting rule set; `tools/bundle.mjs` builds `stacking`; `site/source.js` sends the served source page to the built one.
 - `test/stacking.test.mjs`: openings, each stone's moves, the height rule, strikes, slings, topples, drops, the swap, the Lodestone rule and both kinds of loss, the draws, replay and saves, and bots playing whole legal games.
-
-## v0.10.0 (2026-11-27): the first new game takes root, early and unlisted
 
 ### The garden game: the basic structure (early, not public)
 
