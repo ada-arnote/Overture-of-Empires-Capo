@@ -24,7 +24,10 @@ function turret(o, r, h, x = 0, y = 0, roof = null, fin = 0, n = 8) {
   else ring(n / 2, r * 1.03, (x1, y1, a) => move(p, box([], -r * 0.2, -r * 0.13, 0, r * 0.2, r * 0.13, 0.07, c("stone", 140)), x1, y1, h + 0.1, 1, a + UP));
   return move(o, p, x, y);
 }
-const base = (o, r = 0.36) => lathe(o, [[r, 0], [r * 1.04, 0.02], [r * 1.04, 0.055], [r * 0.9, 0.085], [0, 0.085]], 14, c("metal"), 2);
+// styles hook: a style's kit (style.js) widens the bases, and may cast every figure in plain metal with the owner's enamel on base, shield and flag
+let K = { base: 1, cast: 0 };
+const body = () => (K.cast ? [c("metal"), 2] : [c("cloth"), 1]);
+const base = (o, r = 0.36) => { r *= K.base; return lathe(o, [[r, 0], [r * 1.04, 0.02], [r * 1.04, 0.055], [r * 0.9, 0.085], [0, 0.085]], 14, K.cast ? c("cloth") : c("metal"), K.cast ? 1 : 2); };
 const pole = (o, x, y, z0, z1, r = 0.018, col = c("wood")) => move(o, lathe([], [[r, z0], [r, z1], [0, z1 + r]], 5, col), x, y);
 /** A flag on a pole, in the owner's colour. */
 function flag(o, x, y, z0, z1, w = 0.26, h = 0.17) {
@@ -34,7 +37,7 @@ function flag(o, x, y, z0, z1, w = 0.26, h = 0.17) {
 /** A soldier turned on a lathe: a metal base, an enamel body, a head. */
 function pawn(o, s = 1, head = "bone") {
   const p = base([]);
-  lathe(p, [[0.27, 0.085], [0.27, 0.12], [0.16, 0.2], [0.11, 0.46], [0.15, 0.5], [0.15, 0.53], [0.09, 0.56]], 12, c("cloth"), 1);
+  lathe(p, [[0.27, 0.085], [0.27, 0.12], [0.16, 0.2], [0.11, 0.46], [0.15, 0.5], [0.15, 0.53], [0.09, 0.56]], 12, ...body());
   lathe(p, [[0.09, 0.56], [0.14, 0.61], [0.16, 0.68], [0.14, 0.75], [0.08, 0.8], [0, 0.82]], 10, c(head), head === "bone" ? 0 : 2);
   return move(o, p, 0, 0, 0, s);
 }
@@ -61,14 +64,14 @@ function die(o, n) {
 const RECIPES = {
   // The Island Fable's four ranks: a scout, a guard with shield and spear, a knight, a marshal with a crown
   unit1: (o) => pawn(o, 0.9),
-  unit2(o) { pawn(o, 1); pole(o, 0.2, 0.02, 0.08, 0.95, 0.014, c("wood")); move(o, lathe([], [[0.025, 0], [0, 0.09]], 4, c("metal"), 2), 0.2, 0.02, 0.95); return move(o, prism([], [[-0.12, 0.17], [0.12, 0.17], [0.12, -0.02], [0, -0.17], [-0.12, -0.02]], -0.02, 0.02, c("metal"), 2, 0.012), -0.02, 0.19, 0.34, 1, 0, UP * 0.92); },
+  unit2(o) { pawn(o, 1); pole(o, 0.2, 0.02, 0.08, 0.95, 0.014, c("wood")); move(o, lathe([], [[0.025, 0], [0, 0.09]], 4, c("metal"), 2), 0.2, 0.02, 0.95); return move(o, prism([], [[-0.12, 0.17], [0.12, 0.17], [0.12, -0.02], [0, -0.17], [-0.12, -0.02]], -0.02, 0.02, ...(K.cast ? [c("cloth"), 1] : [c("metal"), 2]), 0.012), -0.02, 0.19, 0.34, 1, 0, UP * 0.92); },
   unit3: (o) => RECIPES.horse(o),
   unit4(o) { pawn(o, 1.12, "metal"); crown(o, 0.9, 0.13); return flag(o, -0.22, 0, 0.08, 1.12); },
   foot: (o) => pawn(o, 0.82),
   horse(o) { // cavalry: a chess knight of our own drawing, until a rider is chosen
     base(o, 0.38);
     const side = [[-0.3, 0], [-0.27, 0.3], [-0.08, 0.55], [-0.02, 0.76], [0.05, 0.84], [0.1, 0.7], [0.3, 0.56], [0.4, 0.34], [0.32, 0.25], [0.12, 0.34], [0.07, 0.26], [0.24, 0]].map(([x, z]) => [x * 0.82, z * 0.86]);
-    move(o, prism([], side, -0.1, 0.1, c("cloth"), 1, 0.025), 0, 0, 0.085, 1, 0, UP);
+    move(o, prism([], side, -0.1, 0.1, ...body(), 0.025), 0, 0, 0.085, 1, 0, UP);
     return move(o, prism([], [[-0.24, 0.3], [-0.12, 0.72], [-0.02, 0.66], [-0.14, 0.3]], -0.115, 0.115, c("dark"), 0), 0, 0, 0.085, 0.82, 0, UP); // the mane
   },
   gun(o) { // artillery: a barrel on a carriage with two wheels
@@ -157,6 +160,10 @@ export function unpack(buffer) {
   return out;
 }
 
-let made = null;
-/** Every model, packed for the mesh layer. Made once, when a board first needs them. */
-export function models() { return (made ||= Object.fromEntries(Object.entries(RECIPES).map(([k, f]) => [k, bake(f([]))]))); }
+const made = new Map();
+/** Every model, packed for the mesh layer, for a style's kit. Made once a kit, when a board first needs them. */
+export function models(kit = {}) {
+  const k = { base: kit.base ?? 1, cast: kit.cast ?? 0 }, key = `${k.base},${k.cast}`;
+  if (!made.has(key)) { K = k; made.set(key, Object.fromEntries(Object.entries(RECIPES).map(([n, f]) => [n, bake(f([]))]))); K = { base: 1, cast: 0 }; }
+  return made.get(key);
+}

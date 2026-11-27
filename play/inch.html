@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ffEsHTXQt9xlDxb6Q23oS6CO7/538M1eti7S5YVASZA='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-dwJomGntVHFsTwlFAZSZc7W+h+rULap2vBg+DZwbRv0='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>An Inch of Ink · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -151,6 +151,7 @@ dialog hr { border: 0; border-top: 1px solid var(--edge); margin: 6px 0 } #sheet
 #fills { display: flex; height: 100%; border-radius: 2px; overflow: hidden }
 #fills i { display: block; height: 100%; transition: width .7s cubic-bezier(.3, .7, .3, 1) }
 #fills i + i { box-shadow: inset 1px 0 0 rgba(0, 0, 0, .6) }
+#fills { box-shadow: 0 0 0 1px rgba(238, 243, 248, .38) } /* styles hook: a dark seat colour (High contrast's black) keeps an edge on the dark bar */
 #goal { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: var(--accent-hi); box-shadow: 0 0 0 1px var(--halo) }
 
 /* seats: a colour bar, the sign, the name, two or three figures. The one to move is keyed in silver */
@@ -1971,9 +1972,9 @@ layout(location=3) in vec4 iP; layout(location=4) in vec2 iR; layout(location=5)
 vec3 world(out vec3 n){ vec3 l=aP*iP.w; n=vec3(aN.x*iR.x-aN.y*iR.y,aN.x*iR.y+aN.y*iR.x,aN.z); return vec3(iP.xy+vec2(l.x*iR.x-l.y*iR.y,l.x*iR.y+l.y*iR.x),iP.z*uLift+l.z); }`;
 const VS = `${HEAD}${INS}
 uniform vec3 uPal[16]; uniform vec2 uTone;
-out vec3 vN,vP,vC; out vec2 vF;
-void main(){ vec3 n,p=world(n); vN=n; vP=p; p+=n*uOut; int f=int(aN.w*127.+.5);
-  vec3 c=uPal[int(aC.r*255.+.5)&15]*(aC.g*2.); if(f==3) c=iC.rgb; if(f==1) c=mix(iC.rgb,vec3(dot(iC.rgb,vec3(.3,.6,.1))),uTone.y)*uTone.x*aC.g*2.; vC=c*aC.a*iC.a; vF=vec2(float(f),iC.a);
+out vec3 vN,vP,vC,vO,vF;
+void main(){ vec3 n,p=world(n); vN=n; vP=p; p+=n*uOut; int f=int(aN.w*127.+.5); float a=iC.a*255.,dim=mod(a,128.)/127.; // an instance's last byte: its dimness, and 128 if someone owns it
+  vec3 c=uPal[int(aC.r*255.+.5)&15]*(aC.g*2.); if(f==3) c=iC.rgb; if(f==1) c=mix(iC.rgb,vec3(dot(iC.rgb,vec3(.3,.6,.1))),uTone.y)*uTone.x*aC.g*2.; vC=c*aC.a*dim; vO=iC.rgb*dim; vF=vec3(float(f),dim,f==1&&a>127.5?1.:0.);
   gl_Position=clip(p); }`;
 /** The shadow test, shared with the grounds: how much of the lamp a point at height z misses. Needs uSun, uWin (the picture's window on the ground) and uTall. */
 const SHADE = `
@@ -1981,14 +1982,16 @@ uniform sampler2D uSh; uniform float uShOn;
 float shd(vec2 p,float z){ if(uShOn<=0.) return 0.; vec2 q=(p-uSun.xy/uSun.z*z-uWin.xy)/uWin.zw; float s=0.;
   for(int i=0;i<4;i++){ vec2 o=vec2(i<2?-1.:1.,(i&1)==0?-1.:1.)*.0011; s+=smoothstep(z+.016*uTall,z+.047*uTall,texture(uSh,q+o).r*uTall); } return s*.25; }`;
 const FS = `${HEAD}${SHADE}
-uniform vec4 uFin[4]; uniform vec3 uAmb;
-in vec3 vN,vP,vC; in vec2 vF; out vec4 o;
+uniform vec4 uFin[4],uGrade; uniform vec3 uAmb; uniform vec2 uGlow; uniform float uStep;
+in vec3 vN,vP,vC,vO,vF; out vec4 o;
 void main(){ if(uOut>0.){ o=vec4(.06,.055,.06,1.); return; }
   vec3 n=normalize(vN),L=normalize(uSun),V=vec3(uTilt.y*uYaw.y,uTilt.y*uYaw.x,uTilt.x); vec4 f=uFin[int(vF.x+.5)];
   float df=max(dot(n,L),0.),sh=shd(vP.xy,vP.z),lit=df*(1.-uAmb.z*sh);
+  if(uStep>0.) lit=.85*smoothstep(.3-uStep,.3+uStep,lit)+.15*lit; // the lamp in two soft bands, as on a painted toy
   vec3 c=vC*(uAmb.x+uAmb.y*n.z+f.x*lit+.24*max(dot(n,V),0.)); // the lamp, the room, and a little light from where the player sits
   c+=f.y*pow(max(dot(n,normalize(L+V)),0.),f.z)*(1.-sh)*vF.y+f.w*pow(1.-max(dot(n,V),0.),3.);
-  o=vec4(c,1.); }`;
+  if(vF.z>0.&&uGlow.x>0.){ float r=1.-max(dot(n,V),0.); c=c*(1.-uGlow.y)+uGlow.x*vO*(.18+1.4*r*r); } // the owner's colour as light, strongest where a face turns away: an acrylic block lit at its edges, with no glow pass
+  o=vec4(c*uGrade.rgb,1.); }`;
 // the lamp's own view: where a corner's shadow falls on the ground, and how high the corner is
 const VS2 = `${HEAD}${INS}
 out float vH;
@@ -2072,7 +2075,7 @@ class Meshes {
       for (const i of items) {
         const o = k * 7, c = i.rgb || [255, 255, 255];
         f[o] = i.x; f[o + 1] = i.y; f[o + 2] = i.z || 0; f[o + 3] = i.s || 1; f[o + 4] = Math.cos(i.t || 0); f[o + 5] = Math.sin(i.t || 0);
-        b[k * 28 + 24] = c[0]; b[k * 28 + 25] = c[1]; b[k * 28 + 26] = c[2]; b[k * 28 + 27] = Math.round(255 * (i.dim ?? 1));
+        b[k * 28 + 24] = c[0]; b[k * 28 + 25] = c[1]; b[k * 28 + 26] = c[2]; b[k * 28 + 27] = Math.round(127 * (i.dim ?? 1)) + (i.rgb ? 128 : 0); // styles hook: owned things can glow
         k++;
       }
     }
@@ -2118,6 +2121,7 @@ class Meshes {
     g.uniform1f(u.uLift, lift);
     this.lamp(u, true, style.sun);
     g.uniform3fv(u.uPal, style.pal.flat().map((v) => v / 255)); g.uniform4fv(u.uFin, style.fin.flat()); g.uniform3f(u.uAmb, ...style.amb); g.uniform2f(u.uTone, ...style.tone);
+    g.uniform2f(u.uGlow, ...(style.glow || [0, 0])); g.uniform1f(u.uStep, style.steps || 0); g.uniform4f(u.uGrade, ...(style.grade || [1, 1, 1, 0])); // styles hook
     g.enable(g.DEPTH_TEST); g.depthFunc(g.LESS);
     if (style.outline) { g.depthMask(false); g.uniform1f(u.uOut, style.outline / cam.s); this.pass(u); g.depthMask(true); } // a dark shell, a little larger, drawn first: what shows round the model is its outline
     g.uniform1f(u.uOut, 0);
@@ -2238,12 +2242,13 @@ $m[19] = (($x) => {
 /** The palette's slots, by name. Recipes paint with these, never with a colour of their own. */
 const SLOT = { metal: 0, wood: 1, stone: 2, roof: 3, thatch: 4, wall: 5, pine: 6, leaf: 7, snow: 8, gold: 9, cloth: 10, hull: 11, dark: 12, field: 13, iron: 14, bone: 15 };
 
-/** War table, the default and the root of the others: matte painted miniatures on a walnut table. */
+/** War table, the default and the root of the others: matte painted miniatures on a walnut table. Every key a style may set is here. */
 const WAR = {
   name: "War table",
   set: "code", // which models: the ones made in code
   pack: "", // a sculpted set to fetch on top of them (a file in site/models/), or none
   models: {}, // one model in place of another, by name: { foot: "army" } stands a block where a soldier would be; "" stands nothing
+  kit: { base: 1, cast: 0 }, // the recipes' own settings: how wide a piece's base is; cast 1: figures in plain metal, the owner's enamel on base, shield and flag
   scale: 1, // pieces larger or smaller
   outline: 0, // a dark line round every model, in screen points; 0 for none
   pal: [[142, 150, 162], [104, 76, 54], [146, 142, 134], [142, 70, 56], [190, 158, 92], [214, 204, 180], [44, 82, 62], [70, 112, 66], [238, 240, 240], [214, 176, 84], [232, 224, 202], [112, 80, 56], [40, 34, 32], [200, 170, 92], [74, 78, 86], [226, 220, 204]],
@@ -2252,44 +2257,126 @@ const WAR = {
   sun: [-0.6, -0.8, 1.3], // where the lamp is: up and to the left, as on a drawn map
   amb: [0.54, 0.14, 0.7], // light with no lamp, more of it from above, and how dark a cast shadow is on a model
   tone: [0.92, 0.14], // the owner's colour as paint on a miniature: a little darker and greyer than on a screen
+  glow: [0, 0], // the owner's colour as light: how strongly a piece's edges glow with it, and how much its body is dimmed to show the glow
+  steps: 0, // the lamp in two soft bands, as on a toy (how soft the step is); 0 for smooth light
+  grade: [1, 1, 1, 0], // the last word on every colour: a tint (r, g, b, 1 for none), and how much darker the corners are
   ground: 0.36, // how dark a cast shadow is on the ground
   // the ground: paper grain, how strongly heights are lit, how deep a tile's rim is cut, gloss on water and wet ink;
-  // wash: every colour drawn toward one (r, g, b, how far); hatch: slopes drawn as pen strokes; ruled: water drawn with ruled lines; edge: how heavy the ink lines are
-  surface: { grain: 1, relief: 1, bevel: 1, gloss: 1, wash: [0, 0, 0, 0], hatch: 0, ruled: 0, edge: 1 },
+  // wash: every colour drawn toward one (r, g, b, how far); own: how much of that wash lies on owned land; hatch: slopes drawn as pen strokes;
+  // ruled: water drawn with ruled lines; edge: how heavy the ink lines are; rim: the line between cells in a colour of its own (r, g, b, how strong);
+  // wood: grain on every tile; contour: lit lines along the heights (r, g, b, how strong) every `spacing`; sea: the water drawn toward a colour (r, g, b, how far)
+  surface: { grain: 1, relief: 1, bevel: 1, gloss: 1, wash: [0, 0, 0, 0], own: 0.7, hatch: 0, ruled: 0, edge: 1, rim: [0, 0, 0, 0], wood: 0, contour: [0, 0, 0, 0], spacing: 12, sea: [0, 0, 0, 0] },
   map: { tint: 0.56, relief: 1, wash: [0, 0, 0, 0] }, // Capo's world: how much of the owner's colour lies over the land's own, how strongly its heights are lit, and a wash as above
-  table: { baize: [14, 27, 51], rule: [184, 196, 212], wood: [0.8, 0.35] }, // the cloth, the line round it, and the wood: how bright, how far toned to one brown
+  // the cloth, the line round it, and the wood: how bright, how far toned to one colour (tone); grid: faint lines on the table
+  table: { baize: [14, 27, 51], rule: [184, 196, 212], wood: [0.8, 0.35], tone: [77, 48, 31], grid: 0 },
+  seats: "standard", // the seat colours this style shows until the player chooses (SEATS)
+  // lamplight: what changes when the page is in its Lamplight theme (any of the keys above; tables and surfaces as a whole)
+  lamp: { sun: [-0.9, -0.5, 0.9], amb: [0.46, 0.12, 0.78], grade: [1.05, 0.94, 0.8, 0.22] },
 };
+/** A style from another: only what differs is listed, and a table, surface or map lists only the values it changes. */
+const from = (base, o) => Object.fromEntries(Object.entries({ ...base, ...o }).map(([k, v]) => [k, base[k] && o[k] && !Array.isArray(v) && typeof v === "object" && k !== "models" && k !== "lamp" ? { ...base[k], ...v } : v]));
 
 const STYLES = {
   war: WAR,
   // paper and ink: a survey chart on the desk, with stained blocks stamped with map symbols in place of figures
-  campaign: {
-    ...WAR, name: "Campaign map",
+  campaign: from(WAR, {
+    name: "Campaign map",
     models: { foot: "army", horse: "armour", gun: "guns", unit1: "army", unit2: "guns", unit3: "armour", unit4: "leader", hill: "", peak: "" },
     pal: [[120, 126, 138], [124, 96, 70], [150, 150, 150], [96, 104, 128], [176, 164, 132], [226, 226, 222], [72, 96, 92], [96, 116, 100], [240, 242, 244], [178, 160, 112], [228, 226, 218], [116, 96, 76], [27, 42, 68], [186, 176, 140], [70, 78, 96], [238, 236, 228]],
     fin: [[0.34, 0.02, 10, 0.02], [0.34, 0.04, 14, 0.03], [0.34, 0.1, 14, 0.04], [0.3, 0.02, 10, 0.02]],
     amb: [0.74, 0.1, 0.4], tone: [0.82, 0.3], ground: 0.2,
-    surface: { grain: 1.7, relief: 0.4, bevel: 0.3, gloss: 0, wash: [233, 237, 242, 0.5], hatch: 0.55, ruled: 0.3, edge: 1.25 },
+    surface: { grain: 1.7, relief: 0.4, bevel: 0.3, gloss: 0, wash: [233, 237, 242, 0.5], own: 0.3, hatch: 0.55, ruled: 0.3, edge: 1.25 },
     map: { tint: 0.4, relief: 0.75, wash: [233, 237, 242, 0.55] },
     table: { baize: [36, 52, 78], rule: [206, 214, 226], wood: [0.66, 0.6] },
-  },
-  // high clarity: flat, outlined, no texture, larger pieces
-  clear: {
-    ...WAR, name: "Clear",
+    lamp: { amb: [0.66, 0.1, 0.45], grade: [1.02, 0.96, 0.86, 0.14] }, // a desk lamp on the chart
+  }),
+  // high clarity: flat, outlined, no texture, larger pieces; the same in lamplight, with no vignette
+  clear: from(WAR, {
+    name: "Clear",
     scale: 1.15, outline: 1.6,
     fin: [[0.3, 0, 10, 0], [0.3, 0, 10, 0], [0.3, 0.06, 12, 0], [0.3, 0, 10, 0]],
     amb: [0.82, 0.06, 0.25], tone: [1, 0], ground: 0.14,
-    surface: { grain: 0, relief: 0.3, bevel: 0.7, gloss: 0, wash: [0, 0, 0, 0], hatch: 0, ruled: 0, edge: 1.45 },
-    map: { tint: 0.86, relief: 0.35, wash: [0, 0, 0, 0] },
+    surface: { grain: 0, relief: 0.3, bevel: 0.7, gloss: 0, edge: 1.45 },
+    map: { tint: 0.86, relief: 0.35 },
     table: { baize: [14, 18, 26], rule: [232, 238, 246], wood: [0.42, 0.9] },
-  },
+    lamp: {},
+  }),
+  // turned and painted hardwood on routed wooden tiles, in a light oak tray lined with felt; soft two-step light
+  toys: from(WAR, {
+    name: "Wooden toys",
+    kit: { base: 1.12, cast: 0 },
+    pal: [[204, 168, 120], [182, 138, 92], [196, 186, 168], [196, 72, 56], [222, 186, 110], [244, 236, 218], [52, 132, 84], [92, 168, 84], [250, 250, 246], [236, 188, 64], [240, 232, 212], [176, 122, 72], [58, 44, 36], [226, 196, 104], [120, 108, 98], [246, 238, 222]],
+    fin: [[0.66, 0.12, 18, 0.05], [0.62, 0.3, 30, 0.06], [0.62, 0.2, 18, 0.05], [0.64, 0.04, 10, 0.03]], // satin varnish; the bases are bare wood
+    sun: [-0.5, -0.7, 1.5], amb: [0.66, 0.12, 0.55], tone: [1, 0.04], steps: 0.07, ground: 0.26,
+    surface: { grain: 0.3, relief: 0.75, bevel: 1.5, gloss: 0.7, wash: [252, 236, 206, 0.12], own: 0.3, wood: 1, edge: 0.9, sea: [64, 132, 176, 0.4] }, // painted blue sea tiles
+    map: { tint: 0.64, relief: 0.8, wash: [252, 236, 206, 0.12] },
+    table: { baize: [44, 86, 64], rule: [222, 190, 140], wood: [1.3, 0.5], tone: [196, 152, 100] },
+    lamp: { sun: [-0.8, -0.5, 1], amb: [0.56, 0.12, 0.65], grade: [1.06, 0.94, 0.8, 0.18] }, // warm room light
+  }),
+  // cast pewter on a cloisonne plate: silver wire between cells, deep blue glass for the sea, brass only as trim
+  pewter: from(WAR, {
+    name: "Pewter and brass",
+    kit: { base: 1.3, cast: 1 }, // larger enamel bases, so an owner reads on every piece
+    pal: [[160, 164, 170], [118, 120, 124], [150, 152, 156], [128, 130, 136], [142, 142, 140], [176, 178, 182], [104, 110, 112], [120, 128, 124], [214, 218, 222], [184, 152, 86], [228, 226, 218], [112, 114, 120], [46, 48, 54], [168, 164, 150], [86, 90, 98], [210, 210, 206]],
+    fin: [[0.5, 0.36, 22, 0.16], [0.56, 0.4, 44, 0.08], [0.5, 0.5, 26, 0.16], [0.6, 0.06, 14, 0.04]], // satin metal everywhere; enamel glossier
+    sun: [-0.55, -0.75, 1.2], amb: [0.5, 0.16, 0.72], tone: [0.96, 0], ground: 0.38,
+    surface: { grain: 0.2, relief: 0.8, bevel: 1.2, gloss: 1.5, wash: [222, 224, 232, 0.2], own: 0, rim: [214, 220, 230, 0.9], edge: 1.1, sea: [16, 40, 118, 0.7] },
+    map: { tint: 0.66, relief: 0.8, wash: [222, 224, 232, 0.2] },
+    table: { baize: [26, 34, 70], rule: [206, 212, 222], wood: [0.5, 0.7], tone: [40, 32, 30] }, // a velvet surround
+    lamp: { sun: [-0.85, -0.55, 0.95], amb: [0.42, 0.16, 0.8], grade: [1.03, 0.95, 0.86, 0.26] },
+  }),
+  // a situation room: dark glass, lit contours, acrylic blocks lit at the edges in the owner's colour. Nothing moves while the board is idle
+  modern: from(WAR, {
+    name: "Modern command",
+    models: { foot: "army", horse: "armour", gun: "guns", unit1: "army", unit2: "guns", unit3: "armour", unit4: "leader", hill: "", peak: "" },
+    pal: [[72, 80, 92], [62, 68, 78], [84, 92, 104], [70, 80, 96], [100, 104, 100], [140, 150, 164], [36, 64, 68], [42, 76, 74], [200, 214, 228], [210, 220, 230], [120, 130, 144], [52, 58, 68], [14, 16, 22], [80, 96, 90], [60, 66, 76], [226, 236, 246]],
+    fin: [[0.44, 0.08, 18, 0.12], [0.36, 0.22, 36, 0.16], [0.44, 0.3, 24, 0.16], [0.4, 0.02, 10, 0.06]],
+    amb: [0.34, 0.1, 0.6], tone: [0.8, 0.12], glow: [0.9, 0.3], ground: 0.3,
+    surface: { grain: 0.25, relief: 0.6, bevel: 0.6, gloss: 0.5, wash: [22, 26, 34, 0.88], own: 0, edge: 0.9, rim: [92, 136, 176, 0.5], contour: [120, 196, 236, 0.6], spacing: 10, sea: [10, 42, 82, 0.72] },
+    map: { tint: 0.7, relief: 0.7, wash: [14, 20, 32, 0.8] },
+    table: { baize: [30, 36, 46], rule: [120, 170, 210], wood: [1, 0.94], tone: [44, 52, 64], grid: 0.5 }, // daylight: smoked glass
+    seats: "safe",
+    lamp: { amb: [0.24, 0.08, 0.66], grade: [0.94, 0.97, 1.04, 0.2], table: { baize: [12, 16, 22], rule: [100, 160, 204], wood: [1, 0.97], tone: [18, 22, 30], grid: 0.6 } }, // lamplight: darker glass
+  }),
 };
 /** Where the player's choice of style is kept, the same for every game. */
 const STYLE_KEY = "capo-style";
 /** The style of a name, or the default. */
 const styleOf = (name) => STYLES[name] || STYLES.war;
+/** A style as it is worn: in daylight as written, in lamplight with its lamp's values over it. */
+const wear = (name, light = "day") => { const s = styleOf(name); return light === "lamp" ? { ...s, ...s.lamp } : s; };
 
-$x.SLOT = SLOT; $x.STYLES = STYLES; $x.STYLE_KEY = STYLE_KEY; $x.styleOf = styleOf;
+// Seat colours: a setting of their own, in every style and game (ruling 147). Standard keeps what each player chose to wear;
+// the others put a tested set on the seats in order, and keep to it whatever was chosen. High contrast has a set for light boards
+// and one for dark ones. Checked by the gate (tools/check.mjs): contrast on every style's board, colour vision, greyscale.
+const SEATS = {
+  standard: { name: "Standard" },
+  safe: { // Okabe and Ito's set; on a dark board their yellow takes the place of their dark blue
+    name: "Colour-blind safe",
+    light: [["Blue", [0, 114, 178]], ["Orange", [230, 159, 0]], ["Green", [0, 158, 115]], ["Purple", [204, 121, 167]], ["Vermilion", [213, 94, 0]], ["Sky", [86, 180, 233]]],
+    dark: [["Sky", [86, 180, 233]], ["Orange", [230, 159, 0]], ["Green", [0, 158, 115]], ["Purple", [204, 121, 167]], ["Vermilion", [213, 94, 0]], ["Yellow", [240, 228, 66]]],
+  },
+  contrast: {
+    name: "High contrast",
+    light: [["Black", [0, 0, 0]], ["Blue", [46, 77, 163]], ["Red", [185, 59, 36]], ["Navy", [0, 33, 61]], ["Violet", [55, 25, 136]], ["Umber", [69, 64, 56]]],
+    dark: [["White", [255, 255, 255]], ["Yellow", [255, 225, 29]], ["Blue", [82, 166, 255]], ["Red", [255, 0, 0]], ["Cyan", [7, 227, 200]], ["Pink", [202, 115, 175]]],
+  },
+};
+/** Where the player's choice of seat colours is kept, the same for every game. */
+const SEATS_KEY = "capo-seats";
+/** The land most boards lie on (the table games' paper and Banners' plain), as a style shows it: what seat colours must stand out from. */
+const LANDS = [[231, 217, 185], [222, 190, 150]];
+const lum = (c) => c.reduce((s, v, i) => s + [0.2126, 0.7152, 0.0722][i] * ((v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4), 0);
+/** A colour as a style's ground shows it: drawn toward the wash, by `k` of the way (all of it for open land; owned land takes `own` of it). */
+const washed = (rgb, s, k = 1) => { const w = s.surface.wash; return rgb.map((v, i) => v + (w[i] - v) * w[3] * k); };
+/** Is this style's board dark? Then seat colours must be light to stand out on it. */
+const darkBoard = (s) => lum(washed(LANDS[0], s)) < 0.18;
+/** The seat colours in force: the set chosen, or the style's own until one is. */
+const seatSet = (chosen, style) => (SEATS[chosen] ? chosen : styleOf(style).seats);
+/** The colours a seat set puts on seats 0 to 5, [name, rgb] each, for this style's board; null for Standard (each seat as chosen). */
+function seatsOf(chosen, style) { const s = styleOf(style), set = SEATS[seatSet(chosen, style)]; return set.light ? (darkBoard(s) && set.dark) || set.light : null; }
+
+$x.SLOT = SLOT; $x.STYLES = STYLES; $x.STYLE_KEY = STYLE_KEY; $x.styleOf = styleOf; $x.wear = wear; $x.SEATS = SEATS; $x.SEATS_KEY = SEATS_KEY; $x.LANDS = LANDS; $x.washed = washed; $x.darkBoard = darkBoard; $x.seatSet = seatSet; $x.seatsOf = seatsOf;
 return $x; })({});
 $m[17] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -2318,7 +2405,10 @@ function turret(o, r, h, x = 0, y = 0, roof = null, fin = 0, n = 8) {
   else ring(n / 2, r * 1.03, (x1, y1, a) => move(p, box([], -r * 0.2, -r * 0.13, 0, r * 0.2, r * 0.13, 0.07, c("stone", 140)), x1, y1, h + 0.1, 1, a + UP));
   return move(o, p, x, y);
 }
-const base = (o, r = 0.36) => lathe(o, [[r, 0], [r * 1.04, 0.02], [r * 1.04, 0.055], [r * 0.9, 0.085], [0, 0.085]], 14, c("metal"), 2);
+// styles hook: a style's kit (style.js) widens the bases, and may cast every figure in plain metal with the owner's enamel on base, shield and flag
+let K = { base: 1, cast: 0 };
+const body = () => (K.cast ? [c("metal"), 2] : [c("cloth"), 1]);
+const base = (o, r = 0.36) => { r *= K.base; return lathe(o, [[r, 0], [r * 1.04, 0.02], [r * 1.04, 0.055], [r * 0.9, 0.085], [0, 0.085]], 14, K.cast ? c("cloth") : c("metal"), K.cast ? 1 : 2); };
 const pole = (o, x, y, z0, z1, r = 0.018, col = c("wood")) => move(o, lathe([], [[r, z0], [r, z1], [0, z1 + r]], 5, col), x, y);
 /** A flag on a pole, in the owner's colour. */
 function flag(o, x, y, z0, z1, w = 0.26, h = 0.17) {
@@ -2328,7 +2418,7 @@ function flag(o, x, y, z0, z1, w = 0.26, h = 0.17) {
 /** A soldier turned on a lathe: a metal base, an enamel body, a head. */
 function pawn(o, s = 1, head = "bone") {
   const p = base([]);
-  lathe(p, [[0.27, 0.085], [0.27, 0.12], [0.16, 0.2], [0.11, 0.46], [0.15, 0.5], [0.15, 0.53], [0.09, 0.56]], 12, c("cloth"), 1);
+  lathe(p, [[0.27, 0.085], [0.27, 0.12], [0.16, 0.2], [0.11, 0.46], [0.15, 0.5], [0.15, 0.53], [0.09, 0.56]], 12, ...body());
   lathe(p, [[0.09, 0.56], [0.14, 0.61], [0.16, 0.68], [0.14, 0.75], [0.08, 0.8], [0, 0.82]], 10, c(head), head === "bone" ? 0 : 2);
   return move(o, p, 0, 0, 0, s);
 }
@@ -2355,14 +2445,14 @@ function die(o, n) {
 const RECIPES = {
   // The Island Fable's four ranks: a scout, a guard with shield and spear, a knight, a marshal with a crown
   unit1: (o) => pawn(o, 0.9),
-  unit2(o) { pawn(o, 1); pole(o, 0.2, 0.02, 0.08, 0.95, 0.014, c("wood")); move(o, lathe([], [[0.025, 0], [0, 0.09]], 4, c("metal"), 2), 0.2, 0.02, 0.95); return move(o, prism([], [[-0.12, 0.17], [0.12, 0.17], [0.12, -0.02], [0, -0.17], [-0.12, -0.02]], -0.02, 0.02, c("metal"), 2, 0.012), -0.02, 0.19, 0.34, 1, 0, UP * 0.92); },
+  unit2(o) { pawn(o, 1); pole(o, 0.2, 0.02, 0.08, 0.95, 0.014, c("wood")); move(o, lathe([], [[0.025, 0], [0, 0.09]], 4, c("metal"), 2), 0.2, 0.02, 0.95); return move(o, prism([], [[-0.12, 0.17], [0.12, 0.17], [0.12, -0.02], [0, -0.17], [-0.12, -0.02]], -0.02, 0.02, ...(K.cast ? [c("cloth"), 1] : [c("metal"), 2]), 0.012), -0.02, 0.19, 0.34, 1, 0, UP * 0.92); },
   unit3: (o) => RECIPES.horse(o),
   unit4(o) { pawn(o, 1.12, "metal"); crown(o, 0.9, 0.13); return flag(o, -0.22, 0, 0.08, 1.12); },
   foot: (o) => pawn(o, 0.82),
   horse(o) { // cavalry: a chess knight of our own drawing, until a rider is chosen
     base(o, 0.38);
     const side = [[-0.3, 0], [-0.27, 0.3], [-0.08, 0.55], [-0.02, 0.76], [0.05, 0.84], [0.1, 0.7], [0.3, 0.56], [0.4, 0.34], [0.32, 0.25], [0.12, 0.34], [0.07, 0.26], [0.24, 0]].map(([x, z]) => [x * 0.82, z * 0.86]);
-    move(o, prism([], side, -0.1, 0.1, c("cloth"), 1, 0.025), 0, 0, 0.085, 1, 0, UP);
+    move(o, prism([], side, -0.1, 0.1, ...body(), 0.025), 0, 0, 0.085, 1, 0, UP);
     return move(o, prism([], [[-0.24, 0.3], [-0.12, 0.72], [-0.02, 0.66], [-0.14, 0.3]], -0.115, 0.115, c("dark"), 0), 0, 0, 0.085, 0.82, 0, UP); // the mane
   },
   gun(o) { // artillery: a barrel on a carriage with two wheels
@@ -2451,9 +2541,13 @@ function unpack(buffer) {
   return out;
 }
 
-let made = null;
-/** Every model, packed for the mesh layer. Made once, when a board first needs them. */
-function models() { return (made ||= Object.fromEntries(Object.entries(RECIPES).map(([k, f]) => [k, bake(f([]))]))); }
+const made = new Map();
+/** Every model, packed for the mesh layer, for a style's kit. Made once a kit, when a board first needs them. */
+function models(kit = {}) {
+  const k = { base: kit.base ?? 1, cast: kit.cast ?? 0 }, key = `${k.base},${k.cast}`;
+  if (!made.has(key)) { K = k; made.set(key, Object.fromEntries(Object.entries(RECIPES).map(([n, f]) => [n, bake(f([]))]))); K = { base: 1, cast: 0 }; }
+  return made.get(key);
+}
 
 $x.unpack = unpack; $x.models = models;
 return $x; })({});
@@ -2466,7 +2560,7 @@ const VS = `#version 300 es
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS = `#version 300 es
 precision highp float; precision highp int;
-uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable,uTall,uK,uShade; uniform vec3 uSun,uBaize,uRule,uMark; uniform vec4 uWin,uSurf,uWash; uniform vec2 uWoodK;${SHADE}
+uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable,uTall,uK,uShade; uniform vec3 uSun,uBaize,uRule,uMark; uniform vec4 uWin,uSurf,uWash,uRim,uCont,uMore,uSea,uGrade; uniform vec2 uWoodK; uniform vec3 uTone;${SHADE}
 float dep(vec2 p,float z){ vec2 d=(p-uC)*uS; float D=(d.x*uYaw.y+d.y*uYaw.x)*uTilt.y+z*uTilt.x; return .5-.5*uK*D/(1.-uQ*D); }
 uniform vec3 uInk,uPale,uWall,uGlow,uLand; out vec4 o;
 uniform float uRim; uniform vec3 uSeat[16]; // reading hook (p10-reading): an owner shown as each tile's rim and sides, so the land itself still reads
@@ -2505,15 +2599,19 @@ float pattern(vec2 q,int k){
   if(k==4) return hatch((q.x-q.y)*.7071,6.5);
   return hatch(q.y,5.5); }
 vec3 face(vec2 p,int id,float foot){
-  vec4 a=tab(id,0),b=tab(id,1); vec3 c=mix(a.rgb,uWash.rgb,uWash.a*(a.a<.99?.7:1.)); float e=2.; // a style may wash every colour toward its paper; an owner's less, so it still reads
+  vec4 a=tab(id,0),b=tab(id,1); vec3 c=mix(a.rgb,uWash.rgb,uWash.a*(a.a<.99?uMore.x:1.)); float e=2.; // a style may wash every colour toward its paper; an owner's less, so it still reads
   vec2 g=vec2(ht(p+vec2(e,0.))-ht(p-vec2(e,0.)),ht(p+vec2(0.,e))-ht(p-vec2(0.,e)))/100.;
   vec4 t2=tab(id,2),t3=tab(id,3); int kd=int(t2.r*255.+.5); vec2 q=(p-vec2(t3.r+t3.g*256.,t3.b+t3.a*256.)*15.9375)/uCell; float fm=0.;
+  if(kd==1){ c=mix(c,uSea.rgb,uSea.a); c=mix(c,uCont.rgb,uMore.w*.22*max(hatch(p.x*uS,40.*uS),hatch(p.y*uS,40.*uS))); } // styles hook: the sea in a colour of the style's, and a sparse grid on it
   if(kd>1){ float sd=t2.g,rim=kd>5?1.:smoothstep(.93,.78,max(abs(q.x),abs(q.x)*.5+abs(q.y)*.866)/.866); fm=form(kd,p,q,sd);
     g+=vec2(form(kd,p+vec2(1.,0.),q+vec2(1.,0.)/uCell,sd)-fm,form(kd,p+vec2(0.,1.),q+vec2(0.,1.)/uCell,sd)-fm)*rim*(kd==3?.5:kd>5?.2:.16);
     c*=mix(1.,kd==2?.84+.24*fm:kd==3?.66+.42*fm:kd==5?1.04-.16*fm:.86+.22*fm,rim); if(kd==5) c=mix(c,vec3(.96,.97,.95),.35*rim*(1.-fm)*grain(floor(q*3.6+sd)*7.)); }
   float k=clamp(1.-dot(g,uLight)*2.3*uRelief*uSurf.y,.56,1.36); c*=k;
   if(uMark.x>0.){ float sl=length(g); if(sl>.04){ vec2 dn=g/sl; c=mix(c,uInk,uMark.x*smoothstep(.05,.28,sl)*hatch(dot((p-uC)*uS,vec2(-dn.y,dn.x)),4.5)); } } // slopes as pen strokes down the hill c=mix(c,vec3(1.,.97,.9),.30*smoothstep(78.,118.,ht(p))*uRelief);
+  if(uCont.a>0.){ float h=ht(p),w=max(length(g)*25.*foot*uDpr,.03),d=abs(fract(h/uMore.z+.5)-.5)*uMore.z,on=uCont.a*smoothstep(30.,33.,h)*smoothstep(.004,.03,length(g))*(a.a<.99?.3:1.); // lit lines along the heights, above the plain, faint over owned land
+    c=mix(c,uCont.rgb,on*(1.-smoothstep(.3*w,1.1*w,d)))+uCont.rgb*on*(a.a<.99?0.:.16)*exp(-d/(3.*w)); } // and a soft glow beside them, made here (no glow pass)
   c*=1.+.07*uSurf.x*(grain(p*1.5)-.5); // paper
+  if(uMore.y>0.) c*=1.+uMore.y*(.06*sin(p.y*.55+nz(p*vec2(.018,.06))*14.)-.03*nz(p*vec2(.05,.5))); // wood grain
   float wet=b.b; c=mix(c,c*c*1.15,wet*.55); // fresh ink is deeper
   if(wet>0.) c+=vec3(.10)*wet*smoothstep(.0,1.,k-1.)*2.+min(uBev,1.)*uSurf.w*wet*.5*shine(g*2.5+vec2(nz(p*.35)-.5,nz(p*.35+7.)-.5)*.7,18.); // and it shines while it is wet
   if(uBev>0.){ // a tile is a moulded thing: its rim falls away and catches the light, and a taller neighbour shades its foot
@@ -2535,7 +2633,7 @@ vec3 face(vec2 p,int id,float foot){
     if(owned) c=near!=dark?uInk*.5:mix(c,uPale,dark?.9:.6);
     // beside owned land only the owned side draws the edge, so the ink meets the ground as it is
     else if(!them){ float l=dot(a.rgb,vec3(.3,.6,.1)); vec3 line=l>.36?uInk:uPale; c=mix(c,near?line:mix(line,a.rgb,.55),near?.42:.15); } }
-  else if(edge) c=mix(c,uInk,b.a<.99?.46:.16);
+  else if(edge) c=uRim.a>0.?mix(c,uRim.rgb,uRim.a):mix(c,uInk,b.a<.99?.46:.16); // a style may draw the line between cells as wire or light
   if(land) c=mix(c,uLand,own?.6:.92);
   if(owned&&uRim>0.){ vec3 sc=mix(seatOf(a.a),uWash.rgb,uWash.a*.6); float hd=max(abs(q.x),abs(q.x)*.5+abs(q.y)*.866)/.866; c=mix(c,sc,.16); c=mix(c,sc*clamp(k,.9,1.12),smoothstep(.68,.74,hd)); } // reading hook (p10-reading)
   float gl=b.g; if(gl>0.){ float pulse=uTime<=0.?1.:.72+.28*cos(uTime*6.2832); c=mix(c,uGlow,gl*(edge?.95:.34*pulse)); }
@@ -2558,10 +2656,11 @@ void main(){
     if(uTable<=0.){ o=vec4(0.,0.,0.,s/20.*.55); return; }
     // walnut, with a blue baize inlay for the board to lie on and a silver rule round it
     vec2 hs=uSize*.5; float mg=max(hs.x,hs.y)*.16,r=mg*.6; vec2 d=abs(p0-hs)-hs-mg+r; float sd=length(max(d,0.))+min(max(d.x,d.y),0.)-r,fw=foot*uDpr*1.2;
-    vec3 c=texture(uWood,p0/(max(hs.x,hs.y)*vec2(1.3,.65))).rgb; c=mix(c,vec3(.3,.19,.12),uWoodK.y)*uWoodK.x; c*=1.-.3*smoothstep(mg*.5,0.,sd)*step(0.,sd);
+    vec3 c=texture(uWood,p0/(max(hs.x,hs.y)*vec2(1.3,.65))).rgb; c=mix(c,uTone,uWoodK.y)*uWoodK.x; c*=1.-.3*smoothstep(mg*.5,0.,sd)*step(0.,sd);
     c=mix(uBaize*(.86+.28*grain(p0*2.)),c,smoothstep(-fw,fw,sd)); c=mix(c,uRule,(1.-smoothstep(mg*.035,mg*.035+fw,abs(sd+mg*.32)))*.8);
+    c=mix(c,uRule,uMore.w*.16*max(hatch(p0.x*uS,48.*uS),hatch(p0.y*uS,48.*uS))); // a faint grid on a glass table
     gl_FragDepth=dep(p0,0.);
-    o=vec4(c*(1.-s/20.*.62)*(1.-uShade*shd(p0,0.))*(1.-2.*dot(uv/uView,uv/uView)),1.); return; }
+    o=vec4(c*uGrade.rgb*(1.-s/20.*.62)*(1.-uShade*shd(p0,0.))*(1.-(2.+uGrade.w)*dot(uv/uView,uv/uView)),1.); return; }
   vec3 c;
   if(wall){ vec4 a0=tab(id,0); vec3 b=uRim>0.&&a0.a<.99?seatOf(a0.a):a0.rgb; /* reading hook (p10-reading): an owner's colour on the sides */ float l=.36+.30*clamp(z/max(top(id),.01),0.,1.); vec2 n=vec2(0.);
     if(uBev>0.){ for(int i=0;i<6;i++){ float t=float(i)*1.0471976+.5; vec2 d=vec2(cos(t),sin(t)); if(idAt(p+d*1.7)!=id) n+=d; } if(n!=vec2(0.)) l*=1.25+.55*dot(normalize(n),uLight); } // a side that faces the lamp is lighter
@@ -2569,8 +2668,8 @@ void main(){
   else { c=face(uMost>0.?p:p,id,foot); if(uMost>0.){ float h=top(id); for(int k=1;k<=5;k++){ float d=float(k)*3.; if(top(idAt(p+uLight*d))>h+.6*float(k)){ c*=.80; break; } } } }
   if(!wall) c*=1.-uShade*shd(p,z/uS);
   gl_FragDepth=dep(p,z);
-  if(uTable>0.) c*=1.-dot(uv/uView,uv/uView);
-  o=vec4(c,1.); }`;
+  if(uTable>0.) c*=1.-(1.+uGrade.w)*dot(uv/uView,uv/uView);
+  o=vec4(c*uGrade.rgb,1.); }`;
 
 class Painter {
   constructor(canvas) {
@@ -2641,7 +2740,9 @@ class Painter {
     g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uShOn, 0);
     o.lamp?.(u);
     const sf = o.style.surface; g.uniform4f(u.uSurf, sf.grain, sf.relief, sf.bevel, sf.gloss); g.uniform4f(u.uWash, sf.wash[0] / 255, sf.wash[1] / 255, sf.wash[2] / 255, sf.wash[3]); g.uniform3f(u.uMark, sf.hatch, sf.ruled, sf.edge);
-    const st = o.style.table; g.uniform3f(u.uBaize, st.baize[0] / 255, st.baize[1] / 255, st.baize[2] / 255); g.uniform3f(u.uRule, st.rule[0] / 255, st.rule[1] / 255, st.rule[2] / 255); g.uniform2f(u.uWoodK, st.wood[0], st.wood[1]);
+    const f4 = (k, c, a = c[3]) => g.uniform4f(u[k], c[0] / 255, c[1] / 255, c[2] / 255, a), st = o.style.table; // styles hook: rim, contours, sea, the rest, the grade
+    f4("uRim", sf.rim); f4("uCont", sf.contour); f4("uSea", sf.sea); g.uniform4f(u.uMore, sf.own, sf.wood, sf.spacing, st.grid); g.uniform4f(u.uGrade, ...o.style.grade); g.uniform3f(u.uTone, st.tone[0] / 255, st.tone[1] / 255, st.tone[2] / 255);
+    g.uniform3f(u.uBaize, st.baize[0] / 255, st.baize[1] / 255, st.baize[2] / 255); g.uniform3f(u.uRule, st.rule[0] / 255, st.rule[1] / 255, st.rule[2] / 255); g.uniform2f(u.uWoodK, st.wood[0], st.wood[1]);
     g.uniform1i(u.uId, 0); g.uniform1i(u.uHt, 1); g.uniform1i(u.uTab, 2); g.uniform1i(u.uWood, 3);
     g.uniform2f(u.uSize, m.w, m.h); g.uniform2f(u.uView, cam.W, cam.H); g.uniform2f(u.uMid, cam.mx, cam.my); g.uniform2f(u.uC, cam.cx, cam.cy);
     g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform2f(u.uLight, o.style.sun[0], o.style.sun[1]);
@@ -2922,7 +3023,7 @@ const { hexPicture } = $m[15];
 const { Meshes } = $m[16];
 const { models, unpack } = $m[17];
 const { Painter } = $m[20];
-const { STYLES, styleOf } = $m[19];
+const { STYLES, styleOf, wear } = $m[19];
 // reading hook (p10-reading): the goods, pips, ports, links and flags; names and plates that keep clear of each other
 const { drawLinks, flag, linkModels, pips, portPlate, stageLinks, stamp } = $m[21];
 const { drawNames, spread, tie } = $m[22];
@@ -3005,10 +3106,10 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   if (wood) { const img = new Image(); img.onload = () => { if (alive) { painter.wood(img); redraw(); } }; img.src = wood; }
   let timed = probe ? [] : null;
   // The mesh layer: real shapes for scenery and pieces, in every look but Flat (where the drawn pieces stay, as the plain and accessible view).
-  let look3 = styleOf(style), styleName = STYLES[style] ? style : "war";
+  let light = "day", look3 = wear(style, light), styleName = STYLES[style] ? style : "war"; // styles hook: worn in daylight or lamplight
   const lift = () => 9 * L.rise;
   let meshes = null, staged = false;
-  try { meshes = new Meshes(painter.g, { ...models(), ...linkModels() }); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); } // reading hook (p10-reading): the links between hexes
+  try { meshes = new Meshes(painter.g, { ...models(look3.kit), ...linkModels() }); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); } // reading hook (p10-reading): the links between hexes
   const solid = () => L.rise > 0 && !!meshes;
   /** Pieces on a map of small cells are made larger, so that they read when the whole board is in view (they still grow as you zoom in). */
   const grown = () => Math.max(1, Math.min(picture ? 3.2 : 1.25, 24 / (m.R * base))); // on a board of hexes a piece must still fit its own hex
@@ -3430,7 +3531,11 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     pack(buffer) { if (meshes) { meshes.add(unpack(buffer)); staged = false; redraw(); } },
     get style() { return look3; }, get styleName() { return styleName; },
     /** Another style: the same board and pieces, in other materials. */
-    setStyle(name) { if (!STYLES[name]) return; styleName = name; look3 = STYLES[name]; staged = false; dirty = true; redraw(); },
+    setStyle(name) { if (!STYLES[name]) return; const kit = models(look3.kit); styleName = name; look3 = wear(name, light); if (meshes && models(look3.kit) !== kit) meshes.add(models(look3.kit)); staged = false; dirty = true; redraw(); },
+    /** styles hook: "day" or "lamp", the style's lighting for the page's Daylight or Lamplight. */
+    setLight(v) { light = v === "lamp" ? "lamp" : "day"; look3 = wear(styleName, light); staged = false; dirty = true; redraw(); },
+    /** styles hook: the seats' colours have changed; owned land takes them at the next show. */
+    recolour() { show.forEach((c) => { if (c.owner >= 0) c.owner = -2; }); },
   };
 }
 
@@ -3444,7 +3549,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.10.0";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "9ffe918f";
+const BUILD = "fa79751f";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -4279,6 +4384,7 @@ $m[12] = (($x) => {
 // A game gives its rules, its board and its own move panel.
 const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } = $m[3];
 const { EMBLEMS, emblem } = $m[13];
+const { SEATS, SEATS_KEY, STYLE_KEY, seatSet, seatsOf } = $m[19];
 const { footer } = $m[23];
 const { canLock, linkGames, makeLink, newId, readLink } = $m[26];
 const { BUILD, SOURCE_URL, VERSION } = $m[24];
@@ -4293,8 +4399,13 @@ const COLOURS = [["Azure", [0, 114, 178]], ["Rust", [200, 88, 0]], ["Moss", [138
 const LOOK0 = [[0, 0], [4, 1], [5, 2], [3, 3], [1, 8], [14, 4]];
 /** What each seat wears now: its name, colour and icon. Changed in place, so a board keeps what it was given. */
 const NAMES = [], RGB = LOOK0.map(() => [0, 0, 0]), ICONS = [], PAPER = [[231, 217, 185], [228, 213, 180], [234, 221, 191]];
-function dress(look) {
-  look.forEach(([c, i], s) => { const [name, rgb] = COLOURS[c % COLOURS.length]; NAMES[s] = name; RGB[s].splice(0, 3, ...rgb); ICONS[s] = i % EMBLEMS.length; });
+// styles hook: the Seat colours setting (src/map/style.js) puts its own set on the seats in order; Standard keeps each seat's choice
+const stored = (k) => { try { return localStorage.getItem(k); } catch { return null; } }; // read is not ready yet when the first dress is put on
+let worn = LOOK0;
+function dress(look = worn) {
+  const set = seatsOf(stored(SEATS_KEY), stored(STYLE_KEY));
+  worn = look;
+  look.forEach(([c, i], s) => { const [name, rgb] = set?.[s] || COLOURS[c % COLOURS.length]; NAMES[s] = name; RGB[s].splice(0, 3, ...rgb); ICONS[s] = i % EMBLEMS.length; });
 }
 dress(LOOK0);
 const $ = (id) => document.getElementById(id);
@@ -4618,7 +4729,7 @@ function createTable(G) {
   function score() {
     const p = T.match.position, goal = G.goalOf(p), n = G.landOf(p), seats = T.kinds.length, over = T.match.turn === null;
     $("round").textContent = over ? "The end" : G.roundText?.(p) || (p.classic ? `Round ${p.round}` : `Round ${p.round} of ${p.rounds}`);
-    $("fills").replaceChildren(...Array.from({ length: seats }, (_, s) => { const i = el("i"); i.style.width = `${(100 * G.cellsOf(p, s)) / n}%`; i.style.background = `rgb(${RGB[s]})`; return i; }));
+    $("fills").replaceChildren(...Array.from({ length: seats }, (_, s) => { const i = el("i"); i.style.width = `${(100 * G.cellsOf(p, s)) / n}%`; i.style.background = `rgb(${RGB[s]})`; if (inkOf(RGB[s]) !== "#1a1411") i.style.setProperty("--pattern", "rgba(250, 244, 228, .5)"); return i; })); // styles hook: light lines on a dark seat colour
     $("goal").style.left = `${(100 * goal) / n}%`;
     // a map you start on with no land yet (real time) goes to your land once you have some
     if (!homed && !T.demo && board?.centre && document.body.classList.contains("atlas")) { const f = focus(); if (f >= 0) { homed = true; board.centre(f); } }
@@ -5077,7 +5188,9 @@ function createTable(G) {
     if (!clock) row("Bot speed", ...bind("speed"), CHOICES.speed);
     row("Motion", ...bind("motion"), CHOICES.motion);
     if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
-    if (board?.styles?.length) row("Board style", () => board.style, (v) => board.setStyle(v), board.styles); // 3D hook: styles are data (src/map/style.js)
+    const reseat = () => { dress(); board?.recolour?.(); board?.show([], true); if (T.match && !T.demo) score(); }; // styles hook: seat colours follow the style until chosen
+    if (board?.styles?.length) row("Board style", () => board.style, (v) => { board.setStyle(v); reseat(); }, board.styles); // 3D hook: styles are data (src/map/style.js)
+    row("Seat colours", () => seatSet(read(SEATS_KEY), read(STYLE_KEY)), (v) => { store(SEATS_KEY, v); reseat(); }, Object.entries(SEATS).map(([k, v]) => [k, v.name]));
     row("Letter keys", ...bind("keys"), CHOICES.keys);
     box.append(el("p", clock ? "This game's letter keys are in How to play. Off leaves Tab, arrows, Enter and Escape." : "E ends the turn (press twice), U takes back, and each game has a few more. Off leaves Tab, arrows, Enter and Escape.", "about"));
     row("Seat patterns", ...bind("patterns"), CHOICES.patterns);
@@ -5160,7 +5273,8 @@ function createTable(G) {
         }
         return row;
       };
-      box.replaceChildren(el("p", "Colour"), list("Colour", COLOURS.length, 0, (v) => [sign(0, COLOURS[v][1], setup.look[s][1]), COLOURS[v][0]]), el("p", "Icon"), list("Icon", EMBLEMS.length, 1, (v) => [sign(0, COLOURS[setup.look[s][0]][1], v), EMBLEMS[v][0]]));
+      const set = seatsOf(read(SEATS_KEY), read(STYLE_KEY)) && SEATS[seatSet(read(SEATS_KEY), read(STYLE_KEY))].name; // styles hook
+      box.replaceChildren(...(set ? [el("p", `Seat colours are set to ${set} in Settings, so the seats wear that set in order. Your colour here comes back with Standard.`, "about")] : []), el("p", "Colour"), list("Colour", COLOURS.length, 0, (v) => [sign(0, COLOURS[v][1], setup.look[s][1]), COLOURS[v][0]]), el("p", "Icon"), list("Icon", EMBLEMS.length, 1, (v) => [sign(0, COLOURS[setup.look[s][0]][1], v), EMBLEMS[v][0]]));
     };
     draw();
     sheet(`Player ${s + 1}`, box, "Done");
@@ -5363,10 +5477,14 @@ function hexBoard(T, stage, o) {
     placeKey();
     fit();
   };
+  const root = document.documentElement, night = matchMedia("(prefers-color-scheme: dark)"), lamp = () => ((root.dataset.theme ? root.dataset.theme === "dark" : night.matches) ? "lamp" : "day");
+  const relight = () => b?.setLight(lamp()), seen = new MutationObserver(relight);
+  seen.observe(root, { attributes: true, attributeFilter: ["data-theme"] }); night.addEventListener("change", relight);
   if (canDraw()) {
     try {
       b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, fit: o.fit, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, terrain: o.terrain, style: get(STYLE_KEY) || "war", reading: o.reading, wood: "../site/textures/walnut.webp", probe: !LOOKS[kept] && !weak, look: LOOKS[kept] ? kept : weak ? "flat" : "relief" });
       if (b.style.pack) fetch(`models/${b.style.pack}`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((buf) => { if (buf) b?.pack(buf); }).catch(() => {}); // a style's sculpted models come after the board is up; the code-made ones stand meanwhile
+      b.setLight(lamp()); // styles hook: the board's lighting follows the page's Daylight or Lamplight
       b.on("slow", () => { try { localStorage.setItem(SLOW, "1"); } catch { /* it will be timed again next time */ } b?.setLook("flat"); });
       b.on("pick", (i) => { if (i >= 0) o.tap(i); });
       b.on("hover", (i) => b?.setCursor(i >= 0 && T.ready() && o.can(i)));
@@ -5399,7 +5517,9 @@ function hexBoard(T, stage, o) {
     clear: () => b?.preview([]),
     at: (i) => b?.screenOf(i), // where a cell is on the screen, for the coach
     get moving() { return b; }, // motion hook (site/motion.js): the moving board itself, or null for the still picture
-    destroy: () => { b?.destroy(); key?.remove(); },
+    /** styles hook: the seats' colours changed (Settings, Seat colours): owned land takes the new ones. */
+    recolour() { b?.recolour(); if (!b && svg) still(); },
+    destroy() { seen.disconnect(); night.removeEventListener("change", relight); b?.destroy(); key?.remove(); },
   };
 }
 

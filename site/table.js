@@ -3,6 +3,7 @@
 // A game gives its rules, its board and its own move panel.
 import { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } from "../src/core/index.js";
 import { EMBLEMS, emblem } from "../src/map/board.js";
+import { SEATS, SEATS_KEY, STYLE_KEY, seatSet, seatsOf } from "../src/map/style.js";
 import { footer } from "./footer.js";
 import { canLock, linkGames, makeLink, newId, readLink } from "./link.js";
 import { BUILD, SOURCE_URL, VERSION } from "./config.js";
@@ -17,8 +18,13 @@ export const COLOURS = [["Azure", [0, 114, 178]], ["Rust", [200, 88, 0]], ["Moss
 const LOOK0 = [[0, 0], [4, 1], [5, 2], [3, 3], [1, 8], [14, 4]];
 /** What each seat wears now: its name, colour and icon. Changed in place, so a board keeps what it was given. */
 export const NAMES = [], RGB = LOOK0.map(() => [0, 0, 0]), ICONS = [], PAPER = [[231, 217, 185], [228, 213, 180], [234, 221, 191]];
-export function dress(look) {
-  look.forEach(([c, i], s) => { const [name, rgb] = COLOURS[c % COLOURS.length]; NAMES[s] = name; RGB[s].splice(0, 3, ...rgb); ICONS[s] = i % EMBLEMS.length; });
+// styles hook: the Seat colours setting (src/map/style.js) puts its own set on the seats in order; Standard keeps each seat's choice
+const stored = (k) => { try { return localStorage.getItem(k); } catch { return null; } }; // read is not ready yet when the first dress is put on
+let worn = LOOK0;
+export function dress(look = worn) {
+  const set = seatsOf(stored(SEATS_KEY), stored(STYLE_KEY));
+  worn = look;
+  look.forEach(([c, i], s) => { const [name, rgb] = set?.[s] || COLOURS[c % COLOURS.length]; NAMES[s] = name; RGB[s].splice(0, 3, ...rgb); ICONS[s] = i % EMBLEMS.length; });
 }
 dress(LOOK0);
 export const $ = (id) => document.getElementById(id);
@@ -342,7 +348,7 @@ export function createTable(G) {
   function score() {
     const p = T.match.position, goal = G.goalOf(p), n = G.landOf(p), seats = T.kinds.length, over = T.match.turn === null;
     $("round").textContent = over ? "The end" : G.roundText?.(p) || (p.classic ? `Round ${p.round}` : `Round ${p.round} of ${p.rounds}`);
-    $("fills").replaceChildren(...Array.from({ length: seats }, (_, s) => { const i = el("i"); i.style.width = `${(100 * G.cellsOf(p, s)) / n}%`; i.style.background = `rgb(${RGB[s]})`; return i; }));
+    $("fills").replaceChildren(...Array.from({ length: seats }, (_, s) => { const i = el("i"); i.style.width = `${(100 * G.cellsOf(p, s)) / n}%`; i.style.background = `rgb(${RGB[s]})`; if (inkOf(RGB[s]) !== "#1a1411") i.style.setProperty("--pattern", "rgba(250, 244, 228, .5)"); return i; })); // styles hook: light lines on a dark seat colour
     $("goal").style.left = `${(100 * goal) / n}%`;
     // a map you start on with no land yet (real time) goes to your land once you have some
     if (!homed && !T.demo && board?.centre && document.body.classList.contains("atlas")) { const f = focus(); if (f >= 0) { homed = true; board.centre(f); } }
@@ -801,7 +807,9 @@ export function createTable(G) {
     if (!clock) row("Bot speed", ...bind("speed"), CHOICES.speed);
     row("Motion", ...bind("motion"), CHOICES.motion);
     if (board?.looks.length) row("Board look", () => board.look, (v) => { store(LOOK, v); board.setLook(v); }, board.looks);
-    if (board?.styles?.length) row("Board style", () => board.style, (v) => board.setStyle(v), board.styles); // 3D hook: styles are data (src/map/style.js)
+    const reseat = () => { dress(); board?.recolour?.(); board?.show([], true); if (T.match && !T.demo) score(); }; // styles hook: seat colours follow the style until chosen
+    if (board?.styles?.length) row("Board style", () => board.style, (v) => { board.setStyle(v); reseat(); }, board.styles); // 3D hook: styles are data (src/map/style.js)
+    row("Seat colours", () => seatSet(read(SEATS_KEY), read(STYLE_KEY)), (v) => { store(SEATS_KEY, v); reseat(); }, Object.entries(SEATS).map(([k, v]) => [k, v.name]));
     row("Letter keys", ...bind("keys"), CHOICES.keys);
     box.append(el("p", clock ? "This game's letter keys are in How to play. Off leaves Tab, arrows, Enter and Escape." : "E ends the turn (press twice), U takes back, and each game has a few more. Off leaves Tab, arrows, Enter and Escape.", "about"));
     row("Seat patterns", ...bind("patterns"), CHOICES.patterns);
@@ -884,7 +892,8 @@ export function createTable(G) {
         }
         return row;
       };
-      box.replaceChildren(el("p", "Colour"), list("Colour", COLOURS.length, 0, (v) => [sign(0, COLOURS[v][1], setup.look[s][1]), COLOURS[v][0]]), el("p", "Icon"), list("Icon", EMBLEMS.length, 1, (v) => [sign(0, COLOURS[setup.look[s][0]][1], v), EMBLEMS[v][0]]));
+      const set = seatsOf(read(SEATS_KEY), read(STYLE_KEY)) && SEATS[seatSet(read(SEATS_KEY), read(STYLE_KEY))].name; // styles hook
+      box.replaceChildren(...(set ? [el("p", `Seat colours are set to ${set} in Settings, so the seats wear that set in order. Your colour here comes back with Standard.`, "about")] : []), el("p", "Colour"), list("Colour", COLOURS.length, 0, (v) => [sign(0, COLOURS[v][1], setup.look[s][1]), COLOURS[v][0]]), el("p", "Icon"), list("Icon", EMBLEMS.length, 1, (v) => [sign(0, COLOURS[setup.look[s][0]][1], v), EMBLEMS[v][0]]));
     };
     draw();
     sheet(`Player ${s + 1}`, box, "Done");

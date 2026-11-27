@@ -9,7 +9,7 @@ import { Camera } from "../src/map/camera.js";
 import { Dressing, capoModels } from "../src/map/dress.js";
 import { Meshes } from "../src/map/mesh.js";
 import { models } from "../src/map/models.js";
-import { STYLE_KEY, styleOf } from "../src/map/style.js";
+import { STYLE_KEY, wear } from "../src/map/style.js";
 import { WorldGround } from "../src/map/world.js";
 
 /** Fetch and unpack a world: absolute points for every arc, a path, box and middle for every province. */
@@ -103,14 +103,14 @@ export function worldMap(canvas, world, o) {
   let queued = false, moved = 0, last = null, pinch = null, drawn = null, settle = 0, layers = null, signature = "", later = 0, wide = 1, lit = null, timed = [], pieces = null;
 
   // ---- the lit map: its own canvas under this one ----
-  const style = styleOf(read(STYLE_KEY)), cam = new Camera(); // the same style as the table games wear
+  const theme = document.documentElement.dataset.theme, style = wear(read(STYLE_KEY), (theme ? theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches) ? "lamp" : "day"), cam = new Camera(); // the same style as the table games wear, in the page's light (styles hook)
   function light() {
     if (lit || read(FLAT) || !canDraw()) return;
     const under = document.createElement("canvas");
     try {
       under.setAttribute("aria-hidden", "true");
       Object.assign(under.style, { position: "fixed", inset: "0", width: "100%", height: "100%", display: "block" });
-      const ground = new WorldGround(under), meshes = new Meshes(ground.g, { ...models(), ...capoModels() }); // capomap: Capo's own models beside the shared ones
+      const ground = new WorldGround(under), meshes = new Meshes(ground.g, { ...models(style.kit), ...capoModels() }); // capomap: Capo's own models beside the shared ones;
       canvas.before(under);
       lit = { under, ground, meshes, rgb: new Map(), key: "" };
       under.addEventListener("webglcontextlost", (e) => { e.preventDefault(); dark(); });

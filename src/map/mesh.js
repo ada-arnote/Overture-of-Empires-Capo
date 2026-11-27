@@ -15,9 +15,9 @@ layout(location=3) in vec4 iP; layout(location=4) in vec2 iR; layout(location=5)
 vec3 world(out vec3 n){ vec3 l=aP*iP.w; n=vec3(aN.x*iR.x-aN.y*iR.y,aN.x*iR.y+aN.y*iR.x,aN.z); return vec3(iP.xy+vec2(l.x*iR.x-l.y*iR.y,l.x*iR.y+l.y*iR.x),iP.z*uLift+l.z); }`;
 const VS = `${HEAD}${INS}
 uniform vec3 uPal[16]; uniform vec2 uTone;
-out vec3 vN,vP,vC; out vec2 vF;
-void main(){ vec3 n,p=world(n); vN=n; vP=p; p+=n*uOut; int f=int(aN.w*127.+.5);
-  vec3 c=uPal[int(aC.r*255.+.5)&15]*(aC.g*2.); if(f==3) c=iC.rgb; if(f==1) c=mix(iC.rgb,vec3(dot(iC.rgb,vec3(.3,.6,.1))),uTone.y)*uTone.x*aC.g*2.; vC=c*aC.a*iC.a; vF=vec2(float(f),iC.a);
+out vec3 vN,vP,vC,vO,vF;
+void main(){ vec3 n,p=world(n); vN=n; vP=p; p+=n*uOut; int f=int(aN.w*127.+.5); float a=iC.a*255.,dim=mod(a,128.)/127.; // an instance's last byte: its dimness, and 128 if someone owns it
+  vec3 c=uPal[int(aC.r*255.+.5)&15]*(aC.g*2.); if(f==3) c=iC.rgb; if(f==1) c=mix(iC.rgb,vec3(dot(iC.rgb,vec3(.3,.6,.1))),uTone.y)*uTone.x*aC.g*2.; vC=c*aC.a*dim; vO=iC.rgb*dim; vF=vec3(float(f),dim,f==1&&a>127.5?1.:0.);
   gl_Position=clip(p); }`;
 /** The shadow test, shared with the grounds: how much of the lamp a point at height z misses. Needs uSun, uWin (the picture's window on the ground) and uTall. */
 export const SHADE = `
@@ -25,14 +25,16 @@ uniform sampler2D uSh; uniform float uShOn;
 float shd(vec2 p,float z){ if(uShOn<=0.) return 0.; vec2 q=(p-uSun.xy/uSun.z*z-uWin.xy)/uWin.zw; float s=0.;
   for(int i=0;i<4;i++){ vec2 o=vec2(i<2?-1.:1.,(i&1)==0?-1.:1.)*.0011; s+=smoothstep(z+.016*uTall,z+.047*uTall,texture(uSh,q+o).r*uTall); } return s*.25; }`;
 const FS = `${HEAD}${SHADE}
-uniform vec4 uFin[4]; uniform vec3 uAmb;
-in vec3 vN,vP,vC; in vec2 vF; out vec4 o;
+uniform vec4 uFin[4],uGrade; uniform vec3 uAmb; uniform vec2 uGlow; uniform float uStep;
+in vec3 vN,vP,vC,vO,vF; out vec4 o;
 void main(){ if(uOut>0.){ o=vec4(.06,.055,.06,1.); return; }
   vec3 n=normalize(vN),L=normalize(uSun),V=vec3(uTilt.y*uYaw.y,uTilt.y*uYaw.x,uTilt.x); vec4 f=uFin[int(vF.x+.5)];
   float df=max(dot(n,L),0.),sh=shd(vP.xy,vP.z),lit=df*(1.-uAmb.z*sh);
+  if(uStep>0.) lit=.85*smoothstep(.3-uStep,.3+uStep,lit)+.15*lit; // the lamp in two soft bands, as on a painted toy
   vec3 c=vC*(uAmb.x+uAmb.y*n.z+f.x*lit+.24*max(dot(n,V),0.)); // the lamp, the room, and a little light from where the player sits
   c+=f.y*pow(max(dot(n,normalize(L+V)),0.),f.z)*(1.-sh)*vF.y+f.w*pow(1.-max(dot(n,V),0.),3.);
-  o=vec4(c,1.); }`;
+  if(vF.z>0.&&uGlow.x>0.){ float r=1.-max(dot(n,V),0.); c=c*(1.-uGlow.y)+uGlow.x*vO*(.18+1.4*r*r); } // the owner's colour as light, strongest where a face turns away: an acrylic block lit at its edges, with no glow pass
+  o=vec4(c*uGrade.rgb,1.); }`;
 // the lamp's own view: where a corner's shadow falls on the ground, and how high the corner is
 const VS2 = `${HEAD}${INS}
 out float vH;
@@ -116,7 +118,7 @@ export class Meshes {
       for (const i of items) {
         const o = k * 7, c = i.rgb || [255, 255, 255];
         f[o] = i.x; f[o + 1] = i.y; f[o + 2] = i.z || 0; f[o + 3] = i.s || 1; f[o + 4] = Math.cos(i.t || 0); f[o + 5] = Math.sin(i.t || 0);
-        b[k * 28 + 24] = c[0]; b[k * 28 + 25] = c[1]; b[k * 28 + 26] = c[2]; b[k * 28 + 27] = Math.round(255 * (i.dim ?? 1));
+        b[k * 28 + 24] = c[0]; b[k * 28 + 25] = c[1]; b[k * 28 + 26] = c[2]; b[k * 28 + 27] = Math.round(127 * (i.dim ?? 1)) + (i.rgb ? 128 : 0); // styles hook: owned things can glow
         k++;
       }
     }
@@ -162,6 +164,7 @@ export class Meshes {
     g.uniform1f(u.uLift, lift);
     this.lamp(u, true, style.sun);
     g.uniform3fv(u.uPal, style.pal.flat().map((v) => v / 255)); g.uniform4fv(u.uFin, style.fin.flat()); g.uniform3f(u.uAmb, ...style.amb); g.uniform2f(u.uTone, ...style.tone);
+    g.uniform2f(u.uGlow, ...(style.glow || [0, 0])); g.uniform1f(u.uStep, style.steps || 0); g.uniform4f(u.uGrade, ...(style.grade || [1, 1, 1, 0])); // styles hook
     g.enable(g.DEPTH_TEST); g.depthFunc(g.LESS);
     if (style.outline) { g.depthMask(false); g.uniform1f(u.uOut, style.outline / cam.s); this.pass(u); g.depthMask(true); } // a dark shell, a little larger, drawn first: what shows round the model is its outline
     g.uniform1f(u.uOut, 0);

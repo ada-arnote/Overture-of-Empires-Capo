@@ -2,6 +2,25 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Six board styles, and seat colours of your own choosing
+
+**Players**
+- **Three more board styles** in Settings, Board style, beside War table, Campaign map and Clear:
+  - **Wooden toys**: turned, varnished pieces in soft two-step light, on wooden hex tiles with a grain and painted blue sea tiles, in a light oak tray lined with green felt.
+  - **Pewter and brass**: every figure cast in pewter, with the owner's colour as enamel on a wider base, shield, flag and roofs; brass only as trim. The board is a cloisonné plate: silver wire between the cells, deep blue glass for the sea, a velvet surround.
+  - **Modern command**: a dark board on smoked glass with a faint grid, lit contour lines over high ground, thin lit lines between cells, and acrylic blocks lit at their edges in the owner's colour. The glow is drawn by the board itself (no extra pass), and nothing moves while the board is idle.
+- **Seat colours** is a setting of its own, in every style and game: **Standard** (what each seat chose), **Colour-blind safe** (Okabe and Ito's set) and **High contrast**. High contrast has a dark set for light boards and a light set for dark ones, so no seat fades into Modern command's board. Modern command starts on Colour-blind safe until you choose. A dark seat colour keeps a pale edge and light pattern lines on the score bar.
+- **Daylight and lamplight**: every style has a lamplight lighting (a lower, warmer lamp and darker corners; darker glass for Modern command) that the board takes when Settings, Light is Lamplight, or when it follows a dark system. Clear stays as it is.
+- Capo's world map wears the chosen style and its light, as before, now with Pewter's enamel bases and Modern command's contours.
+
+**Contributors**
+- `src/map/style.js`: packs are listed by what differs from War table (`from`, merging tables one level deep), with new keys `kit` (`base` width, `cast` figures in metal), `glow`, `steps`, `grade`, `seats`, `lamp`, `surface.own`/`rim`/`wood`/`contour`/`spacing`/`sea` and `table.tone`/`grid`. `wear(name, light)`, `SEATS`, `SEATS_KEY` (`capo-seats`), `seatSet`, `seatsOf`, `darkBoard`, `washed`, `LANDS`.
+- `models(kit)` bakes the recipes once a kit. The mesh layer stores whether a thing is owned in its instance's last byte (128) and takes `glow`, `steps` and `grade`; the painter takes the rim, contour, wood, sea, grid, table tone and grade; the world ground takes the grade, contours, table tone and grid. Board: `setLight("day" | "lamp")`, `recolour()`; the hex board follows the page's `data-theme` and the system's dark mode.
+- `tools/check.mjs` `styleGate`: every pack has War table's keys and shapes, swaps only to real models, lamplight changes only light, colour and surfaces; seat sets have six named colours. Hard stops: High contrast (and a pack's own default set) under 3:1 against that pack's land as its wash shows it, Colour-blind safe under 0.06 apart (Oklab) for any two seats in normal, protan, deutan or tritan vision (Machado 2009), High contrast under 0.03, High contrast under 1.1:1 in greyscale, and pieces that would show no owner's colour. The rest are notes.
+- Frame times, one board frame drawn and finished on the graphics card, median over 40 frames in Fable, Banners, Glass and Inch (a desktop RTX 3080; the 375 px column is a phone-sized page, not a phone): War table 1.2 ms at 1440 x 900 and 1.1 at 375 px, Campaign map 1.0 and 0.8, Clear 0.7 and 0.7, Wooden toys 1.0 and 0.8, Pewter and brass 1.0 and 0.8, Modern command 1.0 and 1.0; no frame above 2.1 ms at the 90th percentile. 120 runs (every pack in every game, both sizes, each seat set at full size) with no console errors.
+
 ## v0.10.0 (2026-11-27): four new games take root, and nobody is knocked out
 
 ### Margins of Trust, early: the basic structure
