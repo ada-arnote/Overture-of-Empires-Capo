@@ -12,7 +12,9 @@
 //     both fear, needing 1). A country never declares war by rule on one it has a pact with;
 //   tribute: three times in ten, one country that is steady at home demands a yearly tribute of a weaker neighbour
 //     in trouble (at war, or shaken at home) that would pay (pacts.js: needing 4); never of one it has a treaty with.
-//   Neither is ever asked of the player's country by rule: the player binds it, from a card.
+//   The player's country is asked like any other, and answers for itself (ruling 154): a pact comes as an offer
+//     card, and tribute as a demand card, only when the sum says the country would pay and no demand was refused
+//     in the last two years.
 // How restless the world is can be set for a game (PACE): calm, lively (the numbers above) or stormy. It changes
 // how often a war, a pact, a demand for tribute and a crisis come, and nothing else.
 // Peace needs no proposal: wars end by rule at the end of every turn (war.js).
@@ -21,7 +23,7 @@
 import { hash32 } from "./line.js";
 import { treatyAnswer } from "./relations.js";
 import { gaugeOf } from "./state.js";
-import { pactAnswer, pactOf } from "./pacts.js";
+import { mayDun, pactAnswer, pactOf } from "./pacts.js";
 import { strengthOf, truceUntil } from "./war.js";
 import { atWar, attackPlan, treatyOf, turnKey, warsOf } from "./worldrules.js";
 
@@ -83,13 +85,13 @@ export function rivalMoves(g, geo) {
   }
   // round 3: a pact of non-aggression between two neighbours with no treaty, when the answer would be yes
   if (all.length && pick("pact", 100) < rate(g, "pact")) {
-    const c = all[pick("pact:asks", all.length)], list = near.get(c).filter((t) => t !== me && !treatyOf(g, c, t)), t = list[pick("pact:of", list.length || 1)];
-    if (t && pactAnswer(g, geo, c, t, "peace").ok) move(c, "PACT", t);
+    const c = all[pick("pact:asks", all.length)], list = near.get(c).filter((t) => !treatyOf(g, c, t) && !(t === me && g.offers.some((o) => o.from === c && o.kind === "pact"))), t = list[pick("pact:of", list.length || 1)];
+    if (t && pactAnswer(g, geo, t === me ? me : c, t === me ? c : t, "peace").ok) move(c, "PACT", t);
   }
   // round 3: tribute demanded of a weaker neighbour in trouble that would pay
   if (pick("tribute", 100) < rate(g, "tribute")) {
-    const weak = [...new Set([...g.wars.flatMap((w) => w.pair.split("|")), ...Object.keys(g.gauge || {}).filter((c) => gaugeOf(g, c, "s") < 2)])].filter((c) => c !== me && near.has(c)).sort();
-    const asks = weak.flatMap((t) => near.get(t).filter((c) => c !== me && gaugeOf(g, c, "s") >= 2 && pactAnswer(g, geo, c, t, "tribute").ok).map((c) => [c, t]));
+    const weak = [...new Set([...g.wars.flatMap((w) => w.pair.split("|")), ...Object.keys(g.gauge || {}).filter((c) => gaugeOf(g, c, "s") < 2)])].filter((c) => near.has(c)).sort();
+    const asks = weak.flatMap((t) => near.get(t).filter((c) => c !== me && (t !== me || mayDun(g, c)) && gaugeOf(g, c, "s") >= 2 && pactAnswer(g, geo, c, t, "tribute").ok).map((c) => [c, t]));
     if (asks.length) { const [c, t] = asks[pick("tribute:whom", asks.length)]; move(c, "TRIBUTE", t); }
   }
   return moves;

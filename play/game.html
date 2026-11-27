@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-/NvecflPiC5/kR7WA47haUd1FFG3E5/7ExaoI8mJKMk='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https://openrouter.ai https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.mistral.ai https://api.deepseek.com https://api.together.xyz https://api.cerebras.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-EYwZhhEhLMdKFoelH685Ph5xgi+xORMBIRbH4aWSirA='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https://openrouter.ai https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.mistral.ai https://api.deepseek.com https://api.together.xyz https://api.cerebras.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -958,13 +958,19 @@ $m[9] = (($x) => {
 // a payer that stops while still bound gives the receiver a cause.
 // Round three (ruling 149): every country is bound by the same rules. A PACT or TRIBUTE move, from the AI or from
 // the rules-only turn (rivals.js), is answered by the sums above and written in the receipt and the chronicle.
-// Nobody is made to bind the player's country: a pact meant for it says whether it would be agreed, and the
-// player asks from the card; tribute is never demanded of the player by a move.
+// The player's country is never bound without the player (ruling 154). A pact meant for it arrives as an offer,
+// like a treaty offer, when the country offering would itself agree; accepted from the actions, it stands as
+// offered. Tribute is demanded of the player only when the sum says their country would pay: the demand waits one
+// turn as a card (g.due), and the player answers. Paying binds it as any tribute does. Refusing (the answer when
+// none is given) gives the asker a cause and costs a step of relations; the same country does not ask again for
+// two years.
 const { monthsApart, treatyAnswer } = $m[5];
 const { gaugeOf, gaugeWord, setCause } = $m[4];
 const { mightOf, strengthOf } = $m[8];
 
-const PACT = { need: 1, years: 5, tribute: 4, most: 10, gap: 3, fear: 2 };
+const PACT = { need: 1, years: 5, tribute: 4, most: 10, gap: 3, fear: 2, again: 24 };
+/** Whether a country may demand tribute of the player today: none waiting, and none refused in the last two years. */
+const mayDun = (g, c, now = g.date) => !g.due && !(g.dunned?.[c] && monthsApart(g.dunned[c], now) < PACT.again);
 const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
 const pairOf = (a, b) => [a, b].sort().join("|");
 // read from the game as worldrules.js reads them; kept here so that file can judge PACT and TRIBUTE moves by this one
@@ -1033,9 +1039,11 @@ const drop = (g, p) => { g.pacts = g.pacts.filter((x) => x !== p); };
  * card, an AI's move and the rules-only turn. Returns {no} when it cannot be asked, else {ok, as, text, fact, gauge}:
  * `as` is the country the receipt line speaks for, `text` its words after the name.
  */
-function askClause(g, geo, from, to, kind, date) {
-  const ans = pactAnswer(g, geo, from, to, kind), name = geo.name, [a, b] = [from, to].sort();
-  if (ans.no) return { no: ans.no };
+function askClause(g, geo, from, to, kind, date, offered = false) {
+  const asked = pactAnswer(g, geo, from, to, kind), name = geo.name, [a, b] = [from, to].sort();
+  if (asked.no) return { no: asked.no };
+  // an offer already made to the player stands as made, as a treaty offer does
+  const ans = offered ? { ...asked, ok: true, why: "as offered" } : asked;
   g.pacts ||= [];
   if (kind === "peace") {
     if (ans.ok) g.pacts.push({ kind: "peace", a, b, since: date });
@@ -1054,13 +1062,25 @@ function clauseMove(g, m, geo, { isMe }) {
   const c = m.country, t = m.target, kind = m.verb === "PACT" ? "peace" : "tribute", what = kind === "peace" ? "a pact of non-aggression" : "a yearly tribute";
   if (!geo.known(t) || t === c) return { ok: false, why: `${what} refused: "${m.target}" is not a country` };
   if (t === g.player && g.mode !== "citizen" && !isMe) {
-    if (kind === "tribute") return { ok: false, why: "would demand a yearly tribute of you, but no move binds your country: nothing is owed" };
-    const a = pactAnswer(g, geo, t, c, "peace");
-    return { ok: false, why: a.no ? `would offer you a pact of non-aggression, but cannot (${a.no})` : `would ${a.ok ? "sign" : "not sign"} a pact of non-aggression with you (${a.why}); it is yours to propose, from its card` };
+    const a = pactAnswer(g, geo, kind === "peace" ? t : c, kind === "peace" ? c : t, kind);
+    if (kind === "tribute") {
+      if (a.no) return { ok: false, why: `would demand a yearly tribute of you, but cannot (${a.no})` };
+      if (!a.ok) return { ok: false, why: `would demand a yearly tribute of you, but does not: by the rules you would refuse (${a.why})` };
+      if (!mayDun(g, c)) return { ok: false, why: "would demand a yearly tribute of you, but a demand already waits or was refused in the last two years" };
+      g.due = { from: c, turn: g.turn, since: g.date };
+      return { ok: true, why: `demands a yearly tribute of you (${a.why}); pay or refuse from your actions before the next turn ends` };
+    }
+    // the offer is made when the country offering would itself say yes to you
+    if (a.no) return { ok: false, why: `would offer you a pact of non-aggression, but cannot (${a.no})` };
+    if (!a.ok) return { ok: false, why: `would offer you a pact of non-aggression, but does not (${a.why})` };
+    if (!g.offers.some((o) => o.from === c && o.kind === "pact")) g.offers.push({ from: c, kind: "pact", date: g.date });
+    return { ok: false, why: "offers you a pact of non-aggression; accept it from your actions" };
   }
   // the player's own order by card for the same clause is this move: it is not asked twice
   if (isMe) g.plans = (g.plans || []).filter((p) => !(p.kind === "pact" && p.sub === kind && p.target === t));
-  const r = askClause(g, geo, c, t, kind, g.date);
+  const offered = isMe && kind === "peace" && (g.offers || []).some((o) => o.from === t && o.kind === "pact");
+  const r = askClause(g, geo, c, t, kind, g.date, offered);
+  if (isMe && kind === "peace" && !r.no && r.ok) g.offers = (g.offers || []).filter((o) => !(o.from === t && o.kind === "pact"));
   return r.no ? { ok: false, why: `${what} with ${geo.name(t)} is refused: ${r.no}` } : { ok: r.ok, why: r.text, as: r.as, fact: r.fact, gauge: r.gauge };
 }
 
@@ -1093,6 +1113,21 @@ function settlePacts(g, receipt, to, geo, plans = []) {
       lines.push({ ok: true, country: p.b, text: `${name(p.b)}: stops paying tribute to ${name(p.a)}${stops ? "" : ` (might ${mightOf(geo, p.b)} against ${mightOf(geo, p.a)}: no longer the weaker)`}` });
     } else if (months >= PACT.most * 12) { drop(g, p); if (mine) lines.push({ ok: true, text: `The tribute ${name(p.b)} paid ${name(p.a)} ends after ${PACT.most} years` }); }
   }
+  // a demand for tribute on the player, made in an earlier turn, is answered now: by the player, never by the sum
+  const d = g.due;
+  if (d && (g.mode === "citizen" || !geo.known(d.from) || !geo.holds(d.from))) g.due = null;
+  else if (d && g.turn > d.turn) {
+    const can = pactAnswer(g, geo, d.from, me, "tribute");
+    g.due = null;
+    if (can.no) lines.push({ ok: true, country: d.from, text: `${name(d.from)}: its demand for tribute is overtaken by events (${can.no})` });
+    else if (d.answer === "pay") {
+      g.pacts.push({ kind: "tribute", a: d.from, b: me, since: to }); sour(g, d.from, me, -1, to);
+      lines.push({ ok: true, country: me, text: `${name(me)}: agrees to pay ${name(d.from)} a yearly tribute (your own answer)`, gauge: [[d.from, "m", 1, "tribute agreed"]], fact: ["tribute", me, d.from] });
+    } else {
+      g.dunned = { ...(g.dunned || {}), [d.from]: to }; setCause(g, d.from, me, `tribute refused in ${year}`, to); sour(g, d.from, me, (g.rel?.[pairOf(d.from, me)]?.[0] || 0) - 1, to);
+      lines.push({ ok: true, country: me, text: `${name(me)}: refuses ${name(d.from)}'s demand for tribute (your own answer), and ${name(d.from)} holds a cause` });
+    }
+  }
   if (g.mode === "citizen") return lines;
   for (const x of plans.filter((p) => p.kind === "pact" && p.sub !== "stop")) {
     const b = x.target, what = x.sub === "peace" ? "a pact of non-aggression" : "a yearly tribute", r = askClause(g, geo, me, b, x.sub, to);
@@ -1107,15 +1142,23 @@ function pactLines(g, geo, near = []) {
   const me = g.player, mine = (g.pacts || []).filter((p) => p.a === me || p.b === me).map((p) => (p.kind === "peace" ? `a pact of non-aggression with ${p.a === me ? p.b : p.a} until ${Number(p.since.slice(0, 4)) + PACT.years}` : p.a === me ? `${p.b} pays it tribute` : `it pays tribute to ${p.a}`));
   const close = new Set([me, ...near]), around = [...spheres(g, geo)].filter(([p, list]) => close.has(p) || list.some((c) => close.has(c))).slice(0, 6).map(([p, list]) => `${p} over ${list.slice(0, 6).join(", ")}`);
   return [
+    ...(g.due ? [`- A demand, kept by the rules: ${g.due.from} demands a yearly tribute of the player's country. The player answers it this turn. Write the pressure and the talk around it; never say how it ends.`] : []),
     ...(mine.length ? [`- Clauses that bind the player's country, kept by the rules (war on a pact partner is a breach, and costs it at home and abroad): ${mine.join("; ")}`] : []),
     ...(around.length ? [`- Spheres of influence near the player, read by the rules from treaties (a much stronger partner stands over each): ${around.join("; ")}`] : []),
   ];
 }
 
-/** Clauses from a save: two countries on the map, a kind the rules know, a date. */
-const keepPacts = (s, known) => ({ pacts: (Array.isArray(s.pacts) ? s.pacts : []).filter((p) => p && ["peace", "tribute"].includes(p.kind) && known(p.a) && known(p.b) && p.a !== p.b && /^\d{4}-\d{2}-\d{2}$/.test(p.since || "")).slice(0, 80).map((p) => ({ kind: p.kind, a: p.a, b: p.b, since: p.since })) });
+/** A waiting demand for tribute and the refusals remembered, from a save. */
+function keepDue(s, known) {
+  const DATE = /^\d{4}-\d{2}-\d{2}$/, d = s.due, ok = d && typeof d === "object" && known(d.from) && d.from !== s.player && Number.isInteger(d.turn) && DATE.test(d.since || "");
+  const dunned = Object.fromEntries(Object.entries(s.dunned && typeof s.dunned === "object" && !Array.isArray(s.dunned) ? s.dunned : {}).filter(([c, at]) => known(c) && DATE.test(at || "")));
+  return { due: ok ? { from: d.from, turn: d.turn, since: d.since, ...(d.answer === "pay" ? { answer: "pay" } : {}) } : null, dunned };
+}
 
-$x.PACT = PACT; $x.pactOf = pactOf; $x.tributeOf = tributeOf; $x.sphereOf = sphereOf; $x.spheres = spheres; $x.fearOf = fearOf; $x.pactAnswer = pactAnswer; $x.askClause = askClause; $x.clauseMove = clauseMove; $x.settlePacts = settlePacts; $x.pactLines = pactLines; $x.keepPacts = keepPacts;
+/** Clauses from a save: two countries on the map, a kind the rules know, a date. */
+const keepPacts = (s, known) => ({ ...keepDue(s, known), pacts: (Array.isArray(s.pacts) ? s.pacts : []).filter((p) => p && ["peace", "tribute"].includes(p.kind) && known(p.a) && known(p.b) && p.a !== p.b && /^\d{4}-\d{2}-\d{2}$/.test(p.since || "")).slice(0, 80).map((p) => ({ kind: p.kind, a: p.a, b: p.b, since: p.since })) });
+
+$x.PACT = PACT; $x.mayDun = mayDun; $x.pactOf = pactOf; $x.tributeOf = tributeOf; $x.sphereOf = sphereOf; $x.spheres = spheres; $x.fearOf = fearOf; $x.pactAnswer = pactAnswer; $x.askClause = askClause; $x.clauseMove = clauseMove; $x.settlePacts = settlePacts; $x.pactLines = pactLines; $x.keepPacts = keepPacts;
 return $x; })({});
 $m[2] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -2040,7 +2083,9 @@ $m[14] = (($x) => {
 //     both fear, needing 1). A country never declares war by rule on one it has a pact with;
 //   tribute: three times in ten, one country that is steady at home demands a yearly tribute of a weaker neighbour
 //     in trouble (at war, or shaken at home) that would pay (pacts.js: needing 4); never of one it has a treaty with.
-//   Neither is ever asked of the player's country by rule: the player binds it, from a card.
+//   The player's country is asked like any other, and answers for itself (ruling 154): a pact comes as an offer
+//     card, and tribute as a demand card, only when the sum says the country would pay and no demand was refused
+//     in the last two years.
 // How restless the world is can be set for a game (PACE): calm, lively (the numbers above) or stormy. It changes
 // how often a war, a pact, a demand for tribute and a crisis come, and nothing else.
 // Peace needs no proposal: wars end by rule at the end of every turn (war.js).
@@ -2049,7 +2094,7 @@ $m[14] = (($x) => {
 const { hash32 } = $m[3];
 const { treatyAnswer } = $m[5];
 const { gaugeOf } = $m[4];
-const { pactAnswer, pactOf } = $m[9];
+const { mayDun, pactAnswer, pactOf } = $m[9];
 const { strengthOf, truceUntil } = $m[8];
 const { atWar, attackPlan, treatyOf, turnKey, warsOf } = $m[2];
 
@@ -2111,13 +2156,13 @@ function rivalMoves(g, geo) {
   }
   // round 3: a pact of non-aggression between two neighbours with no treaty, when the answer would be yes
   if (all.length && pick("pact", 100) < rate(g, "pact")) {
-    const c = all[pick("pact:asks", all.length)], list = near.get(c).filter((t) => t !== me && !treatyOf(g, c, t)), t = list[pick("pact:of", list.length || 1)];
-    if (t && pactAnswer(g, geo, c, t, "peace").ok) move(c, "PACT", t);
+    const c = all[pick("pact:asks", all.length)], list = near.get(c).filter((t) => !treatyOf(g, c, t) && !(t === me && g.offers.some((o) => o.from === c && o.kind === "pact"))), t = list[pick("pact:of", list.length || 1)];
+    if (t && pactAnswer(g, geo, t === me ? me : c, t === me ? c : t, "peace").ok) move(c, "PACT", t);
   }
   // round 3: tribute demanded of a weaker neighbour in trouble that would pay
   if (pick("tribute", 100) < rate(g, "tribute")) {
-    const weak = [...new Set([...g.wars.flatMap((w) => w.pair.split("|")), ...Object.keys(g.gauge || {}).filter((c) => gaugeOf(g, c, "s") < 2)])].filter((c) => c !== me && near.has(c)).sort();
-    const asks = weak.flatMap((t) => near.get(t).filter((c) => c !== me && gaugeOf(g, c, "s") >= 2 && pactAnswer(g, geo, c, t, "tribute").ok).map((c) => [c, t]));
+    const weak = [...new Set([...g.wars.flatMap((w) => w.pair.split("|")), ...Object.keys(g.gauge || {}).filter((c) => gaugeOf(g, c, "s") < 2)])].filter((c) => near.has(c)).sort();
+    const asks = weak.flatMap((t) => near.get(t).filter((c) => c !== me && (t !== me || mayDun(g, c)) && gaugeOf(g, c, "s") >= 2 && pactAnswer(g, geo, c, t, "tribute").ok).map((c) => [c, t]));
     if (asks.length) { const [c, t] = asks[pick("tribute:whom", asks.length)]; move(c, "TRIBUTE", t); }
   }
   return moves;
@@ -2749,10 +2794,14 @@ $m[23] = (($x) => {
 // When a rising has stood a year unanswered (home.js) and its province cannot go back to an old holder, the rebel
 // provinces leave: the province where it gathered and the provinces of the same country that touch it by land,
 // in the map's own order, never the heartland, four at most and never more than half of what the country holds.
-// They become a country: a three-letter code no map country uses, a name from the province and a fixed list of
-// forms, a colour from a fixed list, might two below its parent's (held between 2 and 4), all dealt from the
+// They become a country: a three-letter code no map country uses, a name from a fixed list of forms, a colour
+// from a fixed list, might two below its parent's (held between 2 and 4), all dealt from the
 // game's seed, so the same game founds the same country. It is kept in the game as g.lands[code] = {name, colour,
 // from, since, seat}, and its land as owner entries like any other change of hands.
+// The name (ruling 154). On the real map, with or without an alternate history laid over it, a founded country
+// is named for the rebel's title and never for the place: "The Colonel's Republic". A real province's name in a
+// country's name could read as a real separatist cause, so it is never used, and neither is it used for the code.
+// On an invented world the name comes from the province: "Republic of Branbruwick".
 // What follows by rule: the two stand bitter (-2); a truce of two years holds between them, and for those two
 // years a demand for the land back counts as already made; the parent holds a cause for five years (and, where the
 // land was its own on the map, for as long as it is lost); the parent's unrest is over, its stability rises a
@@ -2765,6 +2814,15 @@ const { MIGHT, mightOf } = $m[8];
 
 const POLITY = { most: 4, lands: 40, low: 2, high: 4, less: 2 };
 const FORMS = ["Republic of %", "Free State of %", "% Commonwealth", "% League", "% Confederation", "% Union"];
+// for the real map: the same six forms, after the rebel's title
+const NEUTRAL = ["Republic", "Free State", "Commonwealth", "League", "Confederation", "Union"];
+/** The name a rising's country takes: from its province on an invented world, from the rebel's title on the real map. Never one already taken in the game. */
+function nameFor(g, u, place, to) {
+  const at = hash32(g.seed, `polity:form:${u.id}:${to}`) % FORMS.length, taken = new Set(Object.values(landsOf(g)).map((l) => l.name)), title = (String(u.who || "").match(/^the ([A-Za-z]+) of /) || [])[1] || "Rebel";
+  const names = FORMS.map((_, i) => (g.world ? FORMS[(at + i) % FORMS.length].replace("%", place) : `The ${title}'s ${NEUTRAL[(at + i) % NEUTRAL.length]}`));
+  const free = names.find((n) => !taken.has(n));
+  return free || `${names[0]} of ${to.slice(0, 4)}`;
+}
 const COLOURS = ["#b5651d", "#7a9e3f", "#3f8f8a", "#8f5fa8", "#c2783c", "#5a7fb8", "#a8a13f", "#b8577a", "#4f9a6b", "#9a6a4f", "#6f6fc0", "#c9933a", "#4a9ab0", "#a85f5f", "#7d8f4a", "#9a5fb0"];
 const CODE = /^[A-Z]{3}$/, COLOUR = /^#[0-9a-f]{6}$/i, DATE = /^\d{4}-\d{2}-\d{2}$/, AZ = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -2792,10 +2850,12 @@ function rebelLand(geo, c, id) {
  * returns {code, name, ids}, or null when no country can be founded (its last land, its heartland, no code left).
  */
 function found(g, geo, c, u, to) {
-  const ids = rebelLand(geo, c, u.id), place = geo.place(u.id)?.name || "", code = ids.length && Object.keys(landsOf(g)).length < POLITY.lands ? codeFor(g, geo, place) : "";
+  const ids = rebelLand(geo, c, u.id), place = geo.place(u.id)?.name || "", name = nameFor(g, u, place, to);
+  // the code is spelled from the name it will carry: on the real map that is the title, never the place
+  const code = ids.length && Object.keys(landsOf(g)).length < POLITY.lands ? codeFor(g, geo, g.world ? place : name.replace(/^The /, "")) : "";
   if (!code) return null;
   const taken = new Set(Object.values(landsOf(g)).map((l) => l.colour)), free = COLOURS.filter((x) => !taken.has(x)), pool = free.length ? free : COLOURS;
-  const name = FORMS[hash32(g.seed, `polity:form:${u.id}:${to}`) % FORMS.length].replace("%", place), pair = [c, code].sort().join("|");
+  const pair = [c, code].sort().join("|");
   const might = Math.max(POLITY.low, Math.min(POLITY.high, mightOf(geo, c) - POLITY.less));
   g.lands = { ...landsOf(g), [code]: { name, colour: pool[hash32(g.seed, `polity:colour:${u.id}:${to}`) % pool.length], from: c, since: to, seat: u.id } };
   for (const id of ids) g.owners[id] = code;
@@ -2823,7 +2883,7 @@ function keepLands(s, isProvince = () => true) {
   return out;
 }
 
-$x.POLITY = POLITY; $x.FORMS = FORMS; $x.COLOURS = COLOURS; $x.landsOf = landsOf; $x.codeFor = codeFor; $x.rebelLand = rebelLand; $x.found = found; $x.polityLines = polityLines; $x.keepLands = keepLands;
+$x.POLITY = POLITY; $x.FORMS = FORMS; $x.NEUTRAL = NEUTRAL; $x.nameFor = nameFor; $x.COLOURS = COLOURS; $x.landsOf = landsOf; $x.codeFor = codeFor; $x.rebelLand = rebelLand; $x.found = found; $x.polityLines = polityLines; $x.keepLands = keepLands;
 return $x; })({});
 $m[22] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -4135,7 +4195,7 @@ const startOf = (s) => Object.fromEntries(Object.entries(s.owners || {}).filter(
  * The player's orders by card, each tied to the action that asked for it: an attack {text, verb, target, seat,
  * approach}, or a treaty or peace with a country {text, verb, target, detail}.
  */
-const ORDERS = ["ATTACK", "TREATY", "PEACE"], KINDS = ["trade", "defence", "alliance"];
+const ORDERS = ["ATTACK", "TREATY", "PEACE", "PACT"], KINDS = ["trade", "defence", "alliance"];
 const keepOrders = (v, isProvince, known) => (Array.isArray(v) ? v : []).map((o) => ({ ...o, verb: ORDERS.includes(o?.verb) ? o.verb : "ATTACK" }))
   .filter((o) => typeof o.text === "string" && typeof o.target === "string" && (o.verb === "ATTACK" ? isProvince(o.target) : known(o.target)))
   .map((o) => (o.verb === "ATTACK" ? { text: o.text, verb: o.verb, target: o.target, seat: typeof o.seat === "string" ? o.seat : "", approach: APPROACHES[o.approach] ? o.approach : "steady" } : { text: o.text, verb: o.verb, target: o.target, detail: KINDS.includes(o.detail) ? o.detail : "" }));
@@ -6560,7 +6620,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.9.3";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "1322fc65";
+const BUILD = "fccf8a91";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -8025,6 +8085,7 @@ const { demand, demandAnswer } = $m[16];
 const { ambitionsFor, chooseAmbition, progress, reckoning } = $m[19];
 const { papers } = $m[21];
 const { NOTE, NOTE2 } = $m[18];
+const { pactAnswer } = $m[9];
 const { cardMore, reads, realmMore, sceneSheet } = $m[55];
 $x.backMore = $m[18].backMore; $x.keepMore = $m[18].keepMore;
 $x.councilMore = $m[55].councilMore; $x.dimBox = $m[55].dimBox; $x.gameMore = $m[55].gameMore; $x.knownFor = $m[55].knownFor; $x.viewFill = $m[55].viewFill; $x.viewTint = $m[55].viewTint; $x.viewsInit = $m[55].viewsInit;
@@ -8047,6 +8108,13 @@ function crisisRow(x, back) {
   if (!facing(g, g.player)) return [`${said} ${a.no ? "It may be overtaken by events." : reads(x, k.b) ? `By the rules today ${x.name(k.b)} would ${a.ok ? "yield" : "refuse"} (${a.why}).` : `You know too little of ${x.name(k.b)} to read its answer.`}`];
   const pick = (v, t) => { const b = x.button(t, () => { if (v) k.answer = v; else delete k.answer; x.save(); x.open(back); }); b.setAttribute("aria-pressed", String((k.answer || "") === v)); return b; };
   return [`${said} The answer is yours. Refuse, and they lose face but keep a grievance; yield, and the province is theirs on that day.`, pick("", "Refuse"), pick("yield", "Yield")];
+}
+
+/** A demand for tribute on the player, with its two answers. Refusing is the answer when none is given. */
+function dueRow(x) {
+  const g = x.g(), d = g.due, a = pactAnswer(g, x.geo(), d.from, g.player, "tribute");
+  const pick = (v, t) => { const b = x.button(t, () => { if (v) d.answer = v; else delete d.answer; x.save(); x.open("actions"); }); b.setAttribute("aria-pressed", String((d.answer || "") === v)); return b; };
+  return [`${x.name(d.from)} demands a yearly tribute of you, to be answered when this turn ends.${a.no ? " It may be overtaken by events." : ` By the rules a country in your place would pay (${a.why}).`} Pay, and your treasury settles a step lower while you do; you may stop later, which gives it a cause. Refuse, and it holds a cause against you now.`, pick("", "Refuse"), pick("pay", "Pay")];
 }
 
 /** The sheet under the country's name. */
@@ -8076,6 +8144,7 @@ function notices(x) {
   if (g.plans?.length) g.plans = g.plans.filter((p) => (g.actions || []).includes(p.text));
   if (g.told) out.push(x.el("p", noteOf(g), "warn"), x.button("Understood", () => { delete g.told; x.save(); x.open("actions"); }));
   if (facing(g, g.player)) out.push(x.el("h3", "A demand on you"), rows(x, [crisisRow(x, "actions")]));
+  if (g.due && g.mode !== "citizen") out.push(x.el("h3", "A demand for tribute"), rows(x, [dueRow(x)]));
   if (g.unrest?.[g.player] && g.mode !== "citizen" && !g.plans?.length) out.push(x.el("p", `${g.unrest[g.player].rising ? "A rising" : "Unrest"} at home, around ${g.unrest[g.player].who}.`, "warn"), x.button("Answer it", () => x.open("realm")));
   if (!g.goal && !g.done?.length) out.push(x.button("Choose an ambition", () => x.open("realm")));
   return out;
@@ -8956,9 +9025,9 @@ function actions(box) {
   // offers as cards: one tap accepts, and the rules carry it out whether or not the AI writes it down
   const offers = el("ul", undefined, "list");
   offers.append(...state.offers.map((o) => {
-    const li = el("li"), peace = o.kind === "peace", what = peace ? "peace" : treatyName(o.kind), verb = peace ? "PEACE" : "TREATY";
+    const li = el("li"), peace = o.kind === "peace", pact = o.kind === "pact", what = peace ? "peace" : pact ? "a pact of non-aggression" : treatyName(o.kind), verb = peace ? "PEACE" : pact ? "PACT" : "TREATY"; // round 3 hook: a pact offered to you
     const taken = (state.orders || []).some((x) => x.verb === verb && x.target === o.from);
-    li.append(el("span", `${name(o.from)} offers ${what} (${fmtDate(o.date)}).`), ...(taken ? [el("b", "Accepted")] : [button("Accept", () => order({ text: `Accept ${name(o.from)}'s offer of ${what}.`, verb, target: o.from, detail: peace ? "" : o.kind }))]),
+    li.append(el("span", `${name(o.from)} offers ${what} (${fmtDate(o.date)}).`), ...(taken ? [el("b", "Accepted")] : [button("Accept", () => order({ text: `Accept ${name(o.from)}'s offer of ${what}.`, verb, target: o.from, detail: peace || pact ? "" : o.kind }))]),
       button("Decline", () => { state.offers = state.offers.filter((x) => x !== o); const old = (state.orders || []).find((x) => x.verb === verb && x.target === o.from); state.orders = (state.orders || []).filter((x) => x !== old); state.actions = (state.actions || []).filter((x) => x !== old?.text); save(); open("actions"); }));
     return li;
   }));

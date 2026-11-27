@@ -14,8 +14,8 @@ import { truceUntil } from "../src/story/war.js";
 import { relOf } from "../src/story/relations.js";
 import { factWords, factsOf } from "../src/story/chronicle.js";
 import { settleHome, settleUnrest } from "../src/story/home.js";
-import { PACT, askClause, fearOf, pactAnswer, pactOf, sphereOf, tributeOf } from "../src/story/pacts.js";
-import { COLOURS, FORMS, POLITY, codeFor, found, keepLands, polityLines, rebelLand } from "../src/story/polity.js";
+import { PACT, askClause, fearOf, mayDun, pactAnswer, pactOf, settlePacts, sphereOf, tributeOf } from "../src/story/pacts.js";
+import { COLOURS, FORMS, NEUTRAL, POLITY, codeFor, found, keepLands, nameFor, polityLines, rebelLand } from "../src/story/polity.js";
 import { PACE, RIVALS, crisisChance, keepPace, paceOf, rivalMoves, setPace } from "../src/story/rivals.js";
 import { clauseWords, pactView } from "../src/story/views.js";
 import { keepMore, moreFacts, plan } from "../src/story/more.js";
@@ -87,17 +87,84 @@ test("a pact between two other countries: the same sum the player's card uses, w
   assert.equal(relOf(g, "PER", "BOL"), 0, "a pact moves no relation, as the player's does not");
 });
 
-test("a pact or tribute meant for the player's country binds nothing: it says what would be agreed, and the player asks", () => {
+test("a pact meant for the player arrives as an offer card, and stands as offered when accepted (ruling 154)", () => {
   const g = game("pact-2"), G = geoOf(g);
-  const r = applyMoves(g, [mv("BOL", "PACT", "PER"), mv("BRA", "TRIBUTE", "PER"), mv("CHL", "PACT", "PER")], G, [], 1);
-  assert.deepEqual(r.map((x) => x.ok), [false, false, false]);
-  assert.equal(r[0].text, "Bolivia: would sign a pact of non-aggression with you (relations neutral 0, Brazil beside both and stronger than both +1: 1, needing 1); it is yours to propose, from its card");
-  assert.equal(r[1].text, "Brazil: would demand a yearly tribute of you, but no move binds your country: nothing is owed");
-  assert.equal(r[2].text, "Chile: would not sign a pact of non-aggression with you (relations neutral 0: 0, needing 1); it is yours to propose, from its card");
+  const r = applyMoves(g, [mv("BOL", "PACT", "PER"), mv("CHL", "PACT", "PER"), mv("BOL", "PACT", "PER")], G, [], 1);
+  assert.deepEqual(r.map((x) => x.ok), [false, false, false], "nothing is signed for the player");
+  assert.equal(r[0].text, "Bolivia: offers you a pact of non-aggression; accept it from your actions");
+  assert.equal(r[1].text, "Chile: would offer you a pact of non-aggression, but does not (relations neutral 0: 0, needing 1)");
+  assert.deepEqual(g.offers, [{ from: "BOL", kind: "pact", date: g.date }], "offered once, however often it is proposed");
   assert.deepEqual(g.pacts || [], []);
+  // accepted from the actions, as a treaty offer is: the order is a PACT move, and it stands as offered whatever has changed since
+  const act = "Accept Bolivia's offer of a pact of non-aggression.";
+  g.orders = [{ text: act, verb: "PACT", target: "BOL", detail: "" }];
+  const kept = keepMore(checkSave(JSON.parse(JSON.stringify(g)), isP, known), isP, known);
+  assert.deepEqual([kept.orders, kept.offers], [g.orders, g.offers], "the offer and its acceptance are kept in the save");
+  g.rel = { "BOL|PER": [-1, g.date] };
+  assert.equal(pactAnswer(g, G, "PER", "BOL", "peace").ok, false, "asked afresh today, Bolivia would refuse");
+  const t = closeTurn(g, reply(g, QUIET), G, [act]);
+  assert.ok(t.receipt.some((x) => x.ok && x.text === "Peru: signs a pact of non-aggression with Bolivia, which agrees (as offered)"), texts(t.receipt).join(" / "));
+  assert.ok(pactOf(g, "PER", "BOL"));
+  assert.deepEqual(g.offers, []);
+  // by rule too: Bolivia, which would agree, sooner or later offers; and does not offer again while its offer waits
+  const p = game("pact-2b"), P2 = geoOf(p), asks = () => { let n = 0; for (let k = 1; k <= 80; k++) { p.turn = k; n += rivalMoves(p, P2).filter((m) => m.verb === "PACT" && m.target === "PER").length; } return n; };
+  assert.ok(asks() > 0);
+  p.offers = [{ from: "BOL", kind: "pact", date: p.date }];
+  assert.equal(asks(), 0);
   // a citizen does not speak for the country: its government is bound like any other
   const c = game("pact-2", {}, "PER", "citizen"), rc = applyMoves(c, [mv("BOL", "PACT", "PER")], geoOf(c), [], 1);
   assert.match(rc[0].text, /^Bolivia: signs a pact of non-aggression with Peru, which agrees/);
+});
+
+test("tribute is demanded of the player by card, only when the sum says they would pay; the player answers (ruling 154)", () => {
+  const open = (seed) => { const g = game(seed); gauges(g, "PER", 1); g.wars = [{ pair: "CHL|PER", since: g.date, by: "CHL" }]; return g; };
+  // steady and at peace, Peru would refuse Brazil, so nothing is asked
+  const calm = game("due-0"), r0 = applyMoves(calm, [mv("BRA", "TRIBUTE", "PER")], geoOf(calm), [], 1);
+  assert.deepEqual([r0[0].ok, r0[0].text, calm.due], [false, "Brazil: would demand a yearly tribute of you, but does not: by the rules you would refuse (might 6 against 3 +3: 3, needing 4)", undefined]);
+  // shaken and at war, it would pay: the demand waits as a card, and nothing is owed yet
+  const g = open("due-1"), G = geoOf(g), r = applyMoves(g, [mv("BRA", "TRIBUTE", "PER"), mv("CHL", "TRIBUTE", "PER")], G, [], 1);
+  assert.equal(r[0].text, "Brazil: demands a yearly tribute of you (might 6 against 3 +3, another war to fight +1, shaken at home +1: 5, needing 4); pay or refuse from your actions before the next turn ends");
+  assert.equal(r[1].ok, false, "one demand at a time, and Chile is at war with you");
+  assert.deepEqual(g.due, { from: "BRA", turn: 1, since: g.date });
+  assert.deepEqual(g.pacts || [], []);
+  assert.ok(moreFacts(g, G, ["CHL", "BOL", "BRA"]).some((l) => /^- A demand, kept by the rules: BRA demands a yearly tribute of the player's country\. The player answers it this turn\./.test(l)));
+  assert.deepEqual(settlePacts(g, [], "2027-01-01", G), [], "not answered in the turn it was made");
+  assert.deepEqual(keepMore(checkSave(JSON.parse(JSON.stringify(g)), isP, known), isP, known).due, g.due, "it waits in the save");
+  // no answer given is a refusal: the asker holds a cause, relations cool a step, and it does not ask again for two years
+  g.turn = 2;
+  let lines = settlePacts(g, [], "2027-02-01", G);
+  assert.deepEqual(texts(lines), ["Peru: refuses Brazil's demand for tribute (your own answer), and Brazil holds a cause"]);
+  assert.deepEqual([g.due, g.cause["BRA>PER"], g.rel["BRA|PER"], g.dunned, tributeOf(g, "BRA", "PER")], [null, ["tribute refused in 2027", "2027-02-01"], [-1, "2027-02-01"], { BRA: "2027-02-01" }, undefined]);
+  g.date = "2027-02-01";
+  assert.equal(mayDun(g, "BRA"), false);
+  assert.match(applyMoves(g, [mv("BRA", "TRIBUTE", "PER")], G, [], 1)[0].text, /a demand already waits or was refused in the last two years$/);
+  g.date = "2029-02-01";
+  assert.equal(mayDun(g, "BRA"), true);
+  // paying binds the country as any tribute does, and it may stop later by card
+  const h = open("due-2"), H = geoOf(h);
+  applyMoves(h, [mv("BRA", "TRIBUTE", "PER")], H, [], 1);
+  h.due.answer = "pay"; h.turn = 2;
+  lines = settlePacts(h, [], "2027-02-01", H);
+  assert.deepEqual(texts(lines), ["Peru: agrees to pay Brazil a yearly tribute (your own answer)"]);
+  assert.deepEqual([lines[0].fact, lines[0].gauge], [["tribute", "PER", "BRA"], [["BRA", "m", 1, "tribute agreed"]]]);
+  assert.deepEqual([tributeOf(h, "BRA", "PER"), sphereOf(h, H, "PER"), h.due], [{ kind: "tribute", a: "BRA", b: "PER", since: "2027-02-01" }, "BRA", null]);
+  // overtaken: a demand whose asker is now at war with you is dropped
+  const w = open("due-3"), W = geoOf(w);
+  applyMoves(w, [mv("BRA", "TRIBUTE", "PER")], W, [], 1);
+  w.wars.push({ pair: "BRA|PER", since: w.date, by: "BRA" }); w.turn = 2;
+  assert.match(settlePacts(w, [], "2027-02-01", W)[0].text, /^Brazil: its demand for tribute is overtaken by events \(at war with Peru: make peace first\)$/);
+  // by rule: asked of a player in trouble that would pay, never while a demand waits or after a refusal
+  const d = game("due-4", {}, "BOL"), D = geoOf(d), asks = () => { let n = 0; for (let k = 1; k <= 60; k++) { d.turn = k; n += rivalMoves(d, D).filter((m) => m.verb === "TRIBUTE" && m.target === "BOL").length; } return n; };
+  assert.equal(asks(), 0, "a steady player is asked nothing");
+  gauges(d, "BOL", 0);
+  assert.ok(asks() > 0);
+  d.dunned = { CHL: d.date, BRA: d.date };
+  assert.equal(asks(), 0);
+  d.dunned = {}; d.due = { from: "CHL", turn: 1, since: d.date };
+  assert.equal(asks(), 0);
+  // junk in a save is dropped
+  const junk = keepMore(checkSave({ ...JSON.parse(JSON.stringify(g)), due: { from: "ZZZ", turn: 1, since: "2027-01-01" }, dunned: { ZZZ: "2027-01-01", BRA: "soon", CHL: "2027-01-01" } }, isP, known), isP, known);
+  assert.deepEqual([junk.due, junk.dunned], [null, { CHL: "2027-01-01" }]);
 });
 
 test("the player's own PACT or TRIBUTE move, read from an action, is the same order as the card: it is asked once", () => {
@@ -140,19 +207,18 @@ test("tribute between two other countries: the payer answers by its sum, pays on
   assert.deepEqual(h.pacts, []);
 });
 
-test("by rule: other countries bind each other, never the player's country, and the same game draws the same moves", () => {
+test("by rule: other countries bind each other, and the same game draws the same moves", () => {
   // Brazil is the player; Peru and Bolivia, in its shadow, have a reason to bind each other
   const g = game("rule-1", {}, "BRA"), G = geoOf(g), seen = [];
-  for (let t = 1; t <= 60; t++) { g.turn = t; for (const m of rivalMoves(g, G)) if (m.verb === "PACT" || m.verb === "TRIBUTE") seen.push([t, m.country, m.verb, m.target]); }
-  assert.ok(seen.length >= 3 && seen.length <= 20, `a few in five years, not every month: ${seen.length}`);
-  assert.ok(seen.every(([, c, v, t]) => v === "PACT" && [c, t].sort().join() === "BOL,PER"), "the only pair with a reason, and never Brazil");
+  for (let t = 1; t <= 80; t++) { g.turn = t; for (const m of rivalMoves(g, G)) if (m.verb === "PACT" || m.verb === "TRIBUTE") seen.push([t, m.country, m.verb, m.target]); }
+  assert.ok(seen.length >= 2 && seen.length <= 24, `a few in seven years, not every month: ${seen.length}`);
+  assert.ok(seen.every(([, c, v, t]) => v === "PACT" && [c, t].sort().join() === "BOL,PER"), "the only pair with a reason; Brazil, which nobody would agree with, is not asked");
   const again = game("rule-1", {}, "BRA"), twice = [];
-  for (let t = 1; t <= 60; t++) { again.turn = t; for (const m of rivalMoves(again, geoOf(again))) if (m.verb === "PACT") twice.push([t, m.country, m.verb, m.target]); }
+  for (let t = 1; t <= 80; t++) { again.turn = t; for (const m of rivalMoves(again, geoOf(again))) if (m.verb === "PACT") twice.push([t, m.country, m.verb, m.target]); }
   assert.deepEqual(twice, seen);
-  // played out: the pact is signed once, written in the receipt, and stands five years
+  // played out: the pact is signed, written in the receipt, and stands five years
   const p = game("rule-1", {}, "BRA");
-  let signed = 0;
-  for (let t = 1; t <= 24; t++) signed += closeTurn(p, reply(p), geoOf(p), []).receipt.filter((x) => x.ok && /signs a pact of non-aggression/.test(x.text)).length;
+  const [, from, , to] = seen[0], signed = closeTurn(p, reply(p, [mv(from, "PACT", to)]), geoOf(p), []).receipt.filter((x) => x.ok && /signs a pact of non-aggression/.test(x.text)).length;
   assert.equal(signed, 1);
   assert.ok(pactOf(p, "PER", "BOL"));
   for (let t = 0; t < 61; t++) closeTurn(p, reply(p, QUIET), geoOf(p), []);
@@ -228,8 +294,10 @@ test("a rising that holds a year founds a country: a code, a name, a colour, lan
   assert.deepEqual(lines[0].fact, ["formed", code, "BRA", land.length]);
   assert.deepEqual(lines[0].gauge, [["BRA", "s", 1, "the rising has left, and its land with it"], ["BRA", "m", -1, "land lost to a rising"]]);
   assert.match(code, /^[A-Z]{3}$/);
-  assert.ok(!NAMES[code] && code.slice(0, 2) === place.slice(0, 2).toUpperCase(), "a code of its own, from the province's name");
-  assert.ok(FORMS.map((f) => f.replace("%", place)).includes(born.name) && COLOURS.includes(born.colour));
+  // ruling 154: on the real map the name and the code come from the rebel's title, never from the place
+  const title = u.who.match(/^the (\w+) of /)[1];
+  assert.ok(NEUTRAL.map((f) => `The ${title}'s ${f}`).includes(born.name) && COLOURS.includes(born.colour), born.name);
+  assert.ok(!born.name.includes(place) && !NAMES[code] && code[0] === title[0].toUpperCase(), "a name and a code of its own, with nothing of the province in them");
   assert.deepEqual([born.from, born.since, born.seat], ["BRA", "2028-01-01", u.id]);
   for (const id of land) assert.equal(G.owner(id), code);
   assert.deepEqual([G.holds(code), G.holds("BRA"), G.known(code), G.name(code), G.home(code)], [land.length, 5 - land.length, true, born.name, u.id]);
@@ -268,8 +336,9 @@ test("a rising: answered in time it founds nothing; taken land still goes back; 
   assert.equal(g.lands, undefined);
   // unanswered, Tacna leaves and Peru keeps Lima
   lines = settleUnrest(g, "2028-02-01", G, []);
-  assert.match(lines[0].text, /^Peru: the rising of the \w+ of Tacna holds Tacna a year unanswered and founds .* \(TAC\), with 1 province; a truce of two years follows$/);
-  assert.deepEqual([G.owner("PER-1"), G.owner("PER-2"), G.holds("PER")], ["TAC", "PER", 1]);
+  assert.match(lines[0].text, /^Peru: the rising of the \w+ of Tacna holds Tacna a year unanswered and founds The \w+'s [\w ]+ \([A-Z]{3}\), with 1 province; a truce of two years follows$/);
+  const tac = Object.keys(g.lands)[0];
+  assert.deepEqual([G.owner("PER-1"), G.owner("PER-2"), G.holds("PER")], [tac, "PER", 1]);
   settleState(g, lines, "2028-02-01", G);
   assert.deepEqual([gaugeOf(g, "PER", "s"), gaugeOf(g, "PER", "m")], [1, 1], "the country it left is shaken, not in revolt, and doubted");
   // land taken from a country that still stands goes back to it, as before
@@ -279,8 +348,17 @@ test("a rising: answered in time it founds nothing; taken land still goes back; 
   assert.equal(b.lands, undefined);
   // no code is ever one the map, the game or an alternate world uses
   assert.equal(codeFor(g, G, "Peru"), "PEU", "PER is Peru's own, so the next letters are tried");
-  assert.equal(codeFor(g, G, "Tacna"), "TAN", "TAC is taken in this game");
-  assert.equal(codeFor({ ...g, alt: { lands: { TAN: { name: "Tannu" } } } }, G, "Tacna"), "TAA");
+  assert.equal(codeFor(g, G, "Tacna"), "TAC");
+  assert.equal(codeFor({ ...g, lands: { TAC: { name: "x" } } }, G, "Tacna"), "TAN", "TAC is taken in that game");
+  assert.equal(codeFor({ ...g, lands: { TAC: { name: "x" } }, alt: { lands: { TAN: { name: "Tannu" } } } }, G, "Tacna"), "TAA");
+  // names: the rebel's title on the real map and on an alternate history laid over it, the province only on an invented world; never one twice
+  const who = { id: "PER-1", who: "the Mayor of Tacna" }, first = nameFor(g, who, "Tacna", "2030-01-01");
+  assert.match(first, /^The Mayor's (Republic|Free State|Commonwealth|League|Confederation|Union)$/);
+  assert.match(nameFor({ ...g, alt: { lands: {} } }, who, "Tacna", "2030-01-01"), /^The Mayor's /);
+  assert.ok(FORMS.map((x) => x.replace("%", "Tacna")).includes(nameFor({ ...g, world: { setting: {} } }, who, "Tacna", "2030-01-01")));
+  const second = nameFor({ ...g, lands: { QQA: { name: first } } }, who, "Tacna", "2030-01-01");
+  assert.ok(second !== first && /^The Mayor's /.test(second));
+  assert.equal(nameFor(g, { id: "PER-1", who: "someone a save made up" }, "Tacna", "2030-01-01").slice(0, 12), "The Rebel's ");
   assert.equal(codeFor(g, G, "Ñu"), "NUX");
   assert.equal(codeFor(g, G, "U.S.A."), "USB", "never a code the might table knows");
   // a game holds forty at most; past that a rising costs mandate, as it did
@@ -300,7 +378,7 @@ test("a founded country has a place in the save: it reads back whole, junk is dr
   for (let i = 0; i < 14 && !founded.length; i++) founded = closeTurn(g, reply(g, QUIET), G, []).receipt.filter((x) => x.fact?.[0] === "formed");
   assert.ok(founded.length >= 1, "left unanswered, the player's own rising founds a country");
   const codes = Object.keys(g.lands);
-  assert.ok(codes.includes("TAC"));
+  assert.equal(g.owners["PER-1"], codes.find((c) => g.lands[c].from === "PER"));
   assert.match(g.chron.turns[g.chron.turns.length - 1].f.map((f) => f[0]).join(), /formed/);
   // the save: nothing of it is lost, and the new code counts as a country wherever one is checked
   const kept = keepMore(checkSave(JSON.parse(JSON.stringify(g)), isP, known), isP, known);
@@ -329,12 +407,13 @@ test("a founded country travels in a scenario saved from the game, and a new gam
   const s = scenarioFrom(g, { title: "After Tacna", blurb: "", opening: "Tacna has gone its own way." }), r = checkScenario(JSON.parse(JSON.stringify(s)), known, isP);
   assert.equal(r.ok, true);
   assert.deepEqual(r.scenario.lands, g.lands);
-  assert.equal(r.scenario.owners["PER-1"], "TAC");
-  assert.ok(scenarioText(r.scenario).includes(g.lands.TAC.name), "its name passes the hard-line check like any other text");
+  const tac = Object.keys(g.lands)[0];
+  assert.equal(r.scenario.owners["PER-1"], tac);
+  assert.ok(scenarioText(r.scenario).includes(g.lands[tac].name), "its name passes the hard-line check like any other text");
   // a code the map already uses is never taken from a file
   assert.equal(checkScenario({ ...s, lands: { CHL: { name: "Not Chile" } } }, known, isP).scenario.lands, undefined);
   const n = newWorldGame("CHL", "nation", "scen-2", { scenario: r.scenario }), N = geoOf(n);
-  assert.deepEqual([n.lands, N.owner("PER-1"), N.name("TAC"), N.holds("TAC")], [g.lands, "TAC", g.lands.TAC.name, 1]);
+  assert.deepEqual([n.lands, N.owner("PER-1"), N.name(tac), N.holds(tac)], [g.lands, tac, g.lands[tac].name, 1]);
 });
 
 test("founding works on an invented world: its own codes, its own province names, the same game twice", () => {

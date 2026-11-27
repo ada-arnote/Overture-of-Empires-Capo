@@ -577,9 +577,9 @@ function actions(box) {
   // offers as cards: one tap accepts, and the rules carry it out whether or not the AI writes it down
   const offers = el("ul", undefined, "list");
   offers.append(...state.offers.map((o) => {
-    const li = el("li"), peace = o.kind === "peace", what = peace ? "peace" : treatyName(o.kind), verb = peace ? "PEACE" : "TREATY";
+    const li = el("li"), peace = o.kind === "peace", pact = o.kind === "pact", what = peace ? "peace" : pact ? "a pact of non-aggression" : treatyName(o.kind), verb = peace ? "PEACE" : pact ? "PACT" : "TREATY"; // round 3 hook: a pact offered to you
     const taken = (state.orders || []).some((x) => x.verb === verb && x.target === o.from);
-    li.append(el("span", `${name(o.from)} offers ${what} (${fmtDate(o.date)}).`), ...(taken ? [el("b", "Accepted")] : [button("Accept", () => order({ text: `Accept ${name(o.from)}'s offer of ${what}.`, verb, target: o.from, detail: peace ? "" : o.kind }))]),
+    li.append(el("span", `${name(o.from)} offers ${what} (${fmtDate(o.date)}).`), ...(taken ? [el("b", "Accepted")] : [button("Accept", () => order({ text: `Accept ${name(o.from)}'s offer of ${what}.`, verb, target: o.from, detail: peace || pact ? "" : o.kind }))]),
       button("Decline", () => { state.offers = state.offers.filter((x) => x !== o); const old = (state.orders || []).find((x) => x.verb === verb && x.target === o.from); state.orders = (state.orders || []).filter((x) => x !== old); state.actions = (state.actions || []).filter((x) => x !== old?.text); save(); open("actions"); }));
     return li;
   }));

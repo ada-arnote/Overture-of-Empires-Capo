@@ -9,6 +9,7 @@ import { demand, demandAnswer } from "../src/story/crisis.js";
 import { ambitionsFor, chooseAmbition, progress, reckoning } from "../src/story/ambitions.js";
 import { papers } from "../src/story/beats.js";
 import { NOTE, NOTE2 } from "../src/story/more.js";
+import { pactAnswer } from "../src/story/pacts.js";
 import { cardMore, reads, realmMore, sceneSheet } from "./court.js";
 export { backMore, keepMore } from "../src/story/more.js";
 export { councilMore, dimBox, gameMore, knownFor, viewFill, viewTint, viewsInit } from "./court.js";
@@ -31,6 +32,13 @@ function crisisRow(x, back) {
   if (!facing(g, g.player)) return [`${said} ${a.no ? "It may be overtaken by events." : reads(x, k.b) ? `By the rules today ${x.name(k.b)} would ${a.ok ? "yield" : "refuse"} (${a.why}).` : `You know too little of ${x.name(k.b)} to read its answer.`}`];
   const pick = (v, t) => { const b = x.button(t, () => { if (v) k.answer = v; else delete k.answer; x.save(); x.open(back); }); b.setAttribute("aria-pressed", String((k.answer || "") === v)); return b; };
   return [`${said} The answer is yours. Refuse, and they lose face but keep a grievance; yield, and the province is theirs on that day.`, pick("", "Refuse"), pick("yield", "Yield")];
+}
+
+/** A demand for tribute on the player, with its two answers. Refusing is the answer when none is given. */
+function dueRow(x) {
+  const g = x.g(), d = g.due, a = pactAnswer(g, x.geo(), d.from, g.player, "tribute");
+  const pick = (v, t) => { const b = x.button(t, () => { if (v) d.answer = v; else delete d.answer; x.save(); x.open("actions"); }); b.setAttribute("aria-pressed", String((d.answer || "") === v)); return b; };
+  return [`${x.name(d.from)} demands a yearly tribute of you, to be answered when this turn ends.${a.no ? " It may be overtaken by events." : ` By the rules a country in your place would pay (${a.why}).`} Pay, and your treasury settles a step lower while you do; you may stop later, which gives it a cause. Refuse, and it holds a cause against you now.`, pick("", "Refuse"), pick("pay", "Pay")];
 }
 
 /** The sheet under the country's name. */
@@ -60,6 +68,7 @@ export function notices(x) {
   if (g.plans?.length) g.plans = g.plans.filter((p) => (g.actions || []).includes(p.text));
   if (g.told) out.push(x.el("p", noteOf(g), "warn"), x.button("Understood", () => { delete g.told; x.save(); x.open("actions"); }));
   if (facing(g, g.player)) out.push(x.el("h3", "A demand on you"), rows(x, [crisisRow(x, "actions")]));
+  if (g.due && g.mode !== "citizen") out.push(x.el("h3", "A demand for tribute"), rows(x, [dueRow(x)]));
   if (g.unrest?.[g.player] && g.mode !== "citizen" && !g.plans?.length) out.push(x.el("p", `${g.unrest[g.player].rising ? "A rising" : "Unrest"} at home, around ${g.unrest[g.player].who}.`, "warn"), x.button("Answer it", () => x.open("realm")));
   if (!g.goal && !g.done?.length) out.push(x.button("Choose an ambition", () => x.open("realm")));
   return out;

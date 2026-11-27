@@ -3,10 +3,14 @@
 // When a rising has stood a year unanswered (home.js) and its province cannot go back to an old holder, the rebel
 // provinces leave: the province where it gathered and the provinces of the same country that touch it by land,
 // in the map's own order, never the heartland, four at most and never more than half of what the country holds.
-// They become a country: a three-letter code no map country uses, a name from the province and a fixed list of
-// forms, a colour from a fixed list, might two below its parent's (held between 2 and 4), all dealt from the
+// They become a country: a three-letter code no map country uses, a name from a fixed list of forms, a colour
+// from a fixed list, might two below its parent's (held between 2 and 4), all dealt from the
 // game's seed, so the same game founds the same country. It is kept in the game as g.lands[code] = {name, colour,
 // from, since, seat}, and its land as owner entries like any other change of hands.
+// The name (ruling 154). On the real map, with or without an alternate history laid over it, a founded country
+// is named for the rebel's title and never for the place: "The Colonel's Republic". A real province's name in a
+// country's name could read as a real separatist cause, so it is never used, and neither is it used for the code.
+// On an invented world the name comes from the province: "Republic of Branbruwick".
 // What follows by rule: the two stand bitter (-2); a truce of two years holds between them, and for those two
 // years a demand for the land back counts as already made; the parent holds a cause for five years (and, where the
 // land was its own on the map, for as long as it is lost); the parent's unrest is over, its stability rises a
@@ -19,6 +23,15 @@ import { MIGHT, mightOf } from "./war.js";
 
 export const POLITY = { most: 4, lands: 40, low: 2, high: 4, less: 2 };
 export const FORMS = ["Republic of %", "Free State of %", "% Commonwealth", "% League", "% Confederation", "% Union"];
+// for the real map: the same six forms, after the rebel's title
+export const NEUTRAL = ["Republic", "Free State", "Commonwealth", "League", "Confederation", "Union"];
+/** The name a rising's country takes: from its province on an invented world, from the rebel's title on the real map. Never one already taken in the game. */
+export function nameFor(g, u, place, to) {
+  const at = hash32(g.seed, `polity:form:${u.id}:${to}`) % FORMS.length, taken = new Set(Object.values(landsOf(g)).map((l) => l.name)), title = (String(u.who || "").match(/^the ([A-Za-z]+) of /) || [])[1] || "Rebel";
+  const names = FORMS.map((_, i) => (g.world ? FORMS[(at + i) % FORMS.length].replace("%", place) : `The ${title}'s ${NEUTRAL[(at + i) % NEUTRAL.length]}`));
+  const free = names.find((n) => !taken.has(n));
+  return free || `${names[0]} of ${to.slice(0, 4)}`;
+}
 export const COLOURS = ["#b5651d", "#7a9e3f", "#3f8f8a", "#8f5fa8", "#c2783c", "#5a7fb8", "#a8a13f", "#b8577a", "#4f9a6b", "#9a6a4f", "#6f6fc0", "#c9933a", "#4a9ab0", "#a85f5f", "#7d8f4a", "#9a5fb0"];
 const CODE = /^[A-Z]{3}$/, COLOUR = /^#[0-9a-f]{6}$/i, DATE = /^\d{4}-\d{2}-\d{2}$/, AZ = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -46,10 +59,12 @@ export function rebelLand(geo, c, id) {
  * returns {code, name, ids}, or null when no country can be founded (its last land, its heartland, no code left).
  */
 export function found(g, geo, c, u, to) {
-  const ids = rebelLand(geo, c, u.id), place = geo.place(u.id)?.name || "", code = ids.length && Object.keys(landsOf(g)).length < POLITY.lands ? codeFor(g, geo, place) : "";
+  const ids = rebelLand(geo, c, u.id), place = geo.place(u.id)?.name || "", name = nameFor(g, u, place, to);
+  // the code is spelled from the name it will carry: on the real map that is the title, never the place
+  const code = ids.length && Object.keys(landsOf(g)).length < POLITY.lands ? codeFor(g, geo, g.world ? place : name.replace(/^The /, "")) : "";
   if (!code) return null;
   const taken = new Set(Object.values(landsOf(g)).map((l) => l.colour)), free = COLOURS.filter((x) => !taken.has(x)), pool = free.length ? free : COLOURS;
-  const name = FORMS[hash32(g.seed, `polity:form:${u.id}:${to}`) % FORMS.length].replace("%", place), pair = [c, code].sort().join("|");
+  const pair = [c, code].sort().join("|");
   const might = Math.max(POLITY.low, Math.min(POLITY.high, mightOf(geo, c) - POLITY.less));
   g.lands = { ...landsOf(g), [code]: { name, colour: pool[hash32(g.seed, `polity:colour:${u.id}:${to}`) % pool.length], from: c, since: to, seat: u.id } };
   for (const id of ids) g.owners[id] = code;

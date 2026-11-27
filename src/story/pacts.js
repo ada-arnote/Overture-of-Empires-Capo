@@ -16,13 +16,19 @@
 // a payer that stops while still bound gives the receiver a cause.
 // Round three (ruling 149): every country is bound by the same rules. A PACT or TRIBUTE move, from the AI or from
 // the rules-only turn (rivals.js), is answered by the sums above and written in the receipt and the chronicle.
-// Nobody is made to bind the player's country: a pact meant for it says whether it would be agreed, and the
-// player asks from the card; tribute is never demanded of the player by a move.
+// The player's country is never bound without the player (ruling 154). A pact meant for it arrives as an offer,
+// like a treaty offer, when the country offering would itself agree; accepted from the actions, it stands as
+// offered. Tribute is demanded of the player only when the sum says their country would pay: the demand waits one
+// turn as a card (g.due), and the player answers. Paying binds it as any tribute does. Refusing (the answer when
+// none is given) gives the asker a cause and costs a step of relations; the same country does not ask again for
+// two years.
 import { monthsApart, treatyAnswer } from "./relations.js";
 import { gaugeOf, gaugeWord, setCause } from "./state.js";
 import { mightOf, strengthOf } from "./war.js";
 
-export const PACT = { need: 1, years: 5, tribute: 4, most: 10, gap: 3, fear: 2 };
+export const PACT = { need: 1, years: 5, tribute: 4, most: 10, gap: 3, fear: 2, again: 24 };
+/** Whether a country may demand tribute of the player today: none waiting, and none refused in the last two years. */
+export const mayDun = (g, c, now = g.date) => !g.due && !(g.dunned?.[c] && monthsApart(g.dunned[c], now) < PACT.again);
 const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
 const pairOf = (a, b) => [a, b].sort().join("|");
 // read from the game as worldrules.js reads them; kept here so that file can judge PACT and TRIBUTE moves by this one
@@ -91,9 +97,11 @@ const drop = (g, p) => { g.pacts = g.pacts.filter((x) => x !== p); };
  * card, an AI's move and the rules-only turn. Returns {no} when it cannot be asked, else {ok, as, text, fact, gauge}:
  * `as` is the country the receipt line speaks for, `text` its words after the name.
  */
-export function askClause(g, geo, from, to, kind, date) {
-  const ans = pactAnswer(g, geo, from, to, kind), name = geo.name, [a, b] = [from, to].sort();
-  if (ans.no) return { no: ans.no };
+export function askClause(g, geo, from, to, kind, date, offered = false) {
+  const asked = pactAnswer(g, geo, from, to, kind), name = geo.name, [a, b] = [from, to].sort();
+  if (asked.no) return { no: asked.no };
+  // an offer already made to the player stands as made, as a treaty offer does
+  const ans = offered ? { ...asked, ok: true, why: "as offered" } : asked;
   g.pacts ||= [];
   if (kind === "peace") {
     if (ans.ok) g.pacts.push({ kind: "peace", a, b, since: date });
@@ -112,13 +120,25 @@ export function clauseMove(g, m, geo, { isMe }) {
   const c = m.country, t = m.target, kind = m.verb === "PACT" ? "peace" : "tribute", what = kind === "peace" ? "a pact of non-aggression" : "a yearly tribute";
   if (!geo.known(t) || t === c) return { ok: false, why: `${what} refused: "${m.target}" is not a country` };
   if (t === g.player && g.mode !== "citizen" && !isMe) {
-    if (kind === "tribute") return { ok: false, why: "would demand a yearly tribute of you, but no move binds your country: nothing is owed" };
-    const a = pactAnswer(g, geo, t, c, "peace");
-    return { ok: false, why: a.no ? `would offer you a pact of non-aggression, but cannot (${a.no})` : `would ${a.ok ? "sign" : "not sign"} a pact of non-aggression with you (${a.why}); it is yours to propose, from its card` };
+    const a = pactAnswer(g, geo, kind === "peace" ? t : c, kind === "peace" ? c : t, kind);
+    if (kind === "tribute") {
+      if (a.no) return { ok: false, why: `would demand a yearly tribute of you, but cannot (${a.no})` };
+      if (!a.ok) return { ok: false, why: `would demand a yearly tribute of you, but does not: by the rules you would refuse (${a.why})` };
+      if (!mayDun(g, c)) return { ok: false, why: "would demand a yearly tribute of you, but a demand already waits or was refused in the last two years" };
+      g.due = { from: c, turn: g.turn, since: g.date };
+      return { ok: true, why: `demands a yearly tribute of you (${a.why}); pay or refuse from your actions before the next turn ends` };
+    }
+    // the offer is made when the country offering would itself say yes to you
+    if (a.no) return { ok: false, why: `would offer you a pact of non-aggression, but cannot (${a.no})` };
+    if (!a.ok) return { ok: false, why: `would offer you a pact of non-aggression, but does not (${a.why})` };
+    if (!g.offers.some((o) => o.from === c && o.kind === "pact")) g.offers.push({ from: c, kind: "pact", date: g.date });
+    return { ok: false, why: "offers you a pact of non-aggression; accept it from your actions" };
   }
   // the player's own order by card for the same clause is this move: it is not asked twice
   if (isMe) g.plans = (g.plans || []).filter((p) => !(p.kind === "pact" && p.sub === kind && p.target === t));
-  const r = askClause(g, geo, c, t, kind, g.date);
+  const offered = isMe && kind === "peace" && (g.offers || []).some((o) => o.from === t && o.kind === "pact");
+  const r = askClause(g, geo, c, t, kind, g.date, offered);
+  if (isMe && kind === "peace" && !r.no && r.ok) g.offers = (g.offers || []).filter((o) => !(o.from === t && o.kind === "pact"));
   return r.no ? { ok: false, why: `${what} with ${geo.name(t)} is refused: ${r.no}` } : { ok: r.ok, why: r.text, as: r.as, fact: r.fact, gauge: r.gauge };
 }
 
@@ -151,6 +171,21 @@ export function settlePacts(g, receipt, to, geo, plans = []) {
       lines.push({ ok: true, country: p.b, text: `${name(p.b)}: stops paying tribute to ${name(p.a)}${stops ? "" : ` (might ${mightOf(geo, p.b)} against ${mightOf(geo, p.a)}: no longer the weaker)`}` });
     } else if (months >= PACT.most * 12) { drop(g, p); if (mine) lines.push({ ok: true, text: `The tribute ${name(p.b)} paid ${name(p.a)} ends after ${PACT.most} years` }); }
   }
+  // a demand for tribute on the player, made in an earlier turn, is answered now: by the player, never by the sum
+  const d = g.due;
+  if (d && (g.mode === "citizen" || !geo.known(d.from) || !geo.holds(d.from))) g.due = null;
+  else if (d && g.turn > d.turn) {
+    const can = pactAnswer(g, geo, d.from, me, "tribute");
+    g.due = null;
+    if (can.no) lines.push({ ok: true, country: d.from, text: `${name(d.from)}: its demand for tribute is overtaken by events (${can.no})` });
+    else if (d.answer === "pay") {
+      g.pacts.push({ kind: "tribute", a: d.from, b: me, since: to }); sour(g, d.from, me, -1, to);
+      lines.push({ ok: true, country: me, text: `${name(me)}: agrees to pay ${name(d.from)} a yearly tribute (your own answer)`, gauge: [[d.from, "m", 1, "tribute agreed"]], fact: ["tribute", me, d.from] });
+    } else {
+      g.dunned = { ...(g.dunned || {}), [d.from]: to }; setCause(g, d.from, me, `tribute refused in ${year}`, to); sour(g, d.from, me, (g.rel?.[pairOf(d.from, me)]?.[0] || 0) - 1, to);
+      lines.push({ ok: true, country: me, text: `${name(me)}: refuses ${name(d.from)}'s demand for tribute (your own answer), and ${name(d.from)} holds a cause` });
+    }
+  }
   if (g.mode === "citizen") return lines;
   for (const x of plans.filter((p) => p.kind === "pact" && p.sub !== "stop")) {
     const b = x.target, what = x.sub === "peace" ? "a pact of non-aggression" : "a yearly tribute", r = askClause(g, geo, me, b, x.sub, to);
@@ -165,10 +200,18 @@ export function pactLines(g, geo, near = []) {
   const me = g.player, mine = (g.pacts || []).filter((p) => p.a === me || p.b === me).map((p) => (p.kind === "peace" ? `a pact of non-aggression with ${p.a === me ? p.b : p.a} until ${Number(p.since.slice(0, 4)) + PACT.years}` : p.a === me ? `${p.b} pays it tribute` : `it pays tribute to ${p.a}`));
   const close = new Set([me, ...near]), around = [...spheres(g, geo)].filter(([p, list]) => close.has(p) || list.some((c) => close.has(c))).slice(0, 6).map(([p, list]) => `${p} over ${list.slice(0, 6).join(", ")}`);
   return [
+    ...(g.due ? [`- A demand, kept by the rules: ${g.due.from} demands a yearly tribute of the player's country. The player answers it this turn. Write the pressure and the talk around it; never say how it ends.`] : []),
     ...(mine.length ? [`- Clauses that bind the player's country, kept by the rules (war on a pact partner is a breach, and costs it at home and abroad): ${mine.join("; ")}`] : []),
     ...(around.length ? [`- Spheres of influence near the player, read by the rules from treaties (a much stronger partner stands over each): ${around.join("; ")}`] : []),
   ];
 }
 
+/** A waiting demand for tribute and the refusals remembered, from a save. */
+function keepDue(s, known) {
+  const DATE = /^\d{4}-\d{2}-\d{2}$/, d = s.due, ok = d && typeof d === "object" && known(d.from) && d.from !== s.player && Number.isInteger(d.turn) && DATE.test(d.since || "");
+  const dunned = Object.fromEntries(Object.entries(s.dunned && typeof s.dunned === "object" && !Array.isArray(s.dunned) ? s.dunned : {}).filter(([c, at]) => known(c) && DATE.test(at || "")));
+  return { due: ok ? { from: d.from, turn: d.turn, since: d.since, ...(d.answer === "pay" ? { answer: "pay" } : {}) } : null, dunned };
+}
+
 /** Clauses from a save: two countries on the map, a kind the rules know, a date. */
-export const keepPacts = (s, known) => ({ pacts: (Array.isArray(s.pacts) ? s.pacts : []).filter((p) => p && ["peace", "tribute"].includes(p.kind) && known(p.a) && known(p.b) && p.a !== p.b && /^\d{4}-\d{2}-\d{2}$/.test(p.since || "")).slice(0, 80).map((p) => ({ kind: p.kind, a: p.a, b: p.b, since: p.since })) });
+export const keepPacts = (s, known) => ({ ...keepDue(s, known), pacts: (Array.isArray(s.pacts) ? s.pacts : []).filter((p) => p && ["peace", "tribute"].includes(p.kind) && known(p.a) && known(p.b) && p.a !== p.b && /^\d{4}-\d{2}-\d{2}$/.test(p.since || "")).slice(0, 80).map((p) => ({ kind: p.kind, a: p.a, b: p.b, since: p.since })) });
