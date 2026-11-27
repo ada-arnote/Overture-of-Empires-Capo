@@ -2,7 +2,7 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
-## Unreleased
+## v0.10.2 (2026-11-27): play live by two links, a community shelf, and a room server ready to deploy
 
 ### The community shelf: scenarios, stories and replays players share (ruling 155, option D)
 
