@@ -126,20 +126,20 @@ export function clauseMove(g, m, geo, { isMe }) {
       if (!a.ok) return { ok: false, why: `would demand a yearly tribute of you, but does not: by the rules you would refuse (${a.why})` };
       if (!mayDun(g, c)) return { ok: false, why: "would demand a yearly tribute of you, but a demand already waits or was refused in the last two years" };
       g.due = { from: c, turn: g.turn, since: g.date };
-      return { ok: true, why: `demands a yearly tribute of you (${a.why}); pay or refuse from your actions before the next turn ends` };
+      return { ok: true, why: `demands a yearly tribute of you (${a.why}); pay or refuse from your actions before the next turn ends`, offer: "due" };
     }
     // the offer is made when the country offering would itself say yes to you
     if (a.no) return { ok: false, why: `would offer you a pact of non-aggression, but cannot (${a.no})` };
     if (!a.ok) return { ok: false, why: `would offer you a pact of non-aggression, but does not (${a.why})` };
     if (!g.offers.some((o) => o.from === c && o.kind === "pact")) g.offers.push({ from: c, kind: "pact", date: g.date });
-    return { ok: false, offer: true, why: "offers you a pact of non-aggression; accept it from your actions" };
+    return { ok: false, why: "offers you a pact of non-aggression; accept it from your actions", offer: "pact" };
   }
   // the player's own order by card for the same clause is this move: it is not asked twice
   if (isMe) g.plans = (g.plans || []).filter((p) => !(p.kind === "pact" && p.sub === kind && p.target === t));
   const offered = isMe && kind === "peace" && (g.offers || []).some((o) => o.from === t && o.kind === "pact");
   const r = askClause(g, geo, c, t, kind, g.date, offered);
   if (isMe && kind === "peace" && !r.no && r.ok) g.offers = (g.offers || []).filter((o) => !(o.from === t && o.kind === "pact"));
-  return r.no ? { ok: false, why: `${what} with ${geo.name(t)} is refused: ${r.no}` } : { ok: r.ok, why: r.text, as: r.as, fact: r.fact, gauge: r.gauge };
+  return r.no ? { ok: false, why: `${what} with ${geo.name(t)} is refused: ${r.no}` } : { ok: r.ok, why: r.text, as: r.as, fact: r.fact, gauge: r.gauge, offer: r.offer };
 }
 
 /**

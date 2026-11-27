@@ -15,7 +15,10 @@ export const BANDS = ["clean", "costly", "failed"];
 // changes, other countries moving by rule when no AI proposes for them, the player's moves reviewed, both endings told.
 // 5: pacts of non-aggression and tribute between any two countries, as moves and by rule; a pact answered with a
 // part for a neighbour both fear; other countries answer their own unrest; a rising that holds founds a country.
-export const RULES = 5;
+// 6: a pledge has a price (a treaty a year old before a stronger one, an asker pledged to many); the rules press the
+// player (a demand, a border incident, a pact against them, unrest) and a partner at war calls them to arms; a
+// country with no land is over.
+export const RULES = 6;
 
 /** A roll's name: the same name always draws the same number in the same game. */
 export const drawKey = ({ turn, mission, checkpoint = "main", person = "-" }) => `${turn}:${mission}:${checkpoint}:${person}`;

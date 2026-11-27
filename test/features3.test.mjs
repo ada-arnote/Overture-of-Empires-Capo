@@ -43,11 +43,12 @@ const texts = (lines) => lines.map((l) => l.text);
 // a turn in which an AI moved for other countries (a move the rules refuse), so none moves by rule
 const QUIET = [mv("CHL", "PEACE", "BRA")];
 
-test("the rules version is 5, and a game saved under 4 is told what changed", () => {
-  assert.equal(RULES, 5);
+test("the rules version is 6, and a game saved under 5 or 4 is told what changed", () => {
+  assert.equal(RULES, 6);
+  assert.match(convertNote({ rules: 5 }), /^This game was saved under rules version 5\. It has been brought up to date: its past turns keep the results they had\..*a year old.*press your country.*call you to arms.*is over\.$/);
   assert.match(convertNote({ rules: 4 }), /^This game was saved under rules version 4\. It has been brought up to date: its past turns keep the results they had\..*pacts of non-aggression and tribute.*found a new country\.$/);
   assert.match(convertNote({ rules: 3 }), /saved under older rules/);
-  assert.equal(convertNote({ rules: 5 }), "");
+  assert.equal(convertNote({ rules: 6 }), "");
   assert.equal(convertNote(game("v")), "");
 });
 

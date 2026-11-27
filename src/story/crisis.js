@@ -76,18 +76,18 @@ export function settleCrisis(g, to, geo, actions = []) {
     const place = geo.place(k.id)?.name, opened = k.by === "you" && k.since === g.date, ans = demandAnswer(g, geo, k.a, k.b, k.id, to);
     if (opened && !actions.includes(k.text)) { g.crisis = null; return lines; }
     if (ans.no) { g.crisis = null; g.calm = to; return [{ ok: true, country: k.a, text: `${name(k.a)}: its demand for ${place || "the province"} is overtaken by events` }]; }
-    if (opened) lines.push({ ok: true, country: k.a, text: `${name(k.a)}: demands ${place} from ${name(k.b)}, to be answered by ${k.due}` });
+    if (opened) lines.push({ ok: true, country: k.a, text: `${name(k.a)}: demands ${place} from ${name(k.b)}, to be answered by ${k.due}`, asks: [k.a, k.b, k.id, k.due] });
     if (to < k.due) return lines;
     const own = k.b === me && g.mode !== "citizen", yes = own ? k.answer === "yield" : ans.ok, year = to.slice(0, 4), why = own ? "your own answer" : ans.why;
     if (yes) {
       if (geo.place(k.id).country === k.a) delete g.owners[k.id]; else g.owners[k.id] = k.a;
       sour(g, k.a, k.b, Math.min(stored(g, k.a, k.b), -2), to);
       setCause(g, k.b, k.a, `land yielded under threat in ${year}`, to);
-      lines.push({ ok: true, country: k.b, text: `${name(k.b)}: yields ${place} to ${name(k.a)} rather than fight (${why})`, fact: ["gave", k.b, k.a, 1], crisis: ["yield", k.a, k.b] });
+      lines.push({ ok: true, country: k.b, text: `${name(k.b)}: yields ${place} to ${name(k.a)} rather than fight (${why})`, fact: ["gave", k.b, k.a, 1], crisis: ["yield", k.a, k.b], land: k.id });
     } else {
       sour(g, k.a, k.b, stored(g, k.a, k.b) - 1, to);
       if (ans.cause) setCause(g, k.a, k.b, `its demand for ${place} was refused in ${year}`, to);
-      lines.push({ ok: true, country: k.b, text: `${name(k.b)}: refuses ${name(k.a)}'s demand for ${place} (${why})`, crisis: ["refuse", k.a, k.b] });
+      lines.push({ ok: true, country: k.b, text: `${name(k.b)}: refuses ${name(k.a)}'s demand for ${place} (${why})`, crisis: ["refuse", k.a, k.b], land: k.id });
     }
     g.asked = { ...(g.asked || {}), [`${k.a}>${k.b}`]: to }; g.calm = to; g.crisis = null;
     return lines;
@@ -108,7 +108,7 @@ export function settleCrisis(g, to, geo, actions = []) {
   if (!from.length) return lines;
   const [a, b, id] = from[hash32(g.seed, `${turnKey(g)}:crisis:pick`) % from.length];
   g.crisis = { a, b, id, since: to, due: addMonths(to, CRISIS.due), by: "rules" };
-  return [{ ok: true, country: a, text: `${name(a)}: demands ${geo.place(id).name} from ${name(b)}, to be answered by ${g.crisis.due}` }];
+  return [{ ok: true, country: a, text: `${name(a)}: demands ${geo.place(id).name} from ${name(b)}, to be answered by ${g.crisis.due}`, asks: [a, b, id, g.crisis.due] }];
 }
 
 /** A line for the prompt while a crisis is open. */

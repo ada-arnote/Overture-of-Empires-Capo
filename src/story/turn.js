@@ -15,6 +15,8 @@ import { ALT_RULES, altLines, stageOf } from "./overlay.js";
 import { missionLines, settleMissions } from "./missions.js";
 // features hook: gauges, causes, crises, ambitions, beats, the press
 import { moreFacts, settleMore } from "./more.js";
+// keyless hook: a turn with no AI is told by the rules (gazette.js)
+import { gazette } from "./gazette.js";
 
 export const JUMPS = [["1w", "A week", 0, 7], ["1m", "A month", 1, 0], ["3m", "Three months", 3, 0], ["6m", "Six months", 6, 0], ["1y", "A year", 12, 0], ["custom", "Other length", 0, 0], ["auto", "Until something happens", 12, 0]];
 export const UNITS = [["days", "days"], ["weeks", "weeks"], ["months", "months"], ["years", "years"]];
@@ -65,7 +67,7 @@ export function newWorldGame(player, mode, seed, extra = {}) {
     ...(sc.beats?.length ? { script: structuredClone(sc.beats) } : {}), // features hook: the scenario's own beats
     ...(sc.lands ? { lands: structuredClone(sc.lands) } : {}), // round 3 hook: countries founded in the game the scenario was saved from
     ...(sc.alt ? { alt: structuredClone(sc.alt), base } : {}), owners, ...(sc.world ? { world: sc.world } : {}), custom: extra.custom || sc.custom || null, character: extra.character || null,
-    wars: structuredClone(sc.wars || []), treaties: structuredClone(sc.treaties || []), offers: [], log: [],
+    wars: structuredClone(sc.wars || []), treaties: (sc.treaties || []).map((t) => ({ ...t, old: 1 })), offers: [], log: [],
     standing: STANDING[mode] || 5, council: null, chats: [], counsel: [], facts: structuredClone(sc.facts || []), might: { ...(sc.might || {}) }, edits: [], sandbox: false };
 }
 
@@ -157,14 +159,15 @@ export function worldPrompt(g, world, actions, to, auto = false) {
 /**
  * Close one turn: the rules judge the reply's moves and what the player ordered by card, favour, standing and
  * relations move, wars end where the rules say so, the turn goes into the log, the chronicle and the memory of
- * people and threads, and the date moves on. r is a reply as read by readWorldReply. When the reply holds no moves
+ * people and threads, and the date moves on. r is a reply as read by readWorldReply, or {rules: true, ...} for a
+ * turn with no AI, which the gazette then tells (gazette.js). When the reply holds no moves
  * for other countries (or there was no AI at all), they move by rule (rivals.js). Changes g and returns the turn's
  * log entry.
  */
 export function closeTurn(g, r, geo, actions) {
   const alone = !r.moves.some((m) => m.country !== g.player || !m.action) ? rivalMoves(g, geo) : [];
   const receipt = applyMoves(g, [...ownMoves(g, r.moves, actions, geo), ...alone], geo, actions, monthsBetween(g.date, r.stop));
-  if (alone.length) receipt.push({ ok: true, text: "Other countries moved by the rules alone this turn: no AI proposed anything for them" });
+  if (alone.length && !r.rules) receipt.push({ ok: true, text: "Other countries moved by the rules alone this turn: no AI proposed anything for them" });
   // the story told with the result known: of the two endings the AI wrote for an ordered attack, the one the rules chose
   const told = receipt.filter((x) => x.check && x.at && x.country === g.player).map((x) => { const w = (r.ifs || []).find((i) => geo.find(i.target) === x.at); return w && { at: x.at, band: x.check.band, text: x.check.band === "failed" ? w.lost : w.won }; }).filter((x) => x && x.text);
   receipt.push(...settleMissions(g, r.stop, geo, actions)); // missions hook
@@ -177,6 +180,7 @@ export function closeTurn(g, r, geo, actions) {
   receipt.push(...settleMore(g, receipt, r.stop, geo, actions)); // features hook
   if ((g.branch || 0) > (g.retold || 0)) { g.retold = g.branch; receipt.push({ ok: true, text: `This turn was played again after a take-back, so its checks drew fresh numbers (line ${g.branch + 1} of this game)` }); }
   const entry = { turn: g.turn, from: g.date, to: r.stop, actions, events: r.events, news: r.news, summary: r.summary, dropped: r.dropped, receipt, advice: r.advice, ...(told.length ? { told } : {}), ...(g.branch ? { branch: g.branch } : {}) };
+  if (r.rules) { entry.rules = 1; try { entry.summary = gazette(g, entry, geo).lead; } catch { entry.summary = ""; } } // prose never stops a turn // keyless hook: the turn's own first sentence, in place of a story
   notePeople(g, entry, r.people);
   receipt.push(...noteThreads(g, entry, r.threads));
   g.log = [...g.log, entry].slice(-60);

@@ -63,6 +63,7 @@ export function applyMoves(g, moves, geo, actions, months) {
     if (r.at) receipt[receipt.length - 1].at = r.at;
     if (r.offer) receipt[receipt.length - 1].offer = true; // an offer made to the player: not applied yet, and not a failure (game.js marks it as news)
     if (r.gauge) receipt[receipt.length - 1].gauge = r.gauge; // round 3 hook: a clause's push on a gauge, read by state.js
+    if (r.offer) receipt[receipt.length - 1].offer = r.offer; // keyless hook: an offer or a demand made to the player, for the gazette
     for (const extra of r.also || []) receipt.push(typeof extra === "string" ? { ok: true, text: extra } : { ok: true, text: extra.text, ...note(extra.fact) });
   }
   return receipt;
@@ -91,7 +92,7 @@ function peace(g, m, geo, { isMe }) {
   const toMe = t === g.player && g.mode !== "citizen" && !isMe, offered = isMe && g.offers.some((o) => o.from === t && o.kind === "peace");
   const a = toMe ? peaceAnswer(g, t, c) : peaceAnswer(g, c, t);
   if (toMe && !a.ok) return { ok: false, why: `would offer you peace, but does not (${a.why})` };
-  if (toMe) { offer(g, c, "peace"); return { ok: false, offer: true, why: "offers you peace; accept it from your actions" }; }
+  if (toMe) { offer(g, c, "peace"); return { ok: false, why: "offers you peace; accept it from your actions", offer: "peace" }; }
   if (!a.ok && !offered) return { ok: false, why: `asks ${geo.name(t)} for peace, which refuses (${a.why})` };
   endWar(g, c, t);
   return { ok: true, why: `makes peace with ${geo.name(t)}${offered ? ", as offered" : `, which agrees (${a.why})`}; each keeps the land it holds`, fact: ["peace", ...pair(c, t).split("|")] };
@@ -108,7 +109,7 @@ function treaty(g, m, geo, { isMe }) {
   const offered = isMe && g.offers.some((o) => o.from === t && o.kind === kind);
   const a = toMe ? treatyAnswer(g, t, c, kind, (x) => strengthOf(g, geo, x)) : treatyAnswer(g, c, t, kind, (x) => strengthOf(g, geo, x));
   if (toMe && !a.ok) return { ok: false, why: `would offer you ${treatyName(kind)}, but does not (${a.why})` };
-  if (toMe) { offer(g, c, kind); return { ok: false, offer: true, why: `offers you ${treatyName(kind)}; accept it from your actions` }; }
+  if (toMe) { offer(g, c, kind); return { ok: false, why: `offers you ${treatyName(kind)}; accept it from your actions`, offer: kind }; }
   if (!a.ok && !offered) return { ok: false, why: `proposes ${treatyName(kind)} to ${geo.name(t)}, which refuses (${a.why})`, fact: ["no", c, t, kind] };
   g.treaties = g.treaties.filter((x) => x.pair !== pair(c, t));
   g.treaties.push({ pair: pair(c, t), kind, since: g.date });
@@ -179,7 +180,7 @@ export function worldFacts(g, geo, near = []) {
   const land = Object.entries(g.owners), mine = land.filter(([id, c]) => close.has(c) || close.has(geo.place(id).country)).slice(-8), far = land.length - mine.length;
   const moved = mine.map(([id, c]) => `${id} ${geo.place(id).name}: held by ${c}, taken from ${geo.place(id).country}`);
   // last turn's receipt: the player's own lines first, twelve at most, and an attack without its numbers (the story tells it in words)
-  const rec = g.log[g.log.length - 1]?.receipt || [], told = [...rec.filter((r) => r.country === me), ...rec.filter((r) => r.country !== me)].slice(0, 12);
+  const rec = g.log[g.log.length - 1]?.receipt || [], own = (r) => r.country === me || r.press || r.call || r.incident || r.offer || r.asks?.[1] === me, told = [...rec.filter(own), ...rec.filter((r) => !own(r))].slice(0, 12); // keyless hook: what presses the player is told first
   return [
     ...(g.facts || []).map((f) => `- Told by the Game Master, and true: ${f.text}`),
     ...(g.leaks || []).filter((l) => l.turn === g.turn).map((l) => `- Leaked: ${l.name}, an unhappy adviser of the player, told the press about the player's plans. Papers may report it.`),
