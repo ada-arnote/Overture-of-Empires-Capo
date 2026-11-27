@@ -279,14 +279,15 @@ const T = createTable({
     return hexBoard(T, stage, {
       cells, rough: none, sea, ground: (i) => (sea[i] ? (i < land.length ? SHALLOW : SEA) : (printed ? GRASS : PAPER)[(i * 7 + (i >> 2)) % 3]),
       owner: () => [...T.match.position.owner, ...ring.map(() => NONE)],
+      reading: { rim: true }, // reading hook (p10-reading): an owner's colour as each tile's rim and sides, so the land still reads
       pieces() {
-        const q = T.match.position, out = [];
+        const q = T.match.position, out = [], can = new Set(T.human() ? legal(T).map(from) : []); // reading hook (p10-reading): what can still act, flagged
         q.tree.forEach((t, at) => { if (t) out.push({ kind: t === WOOD ? "tree" : "cairn", at }); });
         q.farm.forEach((f, at) => { if (f) out.push({ kind: "farm", at }); });
         q.fort.forEach((f, at) => { if (f) out.push({ kind: "fort", at, rgb: RGB[q.owner[at]] }); });
-        for (let s = 0; s < q.seats; s++) for (const t of territories(q, s)) out.push({ kind: "tower", at: t.hall, rgb: RGB[s], count: t.purse, now: s === T.match.turn, warn: t.purse + t.net < 0 });
+        for (let s = 0; s < q.seats; s++) for (const t of territories(q, s)) out.push({ kind: "tower", at: t.hall, rgb: RGB[s], count: t.purse, now: s === T.match.turn, warn: t.purse + t.net < 0, buy: can.has(`h${t.hall}`) });
         if (T.ready()) for (const g of guards) out.push({ kind: "token", at: g.at, n: g.n, hot: g.hot });
-        q.unit.forEach((rank, at) => { if (rank) out.push({ kind: "unit", at, rank, rgb: RGB[q.owner[at]], tired: !!q.moved[at] || q.owner[at] !== T.match.turn, now: !q.moved[at] && q.owner[at] === T.match.turn }); });
+        q.unit.forEach((rank, at) => { if (rank) out.push({ kind: "unit", at, rank, rgb: RGB[q.owner[at]], tired: !!q.moved[at] || q.owner[at] !== T.match.turn, now: !q.moved[at] && q.owner[at] === T.match.turn, ready: can.has(`u${at}`) }); });
         return out;
       },
       tap: (i) => tap(T, i),

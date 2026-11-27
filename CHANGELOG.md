@@ -2,6 +2,22 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## v0.9.7 (2026-11-27): boards you can read at a glance
+
+### Boards that read at a glance: goods, pips, ports, routes, names, rims and flags
+
+**Players**
+- **Grain and Glass:** each good has its own symbol at the top of its hexes (an ear of wheat, a goblet, three bricks, a salt crystal), with a key at the foot of the board (under the seats on a phone). Pips under every number show how often it comes up, red with the busiest numbers. A port's rate sits on a plate over the water beside its flag: "3:1", or "2:1" and the symbol of its good on that good's colour; the jetty now runs out to the sea it serves. Routes are links in the owner's colour from hex to hex, to each neighbouring route or depot of the same seat; seats sharing an edge lie side by side.
+- **Brass and Banners:** province names on the map wherever a name fits inside its province and clear of every plate and land name, so more appear as you zoom in; the province under the pointer is always named. Crowded number plates (Europe at the widest zoom) move aside to the nearest free place and are tied back to their piece by a thin line.
+- **The Island Fable:** a seat's colour is now each tile's rim and sides, with a light tint, so grass, fields and woods still read under it. A white pennant marks a unit that can still move, a gold banner with a coin a village that can still buy.
+- Every board style (War table, Campaign map, Clear) and the Flat look show all of this; the still picture for devices without 3D shows numbers with pips, port rates, rims and the flags as marks.
+
+**Contributors**
+- New `src/map/glyphs.js` (the goods' symbols, drawn once per size and stamped; pips; port plates; flags; the half-link model and its flat drawing; the key) and `src/map/labels.js` (`spread`, a greedy placer that keeps boxes apart; tie lines; place names by fit). Hooks marked "reading hook (p10-reading)" in `board.js`, `paint.js`, `site/hexboard.js`, `glass.js`, `fable.js`, `banners.js` and one line of `table.css`.
+- `createBoard` takes `reading: { goods(i), colours, key, places, rim }`. Route pieces may carry `joins: [{ to, rgb, lane, of }]`, ports `toward` and `rate`, towers `buy`, units `ready`. The painter takes `rim` (the seats' colours) and colours a tile's rim and walls from its owner.
+- Frame times, headless Edge with the GPU at 1440 x 900, zooming (median / 90th percentile ms): Glass 5.6 / 10.3 against 4.6 / 9.8 before (the overlay 1.4 against 0.7); Fable 3.6 to 4.9 / 5.0 to 9.6; Banners 7.3 / 12.9 against 7.9 / 13.7.
+- `src/map` 56.4 to 64.5 kB compressed (guide 45); everything shipped 743.0 to 752.7 kB. `test/reading.test.mjs`: the placer, the links, the symbols.
+
 ## v0.9.6 (2026-11-27): Capo's world map, closer in
 
 ### Capo's lit map: pips, mission pins, cities and towns, dressing, sharper relief, lit lakes
