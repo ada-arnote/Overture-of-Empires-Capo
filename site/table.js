@@ -15,6 +15,8 @@ import { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, 
 import { hail, stir } from "./motion.js";
 // livelink hook: live play by two pasted links, straight between two browsers (site/livelink.js)
 import { liveLink } from "./livelink.js";
+// shelf hook: the community shelf, to browse and open replays and to share this game as one (site/community.js)
+import { shareView, shelfView } from "./community.js";
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -781,7 +783,7 @@ export function createTable(G) {
     const sure = (t, f) => { const b = add(t, f, "quiet danger"), go = b.onclick; b.onclick = () => { if (b.dataset.armed) go(); else { b.dataset.armed = "1"; b.textContent = `${t}: press again to be sure`; } }; };
     add("How to play", rules);
     if (lesson) add("Teach me again", lesson.start);
-    if (T.demo) return box;
+    if (T.demo) { add("Community shelf", shelf); return box; } // shelf hook
     add("What happened so far", showLog);
     if (G.listing) add("The board as a list", () => {
       const { head, rows } = G.listing(T), box = el("div", undefined, "ranks"), t = el("table"), tr = (cells, tag) => { const r = el("tr"); r.append(...cells.map((c) => el(tag, String(c)))); return r; };
@@ -791,6 +793,8 @@ export function createTable(G) {
     if (G.more) add(G.more.label, () => sheet(G.more.label, G.more.body(T)));
     if (!realtime()) add("Take back your last move", undo).disabled = !canUndo();
     add("Save to a file", save);
+    add("Community shelf", shelf); // shelf hook
+    if (T.match.list.length) add("Share to the shelf", share); // shelf hook
     box.append(el("p", SAVED, "about"), el("hr"));
     sure("Start again with the same players", restart);
     sure("Leave to the title", home);
@@ -995,18 +999,26 @@ export function createTable(G) {
   $("file").onchange = async () => {
     const f = $("file").files[0];
     $("file").value = "";
-    if (!f) return;
+    if (f) openSaved(await f.text());
+  };
+  // shelf hook: a saved file and a replay from the shelf open the same way; a finished replay is watched, its seats all bots
+  function openSaved(text, watch = false) {
     try {
-      const { match: m, warning } = openSave(await f.text(), [G.game]);
+      const { match: m, warning } = openSave(text, [G.game]), kinds = G.kindsOf?.(m.options) || Array.from({ length: m.options.seats }, (_, i) => (i ? "normal" : "you"));
       replacing(() => {
-        begin(m, G.kindsOf?.(m.options) || Array.from({ length: m.options.seats }, (_, i) => (i ? "normal" : "you")));
+        begin(m, watch && m.turn === null ? kinds.map((k) => (k === "you" ? "normal" : k)) : kinds);
         if (warning) sheet("Opened with a warning", el("p", warning));
       }, "The saved game");
     } catch (e) {
       if (!(e instanceof Refusal)) throw e;
       sheet("That file was not opened", el("p", `${e.message[0].toUpperCase()}${e.message.slice(1)}.`));
     }
-  };
+  }
+  // shelf hook: the shelf's replays of this game, and this game offered as one (site/community.js)
+  function shelf() { sheet("Community shelf", shelfView({ game: G.key, version: G.game.version, note: "about", open: (e) => { closeSheet(); openSaved(JSON.stringify(e.data), true); }, share: "Share a game of your own from the menu: Share to the shelf." }), "Close", "wide"); }
+  function share() { const m = real || T.match, r = m.result; sheet("Share to the shelf", shareView({ type: "replay", game: G.key, data: JSON.parse(m.save()), result: { moves: m.list.length, winners: r ? r.winners : null }, title: `${G.title}, ${m.list.length} moves`, what: r ? "this game" : "this game so far", note: "about" }), "Close", "wide"); }
+  const shelfLink = el("button", "Community shelf", "text"); // shelf hook
+  shelfLink.type = "button"; shelfLink.onclick = shelf; $("title").querySelector(".links").append(shelfLink);
   addEventListener("keydown", (e) => {
     const k = e.key.toLowerCase();
     if (T.demo || $("sheet").open || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input:not([type=range]), select, textarea")) return;

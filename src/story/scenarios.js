@@ -23,9 +23,8 @@ export const SCENARIOS = [
 ];
 
 // Shown on the first screen so players know what is coming; none can be chosen yet.
-export const SOON = [
-  ["Finding others' scenarios", "Browse scenarios other players have shared, from inside the game. For now, share them as files: save one from the Game menu, open one below."],
-];
+// shelf hook: finding others' scenarios came with the community shelf (ruling 155), so nothing waits here now
+export const SOON = [];
 
 export const CHARACTER = [
   ["name", "Name"], ["pronouns", "Pronouns"], ["role", "Role"], ["personality", "Personality"],

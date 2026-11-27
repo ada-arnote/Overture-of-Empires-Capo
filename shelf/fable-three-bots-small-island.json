@@ -1,0 +1,566 @@
+{
+ "kind": "capo-shelf",
+ "v": 1,
+ "made": "2026-11-27",
+ "by": "Capo",
+ "licence": "CC0-1.0",
+ "id": "fable-three-bots-small-island",
+ "type": "replay",
+ "game": "fable",
+ "title": "Three bots on a small island",
+ "about": "Our own example: three bots play the traditional rules on a small round island until one of them holds it all. Step through it move by move.",
+ "result": {
+  "moves": 115,
+  "winners": [
+   0
+  ]
+ },
+ "data": {
+  "end": "8841fb5bdcedfa40",
+  "format": 1,
+  "game": "fable",
+  "moves": [
+   {
+    "do": "fort",
+    "hall": 38,
+    "to": 37
+   },
+   {
+    "do": "fort",
+    "hall": 8,
+    "to": 16
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "fort",
+    "hall": 46,
+    "to": 54
+   },
+   {
+    "do": "raise",
+    "hall": 46,
+    "to": 58
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "fort",
+    "hall": 25,
+    "to": 33
+   },
+   {
+    "do": "raise",
+    "hall": 25,
+    "to": 19
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "raise",
+    "hall": 46,
+    "to": 42
+   },
+   {
+    "do": "raise",
+    "hall": 66,
+    "to": 75
+   },
+   {
+    "do": "move",
+    "from": 58,
+    "to": 48
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "raise",
+    "hall": 25,
+    "to": 22
+   },
+   {
+    "do": "raise",
+    "hall": 72,
+    "to": 63
+   },
+   {
+    "do": "move",
+    "from": 19,
+    "to": 43
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "raise",
+    "hall": 38,
+    "to": 19
+   },
+   {
+    "do": "raise",
+    "hall": 56,
+    "to": 57
+   },
+   {
+    "do": "raise",
+    "hall": 76,
+    "to": 68
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "move",
+    "from": 22,
+    "to": 43
+   },
+   {
+    "do": "move",
+    "from": 43,
+    "to": 19
+   },
+   {
+    "do": "move",
+    "from": 63,
+    "to": 65
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "move",
+    "from": 57,
+    "to": 68
+   },
+   {
+    "do": "move",
+    "from": 68,
+    "to": 65
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "raise",
+    "hall": 46,
+    "to": 22
+   },
+   {
+    "do": "move",
+    "from": 42,
+    "to": 48
+   },
+   {
+    "do": "move",
+    "from": 48,
+    "to": 25
+   },
+   {
+    "do": "move",
+    "from": 75,
+    "to": 57
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "raise",
+    "hall": 38,
+    "to": 48
+   },
+   {
+    "do": "raise",
+    "hall": 76,
+    "to": 75
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "move",
+    "from": 25,
+    "to": 26
+   },
+   {
+    "do": "raise",
+    "hall": 46,
+    "to": 22
+   },
+   {
+    "do": "move",
+    "from": 22,
+    "to": 73
+   },
+   {
+    "do": "move",
+    "from": 57,
+    "to": 31
+   },
+   {
+    "do": "fort",
+    "hall": 9,
+    "to": 10
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "move",
+    "from": 73,
+    "to": 72
+   },
+   {
+    "do": "move",
+    "from": 26,
+    "to": 18
+   },
+   {
+    "do": "raise",
+    "hall": 46,
+    "to": 63
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "concede"
+   },
+   {
+    "do": "move",
+    "from": 75,
+    "to": 66
+   },
+   {
+    "do": "raise",
+    "hall": 8,
+    "to": 25
+   },
+   {
+    "do": "raise",
+    "hall": 8,
+    "to": 34
+   },
+   {
+    "do": "raise",
+    "hall": 38,
+    "to": 48
+   },
+   {
+    "do": "move",
+    "from": 48,
+    "to": 46
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "move",
+    "from": 46,
+    "to": 57
+   },
+   {
+    "do": "move",
+    "from": 66,
+    "to": 74
+   },
+   {
+    "do": "move",
+    "from": 25,
+    "to": 34
+   },
+   {
+    "do": "move",
+    "from": 34,
+    "to": 45
+   },
+   {
+    "do": "raise",
+    "hall": 76,
+    "to": 44
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "move",
+    "from": 72,
+    "to": 74
+   },
+   {
+    "do": "move",
+    "from": 31,
+    "to": 65
+   },
+   {
+    "do": "move",
+    "from": 63,
+    "to": 23
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "move",
+    "from": 45,
+    "to": 35
+   },
+   {
+    "do": "move",
+    "from": 57,
+    "to": 58
+   },
+   {
+    "do": "raise",
+    "hall": 76,
+    "to": 47
+   },
+   {
+    "do": "move",
+    "from": 44,
+    "to": 43
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "move",
+    "from": 74,
+    "to": 43
+   },
+   {
+    "do": "move",
+    "from": 65,
+    "to": 66
+   },
+   {
+    "do": "move",
+    "from": 23,
+    "to": 44
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "move",
+    "from": 43,
+    "to": 75
+   },
+   {
+    "do": "raise",
+    "hall": 64,
+    "to": 56
+   },
+   {
+    "do": "move",
+    "from": 44,
+    "to": 66
+   },
+   {
+    "do": "move",
+    "from": 66,
+    "to": 76
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "move",
+    "from": 47,
+    "to": 23
+   },
+   {
+    "do": "move",
+    "from": 35,
+    "to": 56
+   },
+   {
+    "do": "move",
+    "from": 58,
+    "to": 22
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "raise",
+    "hall": 25,
+    "to": 31
+   },
+   {
+    "do": "move",
+    "from": 23,
+    "to": 42
+   },
+   {
+    "do": "move",
+    "from": 22,
+    "to": 65
+   },
+   {
+    "do": "move",
+    "from": 56,
+    "to": 73
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "raise",
+    "hall": 64,
+    "to": 45
+   },
+   {
+    "do": "raise",
+    "hall": 26,
+    "to": 11
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "move",
+    "from": 65,
+    "to": 66
+   },
+   {
+    "do": "raise",
+    "hall": 25,
+    "to": 76
+   },
+   {
+    "do": "move",
+    "from": 73,
+    "to": 45
+   },
+   {
+    "do": "move",
+    "from": 31,
+    "to": 42
+   },
+   {
+    "do": "move",
+    "from": 42,
+    "to": 74
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "raise",
+    "hall": 64,
+    "to": 42
+   },
+   {
+    "do": "move",
+    "from": 11,
+    "to": 19
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "raise",
+    "hall": 64,
+    "to": 31
+   },
+   {
+    "do": "move",
+    "from": 42,
+    "to": 22
+   },
+   {
+    "do": "move",
+    "from": 19,
+    "to": 18
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "move",
+    "from": 66,
+    "to": 22
+   },
+   {
+    "do": "raise",
+    "hall": 25,
+    "to": 75
+   },
+   {
+    "do": "move",
+    "from": 74,
+    "to": 72
+   },
+   {
+    "do": "move",
+    "from": 45,
+    "to": 76
+   },
+   {
+    "do": "move",
+    "from": 76,
+    "to": 55
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "move",
+    "from": 22,
+    "to": 31
+   },
+   {
+    "do": "move",
+    "from": 75,
+    "to": 42
+   },
+   {
+    "do": "move",
+    "from": 55,
+    "to": 44
+   },
+   {
+    "do": "move",
+    "from": 72,
+    "to": 26
+   },
+   {
+    "do": "end"
+   },
+   {
+    "do": "concede"
+   }
+  ],
+  "options": {
+   "actions": 99,
+   "boats": false,
+   "farms": false,
+   "fort": 12,
+   "gales": false,
+   "goal": "last",
+   "isle": "round",
+   "limit": 0,
+   "opening": "truce",
+   "order": "rotate",
+   "price": 8,
+   "ranks": 4,
+   "rounds": 10,
+   "seats": 3,
+   "size": "small",
+   "start": "dealt",
+   "style": "classic",
+   "wages": "harsh",
+   "walk": "free",
+   "woods": "slow"
+  },
+  "seed": "shelf example 1",
+  "version": "8"
+ }
+}

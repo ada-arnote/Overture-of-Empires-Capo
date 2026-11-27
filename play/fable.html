@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-qVg0FJzIQzu6MAbkso/Bf7ghw2fqt0zqoGb0akc1N80='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' stun://stun.cloudflare.com:3478; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-moJ4U2u0zc/5n2zW9T7SQz3u9qBmtt93kS2ru9GRFVg='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' stun://stun.cloudflare.com:3478; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>The Island Fable · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -340,6 +340,16 @@ body.side #toast { top: calc(var(--bar-b, 56px) / var(--ui-scale) + 50px); botto
 
 /* reading hook (p10-reading): the key to the symbols on a board, not over the title screen */
 .menu .board-key { display: none }
+/* shelf hook: the community shelf, in Capo's first screen and Game menu and in each table game's menu (site/shelf.js) */
+.shelf-list { list-style: none; padding: 0 !important; margin: 8px 0 12px; display: grid; gap: 8px }
+.shelf-list li { display: grid; gap: 4px; padding: 10px 12px; margin: 0 !important; border: 1px solid var(--edge-soft); border-radius: var(--r-1); background: var(--raise) }
+.shelf-list p { margin: 0 !important; font: 15px/1.45 var(--serif); color: var(--text-2) }
+.shelf-head b { display: block; font: 400 var(--fs-5)/1.2 var(--display); color: var(--text) } .shelf-head small, .shelf-facts, .shelf-say { color: var(--text-3); font-size: var(--fs-1) } .shelf-say:empty { display: none } .shelf-say { color: var(--danger) }
+.shelf-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0 } .shelf-row > .main { flex: 0 1 auto; min-width: 120px } .shelf-row a { text-align: center }
+.shelf-field { display: grid; gap: 4px; margin: 0 0 10px; color: var(--text-3); font-size: var(--fs-2) } .shelf-field .field { width: 100%; box-sizing: border-box }
+.shelf-licence { border: 0; padding: 0; margin: 0 0 10px; display: grid; gap: 6px } .shelf-licence legend { padding: 0; margin-bottom: 4px; color: var(--text-3); font-size: var(--fs-2) }
+.shelf-licence label, .shelf-own { display: flex; gap: 10px; align-items: flex-start; color: var(--text); font-size: var(--fs-2) } .shelf-licence input, .shelf-own input { accent-color: var(--accent); margin-top: 3px; flex: none }
+.shelf-own { margin: 4px 0 8px } .shelf-steps ol { padding-left: 20px; margin: 6px 0 } .shelf-steps li { margin-bottom: 6px; font-size: var(--fs-2) }
 </style>
 <link rel="icon" href="../site/icons/tent/mark.svg">
 </head>
@@ -3594,7 +3604,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.10.1";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "faadf30c";
+const BUILD = "3e6e49b3";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -4739,6 +4749,303 @@ function liveLink({ T, G, begin, sheet, closeSheet, toast, el, names, send }) {
 
 $x.canLive = canLive; $x.PRIVACY = PRIVACY; $x.FAIR = FAIR; $x.liveLink = liveLink;
 return $x; })({});
+$m[40] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Two small things every part of Capo's story game shares: the hard line, and repeatable chance.
+
+// The one hard line (ruling 49): nothing sexual involving minors. Nothing else is filtered.
+// A text crosses it when it names someone young and something sexual, unless it is plainly protective statecraft
+// ("prosecute those who abuse children", "fund sex education for teens"). Anything that asks to depict, describe or
+// arrange sexual content with someone young is refused whatever else it says. "Explicit" alone is not sexual.
+const YOUNG = /\b(child|children|childs?|minor|minors|underage|kid|kids|schoolgirl|schoolboy|preteen|teen|teens|teenager|teenagers|boy|boys|girl|girls|juvenile)\b|\b(1[0-7]|[1-9])[- ]?(years?|yrs?)[- ]?old\b|\baged (1[0-7]|[1-9])\b/i;
+const SEXUAL = /\b(sex(?!\s+(education|ed|trafficking|offen[cs]es?|offenders?|crimes?|abuse))|sexual|sexually|nude|naked|nudity|erotic\w*|porn\w*|lewd|intercourse|seduc\w*|aroused?)\b/i;
+const DEPICT = /\b(describe|depict|write|story|scene|role-?play|roleplay|show|image|photo\w*|picture|video|seduc\w*|have sex|sleep with|make love|kiss\w*|undress\w*)\b/i;
+const PROTECT = /\b(ban|bans|banned|outlaw\w*|punish\w*|prosecut\w*|protect\w*|prevent\w*|stop|end|combat|fight|crack(s|ed|ing)? down|arrest\w*|criminali[sz]\w*|abolish\w*|rescue\w*|shelter\w*|safeguard\w*|investigat\w*|penalt\w*|law|laws|education|against|abuse|exploitation|trafficking|victims?)\b/i;
+/** Whether one text crosses the hard line. */
+const crosses = (text) => {
+  const t = String(text || "");
+  if (!YOUNG.test(t) || !SEXUAL.test(t)) return false;
+  return DEPICT.test(t) || !PROTECT.test(t);
+};
+/** Texts that cross the hard line, by number (counting from 1). They are never sent, and never kept from a reply. */
+const crossesLine = (texts) => texts.map((o, i) => (crosses(o) ? i + 1 : 0)).filter(Boolean);
+
+/** One repeatable 32-bit whole number from the game's seed and a label. */
+function hash32(seed, label) {
+  let h = 2166136261;
+  for (const ch of seed + "/" + label) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
+  h = Math.imul(h ^ (h >>> 15), h | 1); h ^= h + Math.imul(h ^ (h >>> 7), h | 61);
+  return (h ^ (h >>> 14)) >>> 0;
+}
+/** One repeatable whole number from 1 to 100: the only chance the rules use (and the one Coda can repeat). */
+const draw100 = (seed, label) => (hash32(seed, label) % 100) + 1;
+
+$x.crosses = crosses; $x.crossesLine = crossesLine; $x.hash32 = hash32; $x.draw100 = draw100;
+return $x; })({});
+$m[39] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The community shelf (ruling 155, option D): scenarios, Capo stories and table-game replays players share as files,
+// kept in the repository's shelf/ folder and read by the pages from their own site. This is the shelf's format and
+// the checks every entry passes, the same in the pages and in the gate (tools/shelf.mjs), before any game reader sees
+// its data. Data only: nothing in an entry is ever run, and nothing in it may name a web address or an email address.
+const { crosses } = $m[40];
+
+const KIND = "capo-shelf", INDEX = "capo-shelf-index";
+/** What an entry is. A scenario and a story are Capo's; a replay is a table game's, from its seed and moves. */
+const TYPES = { scenario: "Scenario", story: "Story", replay: "Replay" };
+const GAMES = { capo: "Capo", inch: "An Inch of Ink", fable: "The Island Fable", banners: "Brass and Banners", glass: "Grain and Glass" };
+/** The two licences an entry may carry, chosen by the person who made it. */
+const LICENCES = { "CC-BY-4.0": "CC BY 4.0: anyone may use, change and share it, naming you", "CC0-1.0": "CC0: anyone may use, change and share it, no name needed" };
+/** Characters, as written in the file. A file over its size is refused before it is read. */
+const LIMIT = { file: { scenario: 120000, story: 300000, replay: 200000 }, index: 400000, title: 60, about: 300, by: 40, entries: 400 };
+const FIELDS = ["about", "by", "data", "from", "game", "id", "kind", "licence", "made", "result", "title", "type", "v"];
+const ID = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])$/, DATE = /^\d{4}-\d{2}-\d{2}$/;
+// a web address or an email address anywhere in an entry's text: the shelf links to nothing and carries no contact details
+const ADDRESS = /\b[a-z][a-z0-9+.-]*:\/\/|\b(?:mailto|javascript):|\bwww\d?\.|\b(?:[a-z0-9-]+\.)+(?:com|net|org|io|gg|xyz|info|app|dev|tv|uk|ru|cn|link|site|online|club|shop|live|onion|ly)\b/i;
+const MAIL = /[\w.+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/i;
+const line = (v, n) => (typeof v === "string" ? v.replace(/[\x00-\x1f\x7f]+/g, " ").replace(/\s+/g, " ").trim() : "").slice(0, n);
+const fail = (why) => ({ ok: false, why });
+
+/** Every piece of text in a value, keys included, however deep. */
+function textsOf(v, out = [], depth = 0) {
+  if (depth > 40) throw new Error("too deep");
+  if (typeof v === "string") out.push(v);
+  else if (Array.isArray(v)) for (const x of v) textsOf(x, out, depth + 1);
+  else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { out.push(k); textsOf(x, out, depth + 1); }
+  return out;
+}
+/** Why a text may not go on the shelf, or "". */
+function refused(text) {
+  if (crosses(text)) return "it crosses the hard line: nothing sexual involving minors";
+  if (MAIL.test(text)) return "it holds an email address";
+  if (ADDRESS.test(text)) return "it names a web address";
+  return "";
+}
+/** A shelf id from a title: lower case, joined by hyphens, with a short tail so two offers of the same name do not meet. */
+const idFor = (title, tail) => `${line(title, 60).toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "entry"}-${String(tail).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8) || "x"}`.replace(/-+/g, "-");
+
+/** The result a replay claims: how many moves, and who won (null while the game is unfinished). */
+const resultOk = (r) => r && typeof r === "object" && Number.isInteger(r.moves) && r.moves >= 0 && (r.winners === null || (Array.isArray(r.winners) && r.winners.every((s) => Number.isInteger(s) && s >= 0 && s < 64)));
+/** The parts of a table game's save (src/core/match.js), as a replay carries them. */
+const SAVE = ["end", "format", "game", "moves", "options", "seed", "version"];
+
+/**
+ * Check one shelf entry, read from a file. Returns {ok: true, entry} or {ok: false, why}. This is the shelf's own
+ * check: its shape, its fields, its licence and every text in it. The game's own readers (a scenario's check, a saved
+ * game's check, a replay from its seed and moves) then decide whether its data opens.
+ */
+function checkEntry(e) {
+  if (!e || typeof e !== "object" || Array.isArray(e) || e.kind !== KIND || e.v !== 1) return fail("That is not a shelf entry.");
+  const extra = Object.keys(e).find((k) => !FIELDS.includes(k));
+  if (extra) return fail(`The entry has a field the shelf does not know: ${line(extra, 30)}.`);
+  if (!ID.test(e.id || "")) return fail("The entry's id must be 3 to 64 lower-case letters, digits and hyphens.");
+  if (!Object.hasOwn(TYPES, e.type) || !Object.hasOwn(GAMES, e.game)) return fail("The entry's type or game is not one the shelf knows.");
+  if ((e.type === "replay") === (e.game === "capo")) return fail("Scenarios and stories are Capo's; replays are the table games'.");
+  const title = line(e.title, LIMIT.title), about = line(e.about, LIMIT.about), by = line(e.by, LIMIT.by);
+  if (!title || title !== e.title) return fail(`The title must be plain text of 1 to ${LIMIT.title} characters.`);
+  if (about !== (e.about ?? "") || by !== (e.by ?? "")) return fail(`The line about it (to ${LIMIT.about} characters) and the name (to ${LIMIT.by}) must be plain text.`);
+  if (!Object.hasOwn(LICENCES, e.licence)) return fail("The entry must carry CC-BY-4.0 or CC0-1.0, chosen by whoever made it.");
+  if (e.licence === "CC-BY-4.0" && !by) return fail("CC BY means naming who made it: give a name (any name you choose), or choose CC0.");
+  if (!DATE.test(e.made || "") || Number.isNaN(Date.parse(`${e.made}T00:00:00Z`))) return fail("The entry's date is not a date.");
+  if (e.from !== undefined && (!ID.test(e.from) || e.from === e.id)) return fail("The entry it was made from must be another shelf id.");
+  const d = e.data;
+  if (!d || typeof d !== "object" || Array.isArray(d)) return fail("The entry has no data.");
+  if (e.type === "scenario" && (d.kind !== "capo-scenario" || d.v !== 1)) return fail("A scenario entry must hold a Capo scenario.");
+  if (e.type === "story" && (d.v !== 1 || typeof d.player !== "string" || !Array.isArray(d.log))) return fail("A story entry must hold a Capo game.");
+  if (e.type === "replay") {
+    if (Object.keys(d).sort().join() !== SAVE.join() || d.game !== e.game || !Array.isArray(d.moves)) return fail("A replay entry must hold a saved table game of its own game.");
+    if (!resultOk(e.result) || e.result.moves !== d.moves.length) return fail("A replay must say how many moves it has and who won.");
+  } else if (e.result !== undefined) return fail("Only a replay carries a result.");
+  let texts;
+  try { texts = textsOf(e); } catch { return fail("The entry is nested too deep."); }
+  for (const t of texts) { const why = refused(t); if (why) return fail(`Refused: ${why}.`); }
+  return { ok: true, entry: e };
+}
+
+/** The line the index keeps for an entry: what the shelf shows before anything is opened. */
+function cardOf(e, size) {
+  const d = e.data;
+  return { id: e.id, type: e.type, game: e.game, title: e.title, about: e.about || "", by: e.by || "", licence: e.licence, made: e.made, ...(e.from ? { from: e.from } : {}),
+    ...(e.type === "replay" ? { version: d.version, result: { moves: e.result.moves, winners: e.result.winners } } : {}),
+    ...(e.type === "scenario" ? { start: line(d.start, 10) } : {}), ...(e.type === "story" ? { start: line(d.date, 10), turn: Number.isInteger(d.turn) ? d.turn : 1 } : {}), size };
+}
+
+/** The shelf's index, read from the site: the cards that pass, newest first. A bad card is left out, not trusted. */
+function readIndex(x) {
+  if (!x || x.kind !== INDEX || x.v !== 1 || !Array.isArray(x.entries)) return [];
+  const ok = (c) => c && ID.test(c.id || "") && Object.hasOwn(TYPES, c.type) && Object.hasOwn(GAMES, c.game) && line(c.title, LIMIT.title) === c.title && c.title && Object.hasOwn(LICENCES, c.licence) && DATE.test(c.made || "") && Number.isInteger(c.size) && c.size > 0 && c.size <= LIMIT.file[c.type]
+    && textsOf(c).every((t) => !refused(t));
+  return x.entries.slice(0, LIMIT.entries).filter(ok).map((c) => ({ ...c, about: line(c.about, LIMIT.about), by: line(c.by, LIMIT.by) }));
+}
+/** The index itself, from every entry's card: newest first, then by title. */
+const indexOf = (cards) => ({ kind: INDEX, v: 1, entries: [...cards].sort((a, b) => (a.made < b.made ? 1 : a.made > b.made ? -1 : a.title < b.title ? -1 : a.title > b.title ? 1 : 0)) });
+
+/** Em dashes (written by their number, as this file may not hold one) become commas: the house style, and the gate's. */
+const DASH = new RegExp(`\\s*${String.fromCharCode(8212)}\\s*`, "g");
+const plain = (v) => (typeof v === "string" ? v.replace(DASH, ", ") : Array.isArray(v) ? v.map(plain) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, plain(x)])) : v);
+/** A Capo game as a story to share: what it is, without the player's chats with the AI, the counsel asked, the orders and actions in hand, or this browser's notes. */
+function storyOf(g) {
+  const { chats, counsel, edits, actions, orders, shelf, seen, told, ...rest } = g;
+  void chats, void counsel, void edits, void actions, void orders, void shelf, void seen, void told;
+  return { ...rest, chats: [], counsel: [] };
+}
+/**
+ * A new entry, ready to save as a file. meta: {type, game, title, about, by, licence, made, from, tail}.
+ * Data is copied, and em dashes in it become commas. The result still goes through checkEntry before it is offered.
+ */
+function makeEntry(meta, data, result) {
+  const title = line(meta.title, LIMIT.title);
+  return { kind: KIND, v: 1, id: idFor(title, meta.tail), type: meta.type, game: meta.game, title: plain(title), about: plain(line(meta.about, LIMIT.about)), by: line(meta.by, LIMIT.by), licence: meta.licence, made: meta.made,
+    ...(meta.from ? { from: meta.from } : {}), ...(result ? { result: { moves: result.moves, winners: result.winners ? [...result.winners] : null } } : {}), data: plain(structuredClone(data)) };
+}
+
+$x.KIND = KIND; $x.INDEX = INDEX; $x.TYPES = TYPES; $x.GAMES = GAMES; $x.LICENCES = LICENCES; $x.LIMIT = LIMIT; $x.textsOf = textsOf; $x.refused = refused; $x.idFor = idFor; $x.checkEntry = checkEntry; $x.cardOf = cardOf; $x.readIndex = readIndex; $x.indexOf = indexOf; $x.DASH = DASH; $x.storyOf = storyOf; $x.makeEntry = makeEntry;
+return $x; })({});
+$m[38] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The community shelf in the pages (ruling 155, option D): browse what players have shared and open it, and make a
+// shelf file from your own scenario, story or replay. The shelf is read from this site's own shelf/ folder; this page
+// never sends anything. Offering a file is done by the player, on GitHub, with their own account, if they choose to.
+// Used by Capo's first screen and Game menu (site/game.js) and by every table game's menu (site/table.js).
+const { GAMES, LICENCES, LIMIT, TYPES, checkEntry, makeEntry, readIndex } = $m[39];
+const { SOURCE_URL } = $m[28];
+
+const HOME = "../shelf/", BRANCH = "main"; // the folder beside site/ and play/; the branch offers are made against
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
+const button = (text, on, cls = "quiet") => { const b = el("button", text, cls); b.type = "button"; b.onclick = on; return b; };
+const dateOf = (iso) => { const d = new Date(`${iso}T00:00:00Z`); return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }); };
+const SHORT = { "CC-BY-4.0": "CC BY 4.0", "CC0-1.0": "CC0" };
+const asFile = () => location.protocol === "file:";
+
+/** Fetch one file of the shelf, as text no longer than `most`. */
+async function fetchText(name, most) {
+  const res = await fetch(HOME + name);
+  if (!res.ok) throw new Error(res.status === 404 ? "That is not on the shelf." : `The shelf could not be read (${res.status}).`);
+  const text = await res.text();
+  if (text.length > most) throw new Error("That file is larger than the shelf allows.");
+  return text;
+}
+/** The shelf's index: its cards, checked. */
+async function loadIndex() {
+  let x;
+  try { x = JSON.parse(await fetchText("index.json", LIMIT.index)); } catch (e) { throw new Error(e instanceof SyntaxError ? "The shelf's index could not be read." : e.message); }
+  return readIndex(x);
+}
+/** One entry, fetched and checked by the shelf's own rules. The game's readers check its data next. */
+async function loadEntry(card) {
+  let raw;
+  try { raw = JSON.parse(await fetchText(`${card.id}.json`, LIMIT.file[card.type])); } catch (e) { throw new Error(e instanceof SyntaxError ? "That entry is not a shelf file." : e.message); }
+  const r = checkEntry(raw);
+  if (!r.ok) throw new Error(r.why);
+  if (r.entry.id !== card.id || r.entry.type !== card.type || r.entry.game !== card.game) throw new Error("That entry does not match the shelf's index.");
+  return r.entry;
+}
+
+/**
+ * The shelf for one game, as a block to put in a sheet. game: "capo" or a table game's key. open(entry) is the game's
+ * own way in (it runs the game's readers and may refuse). version: a table game's rules version, so replays made under
+ * other rules are shown but cannot be opened. note: the class for small print.
+ */
+function shelfView({ game, open, version = "", note = "note", share = "" }) {
+  const box = el("div", undefined, "shelf"), status = el("p", asFile() ? "" : "Reading the shelf...", note), list = el("div");
+  status.setAttribute("role", "status");
+  box.append(el("p", `${game === "capo" ? "Scenarios and stories" : "Replays"} players have shared. Each one was read by a person and passed the same checks the game uses before it was put here. Opening one reads it from this site; nothing is sent.`, note), status, list);
+  if (asFile()) { status.textContent = "The shelf is read from the site. This copy was opened as a file, so it cannot reach it: open the game from its web address."; return box; }
+  loadIndex().then((cards) => {
+    const mine = cards.filter((c) => c.game === game), byId = new Map(cards.map((c) => [c.id, c]));
+    status.textContent = mine.length ? `${mine.length} on the shelf.` : "Nothing on the shelf for this game yet.";
+    for (const type of Object.keys(TYPES)) {
+      const these = mine.filter((c) => c.type === type);
+      if (!these.length) continue;
+      if (game === "capo") list.append(el("h3", { scenario: "Scenarios", story: "Stories", replay: "Replays" }[type]));
+      const ul = el("ul", undefined, "shelf-list");
+      for (const c of these) {
+        const li = el("li"), head = el("div", undefined, "shelf-head"), go = button("Open", () => {}, "main"), old = c.type === "replay" && version && c.version !== version;
+        const said = [TYPES[c.type], c.by ? `by ${c.by}` : "", SHORT[c.licence], dateOf(c.made)].filter(Boolean).join(" · ");
+        head.append(el("b", c.title), el("small", said));
+        li.append(head);
+        if (c.about) li.append(el("p", c.about));
+        const facts = [c.type === "replay" ? `${c.result.moves} moves${c.result.winners ? ", to the end" : ", unfinished: you can play on"}` : "", c.start ? `Starts ${dateOf(c.start)}${c.turn > 1 ? `, turn ${c.turn}` : ""}` : "", c.from ? `Made from ${byId.get(c.from) ? `"${byId.get(c.from).title}"${byId.get(c.from).by ? ` by ${byId.get(c.from).by}` : ""}` : "an entry no longer on the shelf"}` : ""].filter(Boolean);
+        if (facts.length) li.append(el("small", facts.join(". ") + ".", "shelf-facts"));
+        const say = el("small", "", "shelf-say");
+        say.setAttribute("role", "status");
+        if (old) { go.disabled = true; say.textContent = "Made under other rules of this game, so it cannot be replayed here."; }
+        go.setAttribute("aria-label", `Open ${c.title}`);
+        go.onclick = async () => {
+          go.disabled = true; go.textContent = "Opening..."; say.textContent = "";
+          try { await open(await loadEntry(c)); } catch (e) { say.textContent = e.message || "That entry could not be opened."; }
+          if (go.isConnected) { go.disabled = false; go.textContent = "Open"; }
+        };
+        const row = el("div", undefined, "shelf-row");
+        row.append(go);
+        li.append(row, say);
+        ul.append(li);
+      }
+      list.append(ul);
+    }
+  }).catch((e) => { status.textContent = e.message || "The shelf could not be read."; });
+  box.append(el("p", share || "Share your own from the menu, with Share to the shelf.", note));
+  return box;
+}
+
+/**
+ * Make a shelf file from something of the player's own, and say how to offer it. Nothing is sent: the file is saved
+ * on this device, and the links open GitHub's own pages, where the player decides. what: the words for what is in it.
+ * {type, game, data, result, from, title, about, what, note}
+ */
+function shareView({ type, game, data, result, from, title = "", about = "", what = "", note = "note" }) {
+  const box = el("div", undefined, "shelf share"), say = el("p", "", note), steps = el("div", undefined, "shelf-steps");
+  say.setAttribute("role", "status");
+  const field = (label, value, max, hint) => { const l = el("label", undefined, "shelf-field"), f = el("input", undefined, "field"); Object.assign(f, { type: "text", value, maxLength: max, placeholder: hint, autocomplete: "off", spellcheck: true }); l.append(el("span", label), f); return [l, f]; };
+  const [tl, tf] = field("Title", title.slice(0, LIMIT.title), LIMIT.title, "What it is called on the shelf");
+  const [al, af] = field("A line about it", about.slice(0, LIMIT.about), LIMIT.about, "Optional");
+  const [bl, bf] = field("The name it goes by", "", LIMIT.by, "Any name you choose, not your own unless you want");
+  const lic = el("fieldset", undefined, "shelf-licence");
+  lic.append(el("legend", "Licence"));
+  for (const [k, words] of Object.entries(LICENCES)) { const l = el("label"), r = el("input"); Object.assign(r, { type: "radio", name: "shelf-licence", value: k, checked: k === "CC-BY-4.0" }); l.append(r, el("span", words)); lic.append(l); }
+  const own = el("label", undefined, "shelf-own"), tick = el("input");
+  tick.type = "checkbox";
+  own.append(tick, el("span", "I made this, and I offer it under the licence above."));
+  const make = button("Save the shelf file", () => {
+    const licence = lic.querySelector("input:checked")?.value;
+    if (!tick.checked) { say.textContent = "Tick that you made it and offer it under its licence first."; return; }
+    const tail = [...crypto.getRandomValues(new Uint32Array(1))][0].toString(36).slice(0, 4);
+    const entry = makeEntry({ type, game, title: tf.value, about: af.value, by: bf.value, licence, made: new Date().toISOString().slice(0, 10), from, tail }, data, result);
+    if (!entry.title) { say.textContent = "Give it a title."; return; }
+    const r = checkEntry(entry), text = JSON.stringify(entry, null, 1);
+    if (!r.ok) { say.textContent = r.why; return; }
+    if (text.length > LIMIT.file[type]) { say.textContent = `That is larger than the shelf takes (${Math.round(text.length / 1000)} of ${LIMIT.file[type] / 1000} thousand characters).`; return; }
+    const a = el("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+    a.download = `${entry.id}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    say.textContent = `Saved as ${entry.id}.json.`;
+    offer(entry);
+  }, "main");
+  const offer = (entry) => {
+    const up = el("a", "Open GitHub's upload page for the shelf", "quiet"), issue = el("a", "Or open an offer on GitHub and attach the file", "text");
+    up.href = `${SOURCE_URL}/upload/${BRANCH}/shelf`;
+    issue.href = `${SOURCE_URL}/issues/new?template=shelf.yml&title=${encodeURIComponent(`Shelf: ${entry.title}`)}`;
+    for (const a of [up, issue]) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+    const ol = el("ol");
+    for (const t of [`Read the file first: everything in it will be public. Leave out your own name, where you live and anything else about you.`,
+      "On GitHub, with your own account, drop the file on the upload page and choose Propose changes. That makes a pull request. If you would rather not, open an offer and attach the file there.",
+      `The checks run on it (the shelf's rules, then the game's own readers${type === "replay" ? ", which replay it from its seed and moves" : ""}), and a person reads it. If it is taken, it shows on the shelf in the next build.`]) ol.append(el("li", t));
+    const links = el("div", undefined, "shelf-row");
+    links.append(up, issue);
+    steps.replaceChildren(el("h3", "Offer it to the shelf"), ol, links, el("p", "This page sends nothing and never will: offering is done by you, on GitHub, if you choose. GitHub shows your account's name on the offer.", note));
+  };
+  box.append(el("p", `Make a shelf file from ${what || `this ${TYPES[type].toLowerCase()}`} for ${GAMES[game]}. Others can then open it from the shelf${type === "replay" ? " and step through it, or play on from its end if it is unfinished" : ", play it, and share a game of their own made from it"}.`, note),
+    tl, al, bl, el("p", "The name is how the shelf credits you. A licence of CC BY means it is shown wherever your entry is used.", note), lic, own);
+  const row = el("div", undefined, "shelf-row");
+  row.append(make);
+  box.append(row, say, steps);
+  return box;
+}
+
+$x.loadIndex = loadIndex; $x.loadEntry = loadEntry; $x.shelfView = shelfView; $x.shareView = shareView;
+return $x; })({});
 $m[14] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What every table game's screen shares: title, seats, score bar, words, taking back, saving, bots' turns and the end.
@@ -4757,6 +5064,8 @@ const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, s
 const { hail, stir } = $m[34];
 // livelink hook: live play by two pasted links, straight between two browsers (site/livelink.js)
 const { liveLink } = $m[37];
+// shelf hook: the community shelf, to browse and open replays and to share this game as one (site/community.js)
+const { shareView, shelfView } = $m[38];
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -5523,7 +5832,7 @@ function createTable(G) {
     const sure = (t, f) => { const b = add(t, f, "quiet danger"), go = b.onclick; b.onclick = () => { if (b.dataset.armed) go(); else { b.dataset.armed = "1"; b.textContent = `${t}: press again to be sure`; } }; };
     add("How to play", rules);
     if (lesson) add("Teach me again", lesson.start);
-    if (T.demo) return box;
+    if (T.demo) { add("Community shelf", shelf); return box; } // shelf hook
     add("What happened so far", showLog);
     if (G.listing) add("The board as a list", () => {
       const { head, rows } = G.listing(T), box = el("div", undefined, "ranks"), t = el("table"), tr = (cells, tag) => { const r = el("tr"); r.append(...cells.map((c) => el(tag, String(c)))); return r; };
@@ -5533,6 +5842,8 @@ function createTable(G) {
     if (G.more) add(G.more.label, () => sheet(G.more.label, G.more.body(T)));
     if (!realtime()) add("Take back your last move", undo).disabled = !canUndo();
     add("Save to a file", save);
+    add("Community shelf", shelf); // shelf hook
+    if (T.match.list.length) add("Share to the shelf", share); // shelf hook
     box.append(el("p", SAVED, "about"), el("hr"));
     sure("Start again with the same players", restart);
     sure("Leave to the title", home);
@@ -5737,18 +6048,26 @@ function createTable(G) {
   $("file").onchange = async () => {
     const f = $("file").files[0];
     $("file").value = "";
-    if (!f) return;
+    if (f) openSaved(await f.text());
+  };
+  // shelf hook: a saved file and a replay from the shelf open the same way; a finished replay is watched, its seats all bots
+  function openSaved(text, watch = false) {
     try {
-      const { match: m, warning } = openSave(await f.text(), [G.game]);
+      const { match: m, warning } = openSave(text, [G.game]), kinds = G.kindsOf?.(m.options) || Array.from({ length: m.options.seats }, (_, i) => (i ? "normal" : "you"));
       replacing(() => {
-        begin(m, G.kindsOf?.(m.options) || Array.from({ length: m.options.seats }, (_, i) => (i ? "normal" : "you")));
+        begin(m, watch && m.turn === null ? kinds.map((k) => (k === "you" ? "normal" : k)) : kinds);
         if (warning) sheet("Opened with a warning", el("p", warning));
       }, "The saved game");
     } catch (e) {
       if (!(e instanceof Refusal)) throw e;
       sheet("That file was not opened", el("p", `${e.message[0].toUpperCase()}${e.message.slice(1)}.`));
     }
-  };
+  }
+  // shelf hook: the shelf's replays of this game, and this game offered as one (site/community.js)
+  function shelf() { sheet("Community shelf", shelfView({ game: G.key, version: G.game.version, note: "about", open: (e) => { closeSheet(); openSaved(JSON.stringify(e.data), true); }, share: "Share a game of your own from the menu: Share to the shelf." }), "Close", "wide"); }
+  function share() { const m = real || T.match, r = m.result; sheet("Share to the shelf", shareView({ type: "replay", game: G.key, data: JSON.parse(m.save()), result: { moves: m.list.length, winners: r ? r.winners : null }, title: `${G.title}, ${m.list.length} moves`, what: r ? "this game" : "this game so far", note: "about" }), "Close", "wide"); }
+  const shelfLink = el("button", "Community shelf", "text"); // shelf hook
+  shelfLink.type = "button"; shelfLink.onclick = shelf; $("title").querySelector(".links").append(shelfLink);
   addEventListener("keydown", (e) => {
     const k = e.key.toLowerCase();
     if (T.demo || $("sheet").open || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input:not([type=range]), select, textarea")) return;
@@ -5773,7 +6092,7 @@ function createTable(G) {
 
 $x.COLOURS = COLOURS; $x.NAMES = NAMES; $x.RGB = RGB; $x.ICONS = ICONS; $x.PAPER = PAPER; $x.dress = dress; $x.$ = $; $x.el = el; $x.sleep = sleep; $x.sign = sign; $x.radio = radio; $x.toast = toast; $x.sheet = sheet; $x.createTable = createTable;
 return $x; })({});
-$m[38] = (($x) => {
+$m[41] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The hex board for a game's screen: the moving one when the device can draw it, else a still picture that can be tapped.
 const { LOOKS, canDraw, createBoard } = $m[15];
@@ -5910,7 +6229,7 @@ const { villageName } = $m[5];
 const { ISLANDS, SEAS, island, open, step, stepOf } = $m[6];
 const { createMatch } = $m[7];
 const { $, NAMES, PAPER, RGB, createTable, el, radio, sheet, toast } = $m[14];
-const { hexBoard } = $m[38];
+const { hexBoard } = $m[41];
 
 const SEA = [72, 110, 122], SHALLOW = [98, 138, 146], GRASS = [[150, 186, 104], [142, 180, 98], [158, 190, 112]], RANK = ["", "Scout", "Guard", "Captain", "Marshal"];
 let source = null, where = null, build = "raise", give = null, sure = false; // source: "h12" a hall, "u7" a unit; give: the concede button, sure: tapped once

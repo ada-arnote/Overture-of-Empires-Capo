@@ -92,7 +92,7 @@ if (process.argv[1]?.endsWith("bundle.mjs")) {
     const raw = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`, stamp = createHash("sha256").update(raw).digest("hex").slice(0, 8);
     const fetches = ["world", "game"].includes(name), js = raw.replace('const BUILD = "dev";', `const BUILD = "${stamp}";`), text = page(at(`${name}.html`), at("table.css"), js, "", fetches);
     mkdirSync(path.join(root, "play"), { recursive: true });
-    writeFileSync(path.join(root, "play", `${name}.html`), page(at(`${name}.html`), at("table.css"), js, "../site/", fetches));
+    writeFileSync(path.join(root, "play", `${name}.html`), page(at(`${name}.html`), at("table.css"), js, "../site/", true)); // shelf hook: a served page may read its own site (the community shelf); the double-click page reaches nothing
     writeFileSync(path.join(out, `play-${name}.html`), text);
     console.log(`dist/play-${name}.html, ${Math.round(text.length / 1000)} kB. Open it by double-click.`);
   }
