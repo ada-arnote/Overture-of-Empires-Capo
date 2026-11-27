@@ -250,6 +250,7 @@ createTable({
     const sides = seaward(p, picture);
     document.body.classList.remove("atlas");
     card(T);
+    T.motionHints = { near: (i) => boardOf(T.match.position).near[i], goods: GOODS, tile: TILE }; // motion hook p12: goods fly from a hex to the players beside it
     return hexBoard(T, stage, {
       era: "medieval", // figures hook: which sculpted pieces stand in 3D (src/map/figures.js)
       cells: b.cells, rough: none, sea, picture, terrain: (i) => (sea[i] ? 1 : p.good[i] === WASTE ? 6 : [2, 4, 3, 5][p.good[i]]), ground: (i) => (sea[i] ? SEA : p.good[i] === WASTE ? WASTEG : TILE[p.good[i]]),

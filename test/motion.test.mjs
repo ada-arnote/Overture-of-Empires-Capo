@@ -41,5 +41,15 @@ test("Inch in real time: the five cues are the player's own, and the end speaks 
 });
 
 test("every cue named is made in code", () => {
-  for (const name of ["dice", "march", "capture", "build", "attacked", "finished", "truce", "truceEnd", "age", "out"]) assert.equal(typeof CUES[name], "function");
+  for (const name of ["dice", "march", "capture", "build", "attacked", "finished", "truce", "truceEnd", "age", "out", "rethrow", "raid", "steal", "gather"]) assert.equal(typeof CUES[name], "function");
+});
+
+test("p12: sounds land with the motion: each throw of a run, the capture after it, the raid, the goods and the theft", () => {
+  const run = cuesOf("banners", [{ kind: "fight" }, { kind: "take" }], null, null, { throws: [0, 0.8, 1.2], capture: 2.1 });
+  assert.deepEqual(run, [["dice", 0], ["rethrow", 0.8], ["rethrow", 1.2], ["capture", 2.1]]);
+  const seven = cuesOf("glass", [{ kind: "roll", raid: true }, { kind: "harvest", got: [[0, 0, 0, 0]] }], null, null, { raid: 0.7 });
+  assert.deepEqual(seven, [["dice", 0], ["raid", 0.7]], "a 7 yields nothing, so nothing is gathered");
+  assert.deepEqual(names(cuesOf("glass", [{ kind: "roll", raid: false }, { kind: "harvest", got: [[1, 0, 0, 0], [0, 0, 0, 0]] }])), ["dice", "gather"]);
+  assert.deepEqual(names(cuesOf("glass", [{ kind: "toll", from: 1, good: 2 }])), ["steal"]);
+  assert.deepEqual(names(cuesOf("glass", [{ kind: "toll", from: -1, good: -1 }])), [], "a gate moved beside nobody takes nothing");
 });

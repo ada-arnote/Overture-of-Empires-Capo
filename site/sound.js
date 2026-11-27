@@ -30,9 +30,14 @@ export const CUES = {
   truceEnd: (a, b, t) => { tone(a, b, 784, t, 0.4, 0.12); tone(a, b, 523, t + 0.13, 0.55, 0.12); },
   age: (a, b, t) => { [392, 494, 587, 784].forEach((hz, i) => tone(a, b, hz, t + i * 0.05, 1.5, i === 3 ? 0.04 : 0.09)); },
   out: (a, b, t) => { tone(a, b, 220, t, 0.7, 0.24, "triangle", 140); tone(a, b, 110, t + 0.05, 0.8, 0.14); },
+  // p12: a second throw in a run is a shorter rattle; a raid is a drum and a falling horn; a theft a swish and a clink; goods arriving a soft knock
+  rethrow: (a, b, t) => { [0, 0.06, 0.14].forEach((at, i) => noise(a, b, t + at + Math.random() * 0.015, 0.035, 1500 + Math.random() * 1500, 3.5, 0.7 - i * 0.15)); },
+  raid: (a, b, t) => { [0, 0.11, 0.2].forEach((at, i) => { noise(a, b, t + at, 0.12, 140, 0.9, 0.9 - i * 0.2, "lowpass"); tone(a, b, 82, t + at, 0.2, 0.3 - i * 0.07, "triangle", 55); }); tone(a, b, 330, t + 0.3, 0.6, 0.12, "sawtooth", 220); },
+  steal: (a, b, t) => { noise(a, b, t, 0.22, 2400, 0.7, 0.35, "highpass"); tone(a, b, 1568, t + 0.24, 0.25, 0.09); tone(a, b, 2093, t + 0.29, 0.3, 0.05); },
+  gather: (a, b, t) => { noise(a, b, t, 0.03, 900, 5, 0.8); tone(a, b, 880, t + 0.02, 0.25, 0.06); tone(a, b, 1320, t + 0.08, 0.3, 0.04); },
 };
 /** How long a cue waits before it may sound again, so a busy moment is not a din. */
-const GAP = { dice: 0.25, march: 0.35, capture: 0.3, build: 0.3, attacked: 1.5, finished: 0.5, truce: 0.5, truceEnd: 0.5, age: 2, out: 2 };
+const GAP = { dice: 0.25, march: 0.35, capture: 0.3, build: 0.3, attacked: 1.5, finished: 0.5, truce: 0.5, truceEnd: 0.5, age: 2, out: 2, rethrow: 0.2, raid: 1, steal: 0.5, gather: 0.3 };
 
 /** Play a cue `later` seconds from now. */
 export function play(name, later = 0) {
@@ -51,14 +56,15 @@ export function play(name, later = 0) {
 
 /**
  * The cues a move makes, by game and by what happened in it. moving: motion is shown, so a capture waits for the piece to arrive.
+ * at: when the motion puts each moment, in seconds (throws: a run of throws; capture, gather, steal, raid), so the sound lands with it.
  * Returns the names played, for tests and checks.
  */
-export function cuesOf(key, events, move, p) {
-  const out = [], add = (n, at = 0) => out.push([n, at]), has = (k) => events.some((e) => e.kind === k);
+export function cuesOf(key, events, move, p, at = {}) {
+  const out = [], add = (n, when = 0) => out.push([n, when]), has = (k) => events.some((e) => e.kind === k);
   const me = p?.human;
   if (key === "banners") {
-    if (has("fight")) add("dice");
-    if (has("take")) add("capture", 0.75);
+    if (has("fight")) { add("dice"); for (const t of at.throws?.slice(1) || []) add("rethrow", t); }
+    if (has("take")) add("capture", at.capture ?? 0.75);
     if (has("move") || has("occupy")) add("march");
     if (has("fort")) add("build");
   } else if (key === "fable") {
@@ -67,6 +73,9 @@ export function cuesOf(key, events, move, p) {
     if (has("fort") || has("farm")) add("build");
   } else if (key === "glass") {
     if (has("roll")) add("dice");
+    if (events.some((e) => e.kind === "roll" && e.raid)) add("raid", at.raid ?? 0.6);
+    if (events.some((e) => e.kind === "harvest" && e.got?.some((g) => g.some((v) => v)))) add("gather", at.gather ?? 0.9);
+    if (events.some((e) => e.kind === "toll" && e.from >= 0)) add("steal", at.steal ?? 0.1);
     if (events.some((e) => ["depot", "town", "harbour", "route"].includes(e.kind))) add("build");
   } else if (key === "inch") {
     if (p?.live) {
@@ -85,6 +94,6 @@ export function cuesOf(key, events, move, p) {
   }
   return out;
 }
-export function voice(key, events, move, p, moving) {
-  for (const [n, at] of cuesOf(key, events, move, p)) play(n, moving ? at : Math.min(at, 0.15));
+export function voice(key, events, move, p, moving, at = {}) {
+  for (const [n, when] of cuesOf(key, events, move, p, moving ? at : {})) play(n, moving ? when : Math.min(when, 0.15));
 }

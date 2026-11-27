@@ -13,11 +13,11 @@ const INK = "#1a1411", CREAM = "#fdf6e4", GOLD = [226, 184, 92];
  * One canvas over the whole window, drawn only while an effect runs; then it is cleared and the loop stops.
  * An effect is { ms, draw(c, k, t), end() }, with k from 0 to 1. Frame gaps are kept while it runs, to judge smoothness.
  */
-export function createMotion(parent = document.body) {
+export function createMotion(parent = document.body, { z = 1 } = {}) {
   const cv = document.createElement("canvas"), c = cv.getContext("2d"), own = parent !== document.body; // own: inside a box of the page, not over the window
   cv.className = "motion-layer";
   cv.setAttribute("aria-hidden", "true");
-  Object.assign(cv.style, { position: own ? "absolute" : "fixed", inset: "0", width: "100%", height: "100%", zIndex: "1", pointerEvents: "none" });
+  Object.assign(cv.style, { position: own ? "absolute" : "fixed", inset: "0", width: "100%", height: "100%", zIndex: String(z), pointerEvents: "none" }); // z: p12, the table's layer sits over the score cards (goods reach them) and under the move panel
   parent.append(cv);
   let list = [], queued = false, prev = 0, wiped = true;
   const gaps = [], work = [];
@@ -45,6 +45,8 @@ export function createMotion(parent = document.body) {
     /** Start an effect after `delay` ms. */
     add(e, delay = 0) { e.t0 = performance.now() + delay; list.push(e); kick(); return e; },
     clear() { list = []; if (!wiped) kick(); },
+    /** End at once every effect added with this tag (a new fight replaces the last one's). */
+    drop(tag) { list = list.filter((e) => e.tag !== tag); if (!wiped) kick(); },
     get busy() { return list.length > 0; },
     /** While something moved, in ms: the gaps between frames (the whole page), and this layer's own work in each frame. Each: how many, the middle one, the slowest in twenty, the slowest. */
     frames() { const sum = (list) => { const s = [...list].sort((a, b) => a - b); return s.length ? { n: s.length, median: +s[s.length >> 1].toFixed(2), p95: +s[Math.floor(s.length * 0.95)].toFixed(2), worst: +s[s.length - 1].toFixed(2) } : null; }; return { gaps: sum(gaps), work: sum(work) }; },
@@ -67,8 +69,23 @@ function die(c, x, y, s, face, rgb, turn, alpha) {
   c.restore();
 }
 function shadow(c, x, y, rx, a) { c.beginPath(); c.ellipse(x, y, rx, rx * 0.42, 0, 0, 7); c.fillStyle = `rgba(12,9,7,${a})`; c.fill(); }
-/** A piece on its way: a disc with its number (an army), or a standing pawn with its rank (a unit). */
+/** A piece on its way: a disc with its number (an army), a standing pawn with its rank (a unit), a crate of goods, or the toll gate. */
 function token(c, x, y, r, rgb, label, kind) {
+  if (kind === "good") {
+    c.beginPath(); c.roundRect(x - r, y - r * 0.8, r * 2, r * 1.6, r * 0.32);
+    const g = c.createLinearGradient(x, y - r, x, y + r); g.addColorStop(0, shade(rgb, 1.18, 18)); g.addColorStop(1, shade(rgb, 0.74));
+    c.fillStyle = g; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
+    c.beginPath(); c.moveTo(x - r * 0.7, y - r * 0.1); c.lineTo(x + r * 0.7, y - r * 0.1); c.lineWidth = 1.2; c.strokeStyle = "rgba(26,20,17,.45)"; c.stroke();
+    if (label) { c.font = `800 ${Math.round(r * 1.05)}px system-ui,"Segoe UI",sans-serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.lineWidth = 3; c.strokeStyle = CREAM; c.strokeText(String(label), x, y + r * 0.12); c.fillStyle = INK; c.fillText(String(label), x, y + r * 0.12); }
+    return;
+  }
+  if (kind === "gate") {
+    c.lineWidth = 2; c.strokeStyle = INK;
+    for (const u of [-1, 1]) { c.beginPath(); c.rect(x + u * r * 0.9 - r * 0.16, y - r * 0.9, r * 0.32, r * 1.5); c.fillStyle = "#5b4636"; c.fill(); c.stroke(); }
+    c.beginPath(); c.rect(x - r * 1.25, y - r * 0.62, r * 2.5, r * 0.42); c.fillStyle = "#c0392b"; c.fill(); c.stroke();
+    c.fillStyle = CREAM; for (const u of [-0.7, 0, 0.7]) { c.beginPath(); c.rect(x + u * r - r * 0.13, y - r * 0.6, r * 0.26, r * 0.38); c.fill(); }
+    return;
+  }
   if (kind === "unit") {
     c.save(); c.translate(x, y + r * 0.9); c.scale(r * 1.6, r * 1.6);
     c.beginPath(); c.moveTo(-0.27, 0); c.quadraticCurveTo(-0.25, -0.34, -0.17, -0.58); c.lineTo(-0.1, -0.62); c.arc(0, -0.8, 0.19, 2.1, 7.32); c.lineTo(0.17, -0.58); c.quadraticCurveTo(0.25, -0.34, 0.27, 0); c.closePath();
@@ -105,25 +122,103 @@ export function travel(where, from, to, { rgb, label = "", kind = "army", ms = 4
   };
 }
 
+/** A rounded label: a number held under the dice, or a chip of goods gained or lost. */
+function pill(c, x, y, text, px, fill, ink = CREAM, sub = "") {
+  c.font = `800 ${Math.round(px)}px system-ui,"Segoe UI",sans-serif`;
+  const w1 = c.measureText(text).width, sp = sub ? px * 0.46 : 0;
+  c.font = `700 ${Math.round(sp || 1)}px system-ui,"Segoe UI",sans-serif`;
+  const w2 = sub ? c.measureText(sub).width + px * 0.35 : 0, w = w1 + w2 + px * 0.8, h = px * 1.3;
+  c.beginPath(); c.roundRect(x - w / 2, y - h / 2, w, h, h / 2); c.fillStyle = fill; c.fill(); c.lineWidth = Math.max(2, px * 0.08); c.strokeStyle = INK; c.stroke();
+  c.textBaseline = "middle"; c.textAlign = "left"; c.fillStyle = ink;
+  c.font = `800 ${Math.round(px)}px system-ui,"Segoe UI",sans-serif`; c.fillText(text, x - w / 2 + px * 0.4, y + px * 0.04);
+  if (sub) { c.font = `700 ${Math.round(sp)}px system-ui,"Segoe UI",sans-serif`; c.fillText(sub, x - w / 2 + px * 0.4 + w1 + px * 0.35, y + px * 0.06); }
+}
+
 /**
  * Dice thrown from one place to where they come to rest: they tumble and bounce, show changing faces, then settle on the real
  * ones; the losing dice dim. sets: [{ from: () => point, land: [() => point], faces, rgb, lose: [bool] }]. linger: ms they stay.
+ * total: { text, sub, red } held under the dice once they settle (the number thrown, and what it means).
  */
-export function dice(sets, { roll = 640, linger = 1000, size = 22 }) {
-  const ms = roll + linger, spin = sets.map((s) => s.faces.map((_, i) => (i % 2 ? -1 : 1) * (5 + ((s.faces[i] * 7 + i * 3) % 5))));
+export function dice(sets, { roll = 640, linger = 1000, size = 22, total = null, fadeMs = 260 }) {
+  const ms = roll + linger, spin = sets.map((s) => s.faces.map((_, i) => (i % 2 ? -1 : 1) * (5 + ((s.faces[i] * 7 + i * 3) % 5)))), jump = clamp(size * 1.9, 46, 150);
   return {
     ms,
     draw(c, k, now) {
-      const t = k * ms, f = Math.min(1, t / roll), fade = t > ms - 260 ? (ms - t) / 260 : 1;
+      const t = k * ms, f = Math.min(1, t / roll), fade = t > ms - fadeMs ? (ms - t) / fadeMs : 1, land = (t - roll) / 160, thump = f >= 1 && land < 1 ? 1 + Math.sin(Math.PI * land) * 0.08 : 1;
+      let lx = 0, ly = -1e9, n = 0;
       sets.forEach((s, j) => {
         const a = s.from();
         s.faces.forEach((face, i) => {
-          const b = s.land[i](), x = lerp(a.x, b.x, out3(f)), y = lerp(a.y, b.y, out3(f)), hop = Math.abs(Math.sin(Math.PI * f * 2.6)) * (1 - f) ** 1.6 * 46;
+          const b = s.land[i](), x = lerp(a.x, b.x, out3(f)), y = lerp(a.y, b.y, out3(f)), hop = Math.abs(Math.sin(Math.PI * f * 2.6)) * (1 - f) ** 1.6 * jump;
           const shown = f < 0.82 ? 1 + ((Math.floor(now / 70) * 5 + i * 3 + j * 2 + face) % 6) : face, dim = f >= 1 && s.lose?.[i] ? Math.max(0.45, 1 - (t - roll - 120) / 300 * 0.55) : 1;
-          shadow(c, x + 2, y + size * 0.42, size * 0.5 * (1 - hop / 120), 0.3 * fade);
-          die(c, x, y - hop, size * (1 + hop / 300), shown, s.rgb, spin[j][i] * (1 - f) ** 2 + (face - 3.5) * 0.06, fade * Math.min(1, dim));
+          shadow(c, x + size * 0.08, y + size * 0.42, size * 0.5 * (1 - hop / (jump * 2.6)), 0.3 * fade);
+          die(c, x, y - hop, size * (1 + hop / (jump * 6.5)) * thump, shown, s.rgb, spin[j][i] * (1 - f) ** 2 + (face - 3.5) * 0.06, fade * Math.min(1, dim));
+          lx += b.x; ly = Math.max(ly, b.y); n++;
         });
       });
+      if (total && f >= 1 && n) {
+        const q = clamp((t - roll - 60) / 200, 0, 1), px = clamp(size * 0.62, 16, 52);
+        c.globalAlpha = fade * q; c.save(); c.translate(lx / n, ly + size * 0.62 + px * 0.9); c.scale(0.7 + out3(q) * 0.3, 0.7 + out3(q) * 0.3);
+        pill(c, 0, 0, total.text, px, total.red ? "#a3271b" : "rgba(26,20,17,.88)", CREAM, total.sub || "");
+        c.restore();
+      }
+    },
+  };
+}
+
+/** Something carried through the air between two places (a good to a player, a good taken): a low arc, a pop as it lands. */
+export function fly(from, to, { rgb, label = "", kind = "good", ms = 700, size = 13, end }) {
+  return {
+    ms, end,
+    draw(c, k) {
+      const a = from(), b = to(), e = smooth(k), long = Math.hypot(b.x - a.x, b.y - a.y), lift = Math.sin(Math.PI * e) * clamp(long * 0.28, 20, 140);
+      const s = size * (k < 0.15 ? 0.5 + out3(k / 0.15) * 0.6 : k > 0.85 ? 1.1 - (k - 0.85) / 0.15 * 0.5 : 1.1);
+      c.globalAlpha = Math.min(1, k * 10, (1 - k) * 12);
+      token(c, lerp(a.x, b.x, e), lerp(a.y, b.y, e) - lift, s, rgb, label, kind);
+    },
+  };
+}
+
+/** A chip that rises a little and fades by a place: "+2 Grain", "-1". at() gives the point. */
+export function chip(at, { text, rgb = GOLD, ms = 1300, red = false, px = 17, rise = 34 }) {
+  return {
+    ms,
+    draw(c, k) {
+      const p = at(), q = clamp(k / 0.12, 0, 1);
+      c.globalAlpha = Math.min(q, k > 0.7 ? (1 - k) / 0.3 : 1);
+      pill(c, p.x, p.y - out3(k) * rise, text, px * (0.8 + 0.2 * out3(q)), red ? "#a3271b" : shade(rgb, 0.9), red ? CREAM : INK);
+    },
+  };
+}
+
+/**
+ * The strength standing on a cell while a fight is thrown, counting down as it falls: steps [[ms, n]] says when it changes to what.
+ * It shakes as each loss lands.
+ */
+export function tally(where, at, { rgb, start, steps = [], ms }) {
+  return {
+    ms,
+    draw(c, k) {
+      const t = k * ms, p = where(at), r = clamp(p.r * 0.36, 11, 22);
+      let n = start, hit = 1e9;
+      for (const [when, v] of steps) if (t >= when) { if (v !== n) hit = t - when; n = v; }
+      const shake = hit < 260 ? Math.sin(hit / 22) * (1 - hit / 260) * r * 0.35 : 0;
+      c.globalAlpha = Math.min(1, k * 20, (1 - k) * 25);
+      shadow(c, p.x, p.y + r * 0.3, r, 0.34);
+      token(c, p.x + shake, p.y - r * 0.35, r * (hit < 160 ? 1 + 0.15 * (1 - hit / 160) : 1), rgb, n, "army");
+    },
+  };
+}
+
+/** A raid: the edges of the window darken to red and ease back, once. */
+export function raid({ ms = 1100 } = {}) {
+  return {
+    ms,
+    draw(c, k) {
+      const W = c.canvas.width / (c.getTransform().a || 1), H = c.canvas.height / (c.getTransform().d || 1), a = Math.sin(Math.PI * Math.min(1, k * 1.4)) * 0.55;
+      const g = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.32, W / 2, H / 2, Math.hypot(W, H) * 0.6);
+      g.addColorStop(0, "rgba(120,16,10,0)"); g.addColorStop(1, `rgba(120,16,10,${a})`);
+      c.fillStyle = g; c.fillRect(0, 0, W, H);
     },
   };
 }

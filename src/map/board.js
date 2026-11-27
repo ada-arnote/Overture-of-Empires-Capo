@@ -145,14 +145,15 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     queued = false;
     if (!alive) return;
     let moving = t < until;
-    if (holds.length) { for (const h of holds.filter((x) => t >= x.until)) { holds.splice(holds.indexOf(h), 1); spots = spots.concat(h.list.filter((x) => !spots.some((y) => y.at === x.at && y.kind === x.kind))); staged = false; } moving = true; } // motion hook
+    if (holds.length) { for (const h of holds.filter((x) => t >= x.until)) { holds.splice(holds.indexOf(h), 1); spots = spots.concat(h.list.filter((x) => !spots.some((y) => y.at === x.at && y.kind === x.kind))); staged = false; } } // motion hook; p12: a timer brings a held piece back (hold), so the board is not drawn every frame meanwhile
     if (timed && L.rise) { // the first frames, timed: a device that drags is told so, and the page can open flat instead
       timed.push(t);
       if (timed.length < 16 && !document.hidden) moving = true;
       else { const d = timed.slice(4).map((v, i) => v - timed[i + 3]).sort((a, b) => a - b); if (timed.length > 15 && d[d.length >> 2] > 24) (listeners.slow || []).forEach((f) => f()); timed = null; } // the quickest quarter is judged, so a busy moment on the page is not taken for a slow graphics card
     }
     show.forEach((c, i) => {
-      if (c.start || c.ends) {
+      if (c.start > t) { /* motion hook p12: a change waiting for the dice is not drawn until it starts (show's timer) */ }
+      else if (c.start || c.ends) {
         const k = t <= c.start ? 0 : t >= c.ends ? 1 : (t - c.start) / (c.ends - c.start);
         c.rgb = mix(c.from, c.to, ease(k));
         c.top = c.topFrom + (c.topTo - c.topFrom) * ease(k) + Math.sin(k * Math.PI) * c.hop;
@@ -472,7 +473,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
      * Show a position. owner[i] is a seat or -1. `order` lists cells that change first to last, so ink spreads.
      * Returns how long the change takes, in milliseconds.
      */
-    show(owner, { pieces = [], order = [], quick = false, names = null } = {}) {
+    show(owner, { pieces = [], order = [], quick = false, names = null, after = 0 } = {}) { // motion hook p12: after, ms the cells in `order` wait (the dice that take them land first)
       if (names) labels = names;
       const homes = new Set(pieces.filter((p) => p.kind === "tower").map((p) => p.at)), held = new Set(pieces.map((p) => p.at));
       const t = performance.now(), slow = !quick && !calm(), fade = !quick && !slow, step = Math.min(90, 900 / Math.max(1, order.length)), place = new Map(order.map((c, i) => [c, i]));
@@ -480,17 +481,21 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       owner.forEach((o, i) => {
         const c = show[i], to = o < 0 || reading.rim ? ground(i) : mix(seats[o], ground(i), rough[i] ? 0.1 : 0), tall = sea[i] ? 0.2 : (homes.has(i) ? 1.5 : o < 0 ? 0.75 : 1.2) + (c.kind === 7 ? 0.3 : 0); // hills stand a little above the plain
         if (c.owner === o && c.topTo === tall) return;
-        const wait = slow && place.has(i) ? place.get(i) * step : 0, long = slow ? 320 : fade ? 200 : 1; // reduced motion: all at once, a quick fade, no hop
+        const wait = slow && place.has(i) ? place.get(i) * step + after : 0, long = slow ? 320 : fade ? 200 : 1; // reduced motion: all at once, a quick fade, no hop
         Object.assign(c, { from: c.rgb, to, topFrom: slow ? c.top : tall, topTo: tall, hop: slow ? 0.5 : 0, start: t + wait, ends: t + wait + long, soak: slow && o >= 0 && c.owner !== o });
         c.owner = o;
         last = Math.max(last, wait + long);
         marks[i] = o < 0 ? null : { seat: o, seen: 1, home: held.has(i) };
       });
       owner.forEach((o, i) => { if (marks[i]) marks[i].home = held.has(i); });
-      spots = spots.filter((s) => s.kind === "dot" || s.kind === "ring").concat(pieces);
-      holds = []; // motion hook: a new position puts every piece where it stands
+      // motion hook: a new position puts every piece where it stands; p12: except one still on its way (a person may move on while a fight is thrown), which takes its new count
+      const now = performance.now(), away = (p) => holds.some((h) => h.list.some((x) => x.at === p.at && x.kind === p.kind));
+      holds = holds.filter((h) => h.until > now);
+      for (const h of holds) h.list = h.list.map((x) => pieces.find((p) => p.at === x.at && p.kind === x.kind)).filter(Boolean);
+      spots = spots.filter((s) => s.kind === "dot" || s.kind === "ring").concat(pieces.filter((p) => !away(p)));
       staged = false;
-      until = t + last;
+      until = t + last - (last > after ? after : 0); // p12: the wait itself is not drawn frame by frame
+      if (after > 0 && last > after) setTimeout(redraw, after);
       dirty = true;
       redraw();
       return last;
@@ -506,7 +511,8 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       redraw();
     },
     // motion hook (src/map/motion.js): a piece held back for `ms` (it is on its way), a point by a cell in pieces' own units with the size of a piece there, and a pan by screen pixels
-    hold(cells, ms, kinds) { const list = spots.filter((x) => cells.includes(x.at) && kinds.includes(x.kind)); if (!list.length) return; spots = spots.filter((x) => !list.includes(x)); holds.push({ until: performance.now() + ms, list }); staged = false; redraw(); },
+    hold(cells, ms, kinds) { const list = spots.filter((x) => cells.includes(x.at) && kinds.includes(x.kind)); if (!list.length) return; spots = spots.filter((x) => !list.includes(x)); holds.push({ until: performance.now() + ms, list }); staged = false; redraw(); setTimeout(redraw, ms + 20); }, // p12: the timer brings it back
+    release() { const t = performance.now(); for (const h of holds) h.until = Math.min(h.until, t); redraw(); }, // motion hook p12: every held piece back at once (a new fight replaces the last one's)
     place(i, dx = 0, dy = 0) { const k = m.R * grown(); cam.projectTo(m.mid[i][0] + dx * k, m.mid[i][1] + dy * k, show[i].top * unit()); return { x: cam.px, y: cam.py, r: k * cam.s * cam.pk }; },
     nudge(dx, dy) { if (zoom <= 1) return; cam.unprojectTo(cam.mx, cam.my, 0); const x = cam.ox, y = cam.oy; cam.unprojectTo(cam.mx + dx, cam.my + dy, 0); slide(x - cam.ox, y - cam.oy); },
     get zoomed() { return zoom > 1; }, get middle() { return { x: cam.mx, y: cam.my, w: cam.W - cam.left - cam.right, h: cam.H - cam.top - cam.bottom }; },

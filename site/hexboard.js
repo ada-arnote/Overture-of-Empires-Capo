@@ -112,7 +112,7 @@ export function hexBoard(T, stage, o) {
       const x = mine.reduce((n, i) => n + mid[i][0], 0) / mine.length, y = mine.reduce((n, i) => n + mid[i][1], 0) / mine.length;
       return mine.reduce((a, i) => (Math.hypot(mid[i][0] - x, mid[i][1] - y) < Math.hypot(mid[a][0] - x, mid[a][1] - y) ? i : a));
     },
-    show(order, quick) { if (b) return b.show(o.owner(), { pieces: o.pieces(), order, quick, names: o.names?.() }); still(); return 0; },
+    show(order, quick, after = 0) { if (b) return b.show(o.owner(), { pieces: o.pieces(), order, quick, names: o.names?.(), after }); still(); return 0; }, // motion hook p12: after
     light: (cells, chosen) => b?.preview(cells, chosen),
     clear: () => b?.preview([]),
     at: (i) => b?.screenOf(i), // where a cell is on the screen, for the coach

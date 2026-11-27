@@ -119,7 +119,8 @@ function onMap(T, e) {
   const row = (list, other, rgb, loses) => { const r = el("div"); Object.assign(r.style, { display: "flex", gap: "2px", justifyContent: "center" }); list.forEach((n, i) => { const s = die(n, rgb, i < other.length && (n < other[i] || (n === other[i] && loses))); s.style.width = s.style.height = "20px"; r.append(s); }); return r; };
   Object.assign(box.style, { display: "grid", gap: "2px", padding: "4px", borderRadius: "8px", background: "rgba(13,22,35,.82)", boxShadow: "0 2px 10px rgba(0,0,0,.5)" });
   box.append(row(A, D, RGB[e.seat], true), row(D, A, e.was === NONE ? pale : RGB[e.was], shownTie));
-  if (!bannersDice(T, e, shownTie)) put(box, { x: (a.x + d.x) / 2, y: (a.y + d.y) / 2 }, 1100, 30); // motion hook: the dice are thrown on the table instead
+  if (bannersDice(T, e, shownTie)) return; // motion hook (p12): every throw is thrown on the table instead, the losses falling as they land
+  put(box, { x: (a.x + d.x) / 2, y: (a.y + d.y) / 2 }, 1100, 30);
   lost(e.lost.attacker, a, RGB[e.seat]);
   lost(e.lost.defender, d, e.was === NONE ? pale : RGB[e.was]);
 }
