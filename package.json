@@ -3,6 +3,7 @@
   "version": "0.10.2",
   "private": true,
   "type": "module",
+  "author": "Arnote Studios",
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "test": "node --test test/*.test.mjs",

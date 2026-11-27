@@ -839,10 +839,11 @@ export function createTable(G) {
     const box = el("div", undefined, "stack"), src = el("a", "Read the source code"), where = el("p", /^https:\/\//.test(SOURCE_URL) ? undefined : "The source address is not set in this copy yet.");
     src.href = SOURCE_URL;
     box.append(
-      el("p", `${G.title}, one of the table games of Overture of Empires: Capo. Version ${VERSION}, build ${BUILD}.`),
+      el("p", `${G.title}, one of the table games of Overture of Empires: Capo, made by Arnote Studios. Version ${VERSION}, build ${BUILD}.`),
       ...(G.family || familyLine(G.key) ? [el("p", G.family || familyLine(G.key))] : []),
       where,
       el("p", "Free software under the GNU Affero General Public License, version 3 or later (AGPL-3.0-or-later): you may read, change and share it, and a changed copy that others use over a network must offer them its source."),
+      el("p", "© 2026 Ada Arnote, Arnote Studios."),
       el("p", "Credits: the rules, maps, emblems and sounds are the project's own work, and so are the pieces made in code; the sounds are made in code as the game runs. The coastlines are drawn from Natural Earth, which is in the public domain. Anything borrowed is listed with its licence in CREDITS.csv, ADAPTED.csv and NOTICES.md beside the source."),
       shelfCredits(), // figures hook: the sculpted pieces' credit lines
     );
