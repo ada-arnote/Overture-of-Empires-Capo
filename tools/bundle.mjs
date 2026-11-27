@@ -82,7 +82,7 @@ export function page(html, css, js, home = "", fetches = false, from = path.join
 if (process.argv[1]?.endsWith("bundle.mjs")) {
   const at = (f) => readFileSync(path.join(root, "site", f), "utf8"), out = path.join(root, "dist");
   mkdirSync(out, { recursive: true });
-  for (const name of ["inch", "fable", "banners", "glass", "world", "game"]) {
+  for (const name of ["inch", "fable", "banners", "glass", "world", "game", "margins"]) { // margins hook: Margins of Trust, early, reached only by play/margins.html
     // each page is stamped with a short fingerprint of its own code, so the footer says exactly which build is live
     const raw = `(() => {\n${bundle(path.join(root, "site", `${name}.js`))}\n})();`, stamp = createHash("sha256").update(raw).digest("hex").slice(0, 8);
     const fetches = ["world", "game"].includes(name), js = raw.replace('const BUILD = "dev";', `const BUILD = "${stamp}";`), text = page(at(`${name}.html`), at("table.css"), js, "", fetches);

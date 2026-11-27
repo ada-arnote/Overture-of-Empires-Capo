@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0d1623">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<title>Margins of Trust · Overture of Empires: Capo</title>
+<link rel="stylesheet" href="table.css">
+<link rel="icon" href="icons/tent/mark.svg">
+<script src="source.js"></script>
+<style>
+/* the flat board: rings of provinces round an inner sea, drawn in SVG */
+#stage svg.rings { touch-action: manipulation }
+.rings .prov { stroke: #3a2f25; stroke-width: .5; cursor: pointer; transition: fill .4s }
+.rings .prov.can { stroke-dasharray: 2 1.2; stroke-width: .9 }
+.rings .prov.chosen { stroke: #f2c84b; stroke-width: 1.6 }
+.rings .sea { fill: #4f7c8c; stroke: #2f4b55; stroke-width: .6 }
+.rings .dock { fill: #2b2219 }
+.rings text { pointer-events: none; font-family: system-ui, sans-serif; text-anchor: middle; dominant-baseline: central }
+.rings .name { font-size: 3.1px; fill: #2b2219 }
+.rings.tight .name { display: none }
+.rings .count { font-size: 4.6px; font-weight: 800 }
+.rings .lands { font-size: 3.4px; fill: rgba(243, 234, 210, .75); letter-spacing: .08em; text-transform: uppercase }
+.rings .arrow { fill: none; stroke-width: 1.4; stroke-linecap: round }
+.rings .arrow.support { stroke-dasharray: 1.6 1.4; stroke-width: 1.1 }
+.rings .arrow.transport { stroke-dasharray: .4 1.4; stroke-width: 1.4 }
+.rings .arrow.failed { opacity: .45 }
+#kinds button, #counts button { min-height: 40px }
+.early { display: inline-block; width: fit-content; align-self: flex-start; margin: 0 0 10px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); font: 700 var(--fs-1)/1.4 var(--sans); letter-spacing: var(--caps); text-transform: uppercase }
+.reveal h3 { display: flex; align-items: center; gap: 8px; margin: 14px 0 4px } .reveal h3 canvas { width: 22px; height: 22px }
+.reveal ul { padding-left: 20px } .reveal li { margin: 2px 0 } .reveal .quiet-holds { color: var(--text-3); font-size: var(--fs-2) }
+.reveal li.bad { color: var(--danger) }
+#cover { text-align: center } #cover p { margin-bottom: 10px }
+</style>
+</head>
+<body class="menu">
+<p id="broken" class="broken">If nothing happens, this copy was opened as a file. Open <b>play-margins.html</b> from the dist folder instead.</p>
+<header id="bar" class="panel" hidden>
+  <button id="menu" type="button" class="icon" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  <div class="mid"><p id="round"></p>
+    <div id="land" role="img"><div id="fills"></div><i id="goal"></i></div></div>
+  <button id="look" type="button" class="icon" aria-label="Change the board's look"><svg viewBox="0 0 24 24"><path d="M3 9l9-5 9 5-9 5zM3 9v6l9 5 9-5V9M12 14v6"/></svg></button>
+</header>
+
+<main>
+<h1 class="sr play-h">Margins of Trust</h1>
+<div id="stage" aria-hidden="true"></div>
+<div class="shade" aria-hidden="true"></div>
+
+<ul id="seats" hidden aria-label="Players"></ul>
+
+<section id="act" class="panel" hidden aria-label="Your orders">
+  <p id="status" role="status"></p>
+  <div id="cover" hidden><p id="cover-say"></p><div class="go"><button id="open-sheet" type="button" class="main"></button></div></div>
+  <div id="choice">
+    <p id="info"></p>
+    <div class="pick strip" id="sources" role="radiogroup" aria-label="Your provinces"></div>
+    <div class="pick small" id="kinds" role="radiogroup" aria-label="Order"></div>
+    <div class="pick strip" id="targets" role="radiogroup" aria-label="Where to"></div>
+    <div class="pick small" id="counts" role="radiogroup" aria-label="How many"></div>
+    <div class="go"><button id="clear" type="button" class="quiet">Clear</button><button id="do" type="button" class="main">Seal my orders</button></div>
+  </div>
+  <button id="last" type="button" class="quiet" hidden>The last reveal</button>
+  <div id="after" hidden class="go"><button id="review" type="button" class="quiet">See the board</button><button id="again" type="button" class="main">Play again</button></div>
+</section>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<section id="title" class="title" aria-labelledby="title-h">
+  <p class="eyebrow">Overture of Empires: Capo</p>
+  <h1 id="title-h">Margins<br>of Trust</h1>
+  <p class="tag">Talk, make promises, then everyone writes their orders at once. No dice.</p>
+  <p class="early">Early</p>
+  <div class="panel card">
+    <div class="go"><button id="resume" type="button" class="quiet" hidden>Continue</button><button id="quick" type="button" class="main">Play</button></div>
+    <p id="preset" class="about"></p>
+    <details id="own"><summary>Choose your own</summary>
+    <div class="line"><span>Rules</span><div class="pick small" id="style" role="radiogroup" aria-label="Rules"></div></div>
+    <p id="about" class="about"></p>
+    <div class="line"><span>Players</span><div class="pick small" id="count" role="radiogroup" aria-label="Players"></div></div>
+    <ul id="who"></ul>
+    <div class="line" id="length-line"><span>Length</span><div class="pick small" id="length" role="radiogroup" aria-label="Length"></div></div>
+    <div class="go"><button id="start" type="button" class="quiet">Begin</button></div>
+    </details>
+  </div>
+  <p class="links"><button type="button" class="text" id="how">How to play</button><button type="button" class="text" id="open">Open a saved game</button><a href="./" class="text">All games</a></p>
+</section>
+</main>
+
+<dialog id="sheet" class="panel" aria-labelledby="sheet-title"><h2 id="sheet-title"></h2><div id="sheet-body"></div><div class="go"><button type="button" class="main" id="sheet-close">Close</button></div></dialog>
+<input id="file" type="file" accept=".json,application/json" hidden>
+<footer id="foot"><span id="version"></span><span id="source"></span><span>AGPL-3.0</span></footer>
+<script type="module" src="margins.js"></script>
+</body>
+</html>
