@@ -10,7 +10,8 @@ const kept = (k) => { try { return localStorage.getItem(k); } catch { return nul
 
 /**
  * L: { seed, options, kinds, steps: [{ at(T) -> a cell, an element or nothing; or(T) -> the element for a cell out of sight; say: text or (T) -> text; when(T): shown only then;
- *      done(T, events): the player did it, even while not shown; pass(T, events): it can no longer be done, so it is left out; next: a step that only tells }] }
+ *      done(T, events): the player did it, even while not shown; pass(T, events): it can no longer be done, so it is left out;
+ *      next: a step that only tells, or (T) -> true while a step that asks for a move cannot be done just now, so Next lets it by }] }
  * `events` are what the player's own moves did since the last look. go() starts the lesson's game.
  */
 export function coach(T, L, key, go) {
@@ -67,10 +68,10 @@ export function coach(T, L, key, go) {
   function draw() {
     const s = steps[at], open = T.ready() && T.match.turn !== null && (!s.when || s.when(T));
     if (!open) { hide(); return; }
-    const text = typeof s.say === "function" ? s.say(T) : s.say, fresh = shown !== at, last = at === steps.length - 1;
+    const text = typeof s.say === "function" ? s.say(T) : s.say, fresh = shown !== at, last = at === steps.length - 1, tells = typeof s.next === "function" ? !!s.next(T) : !!s.next;
     head.replaceChildren(make("b", "Lesson"), make("small", ` step ${at + 1} of ${steps.length}`));
     words.textContent = text;
-    next.hidden = !s.next;
+    next.hidden = !tells;
     next.textContent = last ? "Done" : "Next";
     stop.textContent = "End the lesson";
     stop.hidden = last && !!s.next; // Done says it
@@ -86,7 +87,7 @@ export function coach(T, L, key, go) {
     // a step that only tells waits on Next; one that asks for a move puts the keys on its control, or on the list that mirrors the board,
     // but only when they were nowhere in particular: on the page, or on this card
     const lost = document.activeElement === document.body || box.contains(document.activeElement), [t, or] = aimed;
-    if (s.next && !s.done) next.focus({ preventScroll: true });
+    if (s.next === true && !s.done) next.focus({ preventScroll: true });
     else if (at === 0 || lost) (keys(typeof t === "number" ? or || document.getElementById("act") : t) || box).focus({ preventScroll: true });
   }
   /** Look again: after every move and every change of what is chosen. */

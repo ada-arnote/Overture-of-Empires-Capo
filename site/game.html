@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https://openrouter.ai https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.mistral.ai https://api.deepseek.com https://api.together.xyz https://api.cerebras.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
-<title>Capo</title>
+<title>Capo, the story game · Overture of Empires: Capo</title>
 <link rel="stylesheet" href="table.css">
 <link rel="icon" href="icons/tent/mark.svg">
 <script src="source.js"></script>
@@ -66,7 +66,7 @@ button.connect { min-height: var(--tap); padding: 0 6px; border: 0; background: 
 
 /* the first screen */
 #start { position: fixed; left: 8px; top: 8px; bottom: 8px; width: min(480px, calc(100vw - 16px)); display: none; z-index: 6; overflow: auto }
-#start.open { display: block }
+#start.open { display: block } #start.open ~ .play-h { display: none } /* the first screen has its own h1 */
 #start.min { top: auto; bottom: 8px; overflow: visible } #start.min .box { min-height: 0; padding: 10px 14px }
 #start .box { padding: 20px 22px; min-height: 100%; box-sizing: border-box; background: var(--slate) }
 #start h1 { margin: 6px 0 10px; font-size: clamp(48px, 8vw, 68px); line-height: 1 } #start h1 + .row { flex-wrap: nowrap } #start h1 + .row button { flex: 1 1 auto; padding: 0 6px }
@@ -98,14 +98,17 @@ button.connect { min-height: var(--tap); padding: 0 6px; border: 0; background: 
 </style>
 </head>
 <body>
-<canvas id="map" aria-label="The world map. Drag to move, scroll or pinch to zoom, tap a province to see it."></canvas>
 <header id="top" class="glass" hidden></header>
 <nav id="dock" class="glass" aria-label="Game" hidden></nav>
+<main>
+<canvas id="map" aria-label="The world map. Drag to move, scroll or pinch to zoom, tap a province to see it."></canvas>
 <aside id="sheet" class="glass" aria-label="Panel"></aside>
 <section id="card" class="glass" aria-label="Province"></section>
 <select id="view" class="plain" aria-label="Map view"><option value="countries">Map: countries</option><option value="relations">Map: friends and foes</option><option value="might">Map: might</option><option value="state">Map: stability</option></select>
 <div class="zoom"><button type="button" class="plain" id="in" aria-label="Zoom in">+</button><button type="button" class="plain" id="out" aria-label="Zoom out">&minus;</button><button type="button" class="plain" id="home" aria-label="Back to my country">&#8962;</button><button type="button" class="plain" id="relief" aria-label="Relief map with pieces. Press for the flat map." aria-pressed="true" hidden>&#9651;</button></div>
 <div id="start"><div class="box glass" id="start-box"></div></div>
+<h1 class="sr play-h">Capo, the story game</h1>
+</main>
 <section id="guide" class="paper" role="dialog" aria-live="polite" aria-label="Guide"></section>
 <div id="toast" role="status" aria-live="polite"></div>
 <span id="homelink" hidden><a href="./" class="text">All games</a></span>
