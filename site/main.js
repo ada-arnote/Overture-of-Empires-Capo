@@ -46,7 +46,8 @@ function menu() {
  */
 function desk() {
   const stage = $("stage"), fig = stage.parentElement, say = $("live-say"), go = $("live-go"), still = say.textContent, calm = matchMedia("(prefers-reduced-motion: reduce)");
-  let game = null, loading = false, seen = false, wanted = !calm.matches && !navigator.connection?.saveData, told = still;
+  // a phone's desk is too small for the whole live world to read, so there it keeps the picture and offers the game (live.js shows it closer in)
+  let game = null, loading = false, seen = false, wanted = !calm.matches && !navigator.connection?.saveData && stage.clientWidth >= 560, told = still;
   // the caption says Paused, not Live, while the visitor has paused it
   const tell = (text = told) => { told = text; say.textContent = game && !wanted ? text.replace(/^Live on this page/, "Paused") : text; };
   const sync = () => {
@@ -58,7 +59,7 @@ function desk() {
   const load = async () => {
     if (game || loading) return;
     loading = true;
-    try { game = (await import("./live.js")).live(stage, tell, gone); } catch (e) { console.warn("The live board did not start:", e); }
+    try { game = await (await import("./live.js")).live(stage, tell, gone); } catch (e) { console.warn("The live board did not start:", e); }
     loading = false;
     go.hidden = !game; // where this device cannot draw it, the picture stays and nothing is offered
     if (!game) return;
@@ -66,7 +67,7 @@ function desk() {
     sync();
   };
   go.addEventListener("click", () => { wanted = game ? !wanted : true; if (game) sync(); else load(); });
-  if (!wanted) go.hidden = false; // less motion or less data was asked for: the visitor may still choose to watch
+  if (!wanted) go.hidden = false; // less motion or less data was asked for, or a phone: the visitor may still choose to watch
   new IntersectionObserver(([e]) => {
     seen = e.isIntersecting;
     if (seen && wanted && !game) (window.requestIdleCallback || setTimeout)(load, { timeout: 1500 });
