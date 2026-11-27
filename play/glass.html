@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jLIWqSrpjYEvUPJbz0avmKI+TIR3DEf4G9fgMSyJvZY='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+00QF+EuBe6JYQm74NaPAXG8lHg2GirAIqPxrnP55cU='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Grain and Glass · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -1076,6 +1076,8 @@ $m[9] = (($x) => {
 // A game is a plain object:
 //   id, version          text
 //   options              { name: { values: [...], normal } }   house rules, as plain data
+//                        or { name: { check(value) -> true or false, normal } }   an open option, such as a campaign's marks:
+//                        any value its check accepts; it is in a match's options only when it was given
 //   setup(options, dice) the first position
 //   turn(position)       the seat to move, or null when the game is over
 //   moves(position)      every legal move for that seat, as plain data
@@ -1104,7 +1106,7 @@ function checkGame(game) {
   for (const [k, type] of Object.entries(NEEDED)) if (typeof game?.[k] !== type) throw new TypeError(`game is missing ${k}`);
   if (!/^[a-z][a-z0-9-]{0,31}$/.test(game.id)) throw new TypeError("game id must be short lower-case text");
   for (const [k, o] of Object.entries(game.options)) {
-    if (!Array.isArray(o.values) || !o.values.some((v) => same(v, o.normal))) throw new TypeError(`option ${k}: its normal value is not in its list`);
+    if (o.check ? typeof o.check !== "function" || !o.check(o.normal) : !Array.isArray(o.values) || !o.values.some((v) => same(v, o.normal))) throw new TypeError(`option ${k}: its normal value is not in its list`);
   }
   return game;
 }
@@ -1114,6 +1116,14 @@ function readOptions(game, given = {}) {
   const out = {};
   for (const k of Object.keys(given)) if (!Object.hasOwn(game.options, k)) throw new Refusal("option", `unknown option "${k.slice(0, 40)}"`);
   for (const [k, o] of Object.entries(game.options)) {
+    if (o.check) { // an open option: left out unless given, so every match without it keeps the options and fingerprint it had
+      if (!Object.hasOwn(given, k)) continue;
+      let v;
+      try { v = JSON.parse(canon(given[k])); } catch { v = undefined; }
+      if (v === undefined || !o.check(v)) throw new Refusal("option", `option "${k}" cannot have that value`);
+      out[k] = v;
+      continue;
+    }
     const v = Object.hasOwn(given, k) ? given[k] : o.normal;
     const found = o.values.find((x) => { try { return same(x, v); } catch { return false; } });
     if (found === undefined) throw new Refusal("option", `option "${k}" cannot have that value`);
@@ -3171,7 +3181,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.9.5";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "c2e6c57b";
+const BUILD = "7d6f53de";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {

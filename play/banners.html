@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-K7OHi/WjtpWG13+CLKPWNb/4T+H0oTwTGvFSVPxJjzs='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xNewLlcXdE0rfk34TzzuIRgXszDCRCY454T9KeMfuQc='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Brass and Banners · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -388,6 +388,8 @@ body.side #toast { top: calc(var(--bar-b, 56px) / var(--ui-scale) + 50px); botto
     <ul id="who"></ul>
     <div class="line" id="length-line"><span>Length</span><div class="pick small" id="length" role="radiogroup" aria-label="Length"></div></div>
     <div class="go"><button id="start" type="button" class="quiet">Begin</button></div>
+    <!-- legacy hook: campaigns, early (site/legacy.js) -->
+    <div class="go"><button id="campaign" type="button" class="quiet">Campaign (early)</button></div>
     </details>
   </div>
   <p class="links"><button type="button" class="text" id="how">How to play</button><button type="button" class="text" id="open">Open a saved game</button><a href="../site/" class="text">All games</a></p>
@@ -580,6 +582,8 @@ $m[7] = (($x) => {
 // A game is a plain object:
 //   id, version          text
 //   options              { name: { values: [...], normal } }   house rules, as plain data
+//                        or { name: { check(value) -> true or false, normal } }   an open option, such as a campaign's marks:
+//                        any value its check accepts; it is in a match's options only when it was given
 //   setup(options, dice) the first position
 //   turn(position)       the seat to move, or null when the game is over
 //   moves(position)      every legal move for that seat, as plain data
@@ -608,7 +612,7 @@ function checkGame(game) {
   for (const [k, type] of Object.entries(NEEDED)) if (typeof game?.[k] !== type) throw new TypeError(`game is missing ${k}`);
   if (!/^[a-z][a-z0-9-]{0,31}$/.test(game.id)) throw new TypeError("game id must be short lower-case text");
   for (const [k, o] of Object.entries(game.options)) {
-    if (!Array.isArray(o.values) || !o.values.some((v) => same(v, o.normal))) throw new TypeError(`option ${k}: its normal value is not in its list`);
+    if (o.check ? typeof o.check !== "function" || !o.check(o.normal) : !Array.isArray(o.values) || !o.values.some((v) => same(v, o.normal))) throw new TypeError(`option ${k}: its normal value is not in its list`);
   }
   return game;
 }
@@ -618,6 +622,14 @@ function readOptions(game, given = {}) {
   const out = {};
   for (const k of Object.keys(given)) if (!Object.hasOwn(game.options, k)) throw new Refusal("option", `unknown option "${k.slice(0, 40)}"`);
   for (const [k, o] of Object.entries(game.options)) {
+    if (o.check) { // an open option: left out unless given, so every match without it keeps the options and fingerprint it had
+      if (!Object.hasOwn(given, k)) continue;
+      let v;
+      try { v = JSON.parse(canon(given[k])); } catch { v = undefined; }
+      if (v === undefined || !o.check(v)) throw new Refusal("option", `option "${k}" cannot have that value`);
+      out[k] = v;
+      continue;
+    }
     const v = Object.hasOwn(given, k) ? given[k] : o.normal;
     const found = o.values.find((x) => { try { return same(x, v); } catch { return false; } });
     if (found === undefined) throw new Refusal("option", `option "${k}" cannot have that value`);
@@ -1317,6 +1329,44 @@ function fair(a, d, how) {
 
 $x.DICE = DICE; $x.meet = meet; $x.odds = odds; $x.toll = toll; $x.fair = fair;
 return $x; })({});
+$m[12] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// A campaign's marks as Brass and Banners' setup reads them (the campaign itself: ./legacy.js and src/core/campaign.js).
+// Marks are one open option, `marks`, given only to a campaign's games, so they travel in saves and links like any option
+// and are part of the game's own fingerprint. They change the start only: names, forts and a seat's extra strength.
+
+const whole = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+const list = (v, most, each) => Array.isArray(v) && v.length <= most && v.every(each);
+const KEYS = "bonus,campaign,forts,game,names";
+
+/** Is this a campaign's marks, in the one shape the setup reads? null is an ordinary game. */
+function checkMarks(m) {
+  if (m === null) return true;
+  if (!m || typeof m !== "object" || Array.isArray(m) || Object.keys(m).sort().join() !== KEYS) return false;
+  return typeof m.campaign === "string" && m.campaign.length >= 1 && m.campaign.length <= 24 && whole(m.game, 1, 99)
+    && list(m.names, 64, (x) => Array.isArray(x) && x.length === 2 && whole(x[0], 0, 9999) && typeof x[1] === "string" && x[1].length >= 1 && x[1].length <= 40)
+    && list(m.forts, 64, (x) => whole(x, 0, 9999))
+    && list(m.bonus, 6, (x) => whole(x, 0, 20));
+}
+
+/**
+ * Put a campaign's marks on a first position. Changes p. `at`: each seat's starting province, when the start gives one;
+ * otherwise a seat's extra strength goes into what it sets out at the start.
+ * Names are words only: the rules never read them (nameOf shows them).
+ */
+function applyMarks(p, m, at = null) {
+  if (!m) return;
+  const n = p.owner.length;
+  p.called = Object.fromEntries(m.names.filter(([i]) => i < n));
+  if (p.forts) for (const i of m.forts) if (i < n) p.forts[i] = 1;
+  m.bonus.forEach((k, s) => {
+    if (!k || s >= p.seats) return;
+    if (at) p.str[at[s]] += k; else p.reserve[s] += k;
+  });
+}
+
+$x.checkMarks = checkMarks; $x.applyMarks = applyMarks;
+return $x; })({});
 $m[1] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Brass and Banners (working name). Place strength, attack with dice as often as you like, move once.
@@ -1326,6 +1376,8 @@ const { MAPS, areaBoard, bonusOf, bordersOf } = $m[2];
 // what a land pays is kept with the board maker, which reads the same rule to keep lands even
 $x.bonusOf = $m[2].bonusOf; $x.bordersOf = $m[2].bordersOf;
 const { DICE, odds: chanceOf, meet, toll: tollOf } = $m[11];
+// legacy hook: a campaign's marks, read at the start only
+const { applyMarks, checkMarks } = $m[12];
 
 const NONE = -1, HAND = 5, FORT = 4;
 const BASE = 3, PER = 3, WILD = 3;
@@ -1357,7 +1409,7 @@ const boardOf = (p) => areaBoard(p.key, p.map);
 const cellsOf = (p, seat) => p.owner.reduce((n, o) => n + (o === seat ? 1 : 0), 0);
 const landOf = (p) => p.owner.length;
 const goalOf = (p) => Math.ceil((p.owner.length * p.rule.goal) / 100);
-const nameOf = (p, i) => boardOf(p).names[i];
+const nameOf = (p, i) => p.called?.[i] ?? boardOf(p).names[i]; // legacy hook: a campaign may name a place; names are words, never rules
 const suitOf = (p, card) => (card >= p.owner.length ? WILD : card % 3);
 const mineOf = (p, s) => p.owner.flatMap((o, i) => (o === s ? [i] : []));
 const living = (p) => Array.from({ length: p.seats }, (_, s) => s).filter((s) => p.owner.includes(s));
@@ -1605,6 +1657,7 @@ const banners = {
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 4 }, map: { values: MAPS, normal: "world" },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),
+    marks: { check: checkMarks, normal: null }, // legacy hook: an open option, given only to a campaign's games (./legacy.js)
   },
 
   setup(o, dice) {
@@ -1626,10 +1679,12 @@ const banners = {
       at.forEach((a, s) => { p.owner[a] = s; p.str[a] = 4; });
       if (p.caps) p.caps = [...at];
       if (p.leaders) p.leaders = [...at];
+      applyMarks(p, o.marks, at); // legacy hook
       begin(p, []);
       return p;
     }
     p.reserve = Array(o.seats).fill(Math.max(6, each));
+    applyMarks(p, o.marks); // legacy hook
     if (rule.start === "claimed") { p.phase = "claim"; p.str = p.str.map(() => 0); return p; }
     dice.shuffle(all).slice(0, each * o.seats).forEach((i, k) => { p.owner[i] = k % o.seats; p.str[i] = 1; });
     p.phase = "setup";
@@ -1714,7 +1769,7 @@ const banners = {
 
 $x.NONE = NONE; $x.HAND = HAND; $x.FORT = FORT; $x.SWITCHES = SWITCHES; $x.BAG = BAG; $x.EXPANSIONS = EXPANSIONS; $x.boardOf = boardOf; $x.cellsOf = cellsOf; $x.landOf = landOf; $x.goalOf = goalOf; $x.nameOf = nameOf; $x.suitOf = suitOf; $x.nearOf = nearOf; $x.wholeOf = wholeOf; $x.muster = muster; $x.gain = gain; $x.terms = terms; $x.odds = odds; $x.toll = toll; $x.setsOf = setsOf; $x.setWorth = setWorth; $x.reached = reached; $x.capsToWin = capsToWin; $x.capsHeld = capsHeld; $x.SAFETY = SAFETY; $x.amounts = amounts; $x.banners = banners;
 return $x; })({});
-$m[12] = (($x) => {
+$m[13] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Bots for Brass and Banners. They see only what a player sees, and work out the same odds the player is shown.
 const { FORT, HAND, NONE, banners, boardOf, bonusOf, cellsOf, goalOf, nearOf, odds, setsOf, setWorth, toll } = $m[1];
@@ -1929,7 +1984,7 @@ function choose(p, dice, tier) {
 
 $x.TIERS = TIERS; $x.worth = worth; $x.thinking = thinking; $x.choose = choose;
 return $x; })({});
-$m[13] = (($x) => {
+$m[14] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What the table games' screen keeps for the player: settings, sounds made in code, and the order of places at the end.
 // No page is touched when this is loaded, so its plain parts are tested in Node (test/shell.test.mjs).
@@ -2031,7 +2086,7 @@ function cue(events) {
 
 $x.SETTINGS_KEY = SETTINGS_KEY; $x.CHOICES = CHOICES; $x.DEFAULTS = DEFAULTS; $x.SETTINGS_V = SETTINGS_V; $x.PACE = PACE; $x.SCALE = SCALE; $x.parseSettings = parseSettings; $x.settings = settings; $x.saveSettings = saveSettings; $x.takeBack = takeBack; $x.turnKey = turnKey; $x.ranked = ranked; $x.resultText = resultText; $x.wake = wake; $x.audio = audio; $x.sfx = sfx; $x.cue = cue;
 return $x; })({});
-$m[15] = (($x) => {
+$m[16] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Turns a list of hexes into what the painter needs: a picture of cell numbers and a picture of heights.
 const ROOT3 = Math.sqrt(3);
@@ -2083,11 +2138,11 @@ function hexPicture(cells, rough, sea = [], size = 44) {
 
 $x.noise = noise; $x.hexPicture = hexPicture;
 return $x; })({});
-$m[14] = (($x) => {
+$m[15] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Turns provinces made of small hexes into what the painter needs. Borders are bent a little so they look drawn,
 // never enough to make two provinces touch that did not, or part two that did.
-const { noise } = $m[15];
+const { noise } = $m[16];
 
 const ROOT3 = Math.sqrt(3);
 
@@ -2135,7 +2190,7 @@ function areaPicture(cells, of, mids, size = 26, flat = false) {
 
 $x.areaPicture = areaPicture;
 return $x; })({});
-$m[18] = (($x) => {
+$m[19] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // One camera for every look. Board point (x, y) in board pixels, height Z in screen pixels.
 // The *To methods write into fields and make no objects, so picking makes no garbage.
@@ -2204,7 +2259,7 @@ function pick(cam, m, sx, sy, top, unit, most) {
 
 $x.Camera = Camera; $x.pick = pick;
 return $x; })({});
-$m[19] = (($x) => {
+$m[20] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The mesh layer: real shapes standing on the ground, shared by every game. Each model is sent to the graphics card once and
 // drawn many times (instanced), lit by the same lamp as the ground, hidden by raised cells through the depth the ground writes,
@@ -2379,7 +2434,7 @@ class Meshes {
 
 $x.HEAD = HEAD; $x.SHADE = SHADE; $x.program = program; $x.DEPTH = DEPTH; $x.aim = aim; $x.Meshes = Meshes;
 return $x; })({});
-$m[21] = (($x) => {
+$m[22] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The geometry kit: models made in code, our own work. A shape is a flat list of corners, three to a triangle,
 // ten numbers a corner: place (x, y, z with z up), which way it faces, colour (a slot in the style's palette, a shade about 128, and a spare), and finish
@@ -2480,7 +2535,7 @@ function bake(v) {
 
 $x.ears = ears; $x.lathe = lathe; $x.prism = prism; $x.box = box; $x.move = move; $x.bake = bake;
 return $x; })({});
-$m[22] = (($x) => {
+$m[23] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Styles, as data. A style is a palette, a set of finishes, a lamp, a surface, a table to lie on and a named set of models:
 // nothing in the grounds, the mesh layer or the recipes knows one style from another, so a new style is a new entry here
@@ -2542,13 +2597,13 @@ const styleOf = (name) => STYLES[name] || STYLES.war;
 
 $x.SLOT = SLOT; $x.STYLES = STYLES; $x.STYLE_KEY = STYLE_KEY; $x.styleOf = styleOf;
 return $x; })({});
-$m[20] = (($x) => {
+$m[21] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The recipes: every model the boards stand on the table, made in code with the kit (our own work, in the manner of painted
 // war-game miniatures: metal bases, matte paint, the owner's colour as enamel). One cell's radius is 1; z is up; +y is toward the player.
 // A recipe paints with the style's palette slots, so another style recolours all of them at once.
-const { bake, box, lathe, move, prism } = $m[21];
-const { SLOT } = $m[22];
+const { bake, box, lathe, move, prism } = $m[22];
+const { SLOT } = $m[23];
 
 const c = (slot, shade = 128) => [SLOT[slot], shade, 0], TAU = Math.PI * 2, UP = Math.PI / 2;
 const ring = (n, r, f) => { for (let i = 0; i < n; i++) { const a = (i / n) * TAU; f(Math.cos(a) * r, Math.sin(a) * r, a, i); } };
@@ -2708,11 +2763,11 @@ function models() { return (made ||= Object.fromEntries(Object.entries(RECIPES).
 
 $x.unpack = unpack; $x.models = models;
 return $x; })({});
-$m[23] = (($x) => {
+$m[24] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The painter: WebGL2 by hand. One full-screen triangle; the shader undoes the camera and walks down to the first cell top.
 // It writes the depth of what it found, so that the mesh layer's real shapes are hidden by raised cells, and it takes their shadows.
-const { DEPTH, SHADE } = $m[19];
+const { DEPTH, SHADE } = $m[20];
 const VS = `#version 300 es
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS = `#version 300 es
@@ -2904,16 +2959,16 @@ class Painter {
 
 $x.Painter = Painter;
 return $x; })({});
-$m[17] = (($x) => {
+$m[18] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A hex board on a page: the painted surface, standing pieces and emblems, picking, looks and animation.
 // It never changes a game. It is told what to show and says which cell was pointed at.
-const { Camera, pick } = $m[18];
-const { hexPicture } = $m[15];
-const { Meshes } = $m[19];
-const { models, unpack } = $m[20];
-const { Painter } = $m[23];
-const { STYLES, styleOf } = $m[22];
+const { Camera, pick } = $m[19];
+const { hexPicture } = $m[16];
+const { Meshes } = $m[20];
+const { models, unpack } = $m[21];
+const { Painter } = $m[24];
+const { STYLES, styleOf } = $m[23];
 
 const DEG = Math.PI / 180;
 const LOOKS = {
@@ -3381,7 +3436,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
 
 $x.LOOKS = LOOKS; $x.EMBLEMS = EMBLEMS; $x.emblem = emblem; $x.seatPattern = seatPattern; $x.canDraw = canDraw; $x.createBoard = createBoard;
 return $x; })({});
-$m[25] = (($x) => {
+$m[26] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Where this copy's source code can be read. Anyone who runs a changed copy puts their own address here.
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
@@ -3389,7 +3444,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.9.5";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "fe776447";
+const BUILD = "f52a12e1";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -3409,7 +3464,7 @@ const AI_BASES = {
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_BASES = AI_BASES;
 return $x; })({});
-$m[26] = (($x) => {
+$m[27] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
 // Daylight or lamplight, as the table games' Light setting last left it; every page starts here. The front page has one theme.
@@ -3429,10 +3484,10 @@ function guard() {
 
 $x.guard = guard;
 return $x; })({});
-$m[24] = (($x) => {
+$m[25] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-const { BUILD, SOURCE_URL, VERSION } = $m[25];
-const { guard } = $m[26];
+const { BUILD, SOURCE_URL, VERSION } = $m[26];
+const { guard } = $m[27];
 
 /** Every page shows its version and where its source can be read. */
 function footer() {
@@ -3448,12 +3503,12 @@ function footer() {
 
 $x.footer = footer;
 return $x; })({});
-$m[27] = (($x) => {
+$m[28] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Games played by pasting a link. The whole game is in the part after #, which browsers do not send to the host.
 // With a password the game is locked (AES-GCM, the key made from the password by PBKDF2) before it goes in the link.
 const { Refusal } = $m[3];
-const { SITE_URL } = $m[25];
+const { SITE_URL } = $m[26];
 
 const ID = 6, SALT = 16, IV = 12, ROUNDS = 250000, PLACE = "capo-link-";
 const broken = () => new Refusal("link", "that link is broken or not complete");
@@ -3513,7 +3568,7 @@ const linkGames = {
 
 $x.canLock = canLock; $x.newId = newId; $x.makeLink = makeLink; $x.readLink = readLink; $x.linkGames = linkGames;
 return $x; })({});
-$m[28] = (($x) => {
+$m[29] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The coach: a guided first game. A game gives a fixed seed, a short preset and a few steps. Each step points at a place
 // on the board or a control, says one plain sentence, and goes on when the player does the thing (or presses Next, for a step
@@ -3655,13 +3710,13 @@ function coach(T, L, key, go) {
 
 $x.coach = coach;
 return $x; })({});
-$m[30] = (($x) => {
+$m[31] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Motion over a board: dice that tumble and settle, pieces that travel, a ring where land changes hands, a flourish where
 // something is built, pennants for a win. Drawn on one canvas above the board, and only while something moves.
 // It never changes a game and never holds one up: the board already shows the new position, and motion only follows it.
 // Places are asked for every frame (where(i, dx, dy) gives a point and a piece's size there), so a board that pans keeps them.
-const { emblem } = $m[17];
+const { emblem } = $m[18];
 
 const out3 = (k) => 1 - (1 - k) ** 3, smooth = (k) => k * k * (3 - 2 * k), clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, k) => a + (b - a) * k, shade = (rgb, f, add = 0) => `rgb(${rgb.map((v) => Math.round(clamp(v * f + add, 0, 255)))})`;
@@ -3870,11 +3925,11 @@ function pennants(colours, box, { ms = 2600, many = 34 } = {}) {
 
 $x.createMotion = createMotion; $x.travel = travel; $x.dice = dice; $x.capture = capture; $x.build = build; $x.pulse = pulse; $x.sweep = sweep; $x.pennants = pennants;
 return $x; })({});
-$m[31] = (($x) => {
+$m[32] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The table games' cues, made here with the Web Audio API as they are needed: no sound files. Short and quiet, under the
 // player's sound switch and volume (site/shell.js), and silent until a press has woken them.
-const { audio, settings } = $m[13];
+const { audio, settings } = $m[14];
 
 const last = new Map();
 /** One voice: a tone that swells and dies away, gliding to `to` hertz if given. */
@@ -3964,15 +4019,15 @@ function voice(key, events, move, p, moving) {
 
 $x.CUES = CUES; $x.play = play; $x.cuesOf = cuesOf; $x.voice = voice;
 return $x; })({});
-$m[29] = (($x) => {
+$m[30] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Motion and sound for the table games: what each game's events look like as they happen, played over the board.
 // The rules have already moved when this is called, and the board already shows where things stand: nothing here waits for an
 // animation, holds up a move or changes a position. With motion reduced (the setting, or the system's wish) nothing moves;
 // with the sound off nothing sounds. The camera follows a rival's move only while the player has not moved the map lately.
-const { build, capture, createMotion, dice, pennants, pulse, sweep, travel } = $m[30];
-const { settings } = $m[13];
-const { voice } = $m[31];
+const { build, capture, createMotion, dice, pennants, pulse, sweep, travel } = $m[31];
+const { settings } = $m[14];
+const { voice } = $m[32];
 
 let layer = null, touched = -1e9, fight = null, glide = null, RGB = [], ICONS = []; // the seats' colours and emblems, as the table dressed them
 const PALE = [206, 196, 170], GOODS = [[226, 196, 96], [176, 208, 216], [196, 120, 82], [228, 226, 214]];
@@ -4116,19 +4171,19 @@ function hail(box, colours) {
 
 $x.moving = moving; $x.frames = frames; $x.throwDice = throwDice; $x.bannersDice = bannersDice; $x.stir = stir; $x.hail = hail;
 return $x; })({});
-$m[16] = (($x) => {
+$m[17] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What every table game's screen shares: title, seats, score bar, words, taking back, saving, bots' turns and the end.
 // A game gives its rules, its board and its own move panel.
 const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } = $m[3];
-const { EMBLEMS, emblem } = $m[17];
-const { footer } = $m[24];
-const { canLock, linkGames, makeLink, newId, readLink } = $m[27];
-const { BUILD, SOURCE_URL, VERSION } = $m[25];
-const { coach } = $m[28];
-const { CHOICES, PACE, SCALE, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } = $m[13];
+const { EMBLEMS, emblem } = $m[18];
+const { footer } = $m[25];
+const { canLock, linkGames, makeLink, newId, readLink } = $m[28];
+const { BUILD, SOURCE_URL, VERSION } = $m[26];
+const { coach } = $m[29];
+const { CHOICES, PACE, SCALE, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } = $m[14];
 // motion hook: motion and sound that follow each move (site/motion.js, site/sound.js)
-const { hail, stir } = $m[29];
+const { hail, stir } = $m[30];
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -5128,12 +5183,12 @@ function createTable(G) {
 
 $x.COLOURS = COLOURS; $x.NAMES = NAMES; $x.RGB = RGB; $x.ICONS = ICONS; $x.PAPER = PAPER; $x.dress = dress; $x.$ = $; $x.el = el; $x.sleep = sleep; $x.sign = sign; $x.radio = radio; $x.toast = toast; $x.sheet = sheet; $x.createTable = createTable;
 return $x; })({});
-$m[32] = (($x) => {
+$m[33] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The hex board for a game's screen: the moving one when the device can draw it, else a still picture that can be tapped.
-const { LOOKS, canDraw, createBoard } = $m[17];
-const { STYLES, STYLE_KEY } = $m[22];
-const { ICONS, RGB } = $m[16];
+const { LOOKS, canDraw, createBoard } = $m[18];
+const { STYLES, STYLE_KEY } = $m[23];
+const { ICONS, RGB } = $m[17];
 
 /** The seats' patterns for the still board, the same six as on the moving board and the score bar: /, dots, |, x, \, -. */
 function patterns(make, f) {
@@ -5224,19 +5279,492 @@ function hexBoard(T, stage, o) {
 
 $x.hexBoard = hexBoard;
 return $x; })({});
+$m[35] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// A legacy campaign: a run of 5 or 10 games where each game leaves marks the next one keeps (early: the basic structure).
+// The record is a plain file every player holds: the story it follows, the rules version it began on, and each finished
+// game's seed and moves, with the one choice made after it. Points, marks and opened seals are never stored: they are
+// folded again from the record, game by game, so a campaign replays the same on every machine and a file cannot lie.
+//
+// A game's legacy layer (for Brass and Banners: src/games/banners/legacy.js) gives:
+//   game                 the game's id
+//   rules                { version: game }   every rules version a campaign may be pinned to
+//   story                { id, tale, title, lengths, seats, pool, rewards, seals, chapters }   plain data
+//   optionsFor(record, state, n)   the options of game n, marks included
+//   factsOf(match, steps, n)       what a finished game leaves: { game, winners, order, out, strongest, happened, slots }
+const { canon } = $m[4];
+const { fingerprint } = $m[6];
+const { Refusal, createMatch, readOptions } = $m[7];
+
+const CAMPAIGN = 1;
+const KIND = "capo-campaign", MOST = 4000000, KINDS = ["you", "normal", "easy", "hard"];
+const FIELDS = "format,game,games,id,kind,length,print,rules,seats,story,takeBacks,tale,who";
+/** The only tests a seal may open on, judged on a finished game: no expressions, no code. */
+const TESTS = ["after_game", "first", "wins"];
+const plain = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+const notOne = () => new Refusal("file", "that is not a campaign file");
+
+/** A new campaign record, before its first game. Pinned to the newest rules version unless one is named. */
+function beginCampaign(legacy, { id, length, seats, who, rules = newest(legacy) }) {
+  const s = legacy.story;
+  if (typeof id !== "string" || !/^[a-z0-9]{4,24}$/.test(id)) throw new Refusal("campaign", "a campaign needs an id of letters and digits");
+  if (!s.lengths.includes(length)) throw new Refusal("campaign", `${s.title} is ${s.lengths.join(" or ")} games long`);
+  if (!s.seats.includes(seats)) throw new Refusal("campaign", `${s.title} is for ${s.seats.join(", ")} players`);
+  if (!Array.isArray(who) || who.length !== seats || !who.every((k) => KINDS.includes(k))) throw new Refusal("campaign", "each seat needs a person or a bot");
+  if (!legacy.rules[rules]) throw new Refusal("version", `there is no version ${rules} of these rules here`);
+  return { format: CAMPAIGN, kind: KIND, game: legacy.game, rules, story: s.id, tale: s.tale, id, length, seats, who: [...who], games: [], takeBacks: 0 };
+}
+const newest = (legacy) => Object.keys(legacy.rules).sort((a, b) => b.length - a.length || (b > a ? 1 : -1))[0];
+
+/** The state before any game: no marks, no points. */
+function opening(story, record) {
+  const n = record.seats;
+  return { game: 1, over: false, points: Array(n).fill(0), wins: Array(n).fill(0), signed: [], switches: { ...story.switches }, names: [], works: [], bonus: Array(n).fill(0), opened: [], used: [] };
+}
+
+/** Does a seal open after this game? */
+function opens(when, facts, state) {
+  if (when.test === "after_game") return facts.game === when.n;
+  if (when.test === "first") return facts.happened.includes(when.what);
+  if (when.test === "wins") return state.wins.some((w) => w >= when.n);
+  return false;
+}
+/** A place a mark names: a number, or a slot the facts fill ("@fallen_capital"). -1 when the game left it empty. */
+const placeOf = (at, facts) => (typeof at === "string" && at[0] === "@" ? facts.slots[at.slice(1)] ?? -1 : at);
+
+/**
+ * One finished game folded into the campaign: points, a name, a bonus for the next game, and the seals it opens.
+ * name: the winner's pick from the story's pool, or null for the first not yet used. Returns { state, opened, named }.
+ */
+function advance(story, state, facts, name = null) {
+  const s = structuredClone(state), r = story.rewards, n = facts.game, seats = s.points.length, opened = [];
+  for (let seat = 0; seat < seats; seat++) {
+    if (facts.winners.includes(seat)) { s.points[seat] += r.win; s.wins[seat]++; s.signed.push([seat, n]); } else if (!facts.out.includes(seat)) s.points[seat] += r.live;
+  }
+  // the winner names the province they held strongest at the end; a word on the map from then on
+  const w = facts.winners[0], at = w === undefined ? -1 : facts.strongest[w];
+  let named = null;
+  if (at >= 0) {
+    const free = story.pool.findIndex((_, i) => !s.used.includes(i)), pick = name ?? free;
+    if (!Number.isInteger(pick) || pick < 0 || pick >= story.pool.length || s.used.includes(pick)) throw new Refusal("campaign", `game ${n}: that name is not in the story's list, or is taken`);
+    s.names = [...s.names.filter((x) => x[0] !== at), [at, story.pool[pick], w, n]];
+    s.used.push(pick);
+    named = [at, story.pool[pick], w];
+  } else if (name !== null) throw new Refusal("campaign", `game ${n}: nothing was there to name`);
+  // the seat that placed last starts the next game with more, unless it leads the campaign: catch-up is given, never taken
+  s.bonus = Array(seats).fill(0);
+  const last = facts.order[facts.order.length - 1], top = Math.max(...s.points);
+  if (last !== undefined && !facts.winners.includes(last) && s.points[last] < top) s.bonus[last] = r.bonus;
+  for (const seal of story.seals) {
+    if (s.opened.includes(seal.id) || !opens(seal.when, facts, s)) continue;
+    s.opened.push(seal.id);
+    opened.push(seal.id);
+    for (const d of seal.do) {
+      if (d.kind === "SWITCH") s.switches[d.name] = d.value;
+      else if (d.kind === "WORK") { const p = placeOf(d.place, facts); if (p >= 0) s.works = [...s.works.filter((x) => x[0] !== p), [p, d.what, n]]; }
+    }
+  }
+  s.game = n + 1;
+  s.over = n >= story.length;
+  return { state: s, opened, named };
+}
+
+/** Replay a whole campaign from its record. Returns { state, played: [{ facts, opened, named }] }, or refuses. */
+function foldCampaign(legacy, record) {
+  const game = legacy.rules[record.rules], story = { ...legacy.story, length: record.length };
+  if (!game) throw new Refusal("version", `this campaign is pinned to version ${String(record.rules).slice(0, 12)} of these rules, which this copy does not have. A campaign keeps the rules it began with`);
+  let state = opening(story, record);
+  const played = [];
+  record.games.forEach((g, i) => {
+    const n = i + 1, m = createMatch(game, { options: legacy.optionsFor(record, state, n), seed: g.seed }), steps = [];
+    g.moves.forEach((move, k) => {
+      const before = m.position;
+      try { steps.push({ before, events: m.play(move) }); } catch (e) {
+        if (e instanceof Refusal) throw new Refusal("campaign", `game ${n}, move ${k + 1}: ${e.message}`);
+        throw e;
+      }
+    });
+    if (m.result === null) throw new Refusal("campaign", `game ${n} was not played to its end`);
+    if (m.fingerprint() !== g.end) throw new Refusal("campaign", `game ${n}'s moves lead somewhere other than the file says`);
+    const facts = legacy.factsOf(m, steps, n), made = advance(story, state, facts, g.name);
+    state = made.state;
+    played.push({ facts, opened: made.opened, named: made.named });
+  });
+  return { state, played };
+}
+
+/** The game to play next: { n, seed, options, game }, or null when the campaign is over. */
+function nextGame(legacy, record, state) {
+  if (state.over || record.games.length >= record.length) return null;
+  const n = record.games.length + 1;
+  return { n, seed: `${record.id}/${n}/${record.takeBacks}`, options: legacy.optionsFor(record, state, n), game: legacy.rules[record.rules] };
+}
+
+/** A finished match added as the campaign's next game. Refuses a match that is not that game. Returns a new record. */
+function addGame(legacy, record, match) {
+  const { state } = foldCampaign(legacy, record), want = nextGame(legacy, record, state);
+  if (!want) throw new Refusal("campaign", "this campaign is over");
+  if (match.game.version !== record.rules || match.seed !== want.seed || canon(match.options) !== canon(readOptions(want.game, want.options))) throw new Refusal("campaign", `that game is not game ${want.n} of this campaign`);
+  if (match.result === null) throw new Refusal("campaign", "that game is not over");
+  const next = { ...record, games: [...record.games, { seed: match.seed, moves: match.list, end: match.fingerprint(), name: null }] };
+  foldCampaign(legacy, next);
+  return next;
+}
+
+/** The winner's name for the last game, chosen from the story's pool. Only while it is the last game. Returns a new record. */
+function nameLast(legacy, record, pick) {
+  if (!record.games.length) throw new Refusal("campaign", "no game has been played");
+  const games = [...record.games], last = games.length - 1;
+  games[last] = { ...games[last], name: pick };
+  const next = { ...record, games };
+  foldCampaign(legacy, next);
+  return next;
+}
+
+/** Take back the whole last game, by everyone's agreement. It is counted, the count is shown, and the game is dealt anew. */
+function takeBack(record) {
+  if (!record.games.length) throw new Refusal("campaign", "no game to take back");
+  return { ...record, games: record.games.slice(0, -1), takeBacks: record.takeBacks + 1 };
+}
+
+/** The file: the record written the one exact way, with its fingerprint. */
+function writeCampaign(record) {
+  const { print, ...rest } = record;
+  return canon({ ...rest, print: fingerprint(rest) });
+}
+
+/** Open a campaign file: checked, pinned to its rules version, and replayed. Returns { record, state, played }. */
+function readCampaign(text, legacy) {
+  if (typeof text !== "string" || text.length > MOST) throw new Refusal("file", "that file is too large or not text");
+  let f;
+  try { f = JSON.parse(text); } catch { throw notOne(); }
+  if (!plain(f) || Object.keys(f).sort().join() !== FIELDS || f.kind !== KIND) throw notOne();
+  if (f.format !== CAMPAIGN) throw new Refusal("format", "this campaign was made by a different version of these games");
+  if (f.game !== legacy.game) throw new Refusal("game", "this campaign is for another game. Open it from that game's page");
+  if (f.story !== legacy.story.id || f.tale !== legacy.story.tale) throw new Refusal("story", "this campaign follows a story, or a version of it, that this copy does not have");
+  const { print, ...rest } = f;
+  let kept = false;
+  try { kept = fingerprint(rest) === print; } catch { throw notOne(); }
+  if (!kept) throw new Refusal("file", "this campaign file was changed after it was saved");
+  const seatsOk = legacy.story.seats.includes(f.seats) && Array.isArray(f.who) && f.who.length === f.seats && f.who.every((k) => KINDS.includes(k));
+  const gamesOk = Array.isArray(f.games) && f.games.length <= f.length && f.games.every((g) => plain(g) && Object.keys(g).sort().join() === "end,moves,name,seed" && typeof g.seed === "string" && Array.isArray(g.moves) && typeof g.end === "string" && (g.name === null || Number.isInteger(g.name)));
+  if (typeof f.id !== "string" || !legacy.story.lengths.includes(f.length) || !seatsOk || !gamesOk || !Number.isInteger(f.takeBacks) || f.takeBacks < 0 || typeof f.rules !== "string") throw notOne();
+  const { state, played } = foldCampaign(legacy, rest);
+  return { record: rest, state, played };
+}
+
+/** Who leads: seats by points, then wins, best first. Level seats share a place. */
+function standings(state) {
+  const order = state.points.map((_, s) => s).sort((a, b) => state.points[b] - state.points[a] || state.wins[b] - state.wins[a] || a - b);
+  return order.map((seat) => ({ seat, points: state.points[seat], wins: state.wins[seat], place: 1 + order.filter((o) => state.points[o] > state.points[seat] || (state.points[o] === state.points[seat] && state.wins[o] > state.wins[seat])).length }));
+}
+
+$x.CAMPAIGN = CAMPAIGN; $x.TESTS = TESTS; $x.beginCampaign = beginCampaign; $x.opens = opens; $x.advance = advance; $x.foldCampaign = foldCampaign; $x.nextGame = nextGame; $x.addGame = addGame; $x.nameLast = nameLast; $x.takeBack = takeBack; $x.writeCampaign = writeCampaign; $x.readCampaign = readCampaign; $x.standings = standings;
+return $x; })({});
+$m[36] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Brass and Banners as a legacy campaign (early: the basic structure). The campaign record and its fold are
+// src/core/campaign.js; this is what Banners adds: its first story as data, the options each game is played with,
+// and what a finished game leaves behind. Marks reach the board through one open option (./marks.js).
+const { NONE, banners, cellsOf } = $m[1];
+
+/**
+ * The first story, "The Long Muster": its first few seals. Every effect is data the setup already understands:
+ * a switch (an expansion turned on for every game after), or a fort at a place a condition names.
+ */
+const LONG_MUSTER = {
+  id: "long-muster", tale: 1, title: "The Long Muster", game: "banners",
+  lengths: [5, 10], seats: [2, 3, 4],
+  // the rules every game starts from: the dealt-out war with dice and cards, to a shorter goal and a round limit
+  start: { style: "custom", map: "world", start: "dealt", dice: "standard", muster: "floor", cards: "rising", goal: 65, rounds: 20, neutral: 2, order: "fixed", opening: "lean", spoils: "trade", score: "land", luck: "fair" },
+  switches: { capitals: false, forts: false, leaders: false },
+  // a win is worth 3, holding on to the end 1; the seat that placed last starts the next game with 3 more to set out
+  rewards: { win: 3, live: 1, bonus: 3 },
+  // what the winner may call the province they held strongest; a word on the map, never a rule
+  pool: ["Saltmarch", "Low Cinder", "The Quiet Reach", "Harrow Field", "Greywater", "The Long Ford", "Emberwold", "Kestrel Gap", "Thornmere", "The Brass Gate", "Ashen Weir", "Lantern Hill"],
+  seals: [
+    { id: "halls", when: { test: "after_game", n: 1 }, why: "Opened because the first game is over.",
+      do: [{ kind: "SWITCH", name: "capitals", value: true }],
+      title: "Seats of power", text: "Every banner now keeps a capital: its strongest province when the war begins. A capital adds 1 to its defender's best die, and whoever holds more than half of them at the start of their turn wins." },
+    { id: "walls", when: { test: "first", what: "capital_falls" }, why: "Opened because a capital fell for the first time.",
+      do: [{ kind: "SWITCH", name: "forts", value: true }, { kind: "WORK", what: "fort", place: "@fallen_capital" }],
+      title: "Walls after the fact", text: "Forts can now be built for 4 of what you place, and each throws one more die in defence. The hall that fell stands walled in every game from now on, whoever holds it." },
+    { id: "captains", when: { test: "after_game", n: 3 }, why: "Opened because the third game is over.",
+      do: [{ kind: "SWITCH", name: "leaders", value: true }],
+      title: "Captains of the muster", text: "Every banner now has a leader in the field. A leader adds 1 to your best die where it stands, and comes back two rounds after it is driven off." },
+  ],
+  chapters: [
+    "The banners gather on the old map. Nobody has a hall yet, and nobody's name is on the land.",
+    "The muster comes again. What was won last time is remembered.",
+    "Walls go up where halls once fell.",
+  ],
+};
+
+/** Every rules version a campaign may be pinned to. A version is kept here, frozen, for as long as campaigns run on it. */
+const RULES = { [banners.version]: banners };
+
+/** The options of game n: the story's start, the switches the seals turned on, and the marks. */
+function optionsFor(record, state, n) {
+  return {
+    ...LONG_MUSTER.start, seats: record.seats, ...state.switches,
+    marks: { campaign: record.id, game: n, names: state.names.map(([at, text]) => [at, text]), forts: state.works.filter((w) => w[1] === "fort").map((w) => w[0]), bonus: [...state.bonus] },
+  };
+}
+
+/** What a finished game leaves: who won and the order of the rest, who was put out, each seat's strongest province, the first capital to fall. */
+function factsOf(m, steps, n) {
+  const p = m.position, seats = p.seats, winners = [...m.result.winners];
+  let fallen = -1;
+  for (const { before, events } of steps) for (const e of events) if (fallen < 0 && e.kind === "take" && e.was !== NONE && before.caps?.[e.was] === e.at) fallen = e.at;
+  const out = Array.from({ length: seats }, (_, s) => s).filter((s) => p.outBy[s] !== NONE || cellsOf(p, s) === 0);
+  const order = Array.from({ length: seats }, (_, s) => s).sort((a, b) => (winners.includes(b) ? 1 : 0) - (winners.includes(a) ? 1 : 0) || cellsOf(p, b) - cellsOf(p, a) || a - b);
+  const strongest = Array.from({ length: seats }, (_, s) => p.owner.reduce((best, o, i) => (o === s && (best < 0 || p.str[i] > p.str[best]) ? i : best), -1));
+  return { game: n, winners, order, out, strongest, happened: fallen >= 0 ? ["capital_falls"] : [], slots: fallen >= 0 ? { fallen_capital: fallen } : {} };
+}
+
+/** Brass and Banners' legacy layer, for src/core/campaign.js. */
+const LEGACY = { game: banners.id, rules: RULES, story: LONG_MUSTER, optionsFor, factsOf };
+
+/** The chapter text before game n. */
+const chapterOf = (n) => LONG_MUSTER.chapters[Math.min(n, LONG_MUSTER.chapters.length) - 1];
+
+$x.LONG_MUSTER = LONG_MUSTER; $x.RULES = RULES; $x.LEGACY = LEGACY; $x.chapterOf = chapterOf;
+return $x; })({});
+$m[34] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Brass and Banners' campaign screens (early): start a campaign of 5 or 10 games, play each with the campaign's rules,
+// save and open the campaign file, and break the seals a finished game opens. Reached only from "Campaign (early)" in
+// Banners' own setup. The record and its fold: src/core/campaign.js; the story and the marks: src/games/banners/legacy.js.
+const { Refusal, createMatch } = $m[3];
+const { addGame, beginCampaign, foldCampaign, nameLast, nextGame, readCampaign, standings, takeBack, writeCampaign } = $m[35];
+const { LEGACY, LONG_MUSTER: S, chapterOf } = $m[36];
+const { areaBoard } = $m[2];
+const { $, NAMES, el, radio, sheet, sign, toast } = $m[17];
+
+const KEY = "capo-banners-campaign", KINDS = [["you", "A person"], ["normal", "Bot"], ["easy", "Easy bot"], ["hard", "Hard bot"]];
+const SWITCHED = { capitals: "Capitals are on", forts: "Forts can be built", leaders: "Leaders take the field" };
+const store = (v) => { try { if (v === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, v); } catch { /* the file still works */ } };
+const stored = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
+const place = (at) => areaBoard(0, S.start.map).names[at]; // the map's own name for a place: the story's map never changes
+const cap = (t) => t[0].toUpperCase() + t.slice(1);
+let T = null, broken = "", form = { length: 5, seats: 3, who: ["you", "normal", "normal", "normal"] };
+
+/** The campaign kept in this browser, replayed from its record: { record, state, played }, or null. */
+function load() {
+  const text = stored();
+  broken = "";
+  if (!text) return null;
+  try { return readCampaign(text, LEGACY); } catch (e) {
+    if (!(e instanceof Refusal)) throw e;
+    broken = e.message;
+    return null;
+  }
+}
+function keep(record) {
+  store(writeCampaign(record));
+  return { record, ...foldCampaign(LEGACY, record) };
+}
+const button = (t, f, cls = "quiet") => { const b = el("button", t, cls); b.type = "button"; b.onclick = f; return b; };
+/** A button that asks once more before it acts. */
+function sure(t, f) {
+  const b = button(t, () => { if (b.dataset.armed) f(); else { b.dataset.armed = "1"; b.textContent = `${t}: press again to be sure`; } }, "quiet danger");
+  return b;
+}
+function line(label, host) { const l = el("div", undefined, "line"); host.className = "pick small"; host.setAttribute("role", "radiogroup"); host.setAttribute("aria-label", label); l.append(el("span", label), host); return l; }
+
+/** What the campaign has changed so far, in plain sentences; the bonus is for the next game only. */
+function changes(c, sealed = []) {
+  const s = c.state, out = [], hidden = S.seals.filter((x) => sealed.includes(x.id)).flatMap((x) => x.do.map((d) => d.name)); // a seal not yet broken keeps its rule to itself
+  for (const [k, on] of Object.entries(s.switches)) if (on && !hidden.includes(k)) out.push(`${SWITCHED[k] || cap(k)}.`);
+  for (const [at, text, seat, n] of s.names) out.push(`${place(at)} is called ${text}: ${NAMES[seat]} named it after winning game ${n}.`);
+  for (const [at, , n] of s.works) if (!hidden.includes("forts")) out.push(`A fort stands at ${place(at)}, since game ${n}.`);
+  s.bonus.forEach((k, seat) => { if (k) out.push(`${NAMES[seat]} sets out ${k} more at the start of the next game, for placing last.`); });
+  return out;
+}
+function standingsTable(c) {
+  const box = el("div", undefined, "ranks"), t = el("table"), head = el("tr");
+  head.append(...["Place", "Player", "Points", "Wins"].map((x) => { const th = el("th", x); th.scope = "col"; return th; }));
+  t.append(head, ...standings(c.state).map((r) => { const tr = el("tr"), who = el("th"); who.scope = "row"; who.append(sign(r.seat), NAMES[r.seat]); tr.append(el("td", String(r.place)), who, el("td", String(r.points)), el("td", String(r.wins))); return tr; }));
+  t.setAttribute("aria-label", "The campaign's standings");
+  box.append(t);
+  return box;
+}
+function list(items, none) { if (!items.length) return el("p", none, "about"); const u = el("ul"); u.append(...items.map((x) => el("li", x))); return u; }
+
+/** Play the campaign's next game, with its rules and marks. */
+function play(c) {
+  const nx = nextGame(LEGACY, c.record, c.state);
+  if (!nx) return;
+  if ($("sheet").open) $("sheet").close();
+  T.begin(createMatch(nx.game, { seed: nx.seed, options: nx.options }), [...c.record.who]);
+  toast(`${S.title}, game ${nx.n} of ${c.record.length}. ${chapterOf(nx.n)}`);
+}
+function download(record) {
+  const a = el("a");
+  a.href = URL.createObjectURL(new Blob([writeCampaign(record)], { type: "application/json" }));
+  a.download = `banners-campaign-${record.id}-${record.games.length}-of-${record.length}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/** The campaign: where it stands, what it has changed, and what comes next. Or, with none kept here, a new one. */
+function hub() {
+  const c = load(), box = el("div", undefined, "stack");
+  box.append(el("p", "Early: the first shape of legacy campaigns. Each game leaves marks that the next one keeps. The campaign is a file you hold: save it after each game and open it again here.", "about"));
+  if (!c) return fresh(box);
+  const n = c.record.games.length, over = c.state.over;
+  box.append(el("h3", S.title), el("p", over ? `Finished: all ${c.record.length} games played.` : `Game ${n + 1} of ${c.record.length} comes next.${n ? "" : ` ${chapterOf(1)}`}`), standingsTable(c));
+  if (over) { const top = standings(c.state).filter((r) => r.place === 1).map((r) => NAMES[r.seat]); box.append(el("p", `${top.join(" and ")} ${top.length > 1 ? "share" : "wins"} the campaign.`)); }
+  box.append(el("h3", "What this campaign has changed"), list(changes(c), "Nothing yet: the first game is played on the story's own rules."));
+  box.append(el("p", `Rules version ${c.record.rules}, kept from the campaign's start. Games taken back: ${c.record.takeBacks}.`, "about"));
+  if (!over) box.append(button(`Play game ${n + 1}`, () => play(c), "main"));
+  box.append(button("Save the campaign to a file", () => download(c.record)));
+  if (n) box.append(sure(`Take back game ${n}, if everyone agrees`, () => { const k = keep(takeBack(c.record)); toast(`Game ${n} is taken back and will be dealt anew. Games taken back: ${k.record.takeBacks}.`); hub(); }));
+  box.append(button("Open a campaign file", () => $("campaign-file").click()), sure("Start a new campaign in its place", () => { store(null); hub(); }));
+  sheet("Campaign (early)", box, "Close", "wide");
+}
+
+/** A new campaign: how long, how many, and who sits where. */
+function fresh(box) {
+  if (broken) box.append(el("p", `The campaign kept in this browser could not be opened: ${broken}.`), sure("Forget it", () => { store(null); hub(); }));
+  const length = el("div"), count = el("div"), who = el("ul");
+  Object.assign(who.style, { listStyle: "none", padding: "0", margin: "0 0 12px", display: "grid", gap: "6px" }); // as the title card's seats
+  const draw = () => {
+    radio(length, S.lengths.map((v) => ({ value: v, label: `${v} games` })), form.length, (v) => { form.length = v; draw(); });
+    radio(count, S.seats.map((v) => ({ value: v, label: String(v) })), form.seats, (v) => { form.seats = v; draw(); });
+    who.replaceChildren(...Array.from({ length: form.seats }, (_, s) => {
+      const li = el("li"), k = el("select"), name = el("span", undefined, "wear");
+      k.append(...KINDS.map(([v, t]) => new Option(t, v)));
+      k.value = form.who[s];
+      k.setAttribute("aria-label", NAMES[s]);
+      k.onchange = () => { form.who[s] = k.value; };
+      const mark = sign(s);
+      Object.assign(mark.style, { width: "28px", height: "28px", flex: "none" });
+      Object.assign(li.style, { display: "flex", alignItems: "center", gap: "10px" });
+      name.append(mark, el("b", NAMES[s]));
+      li.append(name, k);
+      return li;
+    }));
+  };
+  draw();
+  box.append(el("h3", S.title), el("p", `${chapterOf(1)} A campaign of Brass and Banners on the world map: the war is dealt out and won at 65% of the land or on the most land after 20 rounds. A win is worth ${S.rewards.win} points and holding on to the end ${S.rewards.live}. The winner names a province, the seat that placed last starts the next game with ${S.rewards.bonus} more, and sealed changes open when their moment comes.`),
+    line("Length", length), line("Players", count), who,
+    button("Begin the campaign", () => {
+      const id = [...crypto.getRandomValues(new Uint32Array(2))].map((v) => v.toString(36)).join("").slice(0, 12);
+      const c = keep(beginCampaign(LEGACY, { id, length: form.length, seats: form.seats, who: form.who.slice(0, form.seats) }));
+      play(c);
+    }, "main"),
+    button("Open a campaign file", () => $("campaign-file").click()));
+  sheet("Campaign (early)", box, "Close", "wide");
+}
+
+/** A seal, closed: what opened it, and a button to break it. Broken, it shows the new rule. */
+function seal(s, broke = () => {}) {
+  const env = el("div"), wax = el("span");
+  Object.assign(env.style, { border: "1px solid currentColor", borderRadius: "10px", padding: "12px 14px", display: "grid", gap: "8px", justifyItems: "start" });
+  Object.assign(wax.style, { width: "34px", height: "34px", borderRadius: "50%", background: "#8a1f1a", boxShadow: "inset 0 0 0 4px #a8322b, 0 1px 3px rgba(0,0,0,.5)" });
+  wax.setAttribute("aria-hidden", "true");
+  const open = button("Break the seal", () => {
+    env.replaceChildren(el("b", `A seal is broken: ${s.title}`), el("p", s.text), el("small", "From the next game on."));
+    env.setAttribute("role", "status");
+    broke(s.id);
+  }, "main");
+  env.append(wax, el("b", "A sealed change"), el("p", s.why), open);
+  return env;
+}
+
+/** After a campaign game: it is in the record; the winner's name for a province; any seals it opened; then on. */
+function after(n) {
+  const c = load();
+  if (!c || c.record.games.length < n) return hub();
+  const g = c.played[n - 1], box = el("div", undefined, "stack"), last = n === c.record.games.length, nx = nextGame(LEGACY, c.record, c.state);
+  box.append(el("p", `Game ${n} of ${c.record.length} is in the campaign.`), standingsTable(c));
+  if (g.named) {
+    const [at, text, seat] = g.named, mine = c.record.who[seat] === "you" && last;
+    box.append(el("h3", "A name on the map"), el("p", `${NAMES[seat]} won, and names the province they held strongest, ${place(at)}: it is now called ${text}.`));
+    if (mine) {
+      const pick = el("div"), now = S.pool.indexOf(text);
+      radio(pick, S.pool.map((t, i) => ({ value: i, label: t })).filter((x) => x.value === now || !c.state.used.includes(x.value)), now, (v) => { keep(nameLast(LEGACY, c.record, v)); after(n); $("sheet-body").querySelector("[aria-checked=true]")?.focus(); });
+      box.append(line("Call it", pick));
+    }
+  }
+  // what the next game brings leaves out a sealed rule until its seal is broken
+  const sealed = [...g.opened], brings = el("div"), redraw = () => brings.replaceChildren(list(changes(c, last ? sealed : []), "The same rules as before."));
+  if (g.opened.length) box.append(el("h3", g.opened.length > 1 ? "Seals open" : "A seal opens"), ...g.opened.map((id) => seal(S.seals.find((s) => s.id === id), (done) => { sealed.splice(sealed.indexOf(done), 1); redraw(); })));
+  redraw();
+  if (nx) box.append(el("h3", `What game ${nx.n} brings`), brings);
+  else { const top = standings(c.state).filter((r) => r.place === 1).map((r) => NAMES[r.seat]); box.append(el("h3", "The campaign is over"), el("p", `${top.join(" and ")} ${top.length > 1 ? "share" : "wins"} ${S.title}.`)); }
+  box.append(el("p", "Save the campaign to keep it: the file holds every game, and opening it replays them all.", "about"), button("Save the campaign to a file", () => download(c.record)));
+  if (nx) box.append(button(`Play game ${nx.n}`, () => play(load()), "main"));
+  box.append(button("The whole campaign", hub));
+  sheet(S.title, box, "Close", "wide");
+}
+
+/** Opening a campaign file: checked and replayed; it takes the place of the one kept here, asked first if they differ. */
+async function opened(f) {
+  let c;
+  try { c = readCampaign(await f.text(), LEGACY); } catch (e) {
+    if (!(e instanceof Refusal)) throw e;
+    return sheet("That campaign was not opened", el("p", `${cap(e.message)}.`));
+  }
+  const here = load(), go = () => { keep(c.record); hub(); toast(`${S.title}: ${c.record.games.length} of ${c.record.length} games replayed.`); };
+  if (!here || writeCampaign(here.record) === writeCampaign(c.record)) return go();
+  const box = el("div", undefined, "stack");
+  box.append(el("p", `This browser keeps one campaign, at game ${here.record.games.length} of ${here.record.length}. Save it to a file first if you want it. The file you opened is at game ${c.record.games.length} of ${c.record.length}.`), sure("Keep the opened campaign in its place", go), button("Back", hub));
+  return sheet("Replace your campaign?", box, null);
+}
+
+/** Banners' table hooks (site/banners.js, marked "legacy hook"). */
+const campaign = {
+  mount(table) {
+    T = table;
+    const file = el("input");
+    Object.assign(file, { type: "file", accept: ".json,application/json", id: "campaign-file", hidden: true });
+    file.onchange = () => { const f = file.files[0]; file.value = ""; if (f) opened(f); };
+    document.body.append(file);
+    $("campaign").onclick = hub;
+  },
+  /** A campaign game that ends goes into the campaign's record at once. */
+  seen(table, events) {
+    const marks = table.match.options.marks;
+    if (table.demo || !marks || !events.some((e) => e.kind === "end")) return;
+    const c = load();
+    if (!c || c.record.id !== marks.campaign || c.record.games.length >= marks.game) return;
+    try { keep(addGame(LEGACY, c.record, table.match)); } catch (e) {
+      if (!(e instanceof Refusal)) throw e;
+      toast(`This game was not added to the campaign: ${e.message}.`);
+    }
+  },
+  next(table) {
+    const marks = table.match.options.marks, c = marks && !table.demo ? load() : null;
+    if (!c || c.record.id !== marks.campaign || c.record.games.length < marks.game) return null;
+    return { label: c.state.over ? "The campaign's end" : "On with the campaign", go: () => after(marks.game) };
+  },
+  summary(table) {
+    const marks = table.match.options.marks;
+    if (!marks || table.demo) return "";
+    const p = table.match.position, r = table.match.result, why = String(r.why || "played to the end"), last = p.rounds ? Math.min(p.round, p.rounds) : p.round;
+    return `${r.winners.length > 1 ? `They ${why}` : `${cap(why)}, in ${last} round${last === 1 ? "" : "s"}`}. Game ${marks.game} of ${S.title}.`;
+  },
+};
+
+$x.campaign = campaign;
+return $x; })({});
 $m[0] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Brass and Banners on the table: place strength, attack with dice, move in, move once.
 const { BAG, EXPANSIONS, FORT, HAND, NONE, SAFETY, SWITCHES, banners, bonusOf, bordersOf, boardOf, capsHeld, capsToWin, cellsOf, gain, goalOf, landOf, muster, nameOf, odds, setWorth, setsOf, suitOf, terms, toll, wholeOf } = $m[1];
-const { choose, thinking } = $m[12];
+const { choose, thinking } = $m[13];
 const { DICE, fair, meet } = $m[11];
 const { createMatch } = $m[3];
-const { settings } = $m[13];
-const { areaPicture } = $m[14];
-const { $, ICONS, NAMES, RGB, createTable, el, radio, sheet, toast } = $m[16];
-const { hexBoard } = $m[32];
+const { settings } = $m[14];
+const { areaPicture } = $m[15];
+const { $, ICONS, NAMES, RGB, createTable, el, radio, sheet, toast } = $m[17];
+const { hexBoard } = $m[33];
 // motion hook
-const { bannersDice } = $m[29];
+const { bannersDice } = $m[30];
+// legacy hook: campaigns (early), behind "Campaign (early)" in the setup
+const { campaign } = $m[34];
 
 const SEA = [68, 108, 122], LAND = [[222, 190, 150], [206, 206, 150], [228, 200, 180], [190, 206, 178], [214, 190, 200], [226, 214, 158], [196, 200, 214], [210, 180, 150], [178, 204, 200], [224, 206, 190]];
 const SUITS = ["Drum", "Horn", "Banner", "Crown"];
@@ -5456,7 +5984,7 @@ const LESSON = {
 };
 const NICE = { forts: ["Forts", "Spend 4 of what you muster to build one. It throws one more die in defence."], leaders: ["Leaders", "Each player has one. It adds 1 to your best die where it stands, and comes back two rounds after it is lost."], capitals: ["Capitals", "Hold more than half of them at the start of your turn and you win. They add 1 to the defender's best die."], secrets: ["Secret goals", "Each player is dealt one. It counts at the start of your turn."], events: ["Seasons", "Some rounds bring a harvest, a storm that closes the crossings, or unrest."] };
 
-createTable({
+const T = createTable({
   game: banners, key: "banners", title: "Brass and Banners", won: "The land is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 4, lengths: [], hard: true, nameOf,
   // bots do not linger: moving in and placing are quick, a fight is given time to be read
   pace: (p) => (p.phase === "occupy" ? 110 : p.phase === "attack" ? (p.owner.length > 40 ? 300 : 380) : 220),
@@ -5512,7 +6040,8 @@ createTable({
     if (e.kind === "score") return e.last ? `${who} scores ${e.n} at the end: ${e.all} points.` : `${who} scores ${e.n}: ${e.all} points.`;
     return "";
   },
-  seen(T, events) { for (const e of events) if (e.kind === "fight") { shown = e; shownTie = terms(T.match.position, e.from, e.to).tie === "both"; showDice(T); onMap(T, e); } else if (e.kind === "muster") { shown = null; if (!T.demo) showDice(T); } },
+  seen(T, events) { for (const e of events) if (e.kind === "fight") { shown = e; shownTie = terms(T.match.position, e.from, e.to).tie === "both"; showDice(T); onMap(T, e); } else if (e.kind === "muster") { shown = null; if (!T.demo) showDice(T); } campaign.seen(T, events); }, // legacy hook: a campaign game is recorded as it ends
+  next: (T) => campaign.next(T), summary: (T) => campaign.summary(T), // legacy hook: the end screen's way back to the campaign
   fresh(T) { source = target = null; much = -1; shown = null; showDice(T); showBag(T); },
   order: (events) => events.flatMap((e) => (e.kind === "take" ? [e.at] : [])),
   board(T, stage) {
@@ -5632,6 +6161,7 @@ createTable({
     ];
   },
 });
+campaign.mount(T); // legacy hook
 
 
 return $x; })({});
