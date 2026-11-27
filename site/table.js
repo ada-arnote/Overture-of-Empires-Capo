@@ -54,7 +54,7 @@ const inkOf = (rgb) => (rgb.reduce((s, v, i) => s + [0.21, 0.72, 0.07][i] * (v /
  * `tabs` makes it a row of tabs. A row marked `soon` can be pressed to read about it but is not offered: the arrows pass it by.
  */
 export function radio(host, items, chosen, pick, tabs = false) {
-  const had = host.contains(document.activeElement), left = host.scrollLeft, state = tabs ? "aria-selected" : "aria-checked";
+  const had = host.contains(document.activeElement), left = host.scrollLeft, top = host.scrollTop, state = tabs ? "aria-selected" : "aria-checked";
   host.replaceChildren(...items.map(({ value, label, note, rgb, off, soon }) => {
     const b = el("button");
     b.type = "button";
@@ -69,7 +69,7 @@ export function radio(host, items, chosen, pick, tabs = false) {
     b.onclick = () => pick(value);
     return b;
   }));
-  host.scrollLeft = left;
+  host.scrollLeft = left; host.scrollTop = top;
   const now = host.querySelector(`[${state}=true]`);
   // a long row scrolls: when the rows change under it, the chosen one is brought into view
   if (now && (host.scrollWidth > host.clientWidth || host.scrollHeight > host.clientHeight)) {
@@ -79,13 +79,23 @@ export function radio(host, items, chosen, pick, tabs = false) {
   }
   host.onkeydown = (e) => {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key], end = { Home: 0, End: -1 }[e.key];
+    const on = items.filter((x) => !x.off && !x.soon), at = on.findIndex((x) => x.value === chosen);
+    // with the letter keys off, letters jump to the next row whose name starts with what was typed (shell p10); on, letters are the game's keys
+    if (!step && end === undefined && settings.keys === "off" && e.key.length === 1 && /\S/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      typed = performance.now() - typedAt < 800 ? typed + e.key.toLowerCase() : e.key.toLowerCase();
+      typedAt = performance.now();
+      const name = (x) => String(x.label).replace(/^(to|the)\s+/i, "").toLowerCase(), from = typed.length > 1 ? at : at + 1;
+      const hit = [...on.slice(Math.max(0, from)), ...on.slice(0, Math.max(0, from))].find((x) => name(x).startsWith(typed) || String(x.label).toLowerCase().startsWith(typed));
+      if (hit) { e.preventDefault(); e.stopPropagation(); pick(hit.value); }
+      return;
+    }
     if (!step && end === undefined) return;
     e.preventDefault();
-    const on = items.filter((x) => !x.off && !x.soon), at = on.findIndex((x) => x.value === chosen);
     if (on.length) pick((end === undefined ? on[(at + step + on.length) % on.length] : on.at(end)).value);
   };
   if (had) now?.focus();
 }
+let typed = "", typedAt = 0; // what was typed into a list, and when (type-ahead)
 let hush = 0;
 /** A line over the board for a few seconds. `spoken` false keeps it from a screen reader: a bot's move, which the recap at your turn says again. */
 export function toast(t, spoken = true) { const b = $("toast"); b.setAttribute("aria-live", spoken ? "polite" : "off"); b.textContent = t; b.classList.add("on"); clearTimeout(hush); hush = setTimeout(() => b.classList.remove("on"), Math.max(4000, 70 * t.length)); } // long enough to read
@@ -111,6 +121,7 @@ const closeSheet = () => { if ($("sheet").open) $("sheet").close(); };
  *    Without it, a position marked `live` is real time.
  *    stands: what Take back says when the last move showed what chance held (a roll, a draw); a plain line is said without it.
  *    The board may add centre(cell) and focus(seat), so a map opens on, and goes home to, your own land.
+ *    nameOf(p, cell): the name of a place, shown on the board beside the place the game lights as aimed or chosen (shell p10).
  */
 export function createTable(G) {
   $("broken")?.remove();
@@ -125,7 +136,7 @@ export function createTable(G) {
   passField.setAttribute("aria-label", "Password for the link, if you want one");
   pass.append(el("span", "Password"), passField);
   $("start").parentNode.before(pass);
-  const more = el("div", undefined, "more"), note = el("p", "", "about"), ahead = el("button", "Skip ahead", "quiet");
+  const more = el("div", undefined, "more"), ahead = el("button", "Skip ahead", "quiet");
   ahead.type = "button"; ahead.hidden = true;
   ahead.onclick = () => { T.hurry = true; ahead.hidden = true; };
   // what happened while you waited (said once, politely), and the log: docked beside the board on wide screens, one tap away on narrow ones
@@ -175,6 +186,34 @@ export function createTable(G) {
   /** Zoom by a factor; 0 goes home: the view the board opened at, a wide map centred on your own land. */
   const zoomTo = (f) => { board?.zoom(f); if (!f) board?.centre?.(focus()); };
   const focus = () => { const p = T.match?.position; if (!p || !board?.focus) return -1; const s = p.human ?? (T.human() ? T.match.turn : T.kinds.indexOf("you")); return board.focus(s); };
+  // shell hook p10: the chosen place's name on the board beside it (G.nameOf), so "Take I6" or "Depot at F8" can be found by eye;
+  // a place chosen in the list while it is off screen or under a panel is brought into view
+  const tag = el("span", "", "cell-tag");
+  tag.hidden = true; tag.setAttribute("aria-hidden", "true"); // the list beside it already says the name
+  document.body.append(tag);
+  let aimed = -1, tagLoop = 0;
+  const onBoard = (i) => {
+    const q = board?.at?.(i), s = $("stage").getBoundingClientRect();
+    if (!q || !Number.isFinite(q.x)) return null;
+    const x = s.left + q.x, y = s.top + q.y;
+    return { x, y, open: x >= 0 && y >= 0 && x <= innerWidth && y <= innerHeight && !!document.elementFromPoint(x, y)?.closest("#stage") };
+  };
+  function follow() {
+    tagLoop = 0;
+    const q = aimed >= 0 && T.ready() ? onBoard(aimed) : null;
+    tag.hidden = !q?.open;
+    if (q?.open) { tag.style.left = `${Math.round(q.x)}px`; tag.style.top = `${Math.round(q.y)}px`; }
+    if (aimed >= 0) tagLoop = requestAnimationFrame(follow);
+  }
+  function aimAt(i) {
+    const fresh = i !== aimed;
+    aimed = T.demo || !G.nameOf || !(i >= 0) ? -1 : i;
+    cancelAnimationFrame(tagLoop);
+    if (aimed < 0) { tag.hidden = true; return; }
+    tag.textContent = G.nameOf(T.match.position, aimed);
+    if (fresh && onBoard(aimed)?.open === false) board?.centre?.(aimed); // only a zoomed board moves; the whole board is already in view
+    follow();
+  }
   // the status line is spoken, and every redraw writes it: the same words written again are left alone, so they are not said again
   // ("Saffron is thinking" once a turn, not at every move). The games write it plainly; this one element takes care of it.
   const text = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
@@ -252,6 +291,11 @@ export function createTable(G) {
     board?.destroy();
     $("stage").replaceChildren();
     board = G.board(T, $("stage"));
+    // shell hook p10: what the game lights is followed by the name tag: the aimed place, else the chosen one
+    const light = board.light, unlight = board.clear;
+    aimAt(-1);
+    if (light) board.light = (cells, o = {}) => { aimAt(o.aim >= 0 ? o.aim : o.ring ?? -1); return light(cells, o); };
+    if (unlight) board.clear = () => { aimAt(-1); return unlight(); };
     room = ""; // a new board is laid out afresh
     board.patterns?.(settings.patterns === "on"); board.motion?.(settings.motion);
     $("look").hidden = !board.looks.length;
@@ -789,11 +833,19 @@ export function createTable(G) {
     more.replaceChildren(...(soon ? [] : (G.choices || []).filter((c) => (!c.only || c.only.includes(setup.style)) && (!c.when || c.when(setup.style, setup.extra))).map(pickOf)));
     if (setup.style === "custom") more.append(...G.switches.map(pickOf));
     if (G.expansions && !soon && (!G.expansionsFor || G.expansionsFor(setup.style, setup.extra))) {
-      const box = el("div", undefined, "pick small");
+      // each expansion says what it adds under its own switch, on a phone too (it was only a tooltip) (shell p10)
+      const box = el("div", undefined, "exps");
       box.setAttribute("role", "group");
       box.setAttribute("aria-label", "Expansions");
-      box.append(...G.expansions.map((c) => { const b = el("button", c.label); b.type = "button"; b.title = c.note; b.setAttribute("aria-pressed", String(!!setup.on[c.key])); b.onclick = () => { setup.on[c.key] = !setup.on[c.key]; note.textContent = setup.on[c.key] ? c.note : ""; titleCard(); }; return b; }));
-      more.append(el("span", "Expansions", "head"), box, note);
+      box.append(...G.expansions.map((c) => {
+        const row = el("div", undefined, "exp"), b = el("button", c.label, "plain"), says = el("p", c.note, "about");
+        b.type = "button"; says.id = `exp-${c.key}`;
+        b.setAttribute("aria-pressed", String(!!setup.on[c.key])); b.setAttribute("aria-describedby", says.id);
+        b.onclick = () => { setup.on[c.key] = !setup.on[c.key]; titleCard(); more.querySelector(`#exp-${c.key}`)?.previousSibling?.focus(); };
+        row.append(b, says);
+        return row;
+      }));
+      more.append(el("span", "Expansions", "head"), box);
     }
     radio($("length"), G.lengths.map(([value, label]) => ({ value, label })), setup.rounds, (v) => { setup.rounds = v; titleCard(); });
     $("who").replaceChildren(...Array.from({ length: setup.seats }, (_, s) => {
@@ -895,6 +947,8 @@ export function createTable(G) {
   fold.onclick = () => { list.hidden = !list.hidden; store("capo-log", list.hidden ? "shut" : null); drawn = -1; place(); };
   // on a phone the board is fitted again when the tray grows or shrinks by more than a little, so the tray never sits on it and small changes do not make it jump
   new ResizeObserver(() => { document.body.style.setProperty("--ah", `${$("act").offsetHeight}px`); if (innerWidth <= 820 && !$("act").hidden && Math.abs($("act").getBoundingClientRect().top - fitted) > 16) place(); }).observe($("act"));
+  // shell hook p10: the bar's foot, so the seats under it follow it down when the round takes two lines at larger text (table.css --bar-b)
+  new ResizeObserver(() => { const r = $("bar").getBoundingClientRect(); if (!r.height) return; document.body.style.setProperty("--bar-b", `${Math.round(r.bottom)}px`); place(); }).observe($("bar"));
   $("how").onclick = rules;
   $("review").onclick = () => { $("act").hidden = true; toast("Open the menu to start again."); };
   $("again").onclick = restart;

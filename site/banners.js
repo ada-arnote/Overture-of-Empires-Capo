@@ -228,7 +228,7 @@ const LESSON = {
 const NICE = { forts: ["Forts", "Spend 4 of what you muster to build one. It throws one more die in defence."], leaders: ["Leaders", "Each player has one. It adds 1 to your best die where it stands, and comes back two rounds after it is lost."], capitals: ["Capitals", "Hold more than half of them at the start of your turn and you win. They add 1 to the defender's best die."], secrets: ["Secret goals", "Each player is dealt one. It counts at the start of your turn."], events: ["Seasons", "Some rounds bring a harvest, a storm that closes the crossings, or unrest."] };
 
 createTable({
-  game: banners, key: "banners", title: "Brass and Banners", won: "The land is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 4, lengths: [], hard: true,
+  game: banners, key: "banners", title: "Brass and Banners", won: "The land is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 4, lengths: [], hard: true, nameOf,
   // bots do not linger: moving in and placing are quick, a fight is given time to be read
   pace: (p) => (p.phase === "occupy" ? 110 : p.phase === "attack" ? (p.owner.length > 40 ? 300 : 380) : 220),
   placeOf: (p, s) => (p.points ? 1000 * p.points[s] + cellsOf(p, s) : cellsOf(p, s)),
@@ -267,7 +267,7 @@ createTable({
   line(e, p) {
     const who = NAMES[e.seat], at = (i) => nameOf(p, i);
     if (e.kind === "place") return `${who} places ${e.n} at ${at(e.at)}.`;
-    if (e.kind === "fight") return e.won ? "" : `${who} attacks ${at(e.to)} from ${at(e.from)}: ${e.lost.attacker} lost, ${e.lost.defender} struck down.`;
+    if (e.kind === "fight") return `${who} attacks ${at(e.to)} from ${at(e.from)}: ${e.lost.attacker} lost, ${e.lost.defender} struck down.`; // won or not, both sides' losses are logged
     if (e.kind === "take") return `${who} takes ${at(e.at)}${e.was === NONE ? "" : ` from ${NAMES[e.was]}`}.`;
     if (e.kind === "out") return `${who} is out. ${NAMES[e.by]} takes their cards.`;
     if (e.kind === "spoils") return `${who} holds ${e.n} cards and hands in at once.`;
@@ -317,12 +317,14 @@ createTable({
     const g = muster(p, p.seat);
     cards(T);
     const must = p.phase === "place" && p.hands[p.seat].length >= HAND && setsOf(p, p.seat).length > 0;
-    $("info").textContent = must ? "You hold five cards or more. Hand in a set first." : p.phase === "claim" ? (source === null ? "Tap an empty province." : about(p, source)) : p.phase === "setup" ? (source === null ? `${p.reserve[p.seat]} left to set out, five at a time. Tap a province of yours.` : about(p, source)) : p.phase === "place" ? (source === null ? (p.took ? "Place what the cards brought, then attack on." : `${g.base ? `${g.base} to begin, ` : ""}${g.land} for land${g.lands ? `, ${g.lands} for whole lands` : ""}${g.event ? ", 2 for the harvest" : ""}`) + `.${p.points && p.round > 1 && !p.took ? ` You scored ${gain(p, p.seat)} for what you held.` : ""} Tap a province of yours.` : about(p, source))
+    $("info").textContent = must ? "You hold five cards or more. Hand in a set first." : p.phase === "claim" ? (source === null ? "Choose an empty province, on the map or in the list." : about(p, source)) : p.phase === "setup" ? (source === null ? `${p.reserve[p.seat]} left to set out, five at a time. Choose a province of yours, on the map or in the list.` : about(p, source)) : p.phase === "place" ? (source === null ? (p.took ? "Place what the cards brought, then attack on." : `${g.base ? `${g.base} to begin, ` : ""}${g.land} for land${g.lands ? `, ${g.lands} for whole lands` : ""}${g.event ? ", 2 for the harvest" : ""}`) + `.${p.points && p.round > 1 && !p.took ? ` You scored ${gain(p, p.seat)} for what you held.` : ""} Choose a province of yours, on the map or in the list.` : about(p, source))
       : p.phase === "occupy" ? "One has moved in. How many more?"
         : fight ? `${p.str[source] - 1} against ${p.str[target]}. If you keep rolling, ${percent(odds(p, source, target))} in 100 to take it, at a likely cost of ${Math.round(toll(p, source, target) / 1000)}.`
-          : target !== null ? "Moving ends your turn." : source !== null ? about(p, source) : "Tap a province of yours, then where to.";
+          : target !== null ? "Moving ends your turn." : source !== null ? about(p, source) : "Choose a province of yours, then where to: on the map or in the lists.";
     $("sources").hidden = !o.sources.length;
-    radio($("sources"), o.sources.map((i) => ({ value: i, label: nameOf(p, i), note: `${p.str[i]} strong` })), source, (v) => { source = v; target = null; much = -1; T.refresh(); });
+    // your provinces at the front first, the strongest first; then the rest, the strongest first (an empty one to claim, by name)
+    const front = (i) => p.owner[i] === p.seat && boardOf(p).near[i].some((j) => p.owner[j] !== p.seat && p.owner[j] !== NONE), rank = (i) => (p.owner[i] === p.seat ? (front(i) ? 0 : 1e6) - p.str[i] : 2e6);
+    radio($("sources"), [...o.sources].sort((x, y) => rank(x) - rank(y) || nameOf(p, x).localeCompare(nameOf(p, y))).map((i) => ({ value: i, label: nameOf(p, i), note: p.owner[i] === p.seat ? `${p.str[i]} strong${front(i) ? ", at the front" : ""}` : "No one's" })), source, (v) => { source = v; target = null; much = -1; T.refresh(); });
     $("targets").hidden = !o.targets.length;
     const order = (i) => (p.owner[i] === p.seat ? 2000000 : -odds(p, source, i));
     radio($("targets"), [...o.targets].sort((x, y) => order(x) - order(y) || x - y).map((i) => ({ value: i, label: p.owner[i] === p.seat ? `To ${nameOf(p, i)}` : nameOf(p, i), note: p.owner[i] === p.seat ? "move" : `${p.owner[i] === NONE ? "No one's" : NAMES[p.owner[i]]}, ${p.str[i]} strong, ${percent(odds(p, source, i))} in 100`, rgb: p.owner[i] === NONE ? LAND[0] : RGB[p.owner[i]] })), target, (v) => { target = v; much = -1; T.refresh(); });

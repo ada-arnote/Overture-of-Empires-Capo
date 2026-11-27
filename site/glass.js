@@ -175,7 +175,7 @@ const LESSON = {
 
 createTable({
   game: glass, key: "glass", title: "Grain and Glass", won: "The island's trade is yours.", outOf: () => false /* nobody is knocked out of a trading game */, seats: [2, 3, 4, 5, 6], normal: 3, lengths: [], pace: () => 420,
-  unit: "Points", cellsOf: pointsOf, goalOf, landOf: (p) => goalOf(p) + 3, choose, thinking, lesson: LESSON,
+  unit: "Points", cellsOf: pointsOf, goalOf, nameOf, landOf: (p) => goalOf(p) + 3, choose, thinking, lesson: LESSON,
   stands: "That move stands: a roll, a draw or a steal, once seen, is not taken back.", // take back stops here (table.js)
   roundText: (p, wide = innerWidth > 820) => (p.over ? null : `Round ${p.round}${p.classic ? "" : `${wide ? " of " : "/"}${p.rounds}`}, ${goalOf(p)}${wide ? " points" : ""} to win`), // the goal in view all game
   about: {
@@ -313,10 +313,13 @@ createTable({
         m = counters.find((x) => x.get === draft.back && x.n === TERMS[draft.counter][0] && x.k === TERMS[draft.counter][1]) || null;
       }
     }
-    const values = [...list.map(keyOf), ...extra.map((x) => x.value)];
-    if (!values.includes(where)) where = values[0] ?? null;
+    // a place on the board is never chosen for you (it was the first in the list, often a poor one); depots are listed best first
+    const values = [...list.map(keyOf), ...extra.map((x) => x.value)], places = list.some((x) => x.at !== undefined);
+    if (!values.includes(where)) where = places ? null : values[0] ?? null;
+    if (places && !m && where === null) none = "Choose a hex, on the board or in the list";
+    const rank = (x) => (x.do === "depot" && x.at !== undefined ? -worth(p, x.at) : 0);
     $("wheres").hidden = !values.length;
-    radio($("wheres"), [...list.map((x) => ({ value: keyOf(x), label: label(p, x), note: x.at === undefined ? undefined : `${yields(p, x.at, x.do === "depot")}${x.do === "depot" ? `: ${worth(p, x.at)} goods in 36 rolls` : ""}` })), ...extra], where, (v) => { where = v; T.refresh(); });
+    radio($("wheres"), [...[...list].sort((x, y) => rank(x) - rank(y)).map((x) => ({ value: keyOf(x), label: label(p, x), note: x.at === undefined ? undefined : `${yields(p, x.at, x.do === "depot")}${x.do === "depot" ? `: ${worth(p, x.at)} goods in 36 rolls` : ""}` })), ...extra], where, (v) => { where = v; T.refresh(); });
     $("desk").hidden = !rows.length;
     $("desk").replaceChildren(...rows);
     m ||= list.find((x) => keyOf(x) === where) || null;
@@ -345,6 +348,7 @@ createTable({
     if (k === "e") $("end").click();
     else if (k === "l" && T.match.position.roll) ledger(T);
     else if (k === "t" && !$("sources").hidden && legal(T).some((m) => kindOf(m) === "trade")) { kind = "trade"; where = null; T.refresh(); }
+    else if (k === "enter" && $("wheres").contains(document.activeElement) && document.activeElement.matches("[role=radio]")) { e.preventDefault(); document.activeElement.click(); if (!$("do").disabled) $("do").click(); } // Enter on a place chooses it and acts
     else if (k === "enter" && !(document.activeElement instanceof HTMLButtonElement && document.activeElement.id !== "do")) { e.preventDefault(); $("do").click(); }
   },
   rules: (_, p) => { const r = p?.rule || Object.fromEntries(Object.entries(SWITCHES).map(([k, o]) => [k, o.normal])); return [ // before a game: Traditional's

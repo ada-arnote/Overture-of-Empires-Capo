@@ -2,6 +2,28 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### The table games' shell and pages: lists that wrap, places named on the board, a lesson that waits for you
+
+**Players**
+- **Long lists wrap.** The lists of provinces, hexes and places in the move panel are rows that wrap and scroll down inside a box of about three rows, instead of one sideways strip with most of it out of view. Brass and Banners lists your provinces at the front first, the strongest first; Grain and Glass lists depot sites best first.
+- **The chosen place is named on the board.** Choose "Depot at F8", a village or a province, in the list or on the map, and its name stands over it on the board. A place chosen in the list while it is off screen or under a panel is brought into view.
+- **Grain and Glass no longer chooses a place for you.** The main button reads "Choose a hex, on the board or in the list" until you do; Enter on a place in the list chooses it and builds there.
+- **The Island Fable's lesson waits for you** to join units, take a rival hex and cut a rival's land, rather than offering Next; Next shows only while the move cannot be made this turn, and the step says so.
+- **Brass and Banners logs both sides' losses** in a fight that is won, not only in one that is lost.
+- **Larger text no longer cuts the bar.** The round line takes two lines where it must, the seats strip under it moves down with it, a narrow phone puts each seat's number under its name, and the zoom buttons on a phone are a row just above the move panel, so they never climb onto the seats.
+- **Expansions say what they add** under each switch on the title card, on a phone too (it was a tooltip).
+- With the letter keys off (Settings), typing letters in a list jumps to the place whose name starts with them.
+- Fable's Concede says its second step aloud; Banners says "choose it on the map or in the list" where it said "tap".
+- **Page titles and landmarks.** Every game page's title names the site ("Brass and Banners · Overture of Empires: Capo"), the board and panels are the page's main part with a heading of their own in play, and the seat list is named Players. The world map has a heading, a main part and a link to all games.
+
+**Contributors**
+- `radio()` keeps a list's vertical scroll as well as its sideways one, and does type-ahead when `settings.keys` is off. `.strip` is a wrapping, vertically scrolling list (table.css).
+- Shell hooks p10 in `site/table.js`: `G.nameOf(p, cell)` names the cell a game lights as `aim` (else `ring`); the shell wraps `board.light` and `board.clear` to place `.cell-tag`, and calls `board.centre(cell)` when that cell is off screen or covered. `--bar-b` (the bar's foot, from a ResizeObserver) places the seats strip under the bar.
+- Coach steps take `next` as a function, `(T) -> true` while a move-asking step cannot be done now.
+- Game pages: `<header id="bar">` comes first, then `<main>` with a visually hidden `h1.play-h` (hidden on the title by `.menu .play-h`); the title is `<section id="title">`. `site/game.html` and `site/world.html` gain `<main>`.
+
 ## v0.9.3 (2026-11-26): Late 2026 first, no-AI turns in one press, and Inch's third age sooner
 
 ### An Inch of Ink: the third age sooner, Continue paused, a nudge to Normal

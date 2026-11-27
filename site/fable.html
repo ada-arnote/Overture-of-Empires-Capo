@@ -6,16 +6,13 @@
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
-<title>The Island Fable</title>
+<title>The Island Fable · Overture of Empires: Capo</title>
 <link rel="stylesheet" href="table.css">
 <link rel="icon" href="icons/tent/mark.svg">
 <script src="source.js"></script>
 </head>
 <body class="menu">
 <p id="broken" class="broken">If nothing happens, this copy was opened as a file. Open <b>play-fable.html</b> from the dist folder instead.</p>
-<div id="stage" aria-hidden="true"></div>
-<div class="shade" aria-hidden="true"></div>
-
 <header id="bar" class="panel" hidden>
   <button id="menu" type="button" class="icon" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   <div class="mid"><p id="round"></p>
@@ -23,7 +20,12 @@
   <button id="look" type="button" class="icon" aria-label="Change the board's look"><svg viewBox="0 0 24 24"><path d="M3 9l9-5 9 5-9 5zM3 9v6l9 5 9-5V9M12 14v6"/></svg></button>
 </header>
 
-<ul id="seats" hidden></ul>
+<main>
+<h1 class="sr play-h">The Island Fable</h1>
+<div id="stage" aria-hidden="true"></div>
+<div class="shade" aria-hidden="true"></div>
+
+<ul id="seats" hidden aria-label="Players"></ul>
 
 <section id="act" class="panel" hidden aria-label="Your move">
   <p id="status" role="status"></p>
@@ -39,9 +41,9 @@
 
 <div id="toast" role="status" aria-live="polite"></div>
 
-<main id="title" class="title">
+<section id="title" class="title" aria-labelledby="title-h">
   <p class="eyebrow">Overture of Empires: Capo</p>
-  <h1>The Island<br>Fable</h1>
+  <h1 id="title-h">The Island<br>Fable</h1>
   <p class="tag">A hex island war of villages and upkeep. Cut a rival's land in two.</p>
   <div class="panel card">
     <div class="go"><button id="resume" type="button" class="quiet" hidden>Continue</button><button id="quick" type="button" class="main">Play</button></div>
@@ -57,6 +59,7 @@
     </details>
   </div>
   <p class="links"><button type="button" class="text" id="how">How to play</button><button type="button" class="text" id="open">Open a saved game</button><a href="./" class="text">All games</a></p>
+</section>
 </main>
 
 <dialog id="sheet" class="panel" aria-labelledby="sheet-title"><h2 id="sheet-title"></h2><div id="sheet-body"></div><div class="go"><button type="button" class="main" id="sheet-close">Close</button></div></dialog>

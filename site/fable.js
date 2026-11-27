@@ -183,16 +183,17 @@ const LESSON = {
       say: "Joined land is a territory with one village, and the number on its tower is its purse: choose your village, on the map or in the list." },
     { at: (T) => (source?.[0] !== "h" ? richest(pos(T)) : where === null ? $("wheres") : $("do")), or: () => $("sources"), done: (T, ev) => has(ev, "raise", "clear", "take", "merge"),
       say: (T) => `A scout costs ${raiseOf(pos(T))} from that purse: choose where it stands, in the list or on the map, then press the button. Take back undoes a move.` },
-    { at: (T) => (source?.[0] === "u" ? $("wheres") : idle(T) ?? null), or: () => $("sources"), next: true, done: (T, ev) => has(ev, "move", "merge"),
-      say: "Units walk anywhere inside your own land and can still act after; move one onto another scout and they join into a guard." },
+    // the steps that ask for a move wait for it; Next shows only while it cannot be made this turn
+    { at: (T) => (source?.[0] === "u" ? $("wheres") : idle(T) ?? null), or: () => $("sources"), next: (T) => !legal(T).some((m) => m.do === "move"), done: (T, ev) => has(ev, "move", "merge"),
+      say: (T) => `Units walk anywhere inside your own land and can still act after; move one onto another scout and they join into a guard. ${legal(T).some((m) => m.do === "move") ? "Choose a unit, then where it goes." : "No unit of yours can move just now: press Next."}` },
     { at: () => document.querySelector("#seats li"), next: true,
       say: (T) => `Every turn a territory earns 1 coin a hex without woods and pays its units' wages (a scout costs ${upkeepOf(pos(T), 1)}); a purse that cannot pay loses all its units.` },
     { at: () => $("end"), done: (T, ev) => has(ev, "done"),
       say: (T) => (pos(T).round === 1 && pos(T).rule.opening === "truce" ? "Nobody may take a rival's land in the first round, so press End turn now." : "Press End turn when you are done.") },
-    { when: (T) => pos(T).round > 1, at: (T) => strike(T, false), or: () => $(source ? "wheres" : "sources"), next: true, done: (T, ev) => ev.some((e) => e.kind === "take" && e.was !== NONE),
-      say: "Take a rival hex beside your land: your unit must outrank every unit on and beside it, and a village guards like a scout. With a unit chosen, the numbers on rival land are its guard; a red one is too strong for that unit." },
-    { when: (T) => pos(T).round > 1, at: (T) => strike(T, true), or: () => $(source ? "wheres" : "sources"), next: true, done: (T, ev) => has(ev, "split"),
-      say: "Cut a rival's territory in two: the part left without its village has no purse, so its units starve next turn." },
+    { when: (T) => pos(T).round > 1, at: (T) => strike(T, false), or: () => $(source ? "wheres" : "sources"), next: (T) => !strikes(T, false).length, done: (T, ev) => ev.some((e) => e.kind === "take" && e.was !== NONE),
+      say: (T) => `Take a rival hex beside your land: your unit must outrank every unit on and beside it, and a village guards like a scout. With a unit chosen, the numbers on rival land are its guard; a red one is too strong for that unit. ${strikes(T, false).length ? "Do it now." : "Nothing of yours can take one this turn: join scouts into a guard and try next turn, or press Next."}` },
+    { when: (T) => pos(T).round > 1, at: (T) => strike(T, true), or: () => $(source ? "wheres" : "sources"), next: (T) => !strikes(T, true).length, done: (T, ev) => has(ev, "split"),
+      say: (T) => `Cut a rival's territory in two: the part left without its village has no purse, so its units starve next turn. ${strikes(T, true).length ? "The ring shows a move that cuts: make it." : "No move of yours cuts their land this turn: look again next turn, or press Next."}` },
     { at: () => (give && !give.hidden ? give : $("land")), next: true,
       say: "Win by being the last one standing: a bot concedes when it is far behind, and Concede lets you give up. That is the lesson; play on." },
   ],
@@ -202,7 +203,7 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 
 const T = createTable({
   game: fable, key: "fable", title: "The Island Fable", won: "The island is yours.", outOf: (p, s) => p.round > 1 && cellsOf(p, s) === 0, seats: [2, 3, 4, 5, 6], normal: 3, lengths: [[10, "Short"], [14, "Normal"], [18, "Long"]], pace: (p) => (p.classic ? 240 : 480),
-  cellsOf, goalOf, landOf, choose, thinking, lesson: LESSON, hard: true,
+  cellsOf, goalOf, landOf, nameOf, choose, thinking, lesson: LESSON, hard: true,
   // where the Traditional rules come from: shown in the How to play sheet, and for the menu's About tab
   inspired: INSPIRED,
   about: {
@@ -320,8 +321,8 @@ const T = createTable({
     $("end").onclick = () => endTurn(T);
     if (!give) { give = el("button", "", "text"); give.type = "button"; $("end").parentNode.after(give); } // apart from End turn, and small: it ends your game
     give.hidden = !all.some((x) => x.do === "concede");
-    give.textContent = sure ? "Concede: tap again" : "Concede";
-    give.onclick = () => { if (!T.ready()) return; if (sure) T.play({ do: "concede" }); else { sure = true; T.refresh(); } };
+    give.textContent = sure ? "Concede: press again" : "Concede";
+    give.onclick = () => { if (!T.ready()) return; if (sure) T.play({ do: "concede" }); else { sure = true; T.refresh(); toast("Press Concede again to give up this game."); } }; // the second step is said, not only shown
     // the guard on each rival hex beside the chosen land: red where this village or unit cannot take it
     const r = reach(p), rank = source?.[0] === "u" ? p.unit[Number(source.slice(1))] : 0, truce = p.rule.opening === "truce" && p.round === 1;
     guards = r ? [...r.edge].flatMap((c) => { const n = defence(p, c); return n ? [{ at: c, n, hot: truce || !rank || !beats(p, rank, n) }] : []; }) : [];

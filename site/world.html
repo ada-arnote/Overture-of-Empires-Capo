@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
-<title>Capo world map</title>
+<title>The world map · Overture of Empires: Capo</title>
 <link rel="stylesheet" href="table.css">
 <link rel="icon" href="icons/tent/mark.svg">
 <script src="source.js"></script>
@@ -17,24 +17,27 @@ html, body { height: 100%; margin: 0; overflow: hidden }
 /* surfaces, buttons and fields come from table.css, as on every game screen */
 .bar { position: fixed; top: 10px; left: 10px; right: 10px; display: flex; gap: 8px; align-items: center; pointer-events: none }
 .bar > * { pointer-events: auto }
-.bar .mapname { padding: 8px 14px; font: 400 20px/1.2 var(--display) }
+.bar .mapname { margin: 0; padding: 8px 14px; font: 400 20px/1.2 var(--display); letter-spacing: 0; text-shadow: none }
+.bar .home { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 14px; color: var(--text); font-size: var(--fs-2); text-decoration: none } .bar .home:hover { text-decoration: underline }
 .bar input { width: min(260px, 40vw) }
 .zoom { left: auto; right: 10px; bottom: 16px }
 #card { position: fixed; left: 10px; bottom: 16px; max-width: min(360px, calc(100vw - 80px)); padding: 12px 14px; display: none }
 #card h2 { margin: 0 0 4px; font-size: 22px; line-height: 1.2 } #card p { margin: 4px 0; color: var(--text-3); font-size: var(--fs-2) }
 #card .near { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px } #card .near button { min-height: var(--tap); padding: 0 10px; border-radius: var(--r-1); border: 1px solid var(--edge); background: var(--raise); color: var(--text); font-size: var(--fs-1) }
 #note { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--text-3) }
-@media (max-width: 560px) { .bar .mapname { display: none } .bar input { width: 100% } }
+@media (max-width: 560px) { .bar .mapname { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap } .bar input { flex: 1; width: auto; min-width: 0 } } /* the heading stays for a screen reader */
 .credit { position: fixed; right: 64px; bottom: 6px; font-size: 11px; color: var(--text-3); opacity: .7 }
 </style>
 </head>
 <body>
+<main>
 <canvas id="map" aria-label="World map of provinces. Drag to move, scroll or pinch to zoom, tap a province to see it."></canvas>
-<div class="bar"><span class="mapname glass">Capo: the world map</span><input id="find" class="plain" type="search" placeholder="Find a province or country" aria-label="Find a province or country" list="names"><datalist id="names"></datalist></div>
+<div class="bar"><a class="glass home" href="./">All games</a><h1 class="mapname glass">Capo: the world map</h1><input id="find" class="plain" type="search" placeholder="Find a province or country" aria-label="Find a province or country" list="names"><datalist id="names"></datalist></div>
 <div class="zoom"><button type="button" class="plain" id="in" aria-label="Zoom in">+</button><button type="button" class="plain" id="out" aria-label="Zoom out">&minus;</button><button type="button" class="plain" id="home" aria-label="Whole world">&#8962;</button><button type="button" class="plain" id="relief" aria-label="Relief map with pieces. Press for the flat map." aria-pressed="true" hidden>&#9651;</button></div>
 <section id="card" class="glass" aria-live="polite"></section>
 <p id="note">Loading the map...</p>
 <span class="credit">Made with Natural Earth</span>
+</main>
 <script type="module" src="world.js"></script>
 </body>
 </html>
