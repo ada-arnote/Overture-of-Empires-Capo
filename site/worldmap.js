@@ -172,13 +172,15 @@ export function worldMap(canvas, world, o) {
       f.box = [Math.min(f.box[0], p.box[0]), Math.min(f.box[1], p.box[1]), Math.max(f.box[2], p.box[2]), Math.max(f.box[3], p.box[3])];
     }
     const inner = new Path2D(), outer = new Path2D(), coast = new Path2D(), mine = new Path2D(), front = new Path2D(), me = o.mine?.(), wars = new Set((o.wars?.() || []).flatMap(([x, y]) => [`${x}|${y}`, `${y}|${x}`]));
+    const ally = new Path2D(), friends = new Set(o.allies?.() || []); // keyless hook: the outer edge of the countries pledged to the player
     world.sides.forEach((ids, k) => {
       if (ids.length === 2 && wars.has(`${owners.get(ids[0])}|${owners.get(ids[1])}`)) front.addPath(world.lines[k]); // a front: where two countries at war meet
       (ids.length < 2 ? coast : owners.get(ids[0]) === owners.get(ids[1]) ? inner : outer).addPath(world.lines[k]);
       // the edge of the player's land, coast included, outlined in silver
       if (me && ids.some((id) => owners.get(id) === me) && !(ids.length === 2 && owners.get(ids[0]) === owners.get(ids[1]))) mine.addPath(world.lines[k]);
+      if (friends.size && ids.some((id) => friends.has(owners.get(id))) && !(ids.length === 2 && owners.get(ids[0]) === owners.get(ids[1]))) ally.addPath(world.lines[k]); // keyless hook
     });
-    layers = { owners, fills, inner, outer, coast, mine, front };
+    layers = { owners, fills, inner, outer, coast, mine, front, ally };
     if (lit) { // the lit map's colours: one texel a province
       const bytes = new Uint8Array(world.provinces.size * 4);
       for (const p of world.provinces.values()) { const c = rgbOf(o.colour?.(owners.get(p.id)) || ownerColour(owners.get(p.id))); bytes.set([c[0], c[1], c[2], 255], p.n * 4); }
@@ -240,7 +242,7 @@ export function worldMap(canvas, world, o) {
   // and the map is painted again once things are still.
   function paint() {
     const t0 = performance.now(), d = devicePixelRatio || 1, cw = base.width / d, ch = base.height / d, s = view.s, c = bctx;
-    const sig = `${o.mine?.() || ""}:${o.wars?.() || ""}:${[...world.provinces.keys()].map((id) => o.owner(id)).join()}`;
+    const sig = `${o.mine?.() || ""}:${o.wars?.() || ""}:${o.allies?.() || ""}:${[...world.provinces.keys()].map((id) => o.owner(id)).join()}`;
     if (!layers || sig !== signature) { build(); signature = sig; pieces = null; }
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.clearRect(0, 0, base.width, base.height);
@@ -279,6 +281,7 @@ export function worldMap(canvas, world, o) {
     if (lit) { c.strokeStyle = "rgba(24,18,14,.5)"; c.lineWidth = 3 / s; c.stroke(layers.outer); } // a firm border: ink under a pale line
     c.strokeStyle = lit ? "rgba(250,242,220,.86)" : "rgba(255,244,214,.7)"; c.lineWidth = (lit ? 1.2 : 1.4) / s; c.stroke(layers.outer);
     c.strokeStyle = "rgba(196,58,48,.95)"; c.lineWidth = 2.6 / s; c.setLineDash([5 / s, 3 / s]); c.stroke(layers.front); c.setLineDash([]);
+    if (o.allies) { c.strokeStyle = "rgba(8,34,20,.7)"; c.lineWidth = 4.6 / s; c.stroke(layers.ally); c.strokeStyle = "#84f2ae"; c.lineWidth = 2.4 / s; c.stroke(layers.ally); } // keyless hook: pledged partners in green
     if (o.mine?.()) { c.strokeStyle = "#dfe5ec"; c.lineWidth = 2.2 / s; c.stroke(layers.mine); }
     threads(c, s);
     labels(c, cw, ch, layers.owners);

@@ -16,6 +16,8 @@ import { keepSelf, selfLines, settleSelf } from "./scale.js";
 import { keepPacts, pactLines, settlePacts } from "./pacts.js";
 import { keepLands, polityLines } from "./polity.js";
 import { keepPace } from "./rivals.js";
+// keyless hook: pressure on the player by rule (pressure.js, rules version 6)
+import { keepPressure, pressureLines, settlePressure } from "./pressure.js";
 
 // Which of these systems a saved game has met. 1: gauges, causes, crises, ambitions, beats and the press.
 // 2: home politics, fog, scenes, the scale of play and means, clauses and spheres, scripted beats.
@@ -28,7 +30,7 @@ function terrainLines(g, geo) {
 }
 
 /** Lines for the turn prompt's FACTS. near: the countries beside the player's, by land or narrow sea. */
-export const moreFacts = (g, geo, near = []) => [...stateLines(g, geo, near), ...homeLines(g, geo), ...pactLines(g, geo, near), ...polityLines(g, geo), ...selfLines(g), ...ambitionLines(g, geo), ...crisisLines(g, geo), ...sceneLines(g), ...terrainLines(g, geo), ...beatLines(g, geo)];
+export const moreFacts = (g, geo, near = []) => [...stateLines(g, geo, near), ...homeLines(g, geo), ...pactLines(g, geo, near), ...polityLines(g, geo), ...selfLines(g), ...ambitionLines(g, geo), ...crisisLines(g, geo), ...pressureLines(g, geo), ...sceneLines(g), ...terrainLines(g, geo), ...beatLines(g, geo)];
 
 /**
  * An order by card for one of these systems, tied to the action that carries it: {kind, text, ...}. One of a kind
@@ -44,8 +46,9 @@ export function plan(g, p) { g.plans = [...(g.plans || []).filter((x) => !(x.kin
 export function settleMore(g, receipt, to, geo, actions = []) {
   const plans = (g.plans || []).filter((p) => actions.includes(p.text)), crisis = settleCrisis(g, to, geo, actions);
   const pacts = settlePacts(g, [...receipt, ...crisis], to, geo, plans), unrest = settleUnrest(g, to, geo, plans), scene = settleScene(g, geo);
-  const all = [...receipt, ...crisis, ...pacts, ...unrest, ...scene.lines];
-  const lines = [...crisis, ...pacts, ...unrest, ...scene.lines, ...settleState(g, all, to, geo), ...settleHome(g, to, geo), ...settleSelf(g, to, scene.means)];
+  const press = settlePressure(g, [...receipt, ...crisis], to, geo); // keyless hook
+  const all = [...receipt, ...crisis, ...pacts, ...unrest, ...scene.lines, ...press];
+  const lines = [...crisis, ...pacts, ...unrest, ...scene.lines, ...press, ...settleState(g, all, to, geo), ...settleHome(g, to, geo), ...settleSelf(g, to, scene.means)];
   lines.push(...settleAmbition(g, [...receipt, ...lines], to, geo));
   settleFog(g, to);
   noteBeat(g);
@@ -73,5 +76,5 @@ export function keepMore(s, isProvince, known0) {
   const beats = (Array.isArray(s.beats) ? s.beats : []).filter((b) => Array.isArray(b) && (BEATS.some(([id]) => id === b[0]) || /^s\d{1,2}$/.test(b[0])) && Number.isInteger(b[1])).slice(-BEATS.length - 12);
   const plans = (Array.isArray(s.plans) ? s.plans : []).filter((p) => p && typeof p.text === "string" && ["quell", "terms", "pact"].includes(p.kind) && (p.kind !== "pact" || (known(p.target) && ["peace", "tribute", "stop"].includes(p.sub)))).slice(0, 12).map((p) => ({ kind: p.kind, text: p.text.slice(0, 300), ...(p.kind === "pact" ? { sub: p.sub, target: p.target } : {}) }));
   const script = keepScript(s.script), note = moreNote(s);
-  return { ...s, ...keepState(s, known), ...keepCrisis(s, known, isProvince), ...keepAmbition(s, isProvince), ...keepHome(s, known, isProvince), ...keepFog(s, known), ...keepScene(s), ...keepSelf(s), ...keepPacts(s, known), ...keepPace(s), beats, plans, ...(script.length ? { script } : { script: undefined }), ...(note ? { told: note === NOTE ? 1 : 2 } : {}), more: MORE };
+  return { ...s, ...keepState(s, known), ...keepCrisis(s, known, isProvince), ...keepAmbition(s, isProvince), ...keepHome(s, known, isProvince), ...keepFog(s, known), ...keepScene(s), ...keepSelf(s), ...keepPacts(s, known), ...keepPace(s), ...keepPressure(s, known, isProvince), beats, plans, ...(script.length ? { script } : { script: undefined }), ...(note ? { told: note === NOTE ? 1 : 2 } : {}), more: MORE };
 }

@@ -47,6 +47,16 @@ const pos = (T) => view(T.match.position);
 /** An order of this browser's person: in a game for two it names its seat and goes to the live table (or, played on alone, to the table here). */
 const act = (T, m) => { const p = T.match.position; if (!p.people) return T.play(m); if (net && !net.alone) return void net.order(m); return T.play({ ...m, by: net ? net.seat : p.human }); };
 const keepTips = () => { try { localStorage.setItem(TIPS_KEY, tips ? "on" : "off"); } catch { /* the tips still work for this visit */ } };
+// the ink you chose and the share on the slider are kept in this browser, so a reload and Continue keep them
+const CHOICE_KEY = "capo-inch-choice";
+const keepChoice = () => { try { localStorage.setItem(CHOICE_KEY, JSON.stringify({ ink, pct })); } catch { /* kept for this visit only */ } };
+(() => {
+  try {
+    const o = JSON.parse(localStorage.getItem(CHOICE_KEY) || "null");
+    if (o?.ink === "draw" || (Number.isInteger(o?.ink) && o.ink >= 0 && o.ink < INKS.length)) ink = o.ink;
+    if (PCTS.includes(o?.pct)) pct = o.pct;
+  } catch { /* nothing kept: the ink is drawn and the share is 40% */ }
+})();
 
 /** Colours for every nation: yours first, the rest spread round the wheel, never a near twin of yours, in two lightnesses
  *  so that nations sharing one of the six seat patterns also differ in lightness. */
@@ -147,7 +157,7 @@ function controls(T) {
   const row = el("label", undefined, "live-row"), slider = el("input"), out = el("output"), btns = el("div", undefined, "go"), pause = button("Pause"), city = button("Build a city");
   Object.assign(slider, { type: "range", min: "0", max: String(PCTS.length - 1), step: "1", value: String(PCTS.indexOf(pct)) });
   slider.setAttribute("aria-label", "Share of your strength to send");
-  slider.oninput = () => { pct = PCTS[Number(slider.value)]; out.textContent = `${pct}%`; slider.setAttribute("aria-valuetext", `${pct}%`); if (T.match) T.refresh(); };
+  slider.oninput = () => { pct = PCTS[Number(slider.value)]; keepChoice(); out.textContent = `${pct}%`; slider.setAttribute("aria-valuetext", `${pct}%`); if (T.match) T.refresh(); };
   out.textContent = `${pct}%`;
   row.append(el("span", "Send"), slider, out);
   pause.onclick = () => {
@@ -429,7 +439,7 @@ function guide(T, p, b) {
 function inkSheet(T) {
   const p = pos(T), body = el("div", undefined, "stack"), list = el("div", undefined, "pick list inks");
   list.setAttribute("role", "radiogroup"); list.setAttribute("aria-label", "Your ink");
-  const draw = () => radio(list, [{ value: "draw", label: "Draw for me", note: `The game drew ${INKS[p.ink[p.human]].name}: ${INKS[p.ink[p.human]].line}` }, ...INKS.map((k, v) => ({ value: String(v), label: k.name, note: k.line, rgb: k.rgb }))], String(ink), (v) => { ink = v === "draw" ? v : Number(v); draw(); T.refresh(); });
+  const draw = () => radio(list, [{ value: "draw", label: "Draw for me", note: `The game drew ${INKS[p.ink[p.human]].name}: ${INKS[p.ink[p.human]].line}` }, ...INKS.map((k, v) => ({ value: String(v), label: k.name, note: k.line, rgb: k.rgb }))], String(ink), (v) => { ink = v === "draw" ? v : Number(v); keepChoice(); draw(); T.refresh(); });
   draw();
   body.append(el("p", "Every nation has an ink with one rule. Choose yours, then choose where to start."), list);
   sheet("Choose your ink", body, "Choose where to start");
@@ -507,6 +517,7 @@ export function panel(T) {
   c.ink.hidden = !spawning || !p.choose;
   c.list.hidden = c.head.hidden = c.go.hidden = out;
   $("leaders").hidden = spawning;
+  if (spawning) c.pact.hidden = c.pactSay.hidden = true; // no truce to offer before anyone has land: no empty button under Start
   if (spawning && p.land[s]) { // inchlive hook: in a game for two, you have started and your friend is still choosing
     state("Your friend is choosing where to start. The clock starts when you both have.");
     c.heading.textContent = ""; c.list.hidden = c.head.hidden = c.go.hidden = c.ink.hidden = true; c.due.hidden = c.runs.hidden = c.me.hidden = true;

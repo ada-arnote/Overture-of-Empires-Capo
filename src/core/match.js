@@ -12,6 +12,8 @@
 //   apply(position, move, dice) -> { position, events }
 //   result(position)     { winners: [seat], why } when over, else null
 //   allows(position, move) optional: a quick yes or no, for games whose list of moves is long
+//   draws(move)          optional: true when the move shows something hidden without throwing dice (a card from a
+//                        deck shuffled at setup). Such a move counts as rolled, so take back stops at it.
 import { canon, deepFreeze } from "./canon.js";
 import { fingerprint } from "./digest.js";
 import { chance, seedState } from "./random.js";
@@ -106,8 +108,8 @@ export function createMatch(game, { options = {}, seed = "", salts = [] } = {}) 
       mixed.push(used ? salt : "");
       return now().events;
     },
-    /** Whether the last move rolled any dice. In a game between people such a move is not taken back. */
-    get rolled() { const n = steps.length; return n > 1 && steps[n - 1].dice.join() !== steps[n - 2].dice.join(); },
+    /** Whether the last move rolled any dice, or drew something hidden (game.draws). In a game between people such a move is not taken back. */
+    get rolled() { const n = steps.length; return n > 1 && (steps[n - 1].dice.join() !== steps[n - 2].dice.join() || !!game.draws?.(played[n - 2])); },
     /** Take back the last move. Playing it again rolls the same dice. */
     undo() {
       if (!played.length) return false;

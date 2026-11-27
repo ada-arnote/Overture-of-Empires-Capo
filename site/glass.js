@@ -106,6 +106,8 @@ $("seats").after(costs, rolls);
 function card(T) {
   const p = T.match.position, me = T.human() ? p.seat : T.kinds.indexOf("you");
   costs.hidden = T.demo || me < 0 || T.match.turn === null;
+  const key = document.querySelector(".board-key"); // the board's goods key, at the foot of the stage (hexboard.js)
+  if (key) key.style.marginLeft = "";
   if (costs.hidden) { rolls.hidden = true; return; }
   costs.replaceChildren(el("h2", "Costs"), ...buildsOf(p).map((k) => {
     const short = p.phase === "open" ? "" : missing(p.hands[me], k), row = el("p", undefined, short ? "short" : ""); // the opening is free
@@ -123,6 +125,9 @@ function card(T) {
   rolls.replaceChildren(el("h2", "Rolls"), histogram(p));
   const at = rolls.getBoundingClientRect();
   if (at.height && seats.height && seats.bottom + 8 > at.top) rolls.hidden = true;
+  // the rolls card stands beside the zoom row; the goods key moves along to start clear of it, never under it
+  const k = key?.getBoundingClientRect();
+  if (k?.width && !rolls.hidden && at.width && k.left < at.right && k.right > at.left && k.top < at.bottom && k.bottom > at.top) key.style.marginLeft = `${Math.ceil(at.right + 8 - k.left)}px`;
 }
 
 /** The rolls so far as bars, one for each number, with a line on each where the long run would put it. */
@@ -168,7 +173,7 @@ const LESSON = {
     { at: (T) => (pos(T).opened % 2 ? $("wheres") : richest(T)), or: () => $("wheres"), done: (T, ev) => has(ev, "route"),
       say: (T) => (pos(T).opened % 2 ? "Now a route, on a hex beside your depot. Routes are how you reach new hexes to build on." : "Place your first depot, on the board or in the list. It gathers from its own hex and the six around it. A hex's number is the roll that makes it yield; red 6 and 8 come up most.") },
     { when: (T) => pos(T).phase === "open", at: (T) => (pos(T).opened % 2 ? $("wheres") : richest(T)), or: () => $("wheres"), done: (T) => pos(T).phase !== "open",
-      say: (T) => (pos(T).opened % 2 ? "And its route. Then the game begins." : "The bot has placed twice. Now your second depot: it starts you with one good for every hex around it.") },
+      say: (T) => (pos(T).opened % 2 ? "And its route. Then the game begins." : "The bot has placed twice. Now your second depot: in this lesson it starts you with one good for every hex around it, a richer start than a Traditional game, where it gives one of each good beside it.") },
     { when: (T) => pos(T).phase === "main", at: (T) => pos(T).lit[0] ?? $("status"), or: () => $("info"), next: true,
       say: (T) => { const p = pos(T), [a, b] = p.roll || [0, 0]; return `Each turn starts with a roll: ${a} and ${b} make ${a + b}. Every hex with that number gives its good to each depot on it or beside it, two to a town. Your goods are counted in the panel.`; } },
     { when: (T) => pos(T).phase === "main", at: () => tab("trade"), next: true, done: (T, ev) => has(ev, "swap", "ask", "post", "take", "sell", "buy"),
@@ -182,7 +187,7 @@ const LESSON = {
     { when: (T) => pos(T).round > 1 && pos(T).phase === "main", at: () => $("info"), next: true,
       say: `Awards are 2 points each, for whoever leads: the Great Road for ${AWARD.road} routes joined, the Toll Warden for ${AWARD.warden} tolls played. A plan costs ${costText(COST.plan)}: free routes, goods, a toll, or a point.` },
     { at: () => $("round"), next: true,
-      say: (T) => `The first to ${goalOf(pos(T))} points wins: a depot is 1, a town 2, an award 2, a seal 1. The goal stays at the top of the screen. That is the lesson; play on.` },
+      say: (T) => `The first to ${goalOf(pos(T))} points wins: a depot is 1, a town 2, an award 2, a seal 1. The lesson is a short game on a small island; a Traditional game plays to 10. The goal stays at the top of the screen. That is the lesson; play on.` },
   ],
 };
 
@@ -336,6 +341,7 @@ createTable({
     if (places && !m && where === null) none = "Choose a hex, on the board or in the list";
     const rank = (x) => (x.do === "depot" && x.at !== undefined ? -worth(p, x.at) : 0);
     $("wheres").hidden = !values.length;
+    $("wheres").classList.toggle("answers", p.phase === "answer");
     radio($("wheres"), [...[...list].sort((x, y) => rank(x) - rank(y)).map((x) => ({ value: keyOf(x), label: label(p, x), note: x.at === undefined ? undefined : `${yields(p, x.at, x.do === "depot")}${x.do === "depot" ? `: ${worth(p, x.at)} goods in 36 rolls` : ""}` })), ...extra], where, (v) => { where = v; T.refresh(); });
     $("desk").hidden = !rows.length;
     $("desk").replaceChildren(...rows);

@@ -57,13 +57,15 @@ export function settleAmbition(g, receipt, to, geo) {
     if ((kind === "took" && x === me) || (kind === "gave" && y === me)) t.won++;
     if ((kind === "took" && y === me) || (kind === "gave" && x === me)) t.lost++;
   }
+  // keyless hook: a country that holds no land is over (rules version 6); the world may still be watched
+  if (g.mode !== "citizen" && !g.over && geo.holds(me) === 0) { g.over = { turn: g.turn, date: to }; g.goal = null; return [{ ok: true, country: me, text: `${geo.name(me)}: holds no land; its story as a country ends here`, over: 1 }]; }
   if (!a) return [];
   if (a.broken?.(g, geo, o)) o.mark = to;
   const p = progress(g, geo, to);
   if (p.have < p.need) return [];
   g.done = [...(g.done || []), { id: o.id, said: p.said, turn: g.turn, date: to }].slice(-12);
   g.goal = null;
-  return [{ ok: true, country: me, text: `${geo.name(me)}: its ambition is met, "${p.title}" (${p.said.toLowerCase()})` }];
+  return [{ ok: true, country: me, text: `${geo.name(me)}: its ambition is met, "${p.title}" (${p.said.toLowerCase()})`, met: o.id }];
 }
 
 /** A line for the prompt: the ambition and how far along it is. */
@@ -91,5 +93,6 @@ export function keepAmbition(s, isProvince) {
   const goal = ok ? { id: o.id, since: o.since, mark: o.mark, base: int(o.base), need: o.need, ...(o.id === "restore" ? { ids: (Array.isArray(o.ids) ? o.ids : []).filter(isProvince).slice(0, 12) } : {}) } : null;
   const done = (Array.isArray(s.done) ? s.done : []).filter((d) => d && AMBITIONS[d.id] && typeof d.said === "string" && DATE.test(d.date || "")).map((d) => ({ id: d.id, said: d.said.slice(0, 120), turn: int(d.turn), date: d.date })).slice(-12);
   const t = s.tally, tally = t && typeof t === "object" && DATE.test(t.from || "") ? { from: t.from, base: int(t.base), wars: int(t.wars), won: int(t.won), lost: int(t.lost), pacts: int(t.pacts), peaces: int(t.peaces) } : undefined;
-  return { goal: goal && (goal.id !== "restore" || goal.ids.length === goal.need) ? goal : null, done, ...(tally ? { tally } : {}) };
+  const over = s.over && typeof s.over === "object" && DATE.test(s.over.date || "") ? { turn: int(s.over.turn), date: s.over.date } : undefined;
+  return { goal: goal && (goal.id !== "restore" || goal.ids.length === goal.need) ? goal : null, done, ...(tally ? { tally } : {}), over };
 }

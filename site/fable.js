@@ -10,6 +10,13 @@ import { hexBoard } from "./hexboard.js";
 
 const SEA = [72, 110, 122], SHALLOW = [98, 138, 146], GRASS = [[150, 186, 104], [142, 180, 98], [158, 190, 112]], RANK = ["", "Scout", "Guard", "Captain", "Marshal"];
 let source = null, where = null, build = "raise", give = null, sure = false; // source: "h12" a hall, "u7" a unit; give: the concede button, sure: tapped once
+/** Concede, once pressed, waits a few seconds for the second press; any other press, key or wheel puts it back, as E's question does. */
+function disarm(T) {
+  const off = (e) => { if (e?.target === give) return; stop(); if (sure) { sure = false; T.refresh(); } };
+  const stop = () => { clearTimeout(t); for (const k of ["pointerdown", "keydown", "wheel"]) removeEventListener(k, off, true); };
+  const t = setTimeout(off, 4000);
+  for (const k of ["pointerdown", "keydown", "wheel"]) addEventListener(k, off, true);
+}
 let guards = [], guardsShown = "", warned = -1; // guards: the numbers on rival land beside the chosen village or unit; warned: the move count when End turn last warned
 
 const legal = (T) => (T.ready() ? T.match.legal() : []);
@@ -142,8 +149,11 @@ function rivals(v) {
 function sail(n) {
   const v = island(n);
   if ($("sheet").open) $("sheet").close();
-  T.begin(createMatch(fable, { seed: v.seed, options: v.options }), v.kinds);
-  toast(`Island ${n} of ${ISLANDS}: ${v.name}. ${rivals(v)}. Par ${v.par} rounds.`);
+  // a game in progress is asked about first, as Play asks (table.js); a finished one is not kept, so the next island just sails
+  T.replacing(() => {
+    T.begin(createMatch(fable, { seed: v.seed, options: v.options }), v.kinds);
+    toast(`Island ${n} of ${ISLANDS}: ${v.name}. ${rivals(v)}. Par ${v.par} rounds.`);
+  });
 }
 function voyageSheet() {
   const log = voyage(), last = open(wonSteps()), box = el("div", undefined, "stack");
@@ -324,7 +334,7 @@ const T = createTable({
     if (!give) { give = el("button", "", "text"); give.type = "button"; $("end").parentNode.after(give); } // apart from End turn, and small: it ends your game
     give.hidden = !all.some((x) => x.do === "concede");
     give.textContent = sure ? "Concede: press again" : "Concede";
-    give.onclick = () => { if (!T.ready()) return; if (sure) T.play({ do: "concede" }); else { sure = true; T.refresh(); toast("Press Concede again to give up this game."); } }; // the second step is said, not only shown
+    give.onclick = () => { if (!T.ready()) return; if (sure) T.play({ do: "concede" }); else { sure = true; T.refresh(); toast("Press Concede again to give up this game."); disarm(T); } }; // the second step is said, not only shown
     // the guard on each rival hex beside the chosen land: red where this village or unit cannot take it
     const r = reach(p), rank = source?.[0] === "u" ? p.unit[Number(source.slice(1))] : 0, truce = p.rule.opening === "truce" && p.round === 1;
     guards = r ? [...r.edge].flatMap((c) => { const n = defence(p, c); return n ? [{ at: c, n, hot: truce || !rank || !beats(p, rank, n) }] : []; }) : [];

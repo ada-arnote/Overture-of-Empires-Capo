@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The stacking game (early), as its rules stand: the opening, each stone's moves, the height rule, strikes, topples,
-// drops, the swap, the Lodestone's safety, the end, replays from seed and moves, and bots that play whole legal games.
+// The stacking game (early), as its rules stand: the openings (Traditional, the small Capo set, free placement), each stone's
+// moves, the height rule, strikes, topples, drops, the swap, the Lodestone's safety, the ends, replays from seed and moves; the
+// search's own position against the rules, the bots' steps, hints, reviews and the puzzles.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { canon, createMatch, openSave } from "../src/core/index.js";
-import { COUNT, COURIER, LAYOUTS, LODE, LONGEST, PEBBLE, QUIET, SLINGER, WARDEN, boardOf, cellAt, hasMove, legalOf, lodeOf, nameOf, stacking, stoneOf, stonesOf, threatened } from "../src/games/stacking/rules.js";
-import { TIERS, choose, evaluate } from "../src/games/stacking/bot.js";
+import { canon, chance, createMatch, openSave, seedState } from "../src/core/index.js";
+import { COUNT, COURIER, LAYOUTS, LAYOUTS_SMALL, LODE, LONGEST, PEBBLE, PLACE_LEAST, QUIET, SLINGER, SMALL, WARDEN, boardOf, cellAt, countOf, firstOf, hasMove, legalOf, lodeOf, make as makeRule, nameOf, stacking, stoneOf, stonesOf, threatened } from "../src/games/stacking/rules.js";
+import { STEPS, TIERS, choose, deciding, drain, hinting, reviewing, why } from "../src/games/stacking/bot.js";
+import { evaluate, flat, legal, make, moveOf, think, unmake } from "../src/games/stacking/search.js";
+import { PUZZLES, optionOf } from "../src/games/stacking/puzzles.js";
 import { botGame, inList } from "./fixtures/bots.js";
 
 const start = (seed = "s", options = {}) => createMatch(stacking, { seed, options });
@@ -166,7 +169,7 @@ test("the swap: after the first move the second player may take the side that mo
   assert.equal(p.south, 1);
   p.cells.forEach((c, i) => assert.deepEqual(c.map((st) => (st + 5) % 10), before.cells[i]));
   assert.ok(!m.legal().some((x) => x.do === "swap"), "once only");
-  const off = start("sw", { layout: 0, swap: false });
+  const off = start("sw", { style: "custom", layout: 0, swap: false });
   off.play(off.legal()[0]);
   assert.ok(!off.legal().some((x) => x.do === "swap"));
 });
@@ -175,7 +178,7 @@ test("quiet turns and the longest game end in a draw", () => {
   const p = bare([...LODES, [0, PEBBLE, -2, 2], [1, PEBBLE, 2, -2]], { quiet: QUIET - 1 });
   const q = stacking.apply(p, legalOf(p).find((m) => m.do === "move")).position;
   assert.deepEqual(q.over.winners, [0, 1]);
-  const r = bare([...LODES, [0, PEBBLE, -2, 2], [1, PEBBLE, 2, -2]], { ply: LONGEST - 1 });
+  const r = bare([...LODES, [0, PEBBLE, -2, 2], [1, PEBBLE, 2, -2]], { ply: LONGEST - 1, rule: { ...start("x", { style: "custom" }).position.rule, limit: 0 } }); // Custom with no count
   assert.deepEqual(stacking.apply(r, legalOf(r).find((m) => m.do === "move")).position.over.winners, [0, 1]);
 });
 
@@ -190,18 +193,187 @@ test("positions are whole numbers and plain data; a seed and the moves replay th
   canon(m.position);
 });
 
-test("bots play whole legal games to an end, easy against easy and normal against easy", () => {
-  assert.deepEqual(TIERS, ["easy", "normal"]);
-  for (const [seed, tiers] of [["b1", ["easy"]], ["b2", ["easy"]], ["b3", ["normal", "easy"]]]) {
-    const m = botGame(stacking, choose, { seed, tiers, each: (x) => { for (const s of [0, 1]) assert.ok(stonesOf(x.position, s) >= 1 && lodeOf(x.position, s) >= 0); } });
+test("bots play whole legal games to an end at every step", () => {
+  assert.deepEqual(TIERS, ["easy", "normal", "hard", "master"]);
+  for (const [seed, tiers, style] of [["b1", ["easy"], "classic"], ["b2", ["easy", "normal"], "ours"], ["b3", ["normal", "easy"], "classic"], ["b4", ["hard", "gentle"], "ours"]]) {
+    const m = botGame(stacking, choose, { seed, tiers, options: { style }, each: (x) => { for (const s of [0, 1]) assert.ok(stonesOf(x.position, s) >= 1 && lodeOf(x.position, s) >= 0); } });
     assert.ok(m.result, `${seed} ended`);
     assert.ok(m.list.length <= LONGEST);
   }
 });
 
-test("the normal bot takes a free stone and the evaluation counts it", () => {
+test("the normal bot takes a free stone and the count holds it", () => {
   const p = bare([...LODES, [0, PEBBLE, 0, 0], [1, COURIER, 0, -1]]);
   const m = choose(p, { below: () => 0 }, "normal");
   assert.deepEqual(m, { do: "strike", from: at(0, 0), to: at(0, -1) });
-  assert.ok(evaluate(stacking.apply(p, m).position, 0) > evaluate(p, 0));
+  const f = flat(p), before = evaluate(f);
+  make(f, think(f, { budget: 2000 }).move);
+  assert.ok(-evaluate(f) > before, "the side that took is better off");
+});
+
+// ---- version 2: the small Capo set, free placement, the count, Custom
+
+test("the Capo set: 37 cells, nine stones a side in three home rows, mirrored, drawn from the seed", () => {
+  const seen = new Set();
+  for (let i = 0; i < 24; i++) {
+    const p = start(`c${i}`, { style: "ours" }).position, b = boardOf(3);
+    assert.equal(p.cells.length, 37);
+    seen.add(p.layout);
+    for (const s of [0, 1]) {
+      const kinds = [0, 0, 0, 0, 0];
+      p.cells.forEach((c, j) => { for (const st of c) if (Math.floor(st / 5) === s) { kinds[st % 5]++; const r = b.cells[j][1]; assert.ok(s === 0 ? r >= 1 : r <= -1, "home rows"); } });
+      assert.deepEqual(kinds, SMALL);
+    }
+    p.cells.forEach((c, j) => { const [q, r] = b.cells[j], o = p.cells[cellAt(-q, -r, 3)]; assert.equal(c.length, o.length); if (c.length) assert.equal(c[0] % 5, o[0] % 5); });
+    assert.ok(!threatened(p, 0) && !threatened(p, 1));
+    assert.deepEqual(p.rule, { size: 3, opening: "set", swap: true, limit: 30, drops: true, topple: true, extra: false });
+    assert.equal(firstOf(p), 2, "2 added for the first player on the small board");
+  }
+  assert.equal(seen.size, LAYOUTS_SMALL.length);
+  assert.equal(nameOf(start("n", { style: "ours" }).position, cellAt(0, -3, 3)), "A1");
+  assert.equal(new Set(boardOf(3).cells.map((_, i) => nameOf({ size: 3 }, i))).size, 37);
+});
+
+test("Traditional keeps the settled game: the same twelve stones in the same set layouts", () => {
+  for (let layout = 0; layout < 3; layout++) {
+    const p = start("t", { layout }).position;
+    assert.equal(p.cells.length, 61);
+    for (const [kind, q, r] of LAYOUTS[layout].stones) assert.deepEqual(p.cells[at(q, r)], [stoneOf(0, kind)]);
+    assert.equal(stonesOf(p, 1), COUNT.reduce((a, b) => a + b, 0));
+    assert.equal(p.rule.limit, 40, "version 3: a count after 40 turns each");
+  }
+});
+
+test("the count at a turn limit: each stack a side tops counts its height", () => {
+  const p = bare([...LODES, [0, PEBBLE, 0, 0], [0, PEBBLE, 0, 0], [1, PEBBLE, 2, -2]], { rule: { ...start("x").position.rule, limit: 3 }, ply: 5, began: 0 });
+  assert.equal(countOf(p, 0), 3);
+  assert.equal(countOf(p, 1), 2);
+  const q = stacking.apply(p, legalOf(p).find((m) => m.do === "move" && m.from === at(-4, 4))).position;
+  assert.deepEqual(q.over, { winners: [0], why: "after 3 turns each, tiers topped 4 to 2 with the first player's 1" }); // 1 added on the large board
+  const tie = (more = {}) => bare([...LODES, [0, PEBBLE, -2, 2], [1, PEBBLE, 2, -2], [1, PEBBLE, 2, -2]], { rule: p.rule, ply: 5, began: 0, ...more }); // 2 + 1 against 3
+  const end = (r) => stacking.apply(r, legalOf(r).find((m) => m.do === "move" && m.from === at(-4, 4))).position.over;
+  assert.deepEqual(end(tie()), { winners: [1], why: "after 3 turns each, tiers topped 3 to 3 with the first player's 1, and more stones held" });
+  assert.deepEqual(end(tie({ pouch: [[0, 0, 0, 0, 1], [0, 0, 0, 0, 0]] })), { winners: [0, 1], why: "after 3 turns each, tiers topped 3 to 3 with the first player's 1, and stones held level" });
+  const t = bare([...LODES, [1, PEBBLE, 2, -2], [1, PEBBLE, 2, -2], [1, PEBBLE, 2, -2], [1, PEBBLE, 1, -1], [1, PEBBLE, 0, -1]], { rule: p.rule, ply: 5, began: 0 }); // 1 + 2 against 6
+  assert.deepEqual(end(t).winners, [1]);
+});
+
+test("free placement: the Lodestone first, home rows only, a stop after eight, the rest to the pouch", () => {
+  const m = start("free", { opening: "free" });
+  let p = m.position;
+  assert.equal(p.phase, "place");
+  assert.ok(m.legal().every((x) => x.do === "place" && x.kind === LODE && p.cells[x.to].length === 0 && boardOf().cells[x.to][1] >= 2));
+  const d = chance(seedState("free"));
+  while (m.position.phase === "place") {
+    p = m.position;
+    const all = m.legal(), s = p.seat, places = all.filter((x) => x.do === "place"), stop = all.find((x) => x.do === "stop");
+    if (p.placed[s] < PLACE_LEAST && places.length) assert.ok(!stop, "no stop before eight");
+    if (p.placed[s] > 0) assert.ok(places.every((x) => x.kind !== LODE));
+    m.play(stop && p.placed[s] >= 9 ? stop : places.length ? places[d.below(places.length)] : stop);
+    for (const t of [0, 1]) assert.ok(m.position.phase !== "place" || !threatened({ ...m.position, phase: "play" }, t), "nothing put down strikes a Lodestone");
+  }
+  p = m.position;
+  assert.equal(p.seat, 0);
+  assert.equal(p.began, p.ply);
+  for (const s of [0, 1]) assert.equal(stonesOf(p, s), 12);
+  assert.equal(p.pouch[0].reduce((a, b) => a + b, 0), 3, "nine placed, three in the pouch");
+  m.play(m.legal().find((x) => x.do === "move"));
+  assert.ok(m.isLegal({ do: "swap" }), "the swap comes after the first move of play");
+  assert.ok(botGame(stacking, choose, { seed: "fb", tiers: ["normal", "easy"], options: { style: "custom", size: 3, opening: "free", limit: 30 } }).result);
+});
+
+test("Custom switches: no drops, an extra Pebble for the second player, the small board", () => {
+  const p = start("cu", { style: "custom", size: 3, drops: false, extra: true, limit: 20 }).position;
+  assert.equal(p.cells.length, 37);
+  assert.deepEqual(p.pouch[1], [0, 0, 0, 0, 1]);
+  assert.equal(p.rule.limit, 20);
+  const q = bare([...LODES, [0, PEBBLE, 0, 0]], { rule: { ...p.rule, size: 4, drops: false } });
+  q.pouch[0][COURIER] = 1;
+  assert.ok(!legalOf(q).some((m) => m.do === "drop"));
+});
+
+test("the search's flat position makes the same moves as the rules, and make and unmake leave it as it was", () => {
+  let checked = 0;
+  for (const style of ["ours", "classic"]) for (let g = 0; g < 4; g++) {
+    const m = createMatch(stacking, { seed: `eq${g}`, options: { style } }), d = chance(seedState(`e${g}`));
+    while (m.turn !== null && m.list.length < 120) {
+      const p = m.position, f = flat(p), want = legalOf(p).map(canon).sort(), got = legal(f).map((c) => canon(moveOf(f, c))).sort();
+      assert.deepEqual(got, want);
+      const before = canon([[...f.st], [...f.h], [...f.pouch], f.hash, f.lode, f.seat, f.south]);
+      for (const c of legal(f)) { make(f, c); unmake(f); }
+      assert.equal(canon([[...f.st], [...f.h], [...f.pouch], f.hash, f.lode, f.seat, f.south]), before);
+      checked++;
+      const all = m.legal();
+      m.play(g % 2 ? all[d.below(all.length)] : choose(p, d, "easy"));
+    }
+  }
+  assert.ok(checked > 300, `${checked} positions`);
+});
+
+test("the search is held to a count of positions, not time: the same seed gives the same move", () => {
+  const p = start("det", { style: "ours" }).position;
+  for (const tier of ["normal", "hard"]) {
+    const a = think(flat(p), { ...STEPS[tier], seed: 9 }), b = think(flat(p), { ...STEPS[tier], seed: 9 });
+    assert.equal(a.move, b.move);
+    assert.ok(a.nodes <= STEPS[tier].budget + 400, `${a.nodes} positions`);
+  }
+  const o = { ...STEPS.normal, seed: 4 }; // the worker and the page run the same code from the same settings
+  assert.deepEqual(drain(deciding(p, o)), drain(deciding(p, o)));
+});
+
+test("puzzles: each has exactly one first move that traps in time, whatever the reply, and the hard bot finds it", () => {
+  const trapped = (f) => legal(f).length === 0;
+  const in1 = (f) => legal(f).filter((c) => { make(f, c); const t = trapped(f); unmake(f); return t; });
+  const in2 = (f, c) => { make(f, c); let ok = !trapped(f); if (ok) for (const r of legal(f)) { make(f, r); const t = in1(f).length > 0; unmake(f); if (!t) { ok = false; break; } } unmake(f); return ok; };
+  for (const z of PUZZLES) {
+    const m = createMatch(stacking, { seed: "pz", options: { style: "custom", size: 3, puzzle: optionOf(z) } }), p = m.position, f = flat(p);
+    assert.equal(p.seat, z.seat);
+    const solving = z.turns === 1 ? in1(f) : legal(f).filter((c) => in2(f, c));
+    assert.equal(solving.length, 1, z.name);
+    assert.deepEqual(moveOf(f, solving[0]), z.answer, z.name);
+    if (z.turns === 2) assert.equal(in1(f).length, 0, `${z.name}: no trap in one`);
+    assert.deepEqual(choose(p, chance(seedState("s")), "hard"), z.answer, `${z.name}: the hard bot finds it`);
+    m.play(z.answer); // then the hard bot's best defence, then the trap
+    while (m.turn !== null) m.play(choose(m.position, chance(seedState("d")), "hard"));
+    assert.deepEqual(m.result.winners, [z.seat], z.name);
+  }
+  // a puzzle not solved in time is lost
+  const z = PUZZLES[0], m = createMatch(stacking, { seed: "pz", options: { style: "custom", size: 3, puzzle: optionOf(z) } });
+  m.play(m.legal().find((x) => canon(x) !== canon(z.answer)));
+  if (m.turn !== null) m.play(m.legal()[0]);
+  assert.deepEqual(m.result?.winners, [1 - z.seat]);
+});
+
+test("the steps climb: each beats the one below in most games", () => {
+  const score = (a, b, n, style) => {
+    let won = 0;
+    for (let i = 0; i < n; i++) {
+      const tiers = i % 2 ? [b, a] : [a, b], g = botGame(stacking, choose, { seed: `ladder ${style} ${i}`, tiers, options: { style } });
+      if (g.result.winners.length === 1 && tiers[g.result.winners[0]] === a) won++;
+    }
+    return won;
+  };
+  assert.ok(score("normal", "easy", 6, "ours") >= 5, "normal over easy");
+  assert.ok(score("easy", "gentle", 6, "ours") >= 4, "easy over the lesson's gentle bot");
+});
+
+test("a hint names the move and says why; a trap is called a trap", () => {
+  const z = PUZZLES[1], p = createMatch(stacking, { seed: "h", options: { style: "custom", size: 3, puzzle: optionOf(z) } }).position;
+  const h = drain(hinting(p, 3));
+  assert.deepEqual(h.move, z.answer);
+  assert.match(h.why, /traps the rival Lodestone/);
+  const q = bare([...LODES, [0, PEBBLE, 0, 0], [1, COURIER, 0, -1]]);
+  assert.match(why(q, { do: "strike", from: at(0, 0), to: at(0, -1) }), /takes their Courier/);
+  assert.equal(drain(hinting(start("f", { opening: "free" }).position, 1)), null, "no hints while placing");
+});
+
+test("the review marks a missed trap", () => {
+  const z = PUZZLES[0], m = createMatch(stacking, { seed: "rv", options: { style: "custom", size: 3, puzzle: optionOf(z) } });
+  m.play(m.legal().find((x) => canon(x) !== canon(z.answer)));
+  while (m.turn !== null) m.play(choose(m.position, chance(seedState("r")), "normal"));
+  const marks = drain(reviewing({ seed: m.seed, options: m.options, moves: m.list }, [z.seat]));
+  assert.equal(marks[0].n, 1);
+  assert.equal(marks[0].trap, 1);
+  assert.deepEqual(marks[0].best, z.answer);
+  assert.ok(makeRule && hasMove && QUIET && SLINGER && WARDEN); // the rules' exports the cases above lean on
 });

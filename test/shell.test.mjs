@@ -3,7 +3,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DEFAULTS, parseSettings, ranked, resultText, takeBack, turnKey } from "../site/shell.js";
-import { createMatch } from "../src/core/index.js";
+import { chance, createMatch, seedState } from "../src/core/index.js";
+import { glass } from "../src/games/glass/rules.js";
+import { choose } from "../src/games/glass/bot.js";
 
 test("settings fall back to their defaults for anything missing or strange", () => {
   assert.deepEqual(parseSettings(null), DEFAULTS);
@@ -76,4 +78,14 @@ test("take back stops at chance and at other seats' moves, and the game still re
   const again = createMatch(toy, { seed: "s" });
   for (const mv of m.list) again.play(mv);
   assert.equal(again.fingerprint(), m.fingerprint());
+});
+
+test("take back stops at a drawn plan in Grain and Glass: the deck was shuffled at setup, so no dice change, but the card was seen", () => {
+  const m = createMatch(glass, { seed: "peek", options: { seats: 3, style: "classic" } }), dice = chance(seedState("bots/peek")), kinds = ["you", "you", "you"];
+  while (m.turn !== null && !m.legal().some((x) => x.do === "plan")) m.play(choose(m.position, dice, "normal"));
+  assert.ok(m.turn !== null, "a plan could be drawn at some point");
+  const top = m.position.deck.at(-1);
+  m.play({ do: "plan" });
+  assert.equal(m.rolled, true, "the draw counts as chance");
+  assert.equal(takeBack(m, kinds), "chance", `the ${top} plan, once seen, is not taken back`);
 });
