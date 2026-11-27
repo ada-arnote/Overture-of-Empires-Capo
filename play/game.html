@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-8GQEI3/M7EHQbox5eXvQXU5+etqwItiPRSzhW5ErANA='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https://openrouter.ai https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.mistral.ai https://api.deepseek.com https://api.together.xyz https://api.cerebras.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-10tcWCXSAqA0OaeN2m+fvchC+9sKp5O4Z2cXi685Tyk='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https://openrouter.ai https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.mistral.ai https://api.deepseek.com https://api.together.xyz https://api.cerebras.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo, the story game · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -248,7 +248,7 @@ h1 { font-size: clamp(2.6rem, 1.1rem + 5vw, 5.5rem); line-height: 1; letter-spac
 .ranks th, .ranks td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--edge-soft) } .ranks tr:first-child th { color: var(--text-3) }
 .ranks th[scope=row] { font: 400 19px var(--display) } .ranks canvas { width: 24px; height: 24px; vertical-align: -6px; margin-right: 8px } .ranks .won { color: var(--tone) } .ranks small { color: var(--text-3); font: var(--fs-1) var(--sans) }
 #chart { display: block; width: 100%; height: 120px; margin-bottom: 14px; border-radius: var(--r-1); background: var(--raise) } .end #chart { height: auto; aspect-ratio: 880 / 280 }
-.end .ends { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: var(--sp-2); padding: 10px 0; background: inherit } .end .minor { position: static; justify-content: center; gap: 28px }
+.end .ends { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: var(--sp-2); padding: 10px 0; background: var(--slate); box-shadow: 0 -10px 12px -6px var(--slate); z-index: 1 } /* the sticky row is solid: nothing in the sheet shows through it */ .end .minor { position: static; justify-content: center; gap: 28px }
 
 /* seat patterns on the score bar, for telling seats apart without colour */
 .patterns #land { height: 14px }
@@ -943,7 +943,7 @@ function peaceAnswer(g, from, to, date = g.date) {
 function truceUntil(g, a, b) {
   const at = g.truce?.[pair(a, b)];
   if (!at || monthsApart(at, g.date) >= WAR.truce) return "";
-  return `${Number(at.slice(0, 4)) + WAR.truce / 12}${at.slice(4, 7)}`;
+  return `${String(Number(at.slice(0, 4)) + WAR.truce / 12).padStart(4, "0")}${at.slice(4, 7)}`;
 }
 
 /** End a war on a date: each keeps the land it holds, a truce begins, and a peace offer between them is spent. */
@@ -1112,7 +1112,7 @@ function clauseMove(g, m, geo, { isMe }) {
     if (a.no) return { ok: false, why: `would offer you a pact of non-aggression, but cannot (${a.no})` };
     if (!a.ok) return { ok: false, why: `would offer you a pact of non-aggression, but does not (${a.why})` };
     if (!g.offers.some((o) => o.from === c && o.kind === "pact")) g.offers.push({ from: c, kind: "pact", date: g.date });
-    return { ok: false, why: "offers you a pact of non-aggression; accept it from your actions" };
+    return { ok: false, offer: true, why: "offers you a pact of non-aggression; accept it from your actions" };
   }
   // the player's own order by card for the same clause is this move: it is not asked twice
   if (isMe) g.plans = (g.plans || []).filter((p) => !(p.kind === "pact" && p.sub === kind && p.target === t));
@@ -1262,6 +1262,7 @@ function applyMoves(g, moves, geo, actions, months) {
     const r = ({ WAR: war, PEACE: peace, TREATY: treaty, BREAK: unbind, ATTACK: attack, GIVE: give, PACT: clauseMove, TRIBUTE: clauseMove })[verb](g, m, geo, { isMe, attacks, months, spent });
     say(m, r.ok, r.why, r.check, r.fact, r.as);
     if (r.at) receipt[receipt.length - 1].at = r.at;
+    if (r.offer) receipt[receipt.length - 1].offer = true; // an offer made to the player: not applied yet, and not a failure (game.js marks it as news)
     if (r.gauge) receipt[receipt.length - 1].gauge = r.gauge; // round 3 hook: a clause's push on a gauge, read by state.js
     for (const extra of r.also || []) receipt.push(typeof extra === "string" ? { ok: true, text: extra } : { ok: true, text: extra.text, ...note(extra.fact) });
   }
@@ -1291,7 +1292,7 @@ function peace(g, m, geo, { isMe }) {
   const toMe = t === g.player && g.mode !== "citizen" && !isMe, offered = isMe && g.offers.some((o) => o.from === t && o.kind === "peace");
   const a = toMe ? peaceAnswer(g, t, c) : peaceAnswer(g, c, t);
   if (toMe && !a.ok) return { ok: false, why: `would offer you peace, but does not (${a.why})` };
-  if (toMe) { offer(g, c, "peace"); return { ok: false, why: "offers you peace; accept it from your actions" }; }
+  if (toMe) { offer(g, c, "peace"); return { ok: false, offer: true, why: "offers you peace; accept it from your actions" }; }
   if (!a.ok && !offered) return { ok: false, why: `asks ${geo.name(t)} for peace, which refuses (${a.why})` };
   endWar(g, c, t);
   return { ok: true, why: `makes peace with ${geo.name(t)}${offered ? ", as offered" : `, which agrees (${a.why})`}; each keeps the land it holds`, fact: ["peace", ...pair(c, t).split("|")] };
@@ -1308,7 +1309,7 @@ function treaty(g, m, geo, { isMe }) {
   const offered = isMe && g.offers.some((o) => o.from === t && o.kind === kind);
   const a = toMe ? treatyAnswer(g, t, c, kind, (x) => strengthOf(g, geo, x)) : treatyAnswer(g, c, t, kind, (x) => strengthOf(g, geo, x));
   if (toMe && !a.ok) return { ok: false, why: `would offer you ${treatyName(kind)}, but does not (${a.why})` };
-  if (toMe) { offer(g, c, kind); return { ok: false, why: `offers you ${treatyName(kind)}; accept it from your actions` }; }
+  if (toMe) { offer(g, c, kind); return { ok: false, offer: true, why: `offers you ${treatyName(kind)}; accept it from your actions` }; }
   if (!a.ok && !offered) return { ok: false, why: `proposes ${treatyName(kind)} to ${geo.name(t)}, which refuses (${a.why})`, fact: ["no", c, t, kind] };
   g.treaties = g.treaties.filter((x) => x.pair !== pair(c, t));
   g.treaties.push({ pair: pair(c, t), kind, since: g.date });
@@ -2230,10 +2231,13 @@ const { crisisChance } = $m[14];
 
 const CRISIS = { need: 4, quiet: 6, chance: 50, due: 3, mine: 1, again: 24 };
 const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
-/** A date some whole months on, never past the 28th, so every month has it. */
+/**
+ * A date some whole months on, never past the 28th, so every month has it. Whole numbers only, never a Date: the
+ * year keeps its four digits ("0912"), as every date in a game does, so dates before the year 1000 still sort as text.
+ */
 function addMonths(iso, n) {
-  const [y, m, d] = iso.split("-").map(Number), k = y * 12 + (m - 1) + n;
-  return `${Math.floor(k / 12)}-${String((k % 12) + 1).padStart(2, "0")}-${String(Math.min(d, 28)).padStart(2, "0")}`;
+  const [y, m, d] = iso.split("-").map(Number), k = y * 12 + (m - 1) + n, pad = (v, w) => String(v).padStart(w, "0");
+  return `${pad(Math.floor(k / 12), 4)}-${pad((k % 12) + 1, 2)}-${pad(Math.min(d, 28), 2)}`;
 }
 
 /**
@@ -7510,7 +7514,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.10.6";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "b34178cd";
+const BUILD = "b07f238f";
 // guide hook (ruling 153.8): each AI service's own pages, for links in the Choose an AI guide (site/aiguide.js). A player
 // follows them in a new tab; the page never fetches them, and its rule does not reach them. Kept above the list of services
 // the page may call, because the gate reads every address after that list's name as one the page calls.
@@ -10390,14 +10394,14 @@ function topBar() {
   chip.style.background = colourOf(state.player) || ownerColour(state.player);
   who.append(chip, state.character?.name && state.mode !== "nation" ? `${state.character.name}, ${name(state.player)}` : name(state.player)); who.onclick = () => { showCountry(state.player); open(sheet === "realm" ? null : "realm"); }; who.title = "Your country: its state, your ambition, crises"; // features hook
   const jumpPick = el("select", undefined, "plain");
-  jumpPick.append(...JUMPS.map(([k, t]) => new Option(t, k))); jumpPick.value = jump.key; jumpPick.onchange = () => { jump = { ...jump, key: jumpPick.value }; topBar(); };
+  jumpPick.append(...JUMPS.map(([k, t]) => new Option(t, k))); jumpPick.value = jump.key; jumpPick.onchange = () => { jump = { ...jump, key: jumpPick.value }; keepPrefs(); topBar(); };
   jumpPick.setAttribute("aria-label", "How far to jump");
   const length = [];
   if (jump.key === "custom") {
     const n = Object.assign(el("input", undefined, "plain"), { type: "number", min: 1, max: 3650, value: jump.n, style: "width:72px" }), unit = el("select", undefined, "plain");
     unit.append(...UNITS.map(([k, t]) => new Option(t, k))); unit.value = jump.unit;
     n.setAttribute("aria-label", "How many"); unit.setAttribute("aria-label", "Of what");
-    n.onchange = () => { jump = { ...jump, n: Number(n.value) || 1 }; }; unit.onchange = () => { jump = { ...jump, unit: unit.value }; };
+    n.onchange = () => { jump = { ...jump, n: Number(n.value) || 1 }; keepPrefs(); }; unit.onchange = () => { jump = { ...jump, unit: unit.value }; keepPrefs(); };
     length.push(n, unit);
   }
   const date = el("span", undefined, "date"); date.append(el("b", fmtDate(state.date)), el("small", `Turn ${state.turn}`));
@@ -10478,6 +10482,16 @@ function reviewBox() {
 }
 /** A turn with no AI: orders by card are carried out, other countries move by rule, and no story is told. Asked in the page once a browser, then at once. */
 const RULES_OK = "capo-rules-ok";
+// the map view and the length of a turn are kept in this browser, so a reload keeps them
+const PREFS = "capo-story-prefs";
+const keepPrefs = () => { try { localStorage.setItem(PREFS, JSON.stringify({ view, jump })); } catch { /* kept for this visit only */ } };
+function loadPrefs(select) {
+  let o = null;
+  try { o = JSON.parse(localStorage.getItem(PREFS) || "null"); } catch { /* nothing kept */ }
+  if (typeof o?.view === "string" && [...select.options].some((x) => x.value === o.view)) { view = o.view; select.value = view; }
+  const j = o?.jump;
+  if (j && JUMPS.some(([k]) => k === j.key)) jump = { key: j.key, n: Math.max(1, Math.min(3650, Math.round(Number(j.n) || 1))), unit: UNITS.some(([k]) => k === j.unit) ? j.unit : "weeks" };
+}
 const rulesSeen = () => { try { return localStorage.getItem(RULES_OK) === "1"; } catch { return false; } };
 function rulesOnly() {
   if (!rulesSeen() && !pending.rulesAsk) { pending.rulesAsk = true; open("actions"); return; }
@@ -10613,7 +10627,7 @@ function ledger(box) {
   if (last.receipt?.length) {
     const list = el("ul", undefined, "list");
     // a tick for what went your way, a cross for a move refused or a check failed, a dot for news of the world
-    const kind = (x) => (!x.ok ? "no" : x.check?.band === "failed" ? "lost" : x.country === state.player && (x.check || x.fact) ? "yes" : "news");
+    const kind = (x) => (x.offer ? "news" : !x.ok ? "no" : x.check?.band === "failed" ? "lost" : x.country === state.player && (x.check || x.fact) ? "yes" : "news");
     list.append(...last.receipt.map((x) => { const k = kind(x), li = el("li", undefined, k); li.append(el("span", { yes: "✓", no: "✗", lost: "✗", news: "•" }[k], "mark"), ...(x.check ? [el("b", `${x.check.band}: `)] : []), el("span", `${x.text.replace(/[.!?]$/, "")}.`)); return li; }));
     box.append(el("h3", "What the rules decided"), list, ...missionReports(last, X)); // phase 4 hook: missions step by step
   }
@@ -10742,7 +10756,7 @@ function settle(text) {
 function askBox() {
   if (calling) return waiting();
   const w = asking.where, again = () => askAI(asking.prompt, asking.take, w);
-  return connectBox({ route, title: connected(route) ? undefined : w === "chats" ? "Connect an AI to send this message" : "Connect an AI to ask your council", error: asking.error, again, connected: again, note: toast, cancel: () => { asking = null; open(w); } });
+  return connectBox({ route, title: connected(route) ? undefined : ({ chats: "Connect an AI to send this message", scene: "Connect an AI to play this scene" })[w] || "Connect an AI to ask your council", error: asking.error, again, connected: again, note: toast, cancel: () => { asking = null; open(w); } });
 }
 const talkWorld = () => ({ name, known: (codes) => knownFor(X, codes) }); // features hook: chats and the council are told what your side knows, by tier
 
@@ -11038,8 +11052,9 @@ async function start() {
     wars: () => (state ? state.wars.map((w) => w.pair.split("|")) : []),
     pieces: () => mapPieces({ world, homes, owner: ownerOf, might: (c) => mightOf(geo(), c), wars: state ? state.wars.map((w) => w.pair.split("|")) : [], player: state?.player, staff: state ? commanders(state).filter((x) => !x.off && x.seat !== "generals").length : 0,
       strength: state ? (c) => strengthOf(state, geo(), c) : null, g: state, cities: on === "" && !(state || scen())?.alt ? world.cities : null }) }); // capomap hook: strength pips, and missions read off the game for pins; mapdata hook: real cities on the real map only
-  $("view").onchange = (e) => { view = e.target.value; map.refresh(); };
+  $("view").onchange = (e) => { view = e.target.value; keepPrefs(); map.refresh(); };
   legend = viewsInit($("view"), X, () => view); // features hook: more map views, and their legend
+  loadPrefs($("view"));
   $("in").onclick = () => map.zoomBy(1.6);
   $("out").onclick = () => map.zoomBy(1 / 1.6);
   $("home").onclick = () => (state ? showCountry(state.player) : map.reset());

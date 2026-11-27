@@ -264,6 +264,8 @@ function island(rule, dice, seats) {
 
 export const glass = {
   id: "glass", version: "6",
+  /** A plan comes off a deck shuffled at setup, with no dice thrown: once seen, it is not taken back. */
+  draws: (m) => m.do === "plan",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, seats: { values: [2, 3, 4, 5, 6], normal: 3 },
     ...SWITCHES, ...Object.fromEntries(EXPANSIONS.map((x) => [x, off])),

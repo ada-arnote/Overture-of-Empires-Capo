@@ -548,14 +548,14 @@ function topBar() {
   chip.style.background = colourOf(state.player) || ownerColour(state.player);
   who.append(chip, state.character?.name && state.mode !== "nation" ? `${state.character.name}, ${name(state.player)}` : name(state.player)); who.onclick = () => { showCountry(state.player); open(sheet === "realm" ? null : "realm"); }; who.title = "Your country: its state, your ambition, crises"; // features hook
   const jumpPick = el("select", undefined, "plain");
-  jumpPick.append(...JUMPS.map(([k, t]) => new Option(t, k))); jumpPick.value = jump.key; jumpPick.onchange = () => { jump = { ...jump, key: jumpPick.value }; topBar(); };
+  jumpPick.append(...JUMPS.map(([k, t]) => new Option(t, k))); jumpPick.value = jump.key; jumpPick.onchange = () => { jump = { ...jump, key: jumpPick.value }; keepPrefs(); topBar(); };
   jumpPick.setAttribute("aria-label", "How far to jump");
   const length = [];
   if (jump.key === "custom") {
     const n = Object.assign(el("input", undefined, "plain"), { type: "number", min: 1, max: 3650, value: jump.n, style: "width:72px" }), unit = el("select", undefined, "plain");
     unit.append(...UNITS.map(([k, t]) => new Option(t, k))); unit.value = jump.unit;
     n.setAttribute("aria-label", "How many"); unit.setAttribute("aria-label", "Of what");
-    n.onchange = () => { jump = { ...jump, n: Number(n.value) || 1 }; }; unit.onchange = () => { jump = { ...jump, unit: unit.value }; };
+    n.onchange = () => { jump = { ...jump, n: Number(n.value) || 1 }; keepPrefs(); }; unit.onchange = () => { jump = { ...jump, unit: unit.value }; keepPrefs(); };
     length.push(n, unit);
   }
   const date = el("span", undefined, "date"); date.append(el("b", fmtDate(state.date)), el("small", `Turn ${state.turn}`));
@@ -636,6 +636,16 @@ function reviewBox() {
 }
 /** A turn with no AI: orders by card are carried out, other countries move by rule, and no story is told. Asked in the page once a browser, then at once. */
 const RULES_OK = "capo-rules-ok";
+// the map view and the length of a turn are kept in this browser, so a reload keeps them
+const PREFS = "capo-story-prefs";
+const keepPrefs = () => { try { localStorage.setItem(PREFS, JSON.stringify({ view, jump })); } catch { /* kept for this visit only */ } };
+function loadPrefs(select) {
+  let o = null;
+  try { o = JSON.parse(localStorage.getItem(PREFS) || "null"); } catch { /* nothing kept */ }
+  if (typeof o?.view === "string" && [...select.options].some((x) => x.value === o.view)) { view = o.view; select.value = view; }
+  const j = o?.jump;
+  if (j && JUMPS.some(([k]) => k === j.key)) jump = { key: j.key, n: Math.max(1, Math.min(3650, Math.round(Number(j.n) || 1))), unit: UNITS.some(([k]) => k === j.unit) ? j.unit : "weeks" };
+}
 const rulesSeen = () => { try { return localStorage.getItem(RULES_OK) === "1"; } catch { return false; } };
 function rulesOnly() {
   if (!rulesSeen() && !pending.rulesAsk) { pending.rulesAsk = true; open("actions"); return; }
@@ -771,7 +781,7 @@ function ledger(box) {
   if (last.receipt?.length) {
     const list = el("ul", undefined, "list");
     // a tick for what went your way, a cross for a move refused or a check failed, a dot for news of the world
-    const kind = (x) => (!x.ok ? "no" : x.check?.band === "failed" ? "lost" : x.country === state.player && (x.check || x.fact) ? "yes" : "news");
+    const kind = (x) => (x.offer ? "news" : !x.ok ? "no" : x.check?.band === "failed" ? "lost" : x.country === state.player && (x.check || x.fact) ? "yes" : "news");
     list.append(...last.receipt.map((x) => { const k = kind(x), li = el("li", undefined, k); li.append(el("span", { yes: "✓", no: "✗", lost: "✗", news: "•" }[k], "mark"), ...(x.check ? [el("b", `${x.check.band}: `)] : []), el("span", `${x.text.replace(/[.!?]$/, "")}.`)); return li; }));
     box.append(el("h3", "What the rules decided"), list, ...missionReports(last, X)); // phase 4 hook: missions step by step
   }
@@ -900,7 +910,7 @@ function settle(text) {
 function askBox() {
   if (calling) return waiting();
   const w = asking.where, again = () => askAI(asking.prompt, asking.take, w);
-  return connectBox({ route, title: connected(route) ? undefined : w === "chats" ? "Connect an AI to send this message" : "Connect an AI to ask your council", error: asking.error, again, connected: again, note: toast, cancel: () => { asking = null; open(w); } });
+  return connectBox({ route, title: connected(route) ? undefined : ({ chats: "Connect an AI to send this message", scene: "Connect an AI to play this scene" })[w] || "Connect an AI to ask your council", error: asking.error, again, connected: again, note: toast, cancel: () => { asking = null; open(w); } });
 }
 const talkWorld = () => ({ name, known: (codes) => knownFor(X, codes) }); // features hook: chats and the council are told what your side knows, by tier
 
@@ -1196,8 +1206,9 @@ async function start() {
     wars: () => (state ? state.wars.map((w) => w.pair.split("|")) : []),
     pieces: () => mapPieces({ world, homes, owner: ownerOf, might: (c) => mightOf(geo(), c), wars: state ? state.wars.map((w) => w.pair.split("|")) : [], player: state?.player, staff: state ? commanders(state).filter((x) => !x.off && x.seat !== "generals").length : 0,
       strength: state ? (c) => strengthOf(state, geo(), c) : null, g: state, cities: on === "" && !(state || scen())?.alt ? world.cities : null }) }); // capomap hook: strength pips, and missions read off the game for pins; mapdata hook: real cities on the real map only
-  $("view").onchange = (e) => { view = e.target.value; map.refresh(); };
+  $("view").onchange = (e) => { view = e.target.value; keepPrefs(); map.refresh(); };
   legend = viewsInit($("view"), X, () => view); // features hook: more map views, and their legend
+  loadPrefs($("view"));
   $("in").onclick = () => map.zoomBy(1.6);
   $("out").onclick = () => map.zoomBy(1 / 1.6);
   $("home").onclick = () => (state ? showCountry(state.player) : map.reset());

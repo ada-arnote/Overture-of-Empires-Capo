@@ -918,7 +918,7 @@ test("a game in an alternate world: its borders are the ground it stands on, the
 });
 // ---- the state of countries, causes, crises, ambitions, beats and the press (the features lane) ----
 import { GAUGES, barred, causeOf, gaugeOf, gaugeWords, settleState, stateLines } from "../src/story/state.js";
-import { CRISIS, addMonths, demand, demandAnswer, settleCrisis } from "../src/story/crisis.js";
+import { CRISIS, addMonths, demand, demandAnswer, keepCrisis, settleCrisis } from "../src/story/crisis.js";
 import { AMBITIONS, ambitionsFor, chooseAmbition, progress, reckoning } from "../src/story/ambitions.js";
 import { BEAT, BEATS, beatFor, beatLines, papers } from "../src/story/beats.js";
 import { MORE, keepMore, moreFacts, moreNote } from "../src/story/more.js";
@@ -1045,6 +1045,21 @@ test("a crisis: a demand for one province, answered by rule with its reasons on 
   assert.match(q.log[0].receipt.map((x) => x.text).join(" / "), /Chile: refuses Peru's demand for Arica \(might 3 against 4 -1: -1, needing 4\)/);
   assert.deepEqual([relOf(q, "PER", "CHL"), gaugeOf(q, "PER", "m"), causeOf(q, Q, "PER", "CHL"), q.asked["PER>CHL"]], [-1, 1, "", "2027-01-01"]);
   assert.match(demandAnswer(q, Q, "PER", "CHL", "CHL-1").why, /a demand made before -2/);
+});
+
+test("a crisis before the year 1000 keeps a four-digit year, so it prints and comes due", () => {
+  // The Vacant Throne opens in 912 and the Hundred Lamps in 431; dates in a game are always four digits (no years BC)
+  assert.deepEqual([addMonths("0912-03-01", 3), addMonths("0431-04-01", 12), addMonths("0999-11-30", 3), addMonths("0009-12-01", 1)], ["0912-06-01", "0432-04-01", "1000-02-28", "0010-01-01"]);
+  const p = game4("crisis-912", { date: "0912-03-01", owners: { "PER-1": "BOL" } }), Pg = { ...geo5(p), might: (c) => ({ ...MIGHT4, PER: 5 })[c] };
+  assert.equal(demand(p, Pg, "PER-1", "Demand Tacna (PER-1) from Bolivia.").ok, true);
+  assert.equal(p.crisis.due, "0912-04-01");
+  assert.ok(keepCrisis(structuredClone(p), () => true, () => true).crisis, "a save keeps it");
+  const entry = closeTurn(p, reply(p), Pg, [p.crisis.text]), said = entry.receipt.map((x) => x.text);
+  assert.ok(said.includes("Peru: demands Tacna from Bolivia, to be answered by 0912-04-01"), said.join(" / "));
+  assert.ok(said.some((t) => /^Bolivia: yields Tacna to Peru/.test(t)), "answered on its day, not open for ever");
+  assert.equal(p.crisis, null);
+  assert.equal(demand(p, Pg, "BOL-1", "Demand La Paz.").why === "Another crisis is still open: one at a time.", false, "a later demand is not blocked");
+  assert.equal(truceUntil({ truce: { "BOL|PER": "0912-04-01" }, date: "0912-05-01" }, "PER", "BOL"), "0914-04");
 });
 
 test("the world moves on its own: after six quiet months the rules may open a crisis, the same one every time", () => {

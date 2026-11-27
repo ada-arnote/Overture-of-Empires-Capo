@@ -19,10 +19,13 @@ import { crisisChance } from "./rivals.js";
 
 export const CRISIS = { need: 4, quiet: 6, chance: 50, due: 3, mine: 1, again: 24 };
 const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
-/** A date some whole months on, never past the 28th, so every month has it. */
+/**
+ * A date some whole months on, never past the 28th, so every month has it. Whole numbers only, never a Date: the
+ * year keeps its four digits ("0912"), as every date in a game does, so dates before the year 1000 still sort as text.
+ */
 export function addMonths(iso, n) {
-  const [y, m, d] = iso.split("-").map(Number), k = y * 12 + (m - 1) + n;
-  return `${Math.floor(k / 12)}-${String((k % 12) + 1).padStart(2, "0")}-${String(Math.min(d, 28)).padStart(2, "0")}`;
+  const [y, m, d] = iso.split("-").map(Number), k = y * 12 + (m - 1) + n, pad = (v, w) => String(v).padStart(w, "0");
+  return `${pad(Math.floor(k / 12), 4)}-${pad((k % 12) + 1, 2)}-${pad(Math.min(d, 28), 2)}`;
 }
 
 /**

@@ -61,6 +61,7 @@ export function applyMoves(g, moves, geo, actions, months) {
     const r = ({ WAR: war, PEACE: peace, TREATY: treaty, BREAK: unbind, ATTACK: attack, GIVE: give, PACT: clauseMove, TRIBUTE: clauseMove })[verb](g, m, geo, { isMe, attacks, months, spent });
     say(m, r.ok, r.why, r.check, r.fact, r.as);
     if (r.at) receipt[receipt.length - 1].at = r.at;
+    if (r.offer) receipt[receipt.length - 1].offer = true; // an offer made to the player: not applied yet, and not a failure (game.js marks it as news)
     if (r.gauge) receipt[receipt.length - 1].gauge = r.gauge; // round 3 hook: a clause's push on a gauge, read by state.js
     for (const extra of r.also || []) receipt.push(typeof extra === "string" ? { ok: true, text: extra } : { ok: true, text: extra.text, ...note(extra.fact) });
   }
@@ -90,7 +91,7 @@ function peace(g, m, geo, { isMe }) {
   const toMe = t === g.player && g.mode !== "citizen" && !isMe, offered = isMe && g.offers.some((o) => o.from === t && o.kind === "peace");
   const a = toMe ? peaceAnswer(g, t, c) : peaceAnswer(g, c, t);
   if (toMe && !a.ok) return { ok: false, why: `would offer you peace, but does not (${a.why})` };
-  if (toMe) { offer(g, c, "peace"); return { ok: false, why: "offers you peace; accept it from your actions" }; }
+  if (toMe) { offer(g, c, "peace"); return { ok: false, offer: true, why: "offers you peace; accept it from your actions" }; }
   if (!a.ok && !offered) return { ok: false, why: `asks ${geo.name(t)} for peace, which refuses (${a.why})` };
   endWar(g, c, t);
   return { ok: true, why: `makes peace with ${geo.name(t)}${offered ? ", as offered" : `, which agrees (${a.why})`}; each keeps the land it holds`, fact: ["peace", ...pair(c, t).split("|")] };
@@ -107,7 +108,7 @@ function treaty(g, m, geo, { isMe }) {
   const offered = isMe && g.offers.some((o) => o.from === t && o.kind === kind);
   const a = toMe ? treatyAnswer(g, t, c, kind, (x) => strengthOf(g, geo, x)) : treatyAnswer(g, c, t, kind, (x) => strengthOf(g, geo, x));
   if (toMe && !a.ok) return { ok: false, why: `would offer you ${treatyName(kind)}, but does not (${a.why})` };
-  if (toMe) { offer(g, c, kind); return { ok: false, why: `offers you ${treatyName(kind)}; accept it from your actions` }; }
+  if (toMe) { offer(g, c, kind); return { ok: false, offer: true, why: `offers you ${treatyName(kind)}; accept it from your actions` }; }
   if (!a.ok && !offered) return { ok: false, why: `proposes ${treatyName(kind)} to ${geo.name(t)}, which refuses (${a.why})`, fact: ["no", c, t, kind] };
   g.treaties = g.treaties.filter((x) => x.pair !== pair(c, t));
   g.treaties.push({ pair: pair(c, t), kind, since: g.date });
