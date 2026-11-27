@@ -69,7 +69,9 @@ export function page(html, css, js, home = "", fetches = false, from = path.join
   // the model shelf: the site's own when served, none when the page stands alone (site/shelf.js)
   const safe = assets(js, home, from).replace('const SHELF_URL = "models/";', () => `const SHELF_URL = "${home ? `${home}models/` : ""}";`).replace(/<\/script/gi, "<\\/script"), hash = createHash("sha256").update(`\n${safe}\n`).digest("base64");
   // a page that fetches keeps the addresses it may reach (its own site for map data, an AI for the story); the games reach nothing
-  const reach = html.match(/connect-src ([^;"]*)/)?.[1]?.trim() || "", talk = fetches && reach ? ` connect-src ${reach};` : home ? " connect-src 'self';" : ""; // a served game page may fetch its sculpted pieces
+  // livelink hook: a table page keeps the addresses named for live play (ruling 155), which browsers do not fetch from; a served page may also fetch its sculpted pieces ('self')
+  const reach = html.match(/connect-src ([^;"]*)/)?.[1]?.trim() || "", named = reach.split(/\s+/).filter((v) => /^(?:stun|turns?):\/\//.test(v)).join(" ");
+  const talk = fetches && reach ? ` connect-src ${reach};` : home ? ` connect-src 'self'${named ? ` ${named}` : ""};` : named ? ` connect-src ${named};` : "";
   // served pages load fonts, pictures and sounds from their own site; the double-click page carries them inside, as data:
   const own = home ? "'self'" : "data:", img = home ? "'self' data:" : "data:";
   return assets(html, home, from)

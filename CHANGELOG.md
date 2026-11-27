@@ -2,6 +2,23 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
+## Unreleased
+
+### Live link: two pasted links, then a direct table between two browsers (ruling 155)
+
+**Players**
+- **Play live.** In a game by link between you and one friend (Brass and Banners, Grain and Glass, The Island Fable, and An Inch of Ink played by turns), choose Play live in Link play, or Play live instead in the move panel. You send an invitation link; opening it on your friend's side makes a reply link; when you open or paste the reply, the two browsers join straight to each other and every move goes across at once. Bots are played by whoever made the game.
+- **Nothing is lost when it does not join.** If no direct path is found (about one pair of networks in five needs a relay, which this site does not have yet), the page says so and the game goes on by links exactly as before. If the connection drops in play, the game goes on by links and Play live joins again; the browser that fell behind catches up.
+- **No peeking at the dice.** In live play each roll is drawn from secrets of both browsers: each sends only a hash of its secret first, the mover sends the move with its secret, and the other answers with its own. A game not yet begun is dealt the same way, so neither side chooses the deal. Every move is checked by the rules in both browsers, and the game is compared after every move. Said plainly in the game: both browsers hold the whole game, so a changed browser could still see hidden cards; live play is for friends.
+- **Fixed: links for games of two to five players open again.** The table packed a colour for all six seats into every link, and the page that opened it refused the link as broken. A link now carries the seats in play only.
+- **Privacy.** Nothing is contacted until you choose Play live. Then each browser asks one public address service, `stun.cloudflare.com`, for its own internet address (nothing about the game goes there); your friend's browser sees your internet address, and the invitation and reply carry it. A reply opened in another tab is handed to the waiting game in this browser.
+
+**Contributors**
+- `src/core/session.js` (new): a transport-neutral live table: hello and catch-up, the live deal, commit-then-reveal salts for every move, a fingerprint check each move, and plain stops for a changed secret, a move out of turn or out of the list, and another game. `createMatch` takes `salts`, `play(move, salt)` mixes a salt into that move's dice (kept only where dice were thrown), saves keep `salts` when there are any, and links carry them as layout 3 (layout 2 is still read and still made for games without salts). `compareGames` compares salts too.
+- `site/livelink.js` (new): WebRTC with one STUN address, offers and replies deflated and, with a password, locked like the game link; the reply handed between tabs by `BroadcastChannel`. Marked hooks ("livelink hook") in `site/table.js` (moves wait for their salt, the other browser's seats wait, no take back while live, replays keep salts), in `site/banners.js` and `site/fable.js` (their battle records replay with salts) and in `tools/bundle.mjs` (built table pages keep the named address in their rule).
+- **The gate (ruling 155).** `site/config.js` has `LIVE_ADDRESSES`, each with its reason. `tools/check.mjs` lets a page's `connect-src` hold only `'self'` and those addresses (written `stun://host:port`, the form browsers read), refuses a named address without a reason or that is not `stun:` or `turn:`, and now also finds `stun:` and `turn:` addresses in shipped files: any not named is a stop, as before. The AI list on Capo's page is unchanged. Tests: `test/livelink.test.mjs`.
+- Checked in Chromium: the page rule does not govern WebRTC (STUN answers under `connect-src 'self'`), so the listed address documents the reach rather than enforcing it; `stun:host:port` in a page rule is refused by the browser with a console error, which is why the rule writes `stun://`.
+
 ## v0.10.1 (2026-11-27): sculpted pieces, six style packs, and seat colours for everyone
 
 ### Sculpted pieces in 3D

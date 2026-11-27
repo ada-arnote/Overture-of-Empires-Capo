@@ -4,3 +4,4 @@ export { compareGames, packGame, unpackGame } from "./link.js";
 export { fingerprint, sha256 } from "./digest.js";
 export { chance, next, seedState } from "./random.js";
 export { FORMAT, Refusal, checkGame, readOptions, createMatch, openSave, whenReplayFails } from "./match.js";
+export { DEALT, commitOf, createSession, saltOf, seedOf } from "./session.js";

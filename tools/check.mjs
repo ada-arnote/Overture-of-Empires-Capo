@@ -26,6 +26,7 @@ const PACKED = new Set([".woff2", ".ogg", ".mp3", ".png", ".webp"]); // already 
 const SHIPPED = ["src", "site"];
 const TYPES = new Set([".js", ".css", ".html", ".json", ".svg", ".png", ".webp", ".ogg", ".mp3", ".woff2", ".bin", ".rl", ".csv", ".txt", ".webmanifest"]);
 const MEDIA = new Set([".svg", ".png", ".webp", ".ogg", ".mp3", ".woff2"]);
+const LIVE_SHAPE = /^(?:stun|turns?):[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d{1,5})?$/; // ruling 155
 const WHO_MAY_IMPORT = { "src/core": ["src/core"], "src/games": ["src/core", "src/games"], "src/map": ["src/map"] };
 
 function walk(dir) {
@@ -47,6 +48,15 @@ export function check(root, { release = false } = {}) {
   const read = (name) => (existsSync(path.join(root, name)) ? readFileSync(path.join(root, name), "utf8") : null);
   const ai = (read("site/config.js") || "").split("AI_BASES")[1] || "", aiOrigins = [...new Set([...ai.matchAll(/"(https:\/\/[^/"]+)/g)].map((m) => m[1]))]; // the AI services Capo may call
   const home = (read("site/config.js") || "").match(/SITE_URL\s*=\s*"(https:\/\/[^"]*\/)play\/"/)?.[1]; // the site's own public address, for a share card
+  // ruling 155: the outside addresses a table page may reach for live play, named in site/config.js, each with its reason, and nothing else
+  const named = [...((read("site/config.js") || "").split("LIVE_ADDRESSES")[1]?.split("];")[0] || "").matchAll(/\{([^}]*)\}/g)].map((e) => ({ url: e[1].match(/url:\s*"([^"]*)"/)?.[1] || "", why: e[1].match(/why:\s*"([^"]*)"/)?.[1] || "" }));
+  for (const a of named) {
+    if (!LIVE_SHAPE.test(a.url)) bad.push(`site/config.js: LIVE_ADDRESSES may name only stun: or turn: addresses, not ${a.url.slice(0, 60) || "an empty one"}`);
+    if (a.why.trim().length < 12) bad.push(`site/config.js: ${a.url.slice(0, 60)} in LIVE_ADDRESSES needs a reason`);
+  }
+  const live = named.filter((a) => LIVE_SHAPE.test(a.url) && a.why.trim().length >= 12).map((a) => a.url);
+  // a page rule writes them as stun://host:port, the form browsers read (they warn about stun:host and ignore it)
+  const liveRule = live.map((u) => u.replace(/^(\w+):/, "$1://"));
 
   let total = 0;
   const code = Object.fromEntries(Object.keys(LIMITS.code).map((k) => [k, 0])), assets = Object.fromEntries(Object.keys(LIMITS.assets).map((k) => [k, 0]));
@@ -69,7 +79,8 @@ export function check(root, { release = false } = {}) {
       if (rule["require-trusted-types-for"]?.join(" ") !== "'script'") bad.push(`${name}: its page rule must keep require-trusted-types-for 'script'`);
       for (const k of ["font-src", "media-src"]) if (!rule[k] || rule[k].some((v) => !["'self'", "data:"].includes(v))) bad.push(`${name}: its page rule needs ${k} with only 'self' or data:`);
       const reach = rule["connect-src"] || [], want = ["'self'", ...aiOrigins, "http://localhost:*", "http://127.0.0.1:*"]; // past its own site: exactly the AI services and this computer
-      if (reach.some((v) => v !== "'self'") && [...reach].sort().join(" ") !== [...want].sort().join(" ")) bad.push(`${name}: its connect-src must list exactly 'self', the AI services in site/config.js and this computer`);
+      // or, on a table page, only 'self' and addresses named for live play (ruling 155)
+      if (reach.some((v) => v !== "'self'") && [...reach].sort().join(" ") !== [...want].sort().join(" ") && !reach.every((v) => v === "'self'" || liveRule.includes(v))) bad.push(`${name}: its connect-src must list exactly 'self', the AI services in site/config.js and this computer, or only 'self' and addresses named in LIVE_ADDRESSES (written stun://host:port)`);
     }
     if (ext === ".js" && !text.startsWith("// SPDX-License-Identifier: AGPL-3.0-or-later")) bad.push(`${name}: first line must be the licence mark`);
     if (ext !== ".svg" && text.includes("—")) bad.push(`${name}: has an em dash`);
@@ -80,6 +91,8 @@ export function check(root, { release = false } = {}) {
       if (card || /^http:\/\/www\.w3\.org\//.test(m[0]) || (csp && aiOrigins.includes(m[0]) && csp.includes(` ${m[0]} `)) || (ext === ".html" && new RegExp(`<a [^>]*href="${m[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(text)) || name === "site/config.js") continue;
       bad.push(`${name}: names an outside address, ${m[0].slice(0, 60)}`);
     }
+    // a STUN or TURN address has no //, so it is looked for apart: only the named ones, anywhere (ruling 155)
+    for (const m of text.matchAll(/\b(?:stun|turns?):(?:\/\/)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d{1,5})?/gi)) if (!live.includes(m[0].replace("://", ":")) &&name !== "site/config.js") bad.push(`${name}: names an outside address, ${m[0].slice(0, 60)}`);
     if (ext === ".js") {
       for (const [re, why] of [[/\beval\s*\(|\bnew\s+Function\b/, "runs text as code"], [/\.(?:innerHTML|outerHTML)\s*=|insertAdjacentHTML|document\.write/, "writes markup from text"]]) if (re.test(plain)) bad.push(`${name}: ${why}`);
       if (/^src\/(core|games)\//.test(name)) {

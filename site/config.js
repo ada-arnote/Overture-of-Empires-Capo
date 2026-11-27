@@ -22,3 +22,8 @@ export const AI_BASES = {
   lmstudio: "http://localhost:1234/v1",
   llamacpp: "http://localhost:8080/v1",
 };
+// Ruling 155: the only outside addresses a table page may reach, for live play, each with its reason. They are reached only after a
+// player asks for live play, never when a page opens. The table pages' rule (connect-src) lists exactly these; the gate holds them so.
+export const LIVE_ADDRESSES = [
+  { url: "stun:stun.cloudflare.com:3478", why: "STUN: tells each browser its own public internet address, so two browsers can connect directly. Free and unlimited by Cloudflare's own page; nothing about the game is sent" },
+];

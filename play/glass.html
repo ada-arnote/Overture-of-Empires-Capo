@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-RRIjoWcDSP6vwYrQ7qK5HYsy+JultrvHxGevua6cpOY='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Yki3gS18/lJ5xWjI/ZSoTD+axAV+C4ocjrsdnOlucPw='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' stun://stun.cloudflare.com:3478; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Grain and Glass · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -1136,13 +1136,19 @@ function readOptions(game, given = {}) {
   return out;
 }
 
-function createMatch(game, { options = {}, seed = "" } = {}) {
+/** A salt mixes fresh chance into one move's dice: eight hex digits that two players drew together (src/core/session.js). */
+const SALT = /^[0-9a-f]{8}$/;
+
+/** salts: for each move, a salt or "" (a game played live); a replay passes the same list and rolls the same dice. */
+function createMatch(game, { options = {}, seed = "", salts = [] } = {}) {
   checkGame(game);
+  if (!Array.isArray(salts) || salts.length > MAX_MOVES || salts.some((s) => s !== "" && !SALT.test(s))) throw new Refusal("shape", "those salts are not right");
+  const given = [...salts];
   const chosen = deepFreeze(readOptions(game, options)), theSeed = String(seed).slice(0, 200);
   const dice = chance(seedState(`${game.id}/${theSeed}`));
   const opening = deepFreeze(game.setup(chosen, dice));
   canon(opening); // a bad first position fails here, not ten moves later
-  const steps = [{ position: opening, dice: dice.state, events: [] }], played = [];
+  const steps = [{ position: opening, dice: dice.state, events: [] }], played = [], mixed = [];
   const now = () => steps[steps.length - 1];
 
   return {
@@ -1152,22 +1158,28 @@ function createMatch(game, { options = {}, seed = "" } = {}) {
     get turn() { return game.turn(now().position); },
     get result() { return game.result(now().position); },
     get list() { return played.map((m) => structuredClone(m)); },
+    /** For each move, the salt its dice were mixed with, or "" (most moves: no salt, or no dice). */
+    get salts() { return [...mixed]; },
     legal() { return this.turn === null ? [] : game.moves(now().position); },
     isLegal(move) { const want = canon(move); return this.legal().some((m) => canon(m) === want); },
     fingerprint: () => fingerprint([game.id, game.version, chosen, now().position, now().dice]),
 
-    /** Play one move, or refuse it and change nothing. */
-    play(move) {
+    /** Play one move, or refuse it and change nothing. A salt, if any, mixes into this move's dice; else the one given at the start. */
+    play(move, salt = given[played.length] || "") {
       if (this.turn === null) throw new Refusal("over", "the game is over");
       if (played.length >= MAX_MOVES) throw new Refusal("long", "the list of moves is full");
       let copy;
       try { copy = JSON.parse(canon(move)); } catch (e) { throw new Refusal("shape", `that is not a move: ${e.message}`); }
       if (game.allows ? !game.allows(now().position, copy) : !this.isLegal(copy)) throw new Refusal("illegal", `that move is not allowed now: ${canon(copy).slice(0, 120)}`);
-      const d = chance(now().dice), made = game.apply(now().position, copy, d);
+      if (salt !== "" && !SALT.test(salt)) throw new Refusal("shape", "that salt is not right");
+      const before = now().dice, start = salt ? seedState(`${before.join(".")}/${salt}`) : before;
+      const d = chance(start), made = game.apply(now().position, copy, d), used = d.state.join() !== start.join();
       canon(made.position);
       canon(made.events || []);
-      steps.push({ position: deepFreeze(made.position), dice: d.state, events: deepFreeze(made.events || []) });
+      // a salt counts only where dice were thrown: a move without chance keeps the dice as they were, and no salt
+      steps.push({ position: deepFreeze(made.position), dice: used ? d.state : before, events: deepFreeze(made.events || []) });
       played.push(deepFreeze(copy));
+      mixed.push(used ? salt : "");
       return now().events;
     },
     /** Whether the last move rolled any dice. In a game between people such a move is not taken back. */
@@ -1177,6 +1189,7 @@ function createMatch(game, { options = {}, seed = "" } = {}) {
       if (!played.length) return false;
       steps.pop();
       played.pop();
+      mixed.pop();
       return true;
     },
     /** The position after the first n moves. */
@@ -1185,7 +1198,7 @@ function createMatch(game, { options = {}, seed = "" } = {}) {
       return steps[n].position;
     },
     save() {
-      return canon({ format: FORMAT, game: game.id, version: game.version, options: chosen, seed: theSeed, moves: played, end: this.fingerprint() });
+      return canon({ format: FORMAT, game: game.id, version: game.version, options: chosen, seed: theSeed, moves: played, ...(mixed.some(Boolean) ? { salts: mixed } : {}), end: this.fingerprint() });
     },
   };
 }
@@ -1209,7 +1222,8 @@ function openSave(text, games) {
   if (typeof text !== "string" || text.length > MAX_FILE) throw new Refusal("file", "that file is too large or not text");
   let f;
   try { f = JSON.parse(text); } catch { throw notASave(); }
-  if (!f || typeof f !== "object" || Array.isArray(f) || Object.keys(f).sort().join() !== FIELDS.join()) throw notASave();
+  if (!f || typeof f !== "object" || Array.isArray(f) || Object.keys(f).filter((k) => k !== "salts").sort().join() !== FIELDS.join()) throw notASave();
+  if (f.salts !== undefined && (!Array.isArray(f.salts) || !Array.isArray(f.moves) || f.salts.length !== f.moves.length || !f.salts.every((s) => s === "" || SALT.test(s)))) throw notASave();
   if (f.format !== FORMAT) throw new Refusal("format", "this save was made by a different version of these games");
   if (!Array.isArray(f.moves) || f.moves.length > MAX_MOVES || typeof f.seed !== "string" || typeof f.end !== "string") throw notASave();
   if (!f.options || typeof f.options !== "object" || Array.isArray(f.options)) throw notASave();
@@ -1217,7 +1231,7 @@ function openSave(text, games) {
   if (!game) throw new Refusal("game", "this copy does not have that game");
   if (game.version !== f.version) throw new Refusal("version", `this save needs version ${String(f.version).slice(0, 20)} of ${game.id}; this copy has ${game.version}`);
 
-  const match = createMatch(game, { options: f.options, seed: f.seed }), total = f.moves.length;
+  const match = createMatch(game, { options: f.options, seed: f.seed, salts: f.salts || [] }), total = f.moves.length;
   const fail = (code, index, message) => {
     if (whenReplayFails({ code, index, total }) === "keep") return { match, warning: `${message}. Kept ${index} of ${total} moves.` };
     throw new Refusal(code, message);
@@ -1242,7 +1256,7 @@ const { canon } = $m[6];
 const { fingerprint } = $m[8];
 const { Refusal, createMatch } = $m[9];
 
-const LAYOUT = 2, MOST_MOVES = 4000, MOST_BYTES = 32000, CHECK = 8;
+const LAYOUT = 2, SALTED = 3, MOST_MOVES = 4000, MOST_BYTES = 32000, CHECK = 8;
 const ROLES = ["host", "friend", "normal", "easy", "hard"];
 const broken = () => new Refusal("link", "that link is broken or not complete");
 
@@ -1270,18 +1284,24 @@ function reader(bytes) {
 }
 /** Covers every move as well as where they lead. */
 function check(match, roles) {
-  const f = fingerprint([match.fingerprint(), match.seed, match.list, roles]);
+  const f = fingerprint([match.fingerprint(), match.seed, match.list, roles, ...(match.salts.some(Boolean) ? [match.salts] : [])]);
   return Array.from({ length: CHECK }, (_, i) => parseInt(f.slice(i * 2, i * 2 + 2), 16));
 }
 
-/** roles: for each seat "host", "friend", "normal" or "easy". look: for each seat the numbers of its colour and icon. */
+/** roles: for each seat "host", "friend", "normal" or "easy". look: for each seat the numbers of its colour and icon (a longer list is cut to the seats). */
 function packGame(match, roles, look) {
-  const head = new TextEncoder().encode(canon({ g: match.game.id, v: match.game.version, o: match.options, s: match.seed, r: roles, l: look })), out = [LAYOUT];
+  const salts = match.salts, salted = salts.some(Boolean); // a game played live keeps the salts of its dice (layout 3)
+  const head = new TextEncoder().encode(canon({ g: match.game.id, v: match.game.version, o: match.options, s: match.seed, r: roles, l: look.slice(0, match.options.seats) })), out = [salted ? SALTED : LAYOUT];
   put(out, head.length);
   out.push(...head);
-  const list = match.list, again = createMatch(match.game, { options: match.options, seed: match.seed });
+  const list = match.list, again = createMatch(match.game, { options: match.options, seed: match.seed, salts });
   if (list.length > MOST_MOVES) throw new Refusal("link", "this game is too long for a link");
   put(out, list.length);
+  if (salted) { // how many, then each as the gap from the last one and four bytes
+    const at = salts.flatMap((x, i) => (x ? [i] : []));
+    put(out, at.length);
+    at.forEach((i, k) => { put(out, i - (k ? at[k - 1] : 0)); for (let j = 0; j < 8; j += 2) out.push(parseInt(salts[i].slice(j, j + 2), 16)); });
+  }
   for (const m of list) {
     const want = canon(m);
     put(out, again.legal().findIndex((x) => canon(x) === want));
@@ -1295,18 +1315,29 @@ function packGame(match, roles, look) {
 function unpackGame(bytes, games) {
   if (bytes.length > MOST_BYTES) throw broken();
   const r = reader(bytes);
-  if (r.number() !== LAYOUT) throw new Refusal("link", "that link was made by a different version of these games");
+  const layout = r.number();
+  if (layout !== LAYOUT && layout !== SALTED) throw new Refusal("link", "that link was made by a different version of these games");
   let h;
   try { h = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(r.take(r.number()))); } catch { throw broken(); }
   if (!h || typeof h !== "object" || Object.keys(h).sort().join() !== "g,l,o,r,s,v" || typeof h.s !== "string" || !h.o || typeof h.o !== "object" || Array.isArray(h.o)) throw broken();
   const game = games.find((g) => g.id === h.g);
   if (!game) throw new Refusal("game", "that link is for another game. Open it from that game's page");
   if (game.version !== h.v) throw new Refusal("version", "that link was made by a different version of this game");
-  const match = createMatch(game, { options: h.o, seed: h.s });
-  if (!Array.isArray(h.r) || h.r.length !== match.options.seats || !h.r.every((x) => ROLES.includes(x))) throw broken();
-  if (!Array.isArray(h.l) || h.l.length !== match.options.seats || !h.l.every((x) => Array.isArray(x) && x.length === 2 && x.every((v) => Number.isInteger(v) && v >= 0 && v < 64))) throw broken();
   const n = r.number();
   if (n > MOST_MOVES) throw broken();
+  const salts = Array(n).fill("");
+  if (layout === SALTED) {
+    const k = r.number();
+    if (k > n) throw broken();
+    for (let j = 0, i = 0; j < k; j++) {
+      i += r.number();
+      if (i >= n || (j && salts[i])) throw broken();
+      salts[i] = Array.from(r.take(4), (b) => b.toString(16).padStart(2, "0")).join("");
+    }
+  }
+  const match = createMatch(game, { options: h.o, seed: h.s, salts });
+  if (!Array.isArray(h.r) || h.r.length !== match.options.seats || !h.r.every((x) => ROLES.includes(x))) throw broken();
+  if (!Array.isArray(h.l) || h.l.length !== match.options.seats || !h.l.every((x) => Array.isArray(x) && x.length === 2 && x.every((v) => Number.isInteger(v) && v >= 0 && v < 64))) throw broken();
   for (let i = 0; i < n; i++) {
     const m = match.legal()[r.number()];
     if (!m) throw broken();
@@ -1319,12 +1350,202 @@ function unpackGame(bytes, games) {
 /** How a game that arrives stands to the one already here: "new" (it goes on from ours), "old" (ours goes further), or "other". */
 function compareGames(ours, theirs) {
   if (ours.game.id !== theirs.game.id || ours.seed !== theirs.seed || canon(ours.options) !== canon(theirs.options)) return "other";
-  const a = ours.list.map((m) => canon(m)), b = theirs.list.map((m) => canon(m)), n = Math.min(a.length, b.length);
+  const a = ours.list.map((m, i) => canon([m, ours.salts[i]])), b = theirs.list.map((m, i) => canon([m, theirs.salts[i]])), n = Math.min(a.length, b.length);
   for (let i = 0; i < n; i++) if (a[i] !== b[i]) return "other";
   return b.length > a.length ? "new" : "old";
 }
 
 $x.packGame = packGame; $x.unpackGame = unpackGame; $x.compareGames = compareGames;
+return $x; })({});
+$m[11] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// A table played live between two browsers, over any channel that carries plain messages in order (site/livelink.js uses WebRTC).
+// Both sides keep the whole game and check every move by the rules, so neither can send a move that is not allowed.
+// Nobody can peek at the dice: before each move each side commits to a secret (sends only its hash). The mover sends the move
+// with its secret, the other answers with its own, and that move's dice are mixed with both (the match's salts). A game dealt
+// live gets its seed the same way, so neither side chooses the deal. Hidden things (cards in hand) are still in both browsers.
+const { canon } = $m[6];
+const { sha256 } = $m[8];
+const { Refusal, createMatch } = $m[9];
+
+const V = 1, SECRET = /^[0-9a-f]{32}$/, HASH = /^[0-9a-f]{64}$/, MOST = 20000;
+const hex = (text) => sha256(new TextEncoder().encode(text));
+/** The hash a side sends before its secret. */
+const commitOf = (r) => hex(`capo-live/${r}`);
+/** The salt of move n, from both secrets. */
+const saltOf = (n, host, guest) => hex(canon(["capo-salt", n, host, guest])).slice(0, 8);
+/** A seed dealt live starts with this, so a game is dealt once. */
+const DEALT = "live:";
+const seedOf = (host, guest) => DEALT + hex(canon(["capo-deal", host, guest])).slice(0, 24);
+
+const isN = (n) => Number.isInteger(n) && n >= 0 && n <= MOST;
+/** The moves of a game as places in the list of legal moves, as in a link. */
+function places(m) {
+  const again = createMatch(m.game, { options: m.options, seed: m.seed, salts: m.salts });
+  return m.list.map((mv) => { const want = canon(mv), i = again.legal().findIndex((x) => canon(x) === want); again.play(mv); return i; });
+}
+function rebuild(game, options, seed, list, salts) {
+  const m = createMatch(game, { options, seed, salts });
+  for (const i of list) { const mv = m.legal()[i]; if (!mv) throw new Refusal("live", "a move that is not allowed"); m.play(mv); }
+  return m;
+}
+
+/**
+ * side: "host" or "guest". owns(seat, match): whether a seat is played from this side (the host plays its own seats and the bots).
+ * secret(): 32 fresh hex digits. What the table is told:
+ *   moved(move): a move from the other side is final, play it. dealt(seed): a game not yet begun gets a fresh seed.
+ *   adopt(match): the other side is further on; take a copy of its game (this one stays the session's own). trouble(text, stop): something to say; stop ends live play.
+ */
+function createSession({ side, owns, secret, moved, dealt, adopt, trouble }) {
+  let m = null, send = null, synced = false, pending = null, sent = null, told = null, deal = null;
+  const mine = new Map(), theirs = new Map(), done = new Map(), asked = new Map();
+  const both = (a, b) => (side === "host" ? [a, b] : [b, a]);
+  const stop = (text) => { trouble(text, true); s.detach(); };
+  const at = () => m.list.length;
+
+  function commit(n) {
+    if (!send || !synced || at() !== n || m.turn === null) return;
+    if (!mine.has(n)) { const r = secret(); mine.set(n, { r, c: commitOf(r) }); }
+    send({ t: "commit", n, c: mine.get(n).c, f: m.fingerprint() });
+  }
+  function theirCommit(n) { // their commit for move n, once it is here
+    if (theirs.has(n)) return Promise.resolve(theirs.get(n));
+    return new Promise((resolve) => asked.set(n, resolve));
+  }
+  /** A move is final on this side: the table plays it with this salt. */
+  function final(n, mv, salt) {
+    done.set(n, { key: canon(mv), salt });
+    for (const map of [done, mine, theirs]) for (const k of map.keys()) if (k < n - 8) map.delete(k);
+    commit(n + 1);
+  }
+  function inStep(n, c) {
+    if (c.f !== m.fingerprint()) { stop("The two browsers see this game differently, so live play stopped. It goes on by links."); return false; }
+    return true;
+  }
+
+  function hello(h) {
+    if (h.v !== V) return stop("The other browser has a different version of the live table. Play goes on by links.");
+    if (h.side === side) return stop("Both browsers think they made this game, so live play stopped.");
+    if (h.game !== m.game.id || canon(h.options) !== canon(m.options) || !Array.isArray(h.moves) || !Array.isArray(h.salts) || h.moves.length > MOST) return stop("The other browser has a different game open, so live play stopped.");
+    let them;
+    if (h.seed !== m.seed) { // only a game not begun: undealt on both sides is dealt now; dealt on one side is taken by the other
+      const ours = m.seed.startsWith(DEALT), theirsDealt = String(h.seed).startsWith(DEALT);
+      if (at() || h.moves.length || (ours && theirsDealt)) return stop("The two browsers have different games, so live play stopped.");
+      synced = true;
+      if (!ours && !theirsDealt) return dealing();
+      if (ours) { commit(0); return undefined; }
+      them = createMatch(m.game, { options: m.options, seed: h.seed });
+    } else {
+      try { them = rebuild(m.game, m.options, h.seed, h.moves, h.salts); } catch { return stop("The other browser sent a game the rules do not allow, so live play stopped."); }
+    }
+    const a = m.list.map((mv, i) => canon([mv, m.salts[i]])), b = them.list.map((mv, i) => canon([mv, them.salts[i]]));
+    for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return stop("The two browsers tell this game differently, so live play stopped. It goes on by links.");
+    if (b.length > a.length || them.seed !== m.seed) {
+      // our own last move went out, they played it, and its answer was lost: their secret must match what they promised
+      if (sent && b.length === sent.n + 1 && h.told?.n === sent.n && theirs.has(sent.n) && commitOf(h.told.r) !== theirs.get(sent.n).c) return stop("The other browser changed a secret it had promised, so live play stopped.");
+      m = them;
+      adopt(them);
+    }
+    sent = null;
+    synced = true;
+    if (!at() && !m.seed.startsWith(DEALT)) return dealing();
+    commit(at());
+    return undefined;
+  }
+  function dealing() {
+    if (!deal) { const r = secret(); deal = { r, c: commitOf(r) }; }
+    send({ t: "deal", c: deal.c });
+  }
+  function dealt2(r) {
+    const seed = seedOf(...both(deal.r, r));
+    m = createMatch(m.game, { options: m.options, seed });
+    mine.clear(); theirs.clear(); done.clear();
+    dealt(seed);
+    commit(0);
+  }
+
+  const s = {
+    /** The game the table holds now; a copy is kept here. */
+    start(match) { m = createMatch(match.game, { options: match.options, seed: match.seed, salts: match.salts }); for (const mv of match.list) m.play(mv); },
+    /** A channel is open: say where we stand. */
+    attach(out) {
+      send = out; synced = false;
+      send({ t: "hello", v: V, side, game: m.game.id, options: m.options, seed: m.seed, moves: places(m), salts: m.salts, told });
+    },
+    detach() {
+      send = null; synced = false;
+      if (pending) { const p = pending; pending = null; p.reject(new Refusal("down", "the live connection dropped")); }
+    },
+    up: () => !!send && synced,
+    /** Whether the table should wait for the other side to play this seat. */
+    waits: (seat) => !!send && seat !== null && !owns(seat, m),
+    /** The salt for move n. Ours: sent, and answered with their secret. Theirs: already final. */
+    salt(mv, n) {
+      const d = done.get(n);
+      if (d && d.key === canon(mv)) return Promise.resolve(d.salt);
+      if (!s.up() || at() !== n || !owns(m.turn, m)) return Promise.reject(new Refusal("step", "the live table is not at that move"));
+      const i = m.legal().findIndex((x) => canon(x) === canon(mv));
+      if (i < 0) return Promise.reject(new Refusal("illegal", "that move is not allowed now"));
+      return new Promise((resolve, reject) => {
+        pending = { n, mv, resolve, reject };
+        theirCommit(n).then(() => {
+          if (pending?.n !== n || !send) return;
+          if (!mine.has(n)) commit(n);
+          sent = { n };
+          send({ t: "move", n, i, r: mine.get(n).r });
+        });
+      });
+    },
+    receive(x) {
+      if (!x || typeof x !== "object" || !send) return;
+      if (x.t === "hello") { hello(x); return; }
+      if (!synced) return;
+      if (x.t === "deal" && HASH.test(x.c)) {
+        if (deal?.theirs && deal.theirs !== x.c) trouble("The other browser started the deal again.", false);
+        if (!deal) dealing();
+        deal.theirs = x.c;
+        send({ t: "open", r: deal.r });
+      } else if (x.t === "open" && SECRET.test(x.r) && deal?.theirs) {
+        if (commitOf(x.r) !== deal.theirs) return stop("The other browser changed a secret it had promised, so live play stopped.");
+        dealt2(x.r);
+      } else if (x.t === "commit" && isN(x.n) && HASH.test(x.c) && typeof x.f === "string") {
+        const had = theirs.get(x.n);
+        // a fresh secret for a roll already promised: a reload, or a try at a second roll. Said, so both know
+        if (had && had.c !== x.c) trouble("The other browser drew a new secret for a roll it had already promised. That happens after a reload; done on purpose it would be a second try.", false);
+        theirs.set(x.n, { c: x.c, f: x.f });
+        asked.get(x.n)?.(theirs.get(x.n)); asked.delete(x.n);
+      } else if (x.t === "move" && isN(x.n) && Number.isInteger(x.i) && SECRET.test(x.r)) {
+        const n = x.n, c = theirs.get(n), me = mine.get(n);
+        if (n !== at() || !c || !me || m.turn === null || owns(m.turn, m)) return stop("A move came out of turn, so live play stopped. It goes on by links.");
+        if (commitOf(x.r) !== c.c) return stop("The other browser changed a secret it had promised, so live play stopped.");
+        if (!inStep(n, c)) return undefined;
+        const mv = m.legal()[x.i];
+        if (!mv) return stop("The other browser sent a move the rules do not allow, so live play stopped.");
+        send({ t: "reveal", n, r: me.r });
+        told = { n, r: me.r };
+        const salt = saltOf(n, ...both(me.r, x.r));
+        m.play(mv, salt);
+        final(n, mv, salt);
+        moved(mv);
+      } else if (x.t === "reveal" && isN(x.n) && SECRET.test(x.r) && pending?.n === x.n) {
+        const n = x.n, c = theirs.get(n), p = pending;
+        if (commitOf(x.r) !== c.c) return stop("The other browser changed a secret it had promised, so live play stopped.");
+        if (!inStep(n, c)) return undefined;
+        const salt = saltOf(n, ...both(mine.get(n).r, x.r));
+        pending = null; sent = null;
+        m.play(p.mv, salt);
+        final(n, p.mv, salt);
+        done.delete(n); // ours: the table plays it from here
+        p.resolve(salt);
+      }
+      return undefined;
+    },
+    get match() { return m; },
+  };
+  return s;
+}
+
+$x.commitOf = commitOf; $x.saltOf = saltOf; $x.DEALT = DEALT; $x.seedOf = seedOf; $x.createSession = createSession;
 return $x; })({});
 $m[5] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -1333,10 +1554,11 @@ $x.compareGames = $m[7].compareGames; $x.packGame = $m[7].packGame; $x.unpackGam
 $x.fingerprint = $m[8].fingerprint; $x.sha256 = $m[8].sha256;
 $x.chance = $m[10].chance; $x.next = $m[10].next; $x.seedState = $m[10].seedState;
 $x.FORMAT = $m[9].FORMAT; $x.Refusal = $m[9].Refusal; $x.checkGame = $m[9].checkGame; $x.readOptions = $m[9].readOptions; $x.createMatch = $m[9].createMatch; $x.openSave = $m[9].openSave; $x.whenReplayFails = $m[9].whenReplayFails;
+$x.DEALT = $m[11].DEALT; $x.commitOf = $m[11].commitOf; $x.createSession = $m[11].createSession; $x.saltOf = $m[11].saltOf; $x.seedOf = $m[11].seedOf;
 
 
 return $x; })({});
-$m[11] = (($x) => {
+$m[12] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Made by tools/world.py: our own provinces on a public-domain coast (Natural Earth). Do not edit by hand.
 const COLS = 124, ROWS = 56;
@@ -1413,7 +1635,7 @@ $m[4] = (($x) => {
 // border is a real border. The same key always grows the same land.
 const { chance, seedState } = $m[5];
 const { hexBoard, joined } = $m[2];
-const { CELLS, COLS, CROSSINGS, MARKS, LANDS: WORLD_LANDS, NAMES: WORLD_NAMES, REGION } = $m[11];
+const { CELLS, COLS, CROSSINGS, MARKS, LANDS: WORLD_LANDS, NAMES: WORLD_NAMES, REGION } = $m[12];
 
 const R = 11, PROVINCES = 36, SIZES = [5, 6, 7, 8, 10], TRIES = 200;
 const NAMES = ["Aldermoor", "Ashwick", "Barrowgate", "Bellhollow", "Bracken", "Brightwater", "Calder", "Candlemere", "Carrow", "Cinderford", "Coldharbour", "Corvane", "Dunmarsh", "Eastlode", "Elmreach", "Fallowdale", "Farrow", "Fenwater", "Flintholm", "Foxhythe", "Gallowfield", "Glasswell", "Greywether", "Halloway", "Harrowdown", "Hazelmark", "Heronstead", "Highmoor", "Ironbeck", "Kestrel", "Lanternhead", "Larkfell", "Longstrand", "Maplecross", "Merrow", "Millstone", "Netherby", "Northlode", "Oxmere", "Pellgate", "Quarryhill", "Ravensay", "Redwillow", "Saltmarsh", "Sedgeford", "Silverlea", "Stonewade", "Summerley", "Tallowbridge", "Tarnside", "Thornwick", "Umberfield", "Valecross", "Wardenhill", "Westerby", "Whitcombe", "Windrush", "Wolverden", "Yarrow", "Yewdale"];
@@ -1879,7 +2101,7 @@ function choose(p, dice, tier) {
 
 $x.TIERS = TIERS; $x.trial = trial; $x.spotWorth = spotWorth; $x.wants = wants; $x.thinking = thinking; $x.choose = choose;
 return $x; })({});
-$m[14] = (($x) => {
+$m[15] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // One camera for every look. Board point (x, y) in board pixels, height Z in screen pixels.
 // The *To methods write into fields and make no objects, so picking makes no garbage.
@@ -1948,7 +2170,7 @@ function pick(cam, m, sx, sy, top, unit, most) {
 
 $x.Camera = Camera; $x.pick = pick;
 return $x; })({});
-$m[15] = (($x) => {
+$m[16] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Turns a list of hexes into what the painter needs: a picture of cell numbers and a picture of heights.
 const ROOT3 = Math.sqrt(3);
@@ -2000,7 +2222,7 @@ function hexPicture(cells, rough, sea = [], size = 44) {
 
 $x.noise = noise; $x.hexPicture = hexPicture;
 return $x; })({});
-$m[16] = (($x) => {
+$m[17] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The mesh layer: real shapes standing on the ground, shared by every game. Each model is sent to the graphics card once and
 // drawn many times (instanced), lit by the same lamp as the ground, hidden by raised cells through the depth the ground writes,
@@ -2178,7 +2400,7 @@ class Meshes {
 
 $x.HEAD = HEAD; $x.SHADE = SHADE; $x.program = program; $x.DEPTH = DEPTH; $x.aim = aim; $x.Meshes = Meshes;
 return $x; })({});
-$m[18] = (($x) => {
+$m[19] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The geometry kit: models made in code, our own work. A shape is a flat list of corners, three to a triangle,
 // ten numbers a corner: place (x, y, z with z up), which way it faces, colour (a slot in the style's palette, a shade about 128, and a spare), and finish
@@ -2279,7 +2501,7 @@ function bake(v) {
 
 $x.ears = ears; $x.lathe = lathe; $x.prism = prism; $x.box = box; $x.move = move; $x.bake = bake;
 return $x; })({});
-$m[19] = (($x) => {
+$m[20] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Styles, as data. A style is a palette, a set of finishes, a lamp, a surface, a table to lie on and a named set of models:
 // nothing in the grounds, the mesh layer or the recipes knows one style from another, so a new style is a new entry here
@@ -2426,13 +2648,13 @@ function seatsOf(chosen, style) { const s = styleOf(style), set = SEATS[seatSet(
 
 $x.SLOT = SLOT; $x.STYLES = STYLES; $x.STYLE_KEY = STYLE_KEY; $x.styleOf = styleOf; $x.wear = wear; $x.SEATS = SEATS; $x.SEATS_KEY = SEATS_KEY; $x.LANDS = LANDS; $x.washed = washed; $x.darkBoard = darkBoard; $x.seatSet = seatSet; $x.seatsOf = seatsOf;
 return $x; })({});
-$m[17] = (($x) => {
+$m[18] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The recipes: every model the boards stand on the table, made in code with the kit (our own work, in the manner of painted
 // war-game miniatures: metal bases, matte paint, the owner's colour as enamel). One cell's radius is 1; z is up; +y is toward the player.
 // A recipe paints with the style's palette slots, so another style recolours all of them at once.
-const { bake, box, lathe, move, prism } = $m[18];
-const { SLOT } = $m[19];
+const { bake, box, lathe, move, prism } = $m[19];
+const { SLOT } = $m[20];
 
 const c = (slot, shade = 128) => [SLOT[slot], shade, 0], TAU = Math.PI * 2, UP = Math.PI / 2;
 const ring = (n, r, f) => { for (let i = 0; i < n; i++) { const a = (i / n) * TAU; f(Math.cos(a) * r, Math.sin(a) * r, a, i); } };
@@ -2600,7 +2822,7 @@ function models(kit = {}) {
 
 $x.unpack = unpack; $x.models = models;
 return $x; })({});
-$m[21] = (($x) => {
+$m[22] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Made by tools/models.mjs from tools/figures.json; do not edit by hand. The sculpted models on the shelf (site/models/), each
 // fetched only when a board in 3D shows it, with its licence and the credit line the credits panel shows players.
@@ -2622,13 +2844,13 @@ const SHELF = {
 
 $x.SHELF = SHELF;
 return $x; })({});
-$m[20] = (($x) => {
+$m[21] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Sculpted pieces in place of the recipes made in code, where they are better: which model stands for a piece in each era and
 // region, and fetching each one only when a board in 3D first shows it. Looks only: no rule ever reads a model. The recipes stay
 // as the fallback (Flat, a page with no shelf, a style that keeps to its own set, a model not yet arrived) and nothing waits on one.
-const { SHELF } = $m[21];
-const { unpack } = $m[17];
+const { SHELF } = $m[22];
+const { unpack } = $m[18];
 
 /** Which shelf model takes a recipe's place, by era. A name missing here, or from the shelf, keeps its recipe. */
 const ERAS = {
@@ -2683,11 +2905,11 @@ function figures(era, fetch, got) {
 
 $x.ERAS = ERAS; $x.REGIONS = REGIONS; $x.SORT = SORT; $x.eraOf = eraOf; $x.figures = figures;
 return $x; })({});
-$m[22] = (($x) => {
+$m[23] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The painter: WebGL2 by hand. One full-screen triangle; the shader undoes the camera and walks down to the first cell top.
 // It writes the depth of what it found, so that the mesh layer's real shapes are hidden by raised cells, and it takes their shadows.
-const { DEPTH, SHADE } = $m[16];
+const { DEPTH, SHADE } = $m[17];
 const VS = `#version 300 es
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS = `#version 300 es
@@ -2890,13 +3112,13 @@ class Painter {
 
 $x.Painter = Painter;
 return $x; })({});
-$m[23] = (($x) => {
+$m[24] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Reading a board at a glance: the goods' own symbols and their key, pips under a number, a port's rate on a plate by its flag,
 // a seat's routes as links between hexes, and flags on what can still act. Our own simple shapes, drawn in code.
 // Looks only: no rule ever reads them.
-const { bake, box } = $m[18];
-const { SLOT } = $m[19];
+const { bake, box } = $m[19];
+const { SLOT } = $m[20];
 
 const TAU = Math.PI * 2, INK = "#1a1411", PALE = "#fdf6e4";
 const oval = (c, x, y, rx, ry, a = 0) => { c.moveTo(x + rx * Math.cos(a), y + rx * Math.sin(a)); c.ellipse(x, y, rx, ry, a, 0, TAU); c.closePath(); };
@@ -3054,7 +3276,7 @@ function legend(items, title = "Goods") {
 
 $x.GLYPHS = GLYPHS; $x.glyph = glyph; $x.stamp = stamp; $x.pips = pips; $x.portPlate = portPlate; $x.flag = flag; $x.linkModels = linkModels; $x.linkEnds = linkEnds; $x.stageLinks = stageLinks; $x.drawLinks = drawLinks; $x.legend = legend;
 return $x; })({});
-$m[24] = (($x) => {
+$m[25] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Names on the map and number plates that keep out of each other's way. A plate that would cover another is moved to the
 // nearest free place and tied back to its piece by a thin line; a name that has no room, or no room in its province, is left out.
@@ -3146,21 +3368,21 @@ function drawNames(ctx, cam, m, show, unit, places, taken, hover, plates, tall) 
 
 $x.spread = spread; $x.tie = tie; $x.reach = reach; $x.nameFont = nameFont; $x.word = word; $x.drawNames = drawNames;
 return $x; })({});
-$m[13] = (($x) => {
+$m[14] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A hex board on a page: the painted surface, standing pieces and emblems, picking, looks and animation.
 // It never changes a game. It is told what to show and says which cell was pointed at.
-const { Camera, pick } = $m[14];
-const { hexPicture } = $m[15];
-const { Meshes } = $m[16];
-const { models, unpack } = $m[17];
+const { Camera, pick } = $m[15];
+const { hexPicture } = $m[16];
+const { Meshes } = $m[17];
+const { models, unpack } = $m[18];
 // figures hook
-const { figures } = $m[20];
-const { Painter } = $m[22];
-const { STYLES, styleOf, wear } = $m[19];
+const { figures } = $m[21];
+const { Painter } = $m[23];
+const { STYLES, styleOf, wear } = $m[20];
 // reading hook (p10-reading): the goods, pips, ports, links and flags; names and plates that keep clear of each other
-const { drawLinks, flag, linkModels, pips, portPlate, stageLinks, stamp } = $m[23];
-const { drawNames, spread, tie } = $m[24];
+const { drawLinks, flag, linkModels, pips, portPlate, stageLinks, stamp } = $m[24];
+const { drawNames, spread, tie } = $m[25];
 
 const DEG = Math.PI / 180;
 const LOOKS = {
@@ -3676,7 +3898,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
 
 $x.LOOKS = LOOKS; $x.EMBLEMS = EMBLEMS; $x.emblem = emblem; $x.seatPattern = seatPattern; $x.canDraw = canDraw; $x.createBoard = createBoard;
 return $x; })({});
-$m[26] = (($x) => {
+$m[27] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Where this copy's source code can be read. Anyone who runs a changed copy puts their own address here.
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
@@ -3684,7 +3906,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.10.1";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "1affd5a2";
+const BUILD = "e7a6e280";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -3701,10 +3923,15 @@ const AI_BASES = {
   lmstudio: "http://localhost:1234/v1",
   llamacpp: "http://localhost:8080/v1",
 };
+// Ruling 155: the only outside addresses a table page may reach, for live play, each with its reason. They are reached only after a
+// player asks for live play, never when a page opens. The table pages' rule (connect-src) lists exactly these; the gate holds them so.
+const LIVE_ADDRESSES = [
+  { url: "stun:stun.cloudflare.com:3478", why: "STUN: tells each browser its own public internet address, so two browsers can connect directly. Free and unlimited by Cloudflare's own page; nothing about the game is sent" },
+];
 
-$x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_BASES = AI_BASES;
+$x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_BASES = AI_BASES; $x.LIVE_ADDRESSES = LIVE_ADDRESSES;
 return $x; })({});
-$m[27] = (($x) => {
+$m[28] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
 // Daylight or lamplight, as the table games' Light setting last left it; every page starts here. The front page has one theme.
@@ -3724,10 +3951,10 @@ function guard() {
 
 $x.guard = guard;
 return $x; })({});
-$m[25] = (($x) => {
+$m[26] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
-const { BUILD, SOURCE_URL, VERSION } = $m[26];
-const { guard } = $m[27];
+const { BUILD, SOURCE_URL, VERSION } = $m[27];
+const { guard } = $m[28];
 
 /** Every page shows its version and where its source can be read. */
 function footer() {
@@ -3743,12 +3970,12 @@ function footer() {
 
 $x.footer = footer;
 return $x; })({});
-$m[28] = (($x) => {
+$m[29] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Games played by pasting a link. The whole game is in the part after #, which browsers do not send to the host.
 // With a password the game is locked (AES-GCM, the key made from the password by PBKDF2) before it goes in the link.
 const { Refusal } = $m[5];
-const { SITE_URL } = $m[26];
+const { SITE_URL } = $m[27];
 
 const ID = 6, SALT = 16, IV = 12, ROUNDS = 250000, PLACE = "capo-link-";
 const broken = () => new Refusal("link", "that link is broken or not complete");
@@ -3808,7 +4035,7 @@ const linkGames = {
 
 $x.canLock = canLock; $x.newId = newId; $x.makeLink = makeLink; $x.readLink = readLink; $x.linkGames = linkGames;
 return $x; })({});
-$m[29] = (($x) => {
+$m[30] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The coach: a guided first game. A game gives a fixed seed, a short preset and a few steps. Each step points at a place
 // on the board or a control, says one plain sentence, and goes on when the player does the thing (or presses Next, for a step
@@ -3950,11 +4177,11 @@ function coach(T, L, key, go) {
 
 $x.coach = coach;
 return $x; })({});
-$m[30] = (($x) => {
+$m[31] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The model shelf as the pages reach it: a sculpted piece is fetched from site/models/ only when a board in 3D first shows it,
 // and the credits players can read from every game's About (CC BY asks for a credit line they can reach).
-const { SHELF } = $m[21];
+const { SHELF } = $m[22];
 
 // the built pages point this at the site's own shelf when served, and at nothing when a page is opened by double-click (no fetching there)
 const SHELF_URL = "../site/models/";
@@ -3979,7 +4206,7 @@ function shelfCredits() {
 
 $x.shelf = shelf; $x.shelfCredits = shelfCredits;
 return $x; })({});
-$m[31] = (($x) => {
+$m[32] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What the table games' screen keeps for the player: settings, sounds made in code, and the order of places at the end.
 // No page is touched when this is loaded, so its plain parts are tested in Node (test/shell.test.mjs).
@@ -4081,13 +4308,13 @@ function cue(events) {
 
 $x.SETTINGS_KEY = SETTINGS_KEY; $x.CHOICES = CHOICES; $x.DEFAULTS = DEFAULTS; $x.SETTINGS_V = SETTINGS_V; $x.PACE = PACE; $x.SCALE = SCALE; $x.parseSettings = parseSettings; $x.settings = settings; $x.saveSettings = saveSettings; $x.takeBack = takeBack; $x.turnKey = turnKey; $x.ranked = ranked; $x.resultText = resultText; $x.wake = wake; $x.audio = audio; $x.sfx = sfx; $x.cue = cue;
 return $x; })({});
-$m[33] = (($x) => {
+$m[34] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Motion over a board: dice that tumble and settle, pieces that travel, a ring where land changes hands, a flourish where
 // something is built, pennants for a win. Drawn on one canvas above the board, and only while something moves.
 // It never changes a game and never holds one up: the board already shows the new position, and motion only follows it.
 // Places are asked for every frame (where(i, dx, dy) gives a point and a piece's size there), so a board that pans keeps them.
-const { emblem } = $m[13];
+const { emblem } = $m[14];
 
 const out3 = (k) => 1 - (1 - k) ** 3, smooth = (k) => k * k * (3 - 2 * k), clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, k) => a + (b - a) * k, shade = (rgb, f, add = 0) => `rgb(${rgb.map((v) => Math.round(clamp(v * f + add, 0, 255)))})`;
@@ -4296,11 +4523,11 @@ function pennants(colours, box, { ms = 2600, many = 34 } = {}) {
 
 $x.createMotion = createMotion; $x.travel = travel; $x.dice = dice; $x.capture = capture; $x.build = build; $x.pulse = pulse; $x.sweep = sweep; $x.pennants = pennants;
 return $x; })({});
-$m[34] = (($x) => {
+$m[35] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The table games' cues, made here with the Web Audio API as they are needed: no sound files. Short and quiet, under the
 // player's sound switch and volume (site/shell.js), and silent until a press has woken them.
-const { audio, settings } = $m[31];
+const { audio, settings } = $m[32];
 
 const last = new Map();
 /** One voice: a tone that swells and dies away, gliding to `to` hertz if given. */
@@ -4390,15 +4617,15 @@ function voice(key, events, move, p, moving) {
 
 $x.CUES = CUES; $x.play = play; $x.cuesOf = cuesOf; $x.voice = voice;
 return $x; })({});
-$m[32] = (($x) => {
+$m[33] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Motion and sound for the table games: what each game's events look like as they happen, played over the board.
 // The rules have already moved when this is called, and the board already shows where things stand: nothing here waits for an
 // animation, holds up a move or changes a position. With motion reduced (the setting, or the system's wish) nothing moves;
 // with the sound off nothing sounds. The camera follows a rival's move only while the player has not moved the map lately.
-const { build, capture, createMotion, dice, pennants, pulse, sweep, travel } = $m[33];
-const { settings } = $m[31];
-const { voice } = $m[34];
+const { build, capture, createMotion, dice, pennants, pulse, sweep, travel } = $m[34];
+const { settings } = $m[32];
+const { voice } = $m[35];
 
 let layer = null, touched = -1e9, fight = null, glide = null, RGB = [], ICONS = []; // the seats' colours and emblems, as the table dressed them
 const PALE = [206, 196, 170], GOODS = [[226, 196, 96], [176, 208, 216], [196, 120, 82], [228, 226, 214]];
@@ -4542,22 +4769,300 @@ function hail(box, colours) {
 
 $x.moving = moving; $x.frames = frames; $x.throwDice = throwDice; $x.bannersDice = bannersDice; $x.stir = stir; $x.hail = hail;
 return $x; })({});
-$m[12] = (($x) => {
+$m[36] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Live play by two pasted links (ruling 155; option A of the servers paper). A game by link is upgraded: its invitation is the
+// game's own link with a WebRTC offer added, the friend's page answers with a reply link, and the two browsers then talk straight
+// to each other over a data channel. No server of ours is involved; the one outside address is the STUN service in config.js,
+// reached only after a player asks for live play. If no direct path is found, nothing is lost: the game goes on by links.
+// The rules of the exchange (dealing, salted dice, checks, catching up) are in src/core/session.js.
+const { Refusal, createMatch, createSession, openSave, packGame } = $m[5];
+const { LIVE_ADDRESSES } = $m[27];
+const { makeLink, readLink } = $m[29];
+
+const GATHER = 4000, OPEN = 25000, SHAKY = 7000, HAND = "capo-live-reply", MOST = 2000000;
+const canLive = () => typeof RTCPeerConnection === "function" && !!globalThis.crypto?.getRandomValues;
+const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+const secret = () => hex(crypto.getRandomValues(new Uint8Array(16)));
+const join = (a, b) => { const out = new Uint8Array(a.length + b.length); out.set(a); out.set(b, a.length); return out; };
+const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
+/** A session description, made small: deflated where the browser can (first byte 1), else as it is (0). */
+async function squeeze(text) {
+  const raw = new TextEncoder().encode(text);
+  return typeof CompressionStream === "function" ? join([1], await pipe(raw, new CompressionStream("deflate-raw"))) : join([0], raw);
+}
+async function unsqueeze(b) {
+  if (b[0] === 0) return new TextDecoder().decode(b.subarray(1));
+  if (b[0] !== 1 || typeof DecompressionStream !== "function") throw new Refusal("live", "this browser cannot read that invitation");
+  try { return new TextDecoder().decode(await pipe(b.subarray(1), new DecompressionStream("deflate-raw"))); } catch { throw new Refusal("live", "that invitation is broken or not complete"); }
+}
+/** Wait until the browser has found its addresses, or a few seconds: a slow or blocked STUN service only loses the outside address. */
+const gathered = (pc) => new Promise((done) => {
+  if (pc.iceGatheringState === "complete") { done(); return; }
+  const t = setTimeout(done, GATHER);
+  pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete") { clearTimeout(t); done(); } });
+});
+const blobOf = (url) => url.slice(url.indexOf("#t=") + 3);
+
+const PRIVACY = "Live play joins your browser straight to your friend's. To find the way, each browser asks a public address service (stun.cloudflare.com) for its own internet address; nothing about the game goes there. Your friend's browser sees your internet address, and the invitation and the reply carry it, so send them only to the person you play with.";
+const FAIR = "Every move is checked by the rules in both browsers, and nobody can peek at the dice: each roll is drawn from secrets of both browsers, shown only after the move is sent. Both browsers hold the whole game, so among friends all is well, but a changed browser could see hidden cards.";
+
+/**
+ * The table's side of live play. t: { T, G, begin, sheet, closeSheet, toast, el, names, send }; send is the move panel's link box.
+ * Returns what table.js asks: arrive(hash), begun(), box(), and T.live: on(), waits(seat), salt(move, n).
+ */
+function liveLink({ T, G, begin, sheet, closeSheet, toast, el, names, send }) {
+  const sessions = new Map(); // by link id: a session outlives a dropped connection, so promised secrets stay promised
+  let wire = null, offerIn = null, chain = Promise.resolve(), hand = null, shaky = 0;
+  const button = (text, cls, go) => { const b = el("button", text, cls); b.type = "button"; b.onclick = go; return b; };
+  const mySeat = () => T.kinds.indexOf("you");
+  const sideOf = () => (T.link?.roles[mySeat()] === "host" ? "host" : "guest");
+  const other = () => { const s = T.link.roles.findIndex((r, i) => (r === "host" || r === "friend") && T.kinds[i] === "away"); return s < 0 ? "your friend" : names[s]; };
+  /** Live play needs a game by link between this browser and one other, played by turns. */
+  const fits = () => !!T.link && !T.demo && !T.realtime() && T.link.roles.filter((r) => r === "friend").length === 1 && mySeat() >= 0 && (sideOf() === "host" || T.link.roles[mySeat()] === "friend");
+  // joined: from the moment the channel opens, so the table holds its moves until both sides stand at the same move
+  const on = () => !!wire?.open && !!wire.session;
+  async function inStep() {
+    while (on() && !wire.session.up()) await new Promise((r) => setTimeout(r, 40));
+    if (!on()) throw new Refusal("down", "the live connection dropped");
+  }
+
+  function sessionFor(id) {
+    if (sessions.has(id)) return sessions.get(id);
+    const side = sideOf(), s = createSession({
+      side, secret,
+      owns: (seat) => (side === "host" ? T.link.roles[seat] !== "friend" : seat === mySeat()),
+      // a move from the other side waits for the table to finish showing the last one
+      moved: (mv) => { chain = chain.then(async () => { while (T.busy || T.catching) await new Promise((r) => setTimeout(r, 40)); await T.play(mv); }).catch((e) => { end(); fallback(e instanceof Refusal ? `${e.message[0].toUpperCase()}${e.message.slice(1)}.` : "A move from the other browser could not be played here, so live play stopped."); }); },
+      dealt: (seed) => { begin(createMatch(G.game, { seed, options: T.match.options }), T.kinds, { ...T.link, floor: 0 }); toast("Dealt live: both browsers drew the deal together."); },
+      adopt: (m) => { const from = T.match.list.length, copy = openSave(m.save(), [G.game]).match; begin(copy, T.kinds, { ...T.link, floor: copy.list.length }, from); },
+      trouble: (text, stop) => { if (stop) { end(); fallback(text); } else toast(text); },
+    });
+    sessions.set(id, s);
+    return s;
+  }
+
+  function end() {
+    const w = wire;
+    wire = null;
+    clearTimeout(shaky);
+    if (!w) return;
+    w.session?.detach();
+    try { w.dc?.close(); } catch { /* already closed */ }
+    try { w.pc.close(); } catch { /* already closed */ }
+  }
+  /** No live table: say why, and carry on by links. */
+  function fallback(why) {
+    const box = el("div", undefined, "stack");
+    box.append(el("p", why), el("p", "The game goes on by links, as before: when it is your friend's turn, the move panel offers the link to send."));
+    sheet("Playing by links", box);
+    if (T.link && !T.demo) begin(T.match, T.kinds, T.link); // the table picks up link play where it stands
+  }
+  function dropped() {
+    if (!wire) return;
+    end();
+    toast("The live connection dropped. Play goes on by links; to join again, choose Play live in Link play.");
+    if (T.link && !T.demo) begin(T.match, T.kinds, T.link);
+  }
+  function watch(pc) {
+    pc.addEventListener("connectionstatechange", () => {
+      if (wire?.pc !== pc) return;
+      const s = pc.connectionState;
+      if (s === "connected") clearTimeout(shaky);
+      else if (s === "disconnected") { clearTimeout(shaky); shaky = setTimeout(() => { if (wire?.pc === pc && pc.connectionState !== "connected") dropped(); }, SHAKY); }
+      else if (s === "failed" || s === "closed") {
+        if (wire.open) dropped();
+        else { end(); fallback("No direct path was found between the two browsers. About one pair in five needs a relay, which this site does not have yet."); }
+      }
+    });
+  }
+  function channel(dc) {
+    const w = wire;
+    w.dc = dc;
+    dc.onopen = () => {
+      if (wire !== w) return;
+      clearTimeout(w.timer);
+      w.open = true;
+      w.session = sessionFor(T.link.id);
+      w.session.start(T.match);
+      w.session.attach((x) => { if (dc.readyState === "open") dc.send(JSON.stringify(x)); });
+      closeSheet();
+    };
+    dc.onmessage = (e) => {
+      if (wire !== w || typeof e.data !== "string" || e.data.length > MOST) return;
+      let x;
+      try { x = JSON.parse(e.data); } catch { return; }
+      const was = w.session.up();
+      try {
+        w.session.receive(x);
+        if (!was && w.session.up()) { toast(`Live with ${other()}: your browsers are joined directly.`); T.refresh(); } // both sides now stand at the same move
+      } catch (err) { if (!(err instanceof Refusal)) throw err; end(); fallback("The other browser sent something the rules do not allow, so live play stopped."); }
+    };
+    dc.onclose = () => { if (wire === w && w.open) dropped(); };
+  }
+  function fresh() {
+    end();
+    const pc = new RTCPeerConnection({ iceServers: LIVE_ADDRESSES.map((a) => ({ urls: a.url })) });
+    wire = { pc, dc: null, id: T.link.id, open: false, session: null, timer: 0 };
+    watch(pc);
+    return pc;
+  }
+  /** The text to copy, with a Copy button and the field selected for a long press. */
+  function copyRow(url, what) {
+    const t = el("textarea"), row = el("div", undefined, "go");
+    t.value = url; t.rows = 3; t.readOnly = true; t.className = "paste"; t.setAttribute("aria-label", what);
+    const c = button(`Copy the ${what}`, "main", async () => { try { await navigator.clipboard.writeText(url); c.textContent = "Copied"; } catch { t.select(); toast("Select the text and copy it."); } });
+    row.append(c);
+    if (navigator.share) row.append(button("Share", "quiet", () => navigator.share({ url }).catch(() => {})));
+    return [t, row];
+  }
+
+  /** This browser invites: the game's link with an offer added. */
+  async function invite() {
+    if (!fits() || !canLive()) return;
+    const box = el("div", undefined, "stack"), say = el("p", "Making the invitation...");
+    box.append(say);
+    sheet("Play live", box, "Not now");
+    const pc = fresh(), w = wire;
+    channel(pc.createDataChannel("capo", { ordered: true }));
+    let url;
+    try {
+      await pc.setLocalDescription(await pc.createOffer());
+      await gathered(pc);
+      const pass = T.link.pass, game = await makeLink(G.key, T.link.id, packGame(T.match, T.link.roles, T.look), pass);
+      url = `${game}&o=${blobOf(await makeLink(G.key, T.link.id, await squeeze(pc.localDescription.sdp), pass))}`;
+    } catch (e) { if (wire === w) { end(); say.textContent = e instanceof Refusal ? `${e.message}.` : "This browser could not make an invitation for live play."; } return; }
+    if (wire !== w) return;
+    w.waiting = true;
+    const reply = el("textarea"), named = el("label", undefined, "stack"), status = el("p", "", "line");
+    reply.rows = 2; reply.className = "paste"; reply.placeholder = "Paste the reply here";
+    named.append(el("span", `The reply from ${other()}`), reply);
+    say.textContent = `Send this invitation to ${other()}. Opening it on their side makes a reply link; when it comes back, open it or paste it here.`;
+    box.append(...copyRow(url, "invitation"), named, button("Join", "main", () => answered(reply.value, status)), status, el("small", PRIVACY));
+    listen(status);
+  }
+  /** The reply has come back: join, or fall back to links if no path is found. */
+  async function answered(text, status) {
+    const w = wire;
+    if (!w || w.open || !w.waiting) return false;
+    const m = String(text).trim().match(/#a=([\w-]{12,60000})/);
+    if (!m) { status.textContent = "That is not a reply to this invitation."; return false; }
+    try {
+      const l = readLink(`#t=${m[1]}`);
+      if (l.id !== w.id) throw new Refusal("live", "that reply is for another game");
+      const sdp = await unsqueeze(await l.open(T.link.pass));
+      w.waiting = false;
+      await w.pc.setRemoteDescription({ type: "answer", sdp });
+    } catch (e) { status.textContent = e instanceof Refusal ? `${e.message[0].toUpperCase()}${e.message.slice(1)}.` : "That reply could not be read."; return false; }
+    status.textContent = "Joining...";
+    w.timer = setTimeout(() => { if (wire === w && !w.open) { end(); fallback("No direct path was found between the two browsers. About one pair in five needs a relay, which this site does not have yet."); } }, OPEN);
+    return true;
+  }
+  /** A reply opened in another tab of this browser is handed to the tab that is waiting for it. */
+  function listen(status) {
+    if (typeof BroadcastChannel !== "function") return;
+    hand?.close();
+    hand = new BroadcastChannel(HAND);
+    hand.onmessage = async (e) => { if (typeof e.data?.a === "string" && (await answered(e.data.a, status))) hand?.postMessage({ took: true }); };
+  }
+
+  /** This browser was invited: after the game is open, offer to answer. */
+  function answerPrompt() {
+    const o = offerIn;
+    offerIn = null;
+    const box = el("div", undefined, "stack"), say = el("p", `${other()} asks to play this game live, straight between your two browsers.`);
+    if (!canLive()) { box.append(say, el("p", "This browser cannot play live. The game goes on by links.")); sheet("Play live", box); return; }
+    box.append(say, el("small", PRIVACY), el("small", FAIR));
+    const go = button("Play live", "main", () => reply(o.o, box, say)), no = button("By links instead", "quiet", () => { end(); closeSheet(); });
+    const row = el("div", undefined, "go");
+    row.append(no, go);
+    box.append(row);
+    sheet("Play live", box, null);
+    go.focus();
+  }
+  async function reply(o, box, say) {
+    const pc = fresh(), w = wire;
+    pc.addEventListener("datachannel", (e) => { if (wire === w) channel(e.channel); });
+    box.replaceChildren(say);
+    say.textContent = "Making your reply...";
+    let url;
+    try {
+      const sdp = await unsqueeze(await readLink(`#t=${o}`).open(T.link.pass));
+      await pc.setRemoteDescription({ type: "offer", sdp });
+      await pc.setLocalDescription(await pc.createAnswer());
+      await gathered(pc);
+      const at = await makeLink(G.key, T.link.id, await squeeze(pc.localDescription.sdp), T.link.pass);
+      url = at.replace("#t=", "#a=");
+    } catch (e) { if (wire === w) { end(); say.textContent = e instanceof Refusal ? `${e.message[0].toUpperCase()}${e.message.slice(1)}.` : "This browser could not answer the invitation. The game goes on by links."; } return; }
+    if (wire !== w) return;
+    say.textContent = `Send this reply to ${other()}. The game starts live as soon as they open it.`;
+    box.append(...copyRow(url, "reply"), el("p", `Waiting for ${other()}...`, "line"), button("Play by links instead", "quiet", () => { end(); closeSheet(); }));
+  }
+
+  const offer = button("Play live instead", "quiet", () => invite());
+  offer.hidden = true;
+  send?.append(offer);
+  T.live = {
+    on,
+    /** The table waits for the other browser to play this seat (the host plays the bots). */
+    waits: (seat) => on() && wire.session.waits(seat),
+    salt: async (mv, n) => { await inStep(); return wire.session.salt(mv, n); },
+  };
+  return {
+    /** A page opened from a link. A reply is handed to the waiting tab; an invitation is kept until its game is open. */
+    arrive(hash) {
+      const a = hash.match(/^#a=([\w-]{12,60000})/);
+      if (a) {
+        if (typeof BroadcastChannel !== "function") { sheet("A reply for live play", el("p", "Paste this reply into the game that sent the invitation.")); return true; }
+        const ch = new BroadcastChannel(HAND);
+        let took = false;
+        ch.onmessage = (e) => { if (e.data?.took) { took = true; ch.close(); sheet("Reply handed over", el("p", "Your game in the other tab has the reply and is joining. You can close this tab.")); } };
+        ch.postMessage({ a: hash });
+        setTimeout(() => { if (took) return; ch.close(); sheet("A reply for live play", el("p", "No game in this browser is waiting for this reply. Paste it into the game that sent the invitation, in the Play live window.")); }, 1500);
+        return true;
+      }
+      const o = hash.match(/^#t=([\w-]{12,60000})&o=([\w-]{12,60000})/);
+      if (o) { try { offerIn = { id: readLink(`#t=${o[1]}`).id, o: o[2] }; } catch { offerIn = null; } }
+      return false;
+    },
+    /** The table has begun a game. */
+    begun() {
+      if (wire && wire.id !== T.link?.id) end(); // another game: the live table was for the last one
+      offer.hidden = !fits() || !canLive();
+      if (offerIn && T.link?.id === offerIn.id && !T.demo && fits()) setTimeout(answerPrompt, 0);
+      else if (offerIn && T.link?.id === offerIn.id) offerIn = null;
+    },
+    /** The Link play tab's part. */
+    box() {
+      if (!T.link || T.demo) return [];
+      if (on()) return [el("p", `Live with ${other()}: your browsers are joined directly, and every move goes across at once.`), button("Leave live play", "quiet", () => { end(); closeSheet(); fallback("You left live play."); })];
+      if (!fits()) return T.realtime() ? [el("p", "Live play is for games by turns. A game on the clock goes by links for now.")] : [];
+      if (!canLive()) return [el("p", "This browser cannot play live.")];
+      return [el("p", `Play live: join your browser straight to ${other()}'s, so every move goes across at once. ${FAIR}`), button("Play live", "quiet", invite)];
+    },
+  };
+}
+
+$x.canLive = canLive; $x.PRIVACY = PRIVACY; $x.FAIR = FAIR; $x.liveLink = liveLink;
+return $x; })({});
+$m[13] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What every table game's screen shares: title, seats, score bar, words, taking back, saving, bots' turns and the end.
 // A game gives its rules, its board and its own move panel.
 const { Refusal, chance, compareGames, createMatch, openSave, packGame, seedState, unpackGame } = $m[5];
-const { EMBLEMS, emblem } = $m[13];
-const { SEATS, SEATS_KEY, STYLE_KEY, seatSet, seatsOf } = $m[19];
-const { footer } = $m[25];
-const { canLock, linkGames, makeLink, newId, readLink } = $m[28];
-const { BUILD, SOURCE_URL, VERSION } = $m[26];
-const { coach } = $m[29];
+const { EMBLEMS, emblem } = $m[14];
+const { SEATS, SEATS_KEY, STYLE_KEY, seatSet, seatsOf } = $m[20];
+const { footer } = $m[26];
+const { canLock, linkGames, makeLink, newId, readLink } = $m[29];
+const { BUILD, SOURCE_URL, VERSION } = $m[27];
+const { coach } = $m[30];
 // figures hook
-const { shelfCredits } = $m[30];
-const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } = $m[31];
+const { shelfCredits } = $m[31];
+const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } = $m[32];
 // motion hook: motion and sound that follow each move (site/motion.js, site/sound.js)
-const { hail, stir } = $m[32];
+const { hail, stir } = $m[33];
+// livelink hook: live play by two pasted links, straight between two browsers (site/livelink.js)
+const { liveLink } = $m[36];
 
 // The default six are Okabe and Ito's colour-blind-safe set (blue, orange, bluish green, reddish purple, vermillion, sky blue),
 // a little darker where needed to show on the paper board. Saves keep colour numbers, so new colours go on the end.
@@ -4803,6 +5308,7 @@ function createTable(G) {
     solo: () => T.kinds.filter((k) => k === "you" || k === "away").length === 1 || (!!T.link && T.kinds.filter((k) => k === "you").length === 1),
     play, refresh: panel, realtime: () => realtime(), begin: (m, kinds) => begin(m, kinds), // begin: a game's own ladder starts its next step
   };
+  const live = liveLink({ T, G, begin, sheet, closeSheet, toast, el, names: NAMES, send }); // livelink hook: sets T.live
   /** Is this game played on a clock? Then there are no turns: no turn keys, no taking back, no turn banner. */
   function realtime(p = T.match?.position) {
     if (!p) return false;
@@ -4974,7 +5480,10 @@ function createTable(G) {
     T.busy = true;
     let events;
     // a key can ask for a move the rules do not allow just now (E in an opening that has no end of turn): it is refused, and nothing is lost
-    try { events = T.match.play(move); } catch (e) { if (!(e instanceof Refusal) || T.demo || !person) throw e; T.busy = false; toast("That cannot be done now."); return; }
+    // livelink hook: in live play a move goes to the other browser first, and comes back with the salt for its dice
+    let salt;
+    if (T.live.on()) { try { salt = await T.live.salt(move, T.match.list.length); } catch (e) { if (!(e instanceof Refusal)) throw e; T.busy = false; toast(e.code === "down" ? "The live connection dropped before that move went across." : "That cannot be done now."); panel(); return; } if (mine !== run) return; }
+    try { events = T.match.play(move, salt); } catch (e) { if (!(e instanceof Refusal) || T.demo || !person) throw e; T.busy = false; toast("That cannot be done now."); return; }
     const words = events.map((e) => G.line(e, T.match.position)).filter(Boolean);
     // in a game by link, a move that rolled dice is final: nobody can look at the dice, take it back and choose again
     if (T.link && T.match.rolled) T.link.floor = T.match.list.length;
@@ -5005,6 +5514,7 @@ function createTable(G) {
     if (T.match.turn === null) { if (T.demo) { await sleep(2500); if (mine === run && T.demo) attract(); } return; }
     if (T.human()) return;
     if (T.away()) { panel(); return; }
+    if (T.live.waits(T.match.turn)) { panel(); return; } // livelink hook: the other browser plays this seat
     T.busy = true;
     if (!T.demo) panel();
     const dice = chance(seedState(`${T.match.seed}/${T.match.list.length}`)), from = performance.now();
@@ -5024,6 +5534,7 @@ function createTable(G) {
   /** The panel that hands the game to a friend. The link is made before it is asked for, so one press copies it. */
   let ready = null;
   function sendBox() {
+    if (T.live.on()) { send.hidden = true; return; } // livelink hook: no links to send while the browsers are joined
     const p = T.match.position, over = T.match.turn === null, on = !!T.link && !T.demo && !T.busy && T.kinds.includes("you") && (T.away() || over), mark = on ? `${T.link.id}/${T.match.list.length}` : "";
     send.hidden = !on;
     if (!on || ready?.mark === mark) return;
@@ -5097,6 +5608,7 @@ function createTable(G) {
     go.type = "button"; go.onclick = () => { const v = t.value; closeSheet(); openLink(v); };
     if (T.link && !T.demo) box.append(el("p", ready?.url ? "This game is played by link. Its newest link is ready in the move panel." : "This game is played by link. The move panel offers the link when it is a friend's turn."));
     box.append(el("p", "To start one, choose \"A friend, by link\" for a player. Links hold the whole game. Without a password, anyone who has the link can read it. A friend set on cheating could try a turn more than once, so play with people you trust."), named, go);
+    box.append(...live.box()); // livelink hook
     for (const r of all) {
       let m;
       try { m = openSave(r.save, [G.game]).match; } catch { continue; }
@@ -5111,7 +5623,7 @@ function createTable(G) {
   const linkSheet = () => sheet("Link games", linkBox(), "Back");
   /** Play out what happened since `from`, then go on. */
   async function catchUp(m, from) {
-    const mine = run, all = m.list, show = createMatch(G.game, { seed: m.seed, options: m.options });
+    const mine = run, all = m.list, show = createMatch(G.game, { seed: m.seed, options: m.options, salts: m.salts }); // livelink hook: salts
     for (const mv of all.slice(0, from)) show.play(mv);
     Object.assign(T, { match: show, busy: true, catching: true });
     G.changed?.(T);
@@ -5148,13 +5660,14 @@ function createTable(G) {
     ready = null;
     skip.hidden = true;
     Object.assign(T, { demo: false, busy: false, catching: false, match: m, kinds: k, link });
+    live.begun(); // livelink hook
     real = null; storyN = 0;
     G.fresh?.(T);
     log = []; land = []; mark = -1; drawn = -1; fell = []; held = "";
     unbrief();
     $("status").textContent = ""; // nothing said in the last game lingers in this one
     $("toast").classList.remove("on");
-    const again = createMatch(G.game, { seed: m.seed, options: m.options });
+    const again = createMatch(G.game, { seed: m.seed, options: m.options, salts: m.salts }); // livelink hook: salts
     land.push(tally(again.position));
     m.list.forEach((mv, i) => { if (i === from) mark = log.length; log.push(...again.play(mv).map((e) => G.line(e, again.position)).filter(Boolean)); land.push(tally(again.position)); watch(again.position); });
     if (mark < 0) mark = log.length;
@@ -5278,7 +5791,7 @@ function createTable(G) {
   const restart = () => begin(createMatch(G.game, { seed: seed(), options: T.match.options }), [...T.kinds], T.link ? { id: newId(), roles: T.kinds.map((x) => (x === "you" ? "host" : x === "away" ? "friend" : x)), pass: T.link.pass, floor: 0 } : null);
   const floor = () => (T.link ? T.link.floor : 0);
   // take back stops where hidden things were seen: a roll, a draw or a steal, and any other seat's move (a bot's turn), so it never shows what is coming
-  const undoable = () => (T.catching || T.busy || T.demo || realtime() || !T.match ? "none" : takeBack(T.match, T.kinds, floor()));
+  const undoable = () => (T.catching || T.busy || T.demo || realtime() || !T.match || T.live.on() ? "none" : takeBack(T.match, T.kinds, floor())); // livelink hook: live moves are final
   const canUndo = () => undoable() === "yes";
   function undo() {
     const why = undoable();
@@ -5557,7 +6070,7 @@ function createTable(G) {
   apply();
   titleCard();
   resumeButton();
-  const arrive = () => { if (!location.hash.startsWith("#t=")) return; const text = location.hash; history.replaceState(null, "", location.pathname + location.search); openLink(text); };
+  const arrive = () => { if (live.arrive(location.hash)) { history.replaceState(null, "", location.pathname + location.search); return; } if (!location.hash.startsWith("#t=")) return; const text = location.hash; history.replaceState(null, "", location.pathname + location.search); openLink(text); }; // livelink hook: a reply for live play, or an invitation kept for later
   addEventListener("hashchange", arrive);
   attract();
   arrive();
@@ -5566,16 +6079,16 @@ function createTable(G) {
 
 $x.COLOURS = COLOURS; $x.NAMES = NAMES; $x.RGB = RGB; $x.ICONS = ICONS; $x.PAPER = PAPER; $x.dress = dress; $x.$ = $; $x.el = el; $x.sleep = sleep; $x.sign = sign; $x.radio = radio; $x.toast = toast; $x.sheet = sheet; $x.createTable = createTable;
 return $x; })({});
-$m[35] = (($x) => {
+$m[37] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The hex board for a game's screen: the moving one when the device can draw it, else a still picture that can be tapped.
-const { LOOKS, canDraw, createBoard } = $m[13];
-const { STYLES, STYLE_KEY } = $m[19];
-const { ICONS, RGB } = $m[12];
+const { LOOKS, canDraw, createBoard } = $m[14];
+const { STYLES, STYLE_KEY } = $m[20];
+const { ICONS, RGB } = $m[13];
 // reading hook (p10-reading)
-const { legend } = $m[23];
+const { legend } = $m[24];
 // figures hook
-const { shelf } = $m[30];
+const { shelf } = $m[31];
 
 /** The seats' patterns for the still board, the same six as on the moving board and the score bar: /, dots, |, x, \, -. */
 function patterns(make, f) {
@@ -5699,9 +6212,9 @@ $m[0] = (($x) => {
 // Grain and Glass on the table: roll, build in the hexes your routes reach, trade, and race to the points.
 const { AWARD, BUSY, COST, EXPANSIONS, GOODS, NONE, SWITCHES, TERMS, WASTE, boardOf, glass, goalOf, pointsOf, rateOf, roadOf, sellPrice, total } = $m[1];
 const { choose, thinking } = $m[3];
-const { $, NAMES, RGB, createTable, el, radio, sheet, toast } = $m[12];
-const { hexBoard } = $m[35];
-const { hexPicture } = $m[15];
+const { $, NAMES, RGB, createTable, el, radio, sheet, toast } = $m[13];
+const { hexBoard } = $m[37];
+const { hexPicture } = $m[16];
 
 const SEA = [70, 116, 140], TILE = [[226, 196, 96], [176, 206, 214], [196, 120, 82], [228, 226, 214]], WASTEG = [150, 140, 120];
 const KINDS = { route: "Route", depot: "Depot", town: "Town", harbour: "Harbour", plan: "Plan", trade: "Trade", use: "Play a plan", answer: "Answer the offer", spoil: "Spoilage", toll: "Toll gate" };

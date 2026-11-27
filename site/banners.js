@@ -121,7 +121,7 @@ function onMap(T, e) {
 
 /** The battle record: every fight of the game counted again from its seed and moves, so a game opened from a save has it too. */
 function record(T) {
-  const m = T.match, again = createMatch(banners, { seed: m.seed, options: m.options }), seats = m.options.seats;
+  const m = T.match, again = createMatch(banners, { seed: m.seed, options: m.options, salts: m.salts }), seats = m.options.seats;
   const rows = Array.from({ length: seats }, () => ({ faces: [0, 0, 0, 0, 0, 0, 0], dice: 0, fights: 0, won: 0, taken: 0, gone: 0, struck: 0, fallen: 0, luck: 0 }));
   let bold = null;
   for (const move of m.list) {
