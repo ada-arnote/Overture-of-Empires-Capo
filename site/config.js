@@ -3,7 +3,7 @@
 export const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 // Where the games can be opened. Links made from a page opened as a file use it.
 export const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
-export const VERSION = "0.10.10";
+export const VERSION = "0.10.11";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
 export const BUILD = "dev";
 // guide hook (ruling 153.8): each AI service's own pages, for links in the Choose an AI guide (site/aiguide.js). A player

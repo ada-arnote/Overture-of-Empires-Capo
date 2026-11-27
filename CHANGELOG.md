@@ -2,7 +2,7 @@
 
 What changed in each tagged version of Overture of Empires: Capo, newest first. Each version is a git tag (`v0.5.0`); `git show v0.5.0` has the full detail. How a version is made: `RELEASING.md`.
 
-## Unreleased
+## v0.10.11 (2026-11-27): dice you can read, a raid you feel, battles throw by throw
 
 ### Motion that reads: dice you can see, a raid you feel, goods that fly, battles that are battles (cold review 3, fix 4)
 
