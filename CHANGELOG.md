@@ -4,6 +4,14 @@ What changed in each tagged version of Overture of Empires: Capo, newest first. 
 
 ## Unreleased
 
+### The tile game, early: its basic structure
+
+**Contributors**
+- `src/games/tile/`: Hedge and Highway (working name), a new tile-laying game of our own (ruling 94, owner ruling 153.14). `tiles.js` holds 24 tile kinds as data (edges, ports, features, the mix of 76, the turns that differ, an even order for shorter bags); `rules.js` the game (`tile`, version 1): the bag shuffled once from the seed, one to three tiles to choose from, legal placements, stewards, lanes, towns with markets, wells and meadows found across tiles (`shape`, `regions`), scoring at once, at season ends and at the end, set-aside tiles, the end and the winners. Whole numbers, no clock; a seed and the move list replay. Traditional, Capo and Custom (six switches). `bot.js`: a first bot that lays for points now and weighs what its stewards and rivals stand to gain (random, easy, normal).
+- `site/tile.html`, `site/tile.js`, `site/squareboard.js`: the page on the shared shell, marked Early, reached only at `play/tile.html` (not on the front page or the list of games). A flat square board painted in code with pan, zoom and tap; places that fit lit; the tile in hand as a ghost; turn it, choose a steward, and the score the placement would give is shown before it is laid. How to play, tiles left by kind, the board as a list, the end screen.
+- Marked "tile hook" line: `tools/bundle.mjs` builds `play/tile.html`.
+- `test/tile.test.mjs`: the tile data, gaps every pair of edges can fill, scoring cases built by hand (lanes, shared and led towns, markets, gates, wells, meadows, set-aside tiles, the end and ties), the feature finder against a plain flood fill, the quick check against the list of moves, the preview against the score, bots' complete legal games in each rule set, seasons and replay.
+
 ### The stacking game, early: its basic structure
 
 **Contributors**

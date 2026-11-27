@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0d1623">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<title>Hedge and Highway (early) · Overture of Empires: Capo</title>
+<link rel="stylesheet" href="table.css">
+<link rel="icon" href="icons/tent/mark.svg">
+<script src="source.js"></script>
+<style>
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* the tile in hand, its counts beside it, and what laying it here would score */
+#info { display: flex; align-items: center; gap: 10px; margin-bottom: var(--sp-2) }
+#info canvas { flex: none; width: 76px; height: 76px; border-radius: 4px; box-shadow: 0 0 0 1px var(--edge), var(--lift-1) }
+#info dl { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; font-size: var(--fs-2); line-height: 1.35 } #info dt { color: var(--text-2) } #info dd { font-weight: 700 }
+#preview { margin: 0 0 var(--sp-2); font-size: var(--fs-2); color: var(--text-2); min-height: 1.4em } #preview b { color: var(--text) }
+#act .cap { margin: 0 0 4px }
+.early { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: var(--r-1); border: 1px solid var(--accent); color: var(--accent); font: 700 var(--fs-1)/1.4 var(--sans); letter-spacing: var(--caps); text-transform: uppercase; vertical-align: middle }
+@media (max-width: 820px) { #info canvas { width: 56px; height: 56px } }
+</style>
+</head>
+<body class="menu">
+<p id="broken" class="broken">If nothing happens, this copy was opened as a file. Open <b>play-tile.html</b> from the dist folder instead.</p>
+<header id="bar" class="panel" hidden>
+  <button id="menu" type="button" class="icon" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  <div class="mid"><p id="round"></p>
+    <div id="land" role="img"><div id="fills"></div><i id="goal"></i></div></div>
+  <button id="look" type="button" class="icon" aria-label="Change the board's look"><svg viewBox="0 0 24 24"><path d="M3 9l9-5 9 5-9 5zM3 9v6l9 5 9-5V9M12 14v6"/></svg></button>
+</header>
+
+<main>
+<h1 class="sr play-h">Hedge and Highway</h1>
+<div id="stage" aria-hidden="true"></div>
+<div class="shade" aria-hidden="true"></div>
+
+<ul id="seats" hidden aria-label="Players"></ul>
+
+<section id="act" class="panel" hidden aria-label="Your move">
+  <p id="status" role="status"></p>
+  <div id="choice">
+    <div id="info"></div>
+    <div class="pick" id="tiles" role="radiogroup" aria-label="Which tile"></div>
+    <p class="cap" id="where-cap">Where</p>
+    <div class="pick strip" id="wheres" role="radiogroup" aria-label="Where to lay it"></div>
+    <p class="cap" id="men-cap">Steward</p>
+    <div class="pick" id="men" role="radiogroup" aria-label="Send a steward"></div>
+    <p id="preview" aria-live="polite"></p>
+    <div class="go"><button id="spin" type="button" class="quiet">Turn it</button><button id="do" type="button" class="main"></button></div>
+  </div>
+  <div id="after" hidden class="go"><button id="review" type="button" class="quiet">See the board</button><button id="again" type="button" class="main">Play again</button></div>
+</section>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<section id="title" class="title" aria-labelledby="title-h">
+  <p class="eyebrow">Overture of Empires: Capo <span class="early">Early</span></p>
+  <h1 id="title-h">Hedge and<br>Highway</h1>
+  <p class="tag">A tile-laying game, in an early version. Lay the countryside a tile at a time and send stewards to its lanes, towns and meadows.</p>
+  <div class="panel card">
+    <div class="go"><button id="resume" type="button" class="quiet" hidden>Continue</button><button id="quick" type="button" class="main">Play</button></div>
+    <p id="preset" class="about"></p>
+    <details id="own"><summary>Choose your own</summary>
+    <div class="line"><span>Rules</span><div class="pick small" id="style" role="radiogroup" aria-label="Rules"></div></div>
+    <p id="about" class="about"></p>
+    <div class="line"><span>Players</span><div class="pick small" id="count" role="radiogroup" aria-label="Players"></div></div>
+    <ul id="who"></ul>
+    <div class="line" id="length-line"><span>Length</span><div class="pick small" id="length" role="radiogroup" aria-label="Length"></div></div>
+    <div class="go"><button id="start" type="button" class="quiet">Begin</button></div>
+    </details>
+  </div>
+  <p class="links"><button type="button" class="text" id="how">How to play</button><button type="button" class="text" id="open">Open a saved game</button><a href="./" class="text">All games</a></p>
+</section>
+</main>
+
+<dialog id="sheet" class="panel" aria-labelledby="sheet-title"><h2 id="sheet-title"></h2><div id="sheet-body"></div><div class="go"><button type="button" class="main" id="sheet-close">Close</button></div></dialog>
+<input id="file" type="file" accept=".json,application/json" hidden>
+<footer id="foot"><span id="version"></span><span id="source"></span><span>AGPL-3.0</span></footer>
+<script type="module" src="tile.js"></script>
+</body>
+</html>
