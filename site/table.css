@@ -313,3 +313,6 @@ body.side #toast { top: calc(max(4px, env(safe-area-inset-top)) + 106px); bottom
 /* reduced motion: the system's wish, or the player's in Settings */
 .still * { transition: none !important } .still #dice svg, .still #coach-ring { animation: none }
 @media (prefers-reduced-motion: reduce) { #coach-ring { animation: none } }
+
+/* reading hook (p10-reading): the key to the symbols on a board, not over the title screen */
+.menu .board-key { display: none }

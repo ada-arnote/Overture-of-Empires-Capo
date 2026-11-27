@@ -9,6 +9,8 @@ precision highp float; precision highp int;
 uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable,uTall,uK,uShade; uniform vec3 uSun,uBaize,uRule,uMark; uniform vec4 uWin,uSurf,uWash; uniform vec2 uWoodK;${SHADE}
 float dep(vec2 p,float z){ vec2 d=(p-uC)*uS; float D=(d.x*uYaw.y+d.y*uYaw.x)*uTilt.y+z*uTilt.x; return .5-.5*uK*D/(1.-uQ*D); }
 uniform vec3 uInk,uPale,uWall,uGlow,uLand; out vec4 o;
+uniform float uRim; uniform vec3 uSeat[16]; // reading hook (p10-reading): an owner shown as each tile's rim and sides, so the land itself still reads
+vec3 seatOf(float aa){ return uSeat[min(((int(aa*255.+.5)-20)*154)%211,15)]; }
 int raw(ivec2 t){ if(t.x<0||t.y<0||t.x>=int(uSize.x)||t.y>=int(uSize.y)) return 0; vec4 v=texelFetch(uId,t,0); return int(v.r*255.+.5)+256*int(v.g*255.+.5); }
 int idAt(vec2 p){ return raw(ivec2(floor(p))); }
 int idSoft(vec2 p){ vec2 q=p-.5,f=fract(q); ivec2 b=ivec2(floor(q)); int a=raw(b),c=raw(b+ivec2(1,0)),d=raw(b+ivec2(0,1)),e=raw(b+ivec2(1,1));
@@ -75,6 +77,7 @@ vec3 face(vec2 p,int id,float foot){
     else if(!them){ float l=dot(a.rgb,vec3(.3,.6,.1)); vec3 line=l>.36?uInk:uPale; c=mix(c,near?line:mix(line,a.rgb,.55),near?.42:.15); } }
   else if(edge) c=mix(c,uInk,b.a<.99?.46:.16);
   if(land) c=mix(c,uLand,own?.6:.92);
+  if(owned&&uRim>0.){ vec3 sc=mix(seatOf(a.a),uWash.rgb,uWash.a*.6); float hd=max(abs(q.x),abs(q.x)*.5+abs(q.y)*.866)/.866; c=mix(c,sc,.16); c=mix(c,sc*clamp(k,.9,1.12),smoothstep(.68,.74,hd)); } // reading hook (p10-reading)
   float gl=b.g; if(gl>0.){ float pulse=uTime<=0.?1.:.72+.28*cos(uTime*6.2832); c=mix(c,uGlow,gl*(edge?.95:.34*pulse)); }
   return c; }
 void main(){
@@ -100,7 +103,7 @@ void main(){
     gl_FragDepth=dep(p0,0.);
     o=vec4(c*(1.-s/20.*.62)*(1.-uShade*shd(p0,0.))*(1.-2.*dot(uv/uView,uv/uView)),1.); return; }
   vec3 c;
-  if(wall){ vec3 b=tab(id,0).rgb; float l=.36+.30*clamp(z/max(top(id),.01),0.,1.); vec2 n=vec2(0.);
+  if(wall){ vec4 a0=tab(id,0); vec3 b=uRim>0.&&a0.a<.99?seatOf(a0.a):a0.rgb; /* reading hook (p10-reading): an owner's colour on the sides */ float l=.36+.30*clamp(z/max(top(id),.01),0.,1.); vec2 n=vec2(0.);
     if(uBev>0.){ for(int i=0;i<6;i++){ float t=float(i)*1.0471976+.5; vec2 d=vec2(cos(t),sin(t)); if(idAt(p+d*1.7)!=id) n+=d; } if(n!=vec2(0.)) l*=1.25+.55*dot(normalize(n),uLight); } // a side that faces the lamp is lighter
     c=mix(b*l,uWall,.45)*(.9+.12*grain(p)); if(tab(id,1).g>0.) c=mix(c,uGlow,.35); }
   else { c=face(uMost>0.?p:p,id,foot); if(uMost>0.){ float h=top(id); for(int k=1;k<=5;k++){ float d=float(k)*3.; if(top(idAt(p+uLight*d))>h+.6*float(k)){ c*=.80; break; } } } }
@@ -184,6 +187,7 @@ export class Painter {
     g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform2f(u.uLight, o.style.sun[0], o.style.sun[1]);
     g.uniform1f(u.uS, cam.s); g.uniform1f(u.uQ, cam.q); g.uniform1f(u.uDpr, dpr); g.uniform1f(u.uUnit, o.unit); g.uniform1f(u.uMost, o.most); g.uniform1f(u.uRelief, o.relief); g.uniform1f(u.uTime, o.time); g.uniform1f(u.uPat, o.pat ? 1 : 0); g.uniform1f(u.uCell, m.R); g.uniform1f(u.uBev, o.bevel); g.uniform1f(u.uSlab, m.R < 20 ? 0 : 1); g.uniform1f(u.uTable, o.table ? 1 : 0); // cells too small for a rim of their own are bevelled only where the land's owner or height changes
     const f3 = (k, c) => g.uniform3f(u[k], c[0] / 255, c[1] / 255, c[2] / 255);
+    if (u.uRim) { g.uniform1f(u.uRim, o.rim ? 1 : 0); if (o.rim) g.uniform3fv(u["uSeat[0]"], Float32Array.from({ length: 48 }, (_, i) => (o.rim[(i / 3) | 0]?.[i % 3] ?? 0) / 255)); } // reading hook (p10-reading)
     f3("uInk", o.ink); f3("uPale", o.pale); f3("uWall", o.wall); f3("uGlow", o.glow); f3("uLand", o.land || o.glow);
     g.drawArrays(g.TRIANGLES, 0, 3);
     g.disable(g.DEPTH_TEST);

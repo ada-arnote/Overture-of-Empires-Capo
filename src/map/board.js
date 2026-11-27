@@ -7,6 +7,9 @@ import { Meshes } from "./mesh.js";
 import { models, unpack } from "./models.js";
 import { Painter } from "./paint.js";
 import { STYLES, styleOf } from "./style.js";
+// reading hook (p10-reading): the goods, pips, ports, links and flags; names and plates that keep clear of each other
+import { drawLinks, flag, linkModels, pips, portPlate, stageLinks, stamp } from "./glyphs.js";
+import { drawNames, spread, tie } from "./labels.js";
 
 const DEG = Math.PI / 180;
 export const LOOKS = {
@@ -70,8 +73,12 @@ export function canDraw() {
   return !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(name);
 }
 
-/** terrain(i): what the land of a cell is, shown as a shape on its top (2 grain, 3 clay, 4 sand, 5 salt, 6 rock, 7 hills). wood: the address of the table's picture. probe: time the first frames and say "slow" if they drag. */
-export function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false, style = "painted" }) {
+/**
+ * terrain(i): what the land of a cell is, shown as a shape on its top (2 grain, 3 clay, 4 sand, 5 salt, 6 rock, 7 hills). wood: the address of the table's picture. probe: time the first frames and say "slow" if they drag.
+ * reading (p10-reading): goods(i) the good a cell yields (its symbol is drawn on it), colours the goods' own colours (for a port's plate),
+ * places [{ at, text }] names printed where there is room, rim: an owner's colour as each tile's rim and sides rather than a flood.
+ */
+export function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false, style = "painted", reading = {} }) {
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
@@ -85,7 +92,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   let look3 = styleOf(style), styleName = STYLES[style] ? style : "war";
   const lift = () => 9 * L.rise;
   let meshes = null, staged = false;
-  try { meshes = new Meshes(painter.g, models()); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); }
+  try { meshes = new Meshes(painter.g, { ...models(), ...linkModels() }); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); } // reading hook (p10-reading): the links between hexes
   const solid = () => L.rise > 0 && !!meshes;
   /** Pieces on a map of small cells are made larger, so that they read when the whole board is in view (they still grow as you zoom in). */
   const grown = () => Math.max(1, Math.min(picture ? 3.2 : 1.25, 24 / (m.R * base))); // on a board of hexes a piece must still fit its own hex
@@ -112,8 +119,9 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
         if (s.leader) put("unit4", at, 0.62, -0.3, 0.74, rgb);
         if (s.seat >= 0) put(s.count >= 10 ? "gun" : s.count >= 5 ? "horse" : "foot", at, 0, 0, 0.92, rgb, s.count >= 5 ? -0.45 : 0);
       } else if (s.kind === "token") put("token", at, 0, 0, 1.18);
-      else if (s.kind === "route") s.seats.forEach((c, k) => { const a = -0.9 + k * 0.62; put("bar", at, Math.cos(a) * 0.62, Math.sin(a) * 0.62 - 0.1, 1, c, a + Math.PI / 2); });
+      else if (s.kind === "route") { if (s.joins) stageLinks(out, s, m, show); s.seats.forEach((c, k) => { const a = -0.9 + k * 0.62; put("bar", at, Math.cos(a) * 0.62, Math.sin(a) * 0.62 - 0.1, 1, c, a + Math.PI / 2); }); } // reading hook (p10-reading): links, and a short bar for a seat whose route joins nothing yet
       else if (s.kind === "depot" || s.kind === "town") put(s.kind, at, R < 20 ? 0 : 0.5, R < 20 ? 0 : 0.36, R < 20 ? 0.8 : 0.72, rgb, 0.35);
+      else if (s.kind === "port" && s.toward) put("port", at, (s.toward[0] * 0.6) / big, (s.toward[1] * 0.6) / big, 0.7, null, Math.atan2(s.toward[0], -s.toward[1])); // reading hook (p10-reading): the jetty runs out to the sea it serves
       else if (s.kind === "port") put("port", at, -0.55, -0.3, 0.7, null, 2.4);
       else if (s.kind === "ship") put("ship", at, 0, 0, 0.9, rgb, s.turn || 0);
       else if (s.kind === "model") put(s.name, at, s.dx || 0, s.dy || 0, s.size || 1, rgb, s.turn || 0, s.dim ?? 1); // any model by name: dice on the table, a ship at sea
@@ -163,7 +171,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     if (dirty) { painter.send(show); dirty = false; }
     const on = solid();
     if (on) { if (!staged) stage(); meshes.cast([-72, -72, m.w + 144, m.h + 144], lift(), look3.sun); }
-    painter.draw(cam, dpr(), { style: look3, lamp: on ? (u) => meshes.lamp(u, true, look3.sun) : null, unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, pat, bevel: L.rise ? Math.max(1.5, Math.min(5, m.R * 0.1)) : 0, table: L.rise > 0, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [226, 233, 241], land: [255, 226, 150] }); // silver marks what can be chosen; the lands keep their own line
+    painter.draw(cam, dpr(), { style: look3, lamp: on ? (u) => meshes.lamp(u, true, look3.sun) : null, unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, pat, bevel: L.rise ? Math.max(1.5, Math.min(5, m.R * 0.1)) : 0, table: L.rise > 0, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [226, 233, 241], land: [255, 226, 150], rim: reading.rim ? seats : null }); // reading hook (p10-reading): rim // silver marks what can be chosen; the lands keep their own line
     if (on) meshes.draw(cam, lift(), look3);
     drawOver(t);
     if (moving) redraw();
@@ -241,12 +249,14 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       ctx.fill("evenodd");
       ctx.lineWidth = 1; ctx.strokeStyle = bright ? `rgba(252,247,234,${0.4 * k.seen})` : `rgba(20,16,14,${0.4 * k.seen})`; ctx.stroke();
     });
+    const inked = []; // reading hook (p10-reading): where the lands' names lie, for the places' names to keep clear of
     for (const l of labels) { // names printed on the map
       cam.projectTo(l.at[0], l.at[1], unit());
       const px = Math.max(11, Math.min(30, size * 0.62));
       ctx.font = `italic 600 ${px}px "Palatino Linotype",Palatino,Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
       if (!l.sea) { ctx.lineWidth = px * 0.22; ctx.strokeStyle = "rgba(252,245,222,.62)"; ctx.strokeText(l.text, cam.px, cam.py); }
       ctx.fillStyle = l.sea ? "rgba(244,236,210,.92)" : "rgba(40,26,18,.86)"; ctx.fillText(l.text, cam.px, cam.py);
+      if (reading.places) { const w = ctx.measureText(l.text).width / 2 + 2; inked.push({ x0: cam.px - w, x1: cam.px + w, y0: cam.py - px * 0.6, y1: cam.py + px * 0.6 }); }
     }
     for (const [a, b] of lines) { // crossings over water
       cam.projectTo(a[0], a[1], 0.6 * unit()); const x = cam.px, y = cam.py; cam.projectTo(b[0], b[1], 0.6 * unit());
@@ -254,6 +264,15 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     }
     const chosen = new Set(spots.flatMap((s) => (s.kind === "dot" && !s.small ? [s.at] : []))), numbered = new Set(spots.flatMap((s) => (s.kind === "token" ? [s.at] : [])));
     const on = solid(), R3 = m.R * grown();
+    // reading hook (p10-reading): the links flat (models stand for them in the tilted looks), each good's symbol at the top of its hex
+    if (!on) drawLinks(ctx, cam, m, show, unit(), spots, size);
+    if (reading.goods) show.forEach((c, i) => {
+      const g = reading.goods(i);
+      if (!(g >= 0)) return;
+      cam.projectTo(m.mid[i][0], m.mid[i][1] - m.R * 0.64, c.top * unit());
+      const gs = size * 0.3 * cam.pk;
+      if (gs >= 7) stamp(ctx, g, cam.px, cam.py - gs * 0.1, Math.min(40, Math.max(9, gs)));
+    });
     for (const s of spots) { // things that grow or are built on the ground
       const kind = { well: "cairn", quay: "port", watch: "fort", archive: "depot" }[s.kind] || s.kind; // An Inch of Ink's places, as they are drawn flat
       if (!["tree", "cairn", "farm", "fort", "token", "route", "depot", "town", "gate", "port"].includes(kind) || (on && kind !== "token")) continue;
@@ -263,11 +282,12 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       if (s.kind === "token") { // the hex's number, red when it comes up often
         const r = Math.min(size * 0.4 * cam.pk, Math.max(10, h * 0.46)); // never so big that the ground's colour is lost, or tokens touch on a small screen
         if (chosen.has(s.at) && size * cam.pk >= 30) { ctx.beginPath(); ctx.arc(x, y, r + Math.max(3, r * 0.3), 0, 7); ctx.lineWidth = 5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.lineWidth = 2.5; ctx.strokeStyle = "#eef2f6"; ctx.stroke(); ctx.strokeStyle = "#1a1411"; } // can be chosen: a ring round the number, which stays in view (small hexes have only their bright edge, so the ground still shows)
-        if (on) { cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit() + m.R * 0.09 * cam.s); ctx.fillStyle = s.hot ? "#b0302a" : "#1a1411"; ctx.font = `700 ${Math.round(r * 1.05)}px Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.save(); ctx.translate(cam.px, cam.py); ctx.scale(1, Math.max(0.62, cam.ct)); if (s.lit) { ctx.beginPath(); ctx.arc(0, 0, r * 1.08, 0, 7); ctx.lineWidth = Math.max(3, r * 0.3); ctx.strokeStyle = "#f6f8fb"; ctx.stroke(); } ctx.fillText(String(s.n), 0, 1); ctx.restore(); continue; } // the disc is a model; its number lies on it
+        if (on) { cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit() + m.R * 0.09 * cam.s); ctx.fillStyle = s.hot ? "#b0302a" : "#1a1411"; ctx.font = `700 ${Math.round(r * 1.05)}px Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.save(); ctx.translate(cam.px, cam.py); ctx.scale(1, Math.max(0.62, cam.ct)); if (s.lit) { ctx.beginPath(); ctx.arc(0, 0, r * 1.08, 0, 7); ctx.lineWidth = Math.max(3, r * 0.3); ctx.strokeStyle = "#f6f8fb"; ctx.stroke(); } ctx.fillText(String(s.n), 0, s.pips ? -r * 0.14 : 1); pips(ctx, s.pips, 0, r * 0.56, r, s.hot); ctx.restore(); continue; } // the disc is a model; its number lies on it, and its pips under it (reading hook, p10-reading)
         ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = "#f3e7c6"; ctx.fill();
         ctx.lineWidth = 1.5; ctx.stroke();
         if (s.lit) { const b = Math.max(4, r * 0.4); ctx.beginPath(); ctx.arc(x, y, r + b / 2, 0, 7); ctx.lineWidth = b + 3; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.lineWidth = b; ctx.strokeStyle = "#f6f8fb"; ctx.stroke(); } // it yielded on the last roll: a bright band round the number
-        ctx.fillStyle = s.hot ? "#b0302a" : "#1a1411"; ctx.font = `700 ${Math.round(r * 1.05)}px Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(s.n), x, y + 1);
+        ctx.fillStyle = s.hot ? "#b0302a" : "#1a1411"; ctx.font = `700 ${Math.round(r * 1.05)}px Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(s.n), x, s.pips ? y - r * 0.14 : y + 1);
+        pips(ctx, s.pips, x, y + r * 0.56, r, s.hot); // reading hook (p10-reading)
         continue;
       }
       if (kind === "route") { s.seats.forEach((rgb, k) => { const a = -0.9 + k * 0.55; ctx.beginPath(); ctx.ellipse(x + Math.cos(a) * h * 0.8, y + Math.sin(a) * h * 0.55 - h * 0.35, h * 0.2, h * 0.11, a, 0, 7); ctx.fillStyle = `rgb(${rgb})`; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); }); continue; }
@@ -280,6 +300,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
         continue;
       }
       if (kind === "gate") { ctx.beginPath(); ctx.rect(x - h * 0.6, y - h * 0.95, h * 0.18, h * 0.9); ctx.rect(x + h * 0.42, y - h * 0.95, h * 0.18, h * 0.9); ctx.fillStyle = "#3a2c22"; ctx.fill(); ctx.beginPath(); ctx.rect(x - h * 0.6, y - h * 0.75, h * 1.2, h * 0.16); ctx.fillStyle = "#e9c46a"; ctx.fill(); ctx.stroke(); continue; }
+      if (kind === "port" && s.toward) { cam.projectTo(m.mid[s.at][0] + s.toward[0] * m.R * 0.62, m.mid[s.at][1] + s.toward[1] * m.R * 0.62, show[s.at].top * unit()); const fx = cam.px + h * 0.18, fy = cam.py + h * 0.3; ctx.beginPath(); ctx.moveTo(fx, fy - h * 0.62); ctx.lineTo(fx, fy); ctx.lineWidth = 2; ctx.stroke(); ctx.beginPath(); ctx.moveTo(fx, fy - h * 0.62); ctx.lineTo(fx + h * 0.36, fy - h * 0.5); ctx.lineTo(fx, fy - h * 0.38); ctx.closePath(); ctx.fillStyle = "#fdf6e4"; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); continue; } // reading hook (p10-reading): the flag stands by the sea it serves, its plate beside it
       if (kind === "port") { ctx.beginPath(); ctx.moveTo(x - h * 0.7, y - h * 0.62); ctx.lineTo(x - h * 0.7, y - h * 0.18); ctx.lineWidth = 2; ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - h * 0.7, y - h * 0.62); ctx.lineTo(x - h * 0.36, y - h * 0.5); ctx.lineTo(x - h * 0.7, y - h * 0.38); ctx.closePath(); ctx.fillStyle = s.good === 4 ? "#fdf6e4" : ["#e2c460", "#b0d0d8", "#c47852", "#e4e2d6"][s.good]; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); continue; }
       if (kind === "farm") { for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.ellipse(x, y + k * h * 0.28 * flat, h * 0.62, h * 0.1 * flat + 1, 0, 0, 7); ctx.fillStyle = k ? "#d9b85a" : "#e8cc70"; ctx.fill(); ctx.stroke(); } continue; }
       if (kind === "cairn") { for (const [u, v, r] of [[-0.2, 0.05, 0.2], [0.18, 0.08, 0.18], [0, -0.14, 0.17]]) { ctx.beginPath(); ctx.ellipse(x + u * h, y + v * h, r * h, r * h * 0.8, 0, 0, 7); ctx.fillStyle = "#9a9384"; ctx.fill(); ctx.stroke(); } continue; }
@@ -295,6 +316,11 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
         ctx.fillStyle = "#2f5a34"; ctx.fill(); ctx.stroke();
       }
     }
+    for (const s of spots) { // reading hook (p10-reading): a port's rate on a plate over the water beside its flag
+      if (s.kind !== "port" || !s.toward) continue;
+      cam.projectTo(m.mid[s.at][0] + s.toward[0] * m.R * 1.22, m.mid[s.at][1] + s.toward[1] * m.R * 1.22, show[s.at].top * unit());
+      portPlate(ctx, cam.px, cam.py, Math.min(22, Math.max(11, size * 0.4 * cam.pk)), s.good, reading.colours?.[s.good] || [240, 232, 210]);
+    }
     for (const s of spots) if (s.kind === "dot" && !numbered.has(s.at)) { // a numbered hex is ringed round its number instead
       cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit());
       const held = spots.some((x) => x.at === s.at && (x.kind === "unit" || x.kind === "tower" || x.kind === "army")), r = size * (held ? 0.62 : s.small ? 0.1 : 0.15);
@@ -307,18 +333,36 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       ctx.beginPath(); ctx.ellipse(cam.px, cam.py, size * 0.7, size * 0.7 * flat, 0, 0, 7); ctx.fillStyle = s.aim ? "rgba(255,255,255,.25)" : "rgba(226,233,241,.28)"; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = s.aim ? "#ffffff" : "#dfe6ee"; ctx.stroke(); if (s.aim) { ctx.lineWidth = 1.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); }
     }
     const stand = spots.filter((s) => s.kind === "tower" || s.kind === "unit" || s.kind === "army").map((s) => { cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit()); return { s, x: cam.px, y: cam.py, k: cam.pk }; }).sort((a, b) => a.y - b.y);
+    // reading hook (p10-reading): every plate (and, flat, every army) is placed first, so a crowded one moves aside, tied back to its piece
+    const lay = new Map();
     for (const { s, x, y, k } of stand) {
-      if (on) { // the piece is a model: the page adds what must stay sharp, its number on a plate above it, and the owner's sign
+      if (s.kind === "unit") continue;
+      if (on) {
         const army = s.kind === "army", tall = army ? 0 : 1.5;
-        if (s.kind === "unit") { if (s.now) { ctx.beginPath(); ctx.ellipse(x, y + size * 0.08 * flat, size * 0.36 * k, size * 0.36 * k * flat, 0, 0, 7); ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(238,243,248,.95)"; ctx.stroke(); } continue; }
         cam.projectTo(m.mid[s.at][0], m.mid[s.at][1] + (army && s.seat >= 0 ? R3 * 0.52 : 0), show[s.at].top * unit() + tall * R3 * cam.s); // an army's number lies at its foot, toward the player; a hall's floats over its roof
         const r = Math.max(8.5, Math.min(15, R3 * cam.s * 0.3 * k)), py = cam.py - r * (tall ? 1.15 : 0);
-        plate(String(s.count), cam.px, py, r, s.warn ? "#f2a08c" : s.seat < 0 ? "rgba(214,202,172,.94)" : s.now ? "#dfe8f3" : "#f6eedb");
-        if (s.kind === "army" && s.seat >= 0) { emblem(ctx, icons[s.seat], cam.px + r * 1.9, py, r * 0.9); ctx.lineWidth = 2.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.fillStyle = `rgb(${s.rgb})`; ctx.fill("evenodd"); }
+        ctx.font = `700 ${Math.round(r * 1.12)}px system-ui,"Segoe UI",sans-serif`;
+        const half = Math.max(r, ctx.measureText(String(s.count)).width / 2 + r * 0.38);
+        lay.set(s, { x: cam.px, y: py, ax: cam.px, ay: py, rad: r, l: half, r: army && s.seat >= 0 ? r * 2.4 : half, t: r, b: r });
+      } else if (s.kind === "army") { const r = Math.max(16, size * 0.52 * k); lay.set(s, { x, y, ax: x, ay: y, rad: r, l: r * 1.3, r: r * 1.55, t: r * 1.6, b: r * 0.75 }); }
+    }
+    const taken = lay.size ? spread([...lay].sort(([a], [b]) => (b.now ? 1 : 0) - (a.now ? 1 : 0) || (b.count || 0) - (a.count || 0)).map(([, v]) => v), cam.W, cam.H) : [];
+    for (const p of lay.values()) if (p.moved) tie(ctx, p.ax, p.ay, p.x, p.y);
+    for (const { s, x, y, k } of stand) {
+      if (on) { // the piece is a model: the page adds what must stay sharp, its number on a plate above it, and the owner's sign
+        if (s.kind === "unit") {
+          if (s.now) { ctx.beginPath(); ctx.ellipse(x, y + size * 0.08 * flat, size * 0.36 * k, size * 0.36 * k * flat, 0, 0, 7); ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(238,243,248,.95)"; ctx.stroke(); }
+          if (s.ready) { cam.projectTo(m.mid[s.at][0] + R3 * 0.16, m.mid[s.at][1] + R3 * 0.08, show[s.at].top * unit() + R3 * look3.scale * cam.s * (0.92 + s.rank * 0.05)); flag(ctx, cam.px, cam.py, Math.min(28, Math.max(18, size * 0.42 * k)), "ready"); } // reading hook (p10-reading)
+          continue;
+        }
+        const p = lay.get(s), r = p.rad;
+        plate(String(s.count), p.x, p.y, r, s.warn ? "#f2a08c" : s.seat < 0 ? "rgba(214,202,172,.94)" : s.now ? "#dfe8f3" : "#f6eedb");
+        if (s.kind === "army" && s.seat >= 0) { emblem(ctx, icons[s.seat], p.x + r * 1.9, p.y, r * 0.9); ctx.lineWidth = 2.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.fillStyle = `rgb(${s.rgb})`; ctx.fill("evenodd"); }
+        if (s.buy) { const fh = Math.min(28, Math.max(18, r * 2.1)); flag(ctx, p.x - p.l - fh * 0.7 - 3, p.y + r, fh, "buy"); } // reading hook (p10-reading)
         continue;
       }
-      if (s.kind === "army") { army(s, x, y, Math.max(16, size * 0.52 * k)); continue; }
-      if (s.kind === "unit") { figure(s, x, y + size * 0.2 * flat, Math.max(26, size * (0.6 + s.rank * 0.1) * k)); continue; }
+      if (s.kind === "army") { const p = lay.get(s); army(s, p.x, p.y, p.rad); continue; }
+      if (s.kind === "unit") { const H = Math.max(26, size * (0.6 + s.rank * 0.1) * k), foot = y + size * 0.2 * flat; figure(s, x, foot, H); if (s.ready) flag(ctx, x + H * 0.06, foot - H * 1.0, Math.min(28, Math.max(18, H * 0.5)), "ready"); continue; } // reading hook (p10-reading): ready flag
       const h = Math.max(36, size * 0.95 * k), foot = y + size * 0.22 * flat;
       ctx.beginPath(); ctx.ellipse(x + h * 0.1, foot, h * 0.4, h * 0.15, 0, 0, 7); ctx.fillStyle = "rgba(12,9,7,.42)"; ctx.fill();
       ctx.save(); ctx.translate(x, foot); ctx.scale(h, h);
@@ -327,7 +371,9 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       tower(ctx); ctx.lineWidth = 3.4 / h; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(20,15,12,.95)"; ctx.stroke(); ctx.fillStyle = g; ctx.fill(); ctx.restore();
       const r = Math.max(10.5, h * 0.26), by = foot - h * 0.34;
       plate(String(s.count), x, by, r, s.warn ? "#f2a08c" : s.now ? "#dfe8f3" : "#f6eedb");
+      if (s.buy) { const fh = Math.min(28, Math.max(18, r * 2.1)); ctx.font = `700 ${Math.round(r * 1.12)}px system-ui,"Segoe UI",sans-serif`; flag(ctx, x - Math.max(r, ctx.measureText(String(s.count)).width / 2 + r * 0.38) - fh * 0.7 - 3, by + r, fh, "buy"); } // reading hook (p10-reading)
     }
+    if (reading.places) drawNames(ctx, cam, m, show, unit(), reading.places, taken.concat(inked), hovering, new Map([...lay].map(([s, p]) => [s.at, p])), R3 * look3.scale * 0.95); // reading hook (p10-reading)
     if (point) arrow(...point);
   }
 
@@ -396,8 +442,8 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     fingers.set(e.pointerId, now);
   });
   const at = (e) => { const r = under.getBoundingClientRect(); return pick(cam, m, e.clientX - r.left, e.clientY - r.top, tops, unit(), L.rise ? most() : 0); };
-  under.addEventListener("pointermove", (e) => { if (e.pointerType === "touch") return; const i = at(e); if (i !== hovering) { hovering = i; listeners.hover.forEach((f) => f(i)); } });
-  under.addEventListener("pointerleave", () => { if (hovering !== -1) { hovering = -1; listeners.hover.forEach((f) => f(-1)); } });
+  under.addEventListener("pointermove", (e) => { if (e.pointerType === "touch") return; const i = at(e); if (i !== hovering) { hovering = i; listeners.hover.forEach((f) => f(i)); if (reading.places) redraw(); } }); // reading hook (p10-reading): the place under the pointer is named
+  under.addEventListener("pointerleave", () => { if (hovering !== -1) { hovering = -1; listeners.hover.forEach((f) => f(-1)); if (reading.places) redraw(); } });
   under.addEventListener("click", (e) => { if (dragged) { dragged = false; return; } listeners.pick.forEach((f) => f(at(e))); });
   under.addEventListener("webglcontextlost", (e) => {
     e.preventDefault();
@@ -427,7 +473,7 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
       const t = performance.now(), slow = !quick && !calm(), fade = !quick && !slow, step = Math.min(90, 900 / Math.max(1, order.length)), place = new Map(order.map((c, i) => [c, i]));
       let last = 0;
       owner.forEach((o, i) => {
-        const c = show[i], to = o < 0 ? ground(i) : mix(seats[o], ground(i), rough[i] ? 0.1 : 0), tall = sea[i] ? 0.2 : (homes.has(i) ? 1.5 : o < 0 ? 0.75 : 1.2) + (c.kind === 7 ? 0.3 : 0); // hills stand a little above the plain
+        const c = show[i], to = o < 0 || reading.rim ? ground(i) : mix(seats[o], ground(i), rough[i] ? 0.1 : 0), tall = sea[i] ? 0.2 : (homes.has(i) ? 1.5 : o < 0 ? 0.75 : 1.2) + (c.kind === 7 ? 0.3 : 0); // hills stand a little above the plain
         if (c.owner === o && c.topTo === tall) return;
         const wait = slow && place.has(i) ? place.get(i) * step : 0, long = slow ? 320 : fade ? 200 : 1; // reduced motion: all at once, a quick fade, no hop
         Object.assign(c, { from: c.rgb, to, topFrom: slow ? c.top : tall, topTo: tall, hop: slow ? 0.5 : 0, start: t + wait, ends: t + wait + long, soak: slow && o >= 0 && c.owner !== o });

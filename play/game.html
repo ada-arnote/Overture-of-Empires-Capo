@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-o610DDQQH+9jBmBrnxasjQxmme/M39307TveIy/HXvs='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https://openrouter.ai https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.mistral.ai https://api.deepseek.com https://api.together.xyz https://api.cerebras.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-uMyXdfMg1lEIUlDJuyNHTxvbPsrQ8AQeXrijzDoTrnE='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self' https://openrouter.ai https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.mistral.ai https://api.deepseek.com https://api.together.xyz https://api.cerebras.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -323,6 +323,9 @@ body.side #toast { top: calc(max(4px, env(safe-area-inset-top)) + 106px); bottom
 /* reduced motion: the system's wish, or the player's in Settings */
 .still * { transition: none !important } .still #dice svg, .still #coach-ring { animation: none }
 @media (prefers-reduced-motion: reduce) { #coach-ring { animation: none } }
+
+/* reading hook (p10-reading): the key to the symbols on a board, not over the title screen */
+.menu .board-key { display: none }
 </style>
 <link rel="icon" href="../site/icons/tent/mark.svg">
 <style>
@@ -5114,6 +5117,8 @@ precision highp float; precision highp int;
 uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable,uTall,uK,uShade; uniform vec3 uSun,uBaize,uRule,uMark; uniform vec4 uWin,uSurf,uWash; uniform vec2 uWoodK;${SHADE}
 float dep(vec2 p,float z){ vec2 d=(p-uC)*uS; float D=(d.x*uYaw.y+d.y*uYaw.x)*uTilt.y+z*uTilt.x; return .5-.5*uK*D/(1.-uQ*D); }
 uniform vec3 uInk,uPale,uWall,uGlow,uLand; out vec4 o;
+uniform float uRim; uniform vec3 uSeat[16]; // reading hook (p10-reading): an owner shown as each tile's rim and sides, so the land itself still reads
+vec3 seatOf(float aa){ return uSeat[min(((int(aa*255.+.5)-20)*154)%211,15)]; }
 int raw(ivec2 t){ if(t.x<0||t.y<0||t.x>=int(uSize.x)||t.y>=int(uSize.y)) return 0; vec4 v=texelFetch(uId,t,0); return int(v.r*255.+.5)+256*int(v.g*255.+.5); }
 int idAt(vec2 p){ return raw(ivec2(floor(p))); }
 int idSoft(vec2 p){ vec2 q=p-.5,f=fract(q); ivec2 b=ivec2(floor(q)); int a=raw(b),c=raw(b+ivec2(1,0)),d=raw(b+ivec2(0,1)),e=raw(b+ivec2(1,1));
@@ -5180,6 +5185,7 @@ vec3 face(vec2 p,int id,float foot){
     else if(!them){ float l=dot(a.rgb,vec3(.3,.6,.1)); vec3 line=l>.36?uInk:uPale; c=mix(c,near?line:mix(line,a.rgb,.55),near?.42:.15); } }
   else if(edge) c=mix(c,uInk,b.a<.99?.46:.16);
   if(land) c=mix(c,uLand,own?.6:.92);
+  if(owned&&uRim>0.){ vec3 sc=mix(seatOf(a.a),uWash.rgb,uWash.a*.6); float hd=max(abs(q.x),abs(q.x)*.5+abs(q.y)*.866)/.866; c=mix(c,sc,.16); c=mix(c,sc*clamp(k,.9,1.12),smoothstep(.68,.74,hd)); } // reading hook (p10-reading)
   float gl=b.g; if(gl>0.){ float pulse=uTime<=0.?1.:.72+.28*cos(uTime*6.2832); c=mix(c,uGlow,gl*(edge?.95:.34*pulse)); }
   return c; }
 void main(){
@@ -5205,7 +5211,7 @@ void main(){
     gl_FragDepth=dep(p0,0.);
     o=vec4(c*(1.-s/20.*.62)*(1.-uShade*shd(p0,0.))*(1.-2.*dot(uv/uView,uv/uView)),1.); return; }
   vec3 c;
-  if(wall){ vec3 b=tab(id,0).rgb; float l=.36+.30*clamp(z/max(top(id),.01),0.,1.); vec2 n=vec2(0.);
+  if(wall){ vec4 a0=tab(id,0); vec3 b=uRim>0.&&a0.a<.99?seatOf(a0.a):a0.rgb; /* reading hook (p10-reading): an owner's colour on the sides */ float l=.36+.30*clamp(z/max(top(id),.01),0.,1.); vec2 n=vec2(0.);
     if(uBev>0.){ for(int i=0;i<6;i++){ float t=float(i)*1.0471976+.5; vec2 d=vec2(cos(t),sin(t)); if(idAt(p+d*1.7)!=id) n+=d; } if(n!=vec2(0.)) l*=1.25+.55*dot(normalize(n),uLight); } // a side that faces the lamp is lighter
     c=mix(b*l,uWall,.45)*(.9+.12*grain(p)); if(tab(id,1).g>0.) c=mix(c,uGlow,.35); }
   else { c=face(uMost>0.?p:p,id,foot); if(uMost>0.){ float h=top(id); for(int k=1;k<=5;k++){ float d=float(k)*3.; if(top(idAt(p+uLight*d))>h+.6*float(k)){ c*=.80; break; } } } }
@@ -5289,6 +5295,7 @@ class Painter {
     g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform2f(u.uLight, o.style.sun[0], o.style.sun[1]);
     g.uniform1f(u.uS, cam.s); g.uniform1f(u.uQ, cam.q); g.uniform1f(u.uDpr, dpr); g.uniform1f(u.uUnit, o.unit); g.uniform1f(u.uMost, o.most); g.uniform1f(u.uRelief, o.relief); g.uniform1f(u.uTime, o.time); g.uniform1f(u.uPat, o.pat ? 1 : 0); g.uniform1f(u.uCell, m.R); g.uniform1f(u.uBev, o.bevel); g.uniform1f(u.uSlab, m.R < 20 ? 0 : 1); g.uniform1f(u.uTable, o.table ? 1 : 0); // cells too small for a rim of their own are bevelled only where the land's owner or height changes
     const f3 = (k, c) => g.uniform3f(u[k], c[0] / 255, c[1] / 255, c[2] / 255);
+    if (u.uRim) { g.uniform1f(u.uRim, o.rim ? 1 : 0); if (o.rim) g.uniform3fv(u["uSeat[0]"], Float32Array.from({ length: 48 }, (_, i) => (o.rim[(i / 3) | 0]?.[i % 3] ?? 0) / 255)); } // reading hook (p10-reading)
     f3("uInk", o.ink); f3("uPale", o.pale); f3("uWall", o.wall); f3("uGlow", o.glow); f3("uLand", o.land || o.glow);
     g.drawArrays(g.TRIANGLES, 0, 3);
     g.disable(g.DEPTH_TEST);
@@ -5297,6 +5304,262 @@ class Painter {
 }
 
 $x.Painter = Painter;
+return $x; })({});
+$m[43] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Reading a board at a glance: the goods' own symbols and their key, pips under a number, a port's rate on a plate by its flag,
+// a seat's routes as links between hexes, and flags on what can still act. Our own simple shapes, drawn in code.
+// Looks only: no rule ever reads them.
+const { bake, box } = $m[40];
+const { SLOT } = $m[41];
+
+const TAU = Math.PI * 2, INK = "#1a1411", PALE = "#fdf6e4";
+const oval = (c, x, y, rx, ry, a = 0) => { c.moveTo(x + rx * Math.cos(a), y + rx * Math.sin(a)); c.ellipse(x, y, rx, ry, a, 0, TAU); c.closePath(); };
+const rect = (c, x0, y0, x1, y1) => { c.moveTo(x0, y0); c.lineTo(x1, y0); c.lineTo(x1, y1); c.lineTo(x0, y1); c.closePath(); };
+
+/**
+ * The goods' symbols, drawn about (0, 0) at a size of about 1: each a filled shape, and lines cut into it in the paper colour.
+ * Grain is an ear of wheat, Glass a goblet, Clay three bricks, Salt a crystal.
+ */
+const GLYPHS = [
+  ["Wheat", (c) => {
+    rect(c, -0.035, -0.12, 0.035, 0.48);
+    for (let k = 0; k < 3; k++) { const y = 0.2 - k * 0.2; oval(c, -0.12, y, 0.15, 0.075, -0.95); oval(c, 0.12, y, 0.15, 0.075, 0.95 + Math.PI); }
+    oval(c, 0, -0.36, 0.075, 0.15);
+  }],
+  ["Goblet", (c) => {
+    c.moveTo(-0.3, -0.44); c.lineTo(0.3, -0.44); c.quadraticCurveTo(0.31, -0.02, 0.05, 0.03); c.lineTo(0.04, 0.3); c.lineTo(0.24, 0.39); c.lineTo(0.24, 0.46);
+    c.lineTo(-0.24, 0.46); c.lineTo(-0.24, 0.39); c.lineTo(-0.04, 0.3); c.lineTo(-0.05, 0.03); c.quadraticCurveTo(-0.31, -0.02, -0.3, -0.44); c.closePath();
+  }, (c) => { c.moveTo(-0.18, -0.34); c.quadraticCurveTo(-0.19, -0.14, -0.07, -0.07); }],
+  ["Bricks", (c) => { rect(c, -0.47, 0.03, -0.025, 0.33); rect(c, 0.025, 0.03, 0.47, 0.33); rect(c, -0.22, -0.33, 0.22, -0.03); }],
+  ["Crystal", (c) => { [[0, -0.47], [0.41, -0.235], [0.41, 0.235], [0, 0.47], [-0.41, 0.235], [-0.41, -0.235]].forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); },
+    (c) => { c.moveTo(-0.41, -0.235); c.lineTo(0, 0); c.lineTo(0.41, -0.235); c.moveTo(0, 0); c.lineTo(0, 0.47); }],
+];
+
+/** A good's symbol, upright, at (x, y), about `size` pixels high: dark ink with a pale halo so it reads on every ground. */
+function glyph(ctx, good, x, y, size, ink = INK, halo = "rgba(253,246,228,.9)") {
+  const g = GLYPHS[good];
+  if (!g) return;
+  ctx.save(); ctx.translate(x, y); ctx.scale(size, size);
+  ctx.beginPath(); g[1](ctx);
+  ctx.lineJoin = "round";
+  if (halo) { ctx.lineWidth = 3.2 / size; ctx.strokeStyle = halo; ctx.stroke(); }
+  ctx.fillStyle = ink; ctx.fill();
+  if (g[2]) { ctx.beginPath(); g[2](ctx); ctx.lineWidth = Math.max(1, size * 0.07) / size; ctx.lineCap = "round"; ctx.strokeStyle = halo || PALE; ctx.stroke(); }
+  ctx.restore();
+}
+
+const STAMPS = new Map();
+/** The same symbol from a small picture drawn once for each size (in steps of two pixels), so a board of them costs little to redraw. */
+function stamp(ctx, good, x, y, size) {
+  const px = Math.max(8, Math.round(size / 2) * 2), d = Math.min(2, Math.max(1, devicePixelRatio || 1)), key = `${good} ${px} ${d}`;
+  let c = STAMPS.get(key);
+  if (!c) {
+    if (STAMPS.size > 160) STAMPS.clear();
+    c = document.createElement("canvas"); c.width = c.height = Math.ceil(px * 1.3 * d);
+    const g = c.getContext("2d");
+    if (!g) return glyph(ctx, good, x, y, size);
+    g.scale(d, d); glyph(g, good, (px * 1.3) / 2, (px * 1.3) / 2, px);
+    STAMPS.set(key, c);
+  }
+  const w = size * 1.3;
+  ctx.drawImage(c, x - w / 2, y - w / 2, w, w);
+}
+
+/** Pips under a number: how many ways in 36 it comes up, as dots, red with the number when it comes up most. */
+function pips(ctx, n, x, y, r, hot) {
+  if (!(n > 0)) return;
+  const d = Math.max(1.1, r * 0.085), gap = Math.max(2.8, r * 0.22);
+  ctx.fillStyle = hot ? "#b0302a" : INK;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) { const px = x + (i - (n - 1) / 2) * gap; ctx.moveTo(px + d, y); ctx.arc(px, y, d, 0, TAU); }
+  ctx.fill();
+}
+
+/** A port's rate on a small plate: "3:1", or "2:1" and the symbol of its good on that good's colour. h: the plate's height in pixels. */
+function portPlate(ctx, x, y, h, good, rgb) {
+  const own = good >= 0 && good < GLYPHS.length, text = own ? "2:1" : "3:1";
+  ctx.font = `700 ${Math.round(h * 0.62)}px system-ui,"Segoe UI",sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const tw = ctx.measureText(text).width, sw = own ? h * 0.95 : 0, w = tw + h * 0.6 + sw, x0 = x - w / 2, y0 = y - h / 2, r = h * 0.28;
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x0, y0, w, h, r) : ctx.rect(x0, y0, w, h);
+  ctx.fillStyle = "#f6eedb"; ctx.fill(); ctx.lineWidth = 1.6; ctx.strokeStyle = INK; ctx.stroke();
+  if (own) {
+    ctx.save(); ctx.beginPath(); ctx.rect(x0 + w - sw, y0, sw, h); ctx.clip();
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x0, y0, w, h, r) : ctx.rect(x0, y0, w, h); ctx.fillStyle = `rgb(${rgb})`; ctx.fill(); ctx.restore();
+    ctx.beginPath(); ctx.moveTo(x0 + w - sw, y0); ctx.lineTo(x0 + w - sw, y0 + h); ctx.lineWidth = 1.2; ctx.strokeStyle = INK; ctx.stroke();
+    glyph(ctx, good, x0 + w - sw / 2, y, h * 0.66, INK, null);
+  }
+  ctx.fillStyle = INK; ctx.fillText(text, x0 + h * 0.3 + tw / 2, y + 0.5);
+}
+
+/**
+ * A flag on a short pole whose foot is at (x, y), h pixels tall: "ready" (a pale pennant with an arrow: this can still move)
+ * or "buy" (a gold banner with a coin: this village can still buy). Shape and colour both differ, so neither rests on colour alone.
+ */
+function flag(ctx, x, y, h, kind) {
+  const top = y - h, w = h * 0.62, fh = h * 0.5;
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, top); ctx.lineWidth = Math.max(2.4, h * 0.13); ctx.strokeStyle = INK; ctx.stroke();
+  ctx.beginPath();
+  if (kind === "buy") rect(ctx, x, top, x + w, top + fh);
+  else { ctx.moveTo(x, top); ctx.lineTo(x + w * 1.05, top + fh * 0.18); ctx.lineTo(x + w * 0.78, top + fh * 0.5); ctx.lineTo(x + w * 1.05, top + fh * 0.82); ctx.lineTo(x, top + fh); ctx.closePath(); }
+  ctx.lineWidth = Math.max(2, h * 0.09); ctx.strokeStyle = INK; ctx.stroke();
+  ctx.fillStyle = kind === "buy" ? "#f2c84b" : "#f4f7fb"; ctx.fill();
+  ctx.beginPath(); ctx.lineWidth = Math.max(1.3, h * 0.07); ctx.strokeStyle = INK; ctx.fillStyle = INK;
+  if (kind === "buy") { ctx.arc(x + w / 2, top + fh / 2, fh * 0.26, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.arc(x + w / 2, top + fh / 2, fh * 0.08, 0, TAU); ctx.fill(); }
+  else { const cx = x + w * 0.34, cy = top + fh / 2, a = fh * 0.2; ctx.moveTo(cx - a, cy - a); ctx.lineTo(cx, cy); ctx.lineTo(cx - a, cy + a); ctx.moveTo(cx + a * 0.1, cy - a); ctx.lineTo(cx + a * 1.1, cy); ctx.lineTo(cx + a * 0.1, cy + a); ctx.stroke(); }
+}
+
+/** The model of half a link: from a hex's middle to the edge it shares with the next, in the owner's enamel. Length 0.5 at size 1. */
+const linkModels = () => ({ link: bake(box([], 0, -0.03, 0, 0.5, 0.03, 0.045, [SLOT.cloth, 128, 0], 1, 0.008)) });
+
+/** A link's two ends on the board: from a's middle toward b's, moved sideways into its lane so seats sharing an edge lie side by side. */
+function linkEnds(m, a, b, lane, of) {
+  const [x0, y0] = m.mid[a], [x1, y1] = m.mid[b], dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1, o = (lane - (of - 1) / 2) * m.R * 0.15;
+  const px = (-dy / l) * o, py = (dx / l) * o;
+  return { x0: x0 + px, y0: y0 + py, x1: x1 + px, y1: y1 + py, l, t: Math.atan2(dy, dx) };
+}
+
+/** The links as models: two halves for each, each lying on its own hex's top, so a link down to the sea follows the step. */
+function stageLinks(out, s, m, show) {
+  for (const j of s.joins) {
+    const e = linkEnds(m, s.at, j.to, j.lane, j.of);
+    out.push({ m: "link", x: e.x0, y: e.y0, z: show[s.at].top, s: e.l, rgb: j.rgb, t: e.t }, { m: "link", x: e.x1, y: e.y1, z: show[j.to].top, s: e.l, rgb: j.rgb, t: e.t + Math.PI });
+  }
+}
+
+/** The links drawn flat, for the Flat look: a dark edge and the seat's colour, under the numbers and houses. */
+function drawLinks(ctx, cam, m, show, unit, spots, size) {
+  const w = Math.min(10, Math.max(3, size * 0.11));
+  ctx.lineCap = "round";
+  for (const s of spots) {
+    if (s.kind !== "route" || !s.joins) continue;
+    for (const j of s.joins) {
+      const e = linkEnds(m, s.at, j.to, j.lane, j.of);
+      cam.projectTo(e.x0, e.y0, show[s.at].top * unit); const x = cam.px, y = cam.py;
+      cam.projectTo(e.x1, e.y1, show[j.to].top * unit);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(cam.px, cam.py);
+      ctx.lineWidth = w + 3; ctx.strokeStyle = INK; ctx.stroke(); ctx.lineWidth = w; ctx.strokeStyle = `rgb(${j.rgb})`; ctx.stroke();
+    }
+  }
+  ctx.lineCap = "butt";
+}
+
+/**
+ * The key to the goods: each symbol on its own colour, and its name. items: [{ name, rgb }] by good.
+ * Built from elements and text only. Returns the element, for the page to place.
+ */
+function legend(items, title = "Goods") {
+  const box = document.createElement("div"), dpr = Math.min(2, Math.max(1, devicePixelRatio || 1));
+  box.className = "board-key";
+  Object.assign(box.style, { display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "center" });
+  box.setAttribute("role", "group"); box.setAttribute("aria-label", `${title}: what the symbols on the hexes mean`);
+  items.forEach((it, k) => {
+    const row = document.createElement("span"), cv = document.createElement("canvas"), c = cv.getContext("2d"), n = 20;
+    cv.width = cv.height = Math.round(n * dpr); cv.style.width = cv.style.height = `${n}px`; cv.setAttribute("aria-hidden", "true");
+    if (c) { c.scale(dpr, dpr); c.beginPath(); c.roundRect ? c.roundRect(1, 1, n - 2, n - 2, 4) : c.rect(1, 1, n - 2, n - 2); c.fillStyle = `rgb(${it.rgb})`; c.fill(); c.lineWidth = 1; c.strokeStyle = "rgba(26,20,17,.6)"; c.stroke(); glyph(c, k, n / 2, n / 2, n * 0.74, INK, null); }
+    const name = document.createElement("span");
+    name.textContent = it.name;
+    Object.assign(row.style, { display: "inline-flex", alignItems: "center", gap: "5px" });
+    row.append(cv, name);
+    box.append(row);
+  });
+  return box;
+}
+
+$x.GLYPHS = GLYPHS; $x.glyph = glyph; $x.stamp = stamp; $x.pips = pips; $x.portPlate = portPlate; $x.flag = flag; $x.linkModels = linkModels; $x.linkEnds = linkEnds; $x.stageLinks = stageLinks; $x.drawLinks = drawLinks; $x.legend = legend;
+return $x; })({});
+$m[44] = (($x) => {
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Names on the map and number plates that keep out of each other's way. A plate that would cover another is moved to the
+// nearest free place and tied back to its piece by a thin line; a name that has no room, or no room in its province, is left out.
+// Looks only: no rule ever reads them.
+
+const INK = "#1a1411";
+/** Where a crowded box may go instead, in units of its own size: beside, below, above, then further out. */
+const AROUND = [[0, 0]];
+for (const k of [1, 1.7, 2.5]) for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4 + Math.PI / 2; AROUND.push([Math.round(Math.cos(a) * k * 100) / 100, Math.round(Math.sin(a) * k * 100) / 100]); }
+
+const hits = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+/**
+ * Lay out boxes so that none covers another. Each item: { x, y (where it would sit), l, r, t, b (its reach from there), drop (leave it
+ * out rather than move it), spots ([[dx, dy], ...] in pixels; else the places AROUND, in its own widths and heights) }. Items are placed in
+ * the order given and kept: the first come keep their own place. Writes item.x, item.y, item.moved and item.out; returns the placed boxes.
+ */
+function spread(items, W, H, taken = []) {
+  const placed = [...taken];
+  for (const it of items) {
+    const w = it.l + it.r, h = it.t + it.b, x0 = it.x, y0 = it.y;
+    it.out = true; it.moved = false;
+    for (const [dx, dy] of it.spots || (it.drop ? [[0, 0]] : AROUND.map(([a, b]) => [a * w, b * h]))) {
+      const x = x0 + dx, y = y0 + dy, bx = { x0: x - it.l - 1, x1: x + it.r + 1, y0: y - it.t - 1, y1: y + it.b + 1 };
+      if ((bx.x0 < 0 || bx.y0 < 0 || bx.x1 > W || bx.y1 > H) && (dx || dy || it.drop)) continue; // a piece keeps its own place even at the edge; a name is left out
+      if (placed.some((p) => hits(p, bx))) continue;
+      Object.assign(it, { x, y, out: false, moved: !!(dx || dy) });
+      placed.push(bx);
+      break;
+    }
+    if (it.out && !it.drop) { it.out = false; placed.push({ x0: x0 - it.l, x1: x0 + it.r, y0: y0 - it.t, y1: y0 + it.b }); } // nowhere free: it stays, as before
+  }
+  return placed;
+}
+
+/** A thin line from where a moved plate belongs to where it went, with a dot on its piece. */
+function tie(ctx, ax, ay, x, y) {
+  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(x, y); ctx.lineWidth = 3; ctx.strokeStyle = "rgba(253,246,228,.75)"; ctx.stroke();
+  ctx.lineWidth = 1.4; ctx.strokeStyle = INK; ctx.stroke();
+  ctx.beginPath(); ctx.arc(ax, ay, 2.6, 0, 7); ctx.fillStyle = INK; ctx.fill();
+}
+
+const sizes = new WeakMap();
+/** How big each place is on the board, as the side of a square of the same area, counted once from the picture. */
+function reach(m) {
+  if (sizes.has(m)) return sizes.get(m);
+  const n = new Float32Array(m.mid.length + 1);
+  for (let i = 0; i < m.ids.length; i++) n[m.ids[i]]++;
+  const out = Array.from(m.mid, (_, i) => Math.sqrt(n[i + 1]));
+  sizes.set(m, out);
+  return out;
+}
+
+/** The font for a place's name. Plain and upright, so it is not taken for a land's name (those are italic). */
+const nameFont = (px, bold = false) => `${bold ? 700 : 600} ${px}px system-ui,"Segoe UI",sans-serif`;
+
+/** A name, dark on a pale halo, which reads on every ground and in every style. */
+function word(ctx, text, x, y, px, bold = false) {
+  ctx.font = nameFont(px, bold); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+  ctx.lineWidth = Math.max(3, px * 0.32); ctx.strokeStyle = "rgba(252,247,234,.88)"; ctx.strokeText(text, x, y);
+  ctx.fillStyle = "rgba(26,20,17,.94)"; ctx.fillText(text, x, y);
+}
+
+/**
+ * The places' names, where they fit: under a place's plate (or over its piece), only when the name is no wider than the place is
+ * at this zoom, and never over a plate or another name, so zooming in brings more of them and the whole world stays clear.
+ * The place under the pointer is always named. plates: where each place's plate went ({ ax, ay, rad } by place).
+ */
+function drawNames(ctx, cam, m, show, unit, places, taken, hover, plates, tall) {
+  const side = reach(m), items = [];
+  let lit = null;
+  for (const p of places) {
+    const i = p.at;
+    cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit);
+    const across = side[i] * cam.s * cam.pk, px = Math.round(Math.max(10.5, Math.min(18, 8 + across * 0.035))), x = cam.px, y = cam.py;
+    const pl = plates.get(i), under = pl ? pl.ay + pl.rad + px * 0.8 : y;
+    cam.projectTo(m.mid[i][0], m.mid[i][1], show[i].top * unit + tall * cam.s);
+    const over = cam.py - px * 0.7;
+    if (i === hover) { lit = { text: p.text, x: pl ? pl.ax : x, y: under, px: Math.max(13, px) }; continue; }
+    ctx.font = nameFont(px);
+    const tw = ctx.measureText(p.text).width;
+    if (tw > across * 1.25) continue; // no room in the place at this zoom
+    items.push({ text: p.text, px, across, x: pl ? pl.ax : x, y: under, l: tw / 2 + 2, r: tw / 2 + 2, t: px * 0.62, b: px * 0.62, drop: true, spots: [[0, 0], [0, over - under]] });
+  }
+  items.sort((a, b) => b.across - a.across); // the larger places first
+  spread(items, cam.W, cam.H, taken);
+  for (const it of items) if (!it.out) word(ctx, it.text, it.x, it.y, it.px);
+  if (lit) word(ctx, lit.text, lit.x, lit.y, lit.px, true);
+}
+
+$x.spread = spread; $x.tie = tie; $x.reach = reach; $x.nameFont = nameFont; $x.word = word; $x.drawNames = drawNames;
 return $x; })({});
 $m[35] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -5308,6 +5571,9 @@ const { Meshes } = $m[38];
 const { models, unpack } = $m[39];
 const { Painter } = $m[42];
 const { STYLES, styleOf } = $m[41];
+// reading hook (p10-reading): the goods, pips, ports, links and flags; names and plates that keep clear of each other
+const { drawLinks, flag, linkModels, pips, portPlate, stageLinks, stamp } = $m[43];
+const { drawNames, spread, tie } = $m[44];
 
 const DEG = Math.PI / 180;
 const LOOKS = {
@@ -5371,8 +5637,12 @@ function canDraw() {
   return !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(name);
 }
 
-/** terrain(i): what the land of a cell is, shown as a shape on its top (2 grain, 3 clay, 4 sand, 5 salt, 6 rock, 7 hills). wood: the address of the table's picture. probe: time the first frames and say "slow" if they drag. */
-function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false, style = "painted" }) {
+/**
+ * terrain(i): what the land of a cell is, shown as a shape on its top (2 grain, 3 clay, 4 sand, 5 salt, 6 rock, 7 hills). wood: the address of the table's picture. probe: time the first frames and say "slow" if they drag.
+ * reading (p10-reading): goods(i) the good a cell yields (its symbol is drawn on it), colours the goods' own colours (for a port's plate),
+ * places [{ at, text }] names printed where there is room, rim: an owner's colour as each tile's rim and sides rather than a flood.
+ */
+function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = "relief", picture = null, lands = null, lines = [], labels = [], icons = [0, 1, 2, 3, 4, 5], size = 44, fit = null, terrain = null, wood = "", probe = false, style = "painted", reading = {} }) {
   const under = host.appendChild(document.createElement("canvas")), over = host.appendChild(document.createElement("canvas")), ctx = over.getContext("2d");
   for (const c of [under, over]) c.className = "board-layer";
   over.style.pointerEvents = "none";
@@ -5386,7 +5656,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
   let look3 = styleOf(style), styleName = STYLES[style] ? style : "war";
   const lift = () => 9 * L.rise;
   let meshes = null, staged = false;
-  try { meshes = new Meshes(painter.g, models()); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); }
+  try { meshes = new Meshes(painter.g, { ...models(), ...linkModels() }); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); } // reading hook (p10-reading): the links between hexes
   const solid = () => L.rise > 0 && !!meshes;
   /** Pieces on a map of small cells are made larger, so that they read when the whole board is in view (they still grow as you zoom in). */
   const grown = () => Math.max(1, Math.min(picture ? 3.2 : 1.25, 24 / (m.R * base))); // on a board of hexes a piece must still fit its own hex
@@ -5413,8 +5683,9 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
         if (s.leader) put("unit4", at, 0.62, -0.3, 0.74, rgb);
         if (s.seat >= 0) put(s.count >= 10 ? "gun" : s.count >= 5 ? "horse" : "foot", at, 0, 0, 0.92, rgb, s.count >= 5 ? -0.45 : 0);
       } else if (s.kind === "token") put("token", at, 0, 0, 1.18);
-      else if (s.kind === "route") s.seats.forEach((c, k) => { const a = -0.9 + k * 0.62; put("bar", at, Math.cos(a) * 0.62, Math.sin(a) * 0.62 - 0.1, 1, c, a + Math.PI / 2); });
+      else if (s.kind === "route") { if (s.joins) stageLinks(out, s, m, show); s.seats.forEach((c, k) => { const a = -0.9 + k * 0.62; put("bar", at, Math.cos(a) * 0.62, Math.sin(a) * 0.62 - 0.1, 1, c, a + Math.PI / 2); }); } // reading hook (p10-reading): links, and a short bar for a seat whose route joins nothing yet
       else if (s.kind === "depot" || s.kind === "town") put(s.kind, at, R < 20 ? 0 : 0.5, R < 20 ? 0 : 0.36, R < 20 ? 0.8 : 0.72, rgb, 0.35);
+      else if (s.kind === "port" && s.toward) put("port", at, (s.toward[0] * 0.6) / big, (s.toward[1] * 0.6) / big, 0.7, null, Math.atan2(s.toward[0], -s.toward[1])); // reading hook (p10-reading): the jetty runs out to the sea it serves
       else if (s.kind === "port") put("port", at, -0.55, -0.3, 0.7, null, 2.4);
       else if (s.kind === "ship") put("ship", at, 0, 0, 0.9, rgb, s.turn || 0);
       else if (s.kind === "model") put(s.name, at, s.dx || 0, s.dy || 0, s.size || 1, rgb, s.turn || 0, s.dim ?? 1); // any model by name: dice on the table, a ship at sea
@@ -5464,7 +5735,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     if (dirty) { painter.send(show); dirty = false; }
     const on = solid();
     if (on) { if (!staged) stage(); meshes.cast([-72, -72, m.w + 144, m.h + 144], lift(), look3.sun); }
-    painter.draw(cam, dpr(), { style: look3, lamp: on ? (u) => meshes.lamp(u, true, look3.sun) : null, unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, pat, bevel: L.rise ? Math.max(1.5, Math.min(5, m.R * 0.1)) : 0, table: L.rise > 0, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [226, 233, 241], land: [255, 226, 150] }); // silver marks what can be chosen; the lands keep their own line
+    painter.draw(cam, dpr(), { style: look3, lamp: on ? (u) => meshes.lamp(u, true, look3.sun) : null, unit: unit(), most: L.rise ? most() : 0, relief: L.relief, time: beat, pat, bevel: L.rise ? Math.max(1.5, Math.min(5, m.R * 0.1)) : 0, table: L.rise > 0, ink: [24, 20, 18], pale: [250, 244, 228], wall: [34, 27, 24], glow: [226, 233, 241], land: [255, 226, 150], rim: reading.rim ? seats : null }); // reading hook (p10-reading): rim // silver marks what can be chosen; the lands keep their own line
     if (on) meshes.draw(cam, lift(), look3);
     drawOver(t);
     if (moving) redraw();
@@ -5542,12 +5813,14 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       ctx.fill("evenodd");
       ctx.lineWidth = 1; ctx.strokeStyle = bright ? `rgba(252,247,234,${0.4 * k.seen})` : `rgba(20,16,14,${0.4 * k.seen})`; ctx.stroke();
     });
+    const inked = []; // reading hook (p10-reading): where the lands' names lie, for the places' names to keep clear of
     for (const l of labels) { // names printed on the map
       cam.projectTo(l.at[0], l.at[1], unit());
       const px = Math.max(11, Math.min(30, size * 0.62));
       ctx.font = `italic 600 ${px}px "Palatino Linotype",Palatino,Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
       if (!l.sea) { ctx.lineWidth = px * 0.22; ctx.strokeStyle = "rgba(252,245,222,.62)"; ctx.strokeText(l.text, cam.px, cam.py); }
       ctx.fillStyle = l.sea ? "rgba(244,236,210,.92)" : "rgba(40,26,18,.86)"; ctx.fillText(l.text, cam.px, cam.py);
+      if (reading.places) { const w = ctx.measureText(l.text).width / 2 + 2; inked.push({ x0: cam.px - w, x1: cam.px + w, y0: cam.py - px * 0.6, y1: cam.py + px * 0.6 }); }
     }
     for (const [a, b] of lines) { // crossings over water
       cam.projectTo(a[0], a[1], 0.6 * unit()); const x = cam.px, y = cam.py; cam.projectTo(b[0], b[1], 0.6 * unit());
@@ -5555,6 +5828,15 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     }
     const chosen = new Set(spots.flatMap((s) => (s.kind === "dot" && !s.small ? [s.at] : []))), numbered = new Set(spots.flatMap((s) => (s.kind === "token" ? [s.at] : [])));
     const on = solid(), R3 = m.R * grown();
+    // reading hook (p10-reading): the links flat (models stand for them in the tilted looks), each good's symbol at the top of its hex
+    if (!on) drawLinks(ctx, cam, m, show, unit(), spots, size);
+    if (reading.goods) show.forEach((c, i) => {
+      const g = reading.goods(i);
+      if (!(g >= 0)) return;
+      cam.projectTo(m.mid[i][0], m.mid[i][1] - m.R * 0.64, c.top * unit());
+      const gs = size * 0.3 * cam.pk;
+      if (gs >= 7) stamp(ctx, g, cam.px, cam.py - gs * 0.1, Math.min(40, Math.max(9, gs)));
+    });
     for (const s of spots) { // things that grow or are built on the ground
       const kind = { well: "cairn", quay: "port", watch: "fort", archive: "depot" }[s.kind] || s.kind; // An Inch of Ink's places, as they are drawn flat
       if (!["tree", "cairn", "farm", "fort", "token", "route", "depot", "town", "gate", "port"].includes(kind) || (on && kind !== "token")) continue;
@@ -5564,11 +5846,12 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       if (s.kind === "token") { // the hex's number, red when it comes up often
         const r = Math.min(size * 0.4 * cam.pk, Math.max(10, h * 0.46)); // never so big that the ground's colour is lost, or tokens touch on a small screen
         if (chosen.has(s.at) && size * cam.pk >= 30) { ctx.beginPath(); ctx.arc(x, y, r + Math.max(3, r * 0.3), 0, 7); ctx.lineWidth = 5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.lineWidth = 2.5; ctx.strokeStyle = "#eef2f6"; ctx.stroke(); ctx.strokeStyle = "#1a1411"; } // can be chosen: a ring round the number, which stays in view (small hexes have only their bright edge, so the ground still shows)
-        if (on) { cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit() + m.R * 0.09 * cam.s); ctx.fillStyle = s.hot ? "#b0302a" : "#1a1411"; ctx.font = `700 ${Math.round(r * 1.05)}px Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.save(); ctx.translate(cam.px, cam.py); ctx.scale(1, Math.max(0.62, cam.ct)); if (s.lit) { ctx.beginPath(); ctx.arc(0, 0, r * 1.08, 0, 7); ctx.lineWidth = Math.max(3, r * 0.3); ctx.strokeStyle = "#f6f8fb"; ctx.stroke(); } ctx.fillText(String(s.n), 0, 1); ctx.restore(); continue; } // the disc is a model; its number lies on it
+        if (on) { cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit() + m.R * 0.09 * cam.s); ctx.fillStyle = s.hot ? "#b0302a" : "#1a1411"; ctx.font = `700 ${Math.round(r * 1.05)}px Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.save(); ctx.translate(cam.px, cam.py); ctx.scale(1, Math.max(0.62, cam.ct)); if (s.lit) { ctx.beginPath(); ctx.arc(0, 0, r * 1.08, 0, 7); ctx.lineWidth = Math.max(3, r * 0.3); ctx.strokeStyle = "#f6f8fb"; ctx.stroke(); } ctx.fillText(String(s.n), 0, s.pips ? -r * 0.14 : 1); pips(ctx, s.pips, 0, r * 0.56, r, s.hot); ctx.restore(); continue; } // the disc is a model; its number lies on it, and its pips under it (reading hook, p10-reading)
         ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = "#f3e7c6"; ctx.fill();
         ctx.lineWidth = 1.5; ctx.stroke();
         if (s.lit) { const b = Math.max(4, r * 0.4); ctx.beginPath(); ctx.arc(x, y, r + b / 2, 0, 7); ctx.lineWidth = b + 3; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.lineWidth = b; ctx.strokeStyle = "#f6f8fb"; ctx.stroke(); } // it yielded on the last roll: a bright band round the number
-        ctx.fillStyle = s.hot ? "#b0302a" : "#1a1411"; ctx.font = `700 ${Math.round(r * 1.05)}px Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(s.n), x, y + 1);
+        ctx.fillStyle = s.hot ? "#b0302a" : "#1a1411"; ctx.font = `700 ${Math.round(r * 1.05)}px Georgia,serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(s.n), x, s.pips ? y - r * 0.14 : y + 1);
+        pips(ctx, s.pips, x, y + r * 0.56, r, s.hot); // reading hook (p10-reading)
         continue;
       }
       if (kind === "route") { s.seats.forEach((rgb, k) => { const a = -0.9 + k * 0.55; ctx.beginPath(); ctx.ellipse(x + Math.cos(a) * h * 0.8, y + Math.sin(a) * h * 0.55 - h * 0.35, h * 0.2, h * 0.11, a, 0, 7); ctx.fillStyle = `rgb(${rgb})`; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); }); continue; }
@@ -5581,6 +5864,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
         continue;
       }
       if (kind === "gate") { ctx.beginPath(); ctx.rect(x - h * 0.6, y - h * 0.95, h * 0.18, h * 0.9); ctx.rect(x + h * 0.42, y - h * 0.95, h * 0.18, h * 0.9); ctx.fillStyle = "#3a2c22"; ctx.fill(); ctx.beginPath(); ctx.rect(x - h * 0.6, y - h * 0.75, h * 1.2, h * 0.16); ctx.fillStyle = "#e9c46a"; ctx.fill(); ctx.stroke(); continue; }
+      if (kind === "port" && s.toward) { cam.projectTo(m.mid[s.at][0] + s.toward[0] * m.R * 0.62, m.mid[s.at][1] + s.toward[1] * m.R * 0.62, show[s.at].top * unit()); const fx = cam.px + h * 0.18, fy = cam.py + h * 0.3; ctx.beginPath(); ctx.moveTo(fx, fy - h * 0.62); ctx.lineTo(fx, fy); ctx.lineWidth = 2; ctx.stroke(); ctx.beginPath(); ctx.moveTo(fx, fy - h * 0.62); ctx.lineTo(fx + h * 0.36, fy - h * 0.5); ctx.lineTo(fx, fy - h * 0.38); ctx.closePath(); ctx.fillStyle = "#fdf6e4"; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); continue; } // reading hook (p10-reading): the flag stands by the sea it serves, its plate beside it
       if (kind === "port") { ctx.beginPath(); ctx.moveTo(x - h * 0.7, y - h * 0.62); ctx.lineTo(x - h * 0.7, y - h * 0.18); ctx.lineWidth = 2; ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - h * 0.7, y - h * 0.62); ctx.lineTo(x - h * 0.36, y - h * 0.5); ctx.lineTo(x - h * 0.7, y - h * 0.38); ctx.closePath(); ctx.fillStyle = s.good === 4 ? "#fdf6e4" : ["#e2c460", "#b0d0d8", "#c47852", "#e4e2d6"][s.good]; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); continue; }
       if (kind === "farm") { for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.ellipse(x, y + k * h * 0.28 * flat, h * 0.62, h * 0.1 * flat + 1, 0, 0, 7); ctx.fillStyle = k ? "#d9b85a" : "#e8cc70"; ctx.fill(); ctx.stroke(); } continue; }
       if (kind === "cairn") { for (const [u, v, r] of [[-0.2, 0.05, 0.2], [0.18, 0.08, 0.18], [0, -0.14, 0.17]]) { ctx.beginPath(); ctx.ellipse(x + u * h, y + v * h, r * h, r * h * 0.8, 0, 0, 7); ctx.fillStyle = "#9a9384"; ctx.fill(); ctx.stroke(); } continue; }
@@ -5596,6 +5880,11 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
         ctx.fillStyle = "#2f5a34"; ctx.fill(); ctx.stroke();
       }
     }
+    for (const s of spots) { // reading hook (p10-reading): a port's rate on a plate over the water beside its flag
+      if (s.kind !== "port" || !s.toward) continue;
+      cam.projectTo(m.mid[s.at][0] + s.toward[0] * m.R * 1.22, m.mid[s.at][1] + s.toward[1] * m.R * 1.22, show[s.at].top * unit());
+      portPlate(ctx, cam.px, cam.py, Math.min(22, Math.max(11, size * 0.4 * cam.pk)), s.good, reading.colours?.[s.good] || [240, 232, 210]);
+    }
     for (const s of spots) if (s.kind === "dot" && !numbered.has(s.at)) { // a numbered hex is ringed round its number instead
       cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit());
       const held = spots.some((x) => x.at === s.at && (x.kind === "unit" || x.kind === "tower" || x.kind === "army")), r = size * (held ? 0.62 : s.small ? 0.1 : 0.15);
@@ -5608,18 +5897,36 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       ctx.beginPath(); ctx.ellipse(cam.px, cam.py, size * 0.7, size * 0.7 * flat, 0, 0, 7); ctx.fillStyle = s.aim ? "rgba(255,255,255,.25)" : "rgba(226,233,241,.28)"; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = s.aim ? "#ffffff" : "#dfe6ee"; ctx.stroke(); if (s.aim) { ctx.lineWidth = 1.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); }
     }
     const stand = spots.filter((s) => s.kind === "tower" || s.kind === "unit" || s.kind === "army").map((s) => { cam.projectTo(m.mid[s.at][0], m.mid[s.at][1], show[s.at].top * unit()); return { s, x: cam.px, y: cam.py, k: cam.pk }; }).sort((a, b) => a.y - b.y);
+    // reading hook (p10-reading): every plate (and, flat, every army) is placed first, so a crowded one moves aside, tied back to its piece
+    const lay = new Map();
     for (const { s, x, y, k } of stand) {
-      if (on) { // the piece is a model: the page adds what must stay sharp, its number on a plate above it, and the owner's sign
+      if (s.kind === "unit") continue;
+      if (on) {
         const army = s.kind === "army", tall = army ? 0 : 1.5;
-        if (s.kind === "unit") { if (s.now) { ctx.beginPath(); ctx.ellipse(x, y + size * 0.08 * flat, size * 0.36 * k, size * 0.36 * k * flat, 0, 0, 7); ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(238,243,248,.95)"; ctx.stroke(); } continue; }
         cam.projectTo(m.mid[s.at][0], m.mid[s.at][1] + (army && s.seat >= 0 ? R3 * 0.52 : 0), show[s.at].top * unit() + tall * R3 * cam.s); // an army's number lies at its foot, toward the player; a hall's floats over its roof
         const r = Math.max(8.5, Math.min(15, R3 * cam.s * 0.3 * k)), py = cam.py - r * (tall ? 1.15 : 0);
-        plate(String(s.count), cam.px, py, r, s.warn ? "#f2a08c" : s.seat < 0 ? "rgba(214,202,172,.94)" : s.now ? "#dfe8f3" : "#f6eedb");
-        if (s.kind === "army" && s.seat >= 0) { emblem(ctx, icons[s.seat], cam.px + r * 1.9, py, r * 0.9); ctx.lineWidth = 2.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.fillStyle = `rgb(${s.rgb})`; ctx.fill("evenodd"); }
+        ctx.font = `700 ${Math.round(r * 1.12)}px system-ui,"Segoe UI",sans-serif`;
+        const half = Math.max(r, ctx.measureText(String(s.count)).width / 2 + r * 0.38);
+        lay.set(s, { x: cam.px, y: py, ax: cam.px, ay: py, rad: r, l: half, r: army && s.seat >= 0 ? r * 2.4 : half, t: r, b: r });
+      } else if (s.kind === "army") { const r = Math.max(16, size * 0.52 * k); lay.set(s, { x, y, ax: x, ay: y, rad: r, l: r * 1.3, r: r * 1.55, t: r * 1.6, b: r * 0.75 }); }
+    }
+    const taken = lay.size ? spread([...lay].sort(([a], [b]) => (b.now ? 1 : 0) - (a.now ? 1 : 0) || (b.count || 0) - (a.count || 0)).map(([, v]) => v), cam.W, cam.H) : [];
+    for (const p of lay.values()) if (p.moved) tie(ctx, p.ax, p.ay, p.x, p.y);
+    for (const { s, x, y, k } of stand) {
+      if (on) { // the piece is a model: the page adds what must stay sharp, its number on a plate above it, and the owner's sign
+        if (s.kind === "unit") {
+          if (s.now) { ctx.beginPath(); ctx.ellipse(x, y + size * 0.08 * flat, size * 0.36 * k, size * 0.36 * k * flat, 0, 0, 7); ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(238,243,248,.95)"; ctx.stroke(); }
+          if (s.ready) { cam.projectTo(m.mid[s.at][0] + R3 * 0.16, m.mid[s.at][1] + R3 * 0.08, show[s.at].top * unit() + R3 * look3.scale * cam.s * (0.92 + s.rank * 0.05)); flag(ctx, cam.px, cam.py, Math.min(28, Math.max(18, size * 0.42 * k)), "ready"); } // reading hook (p10-reading)
+          continue;
+        }
+        const p = lay.get(s), r = p.rad;
+        plate(String(s.count), p.x, p.y, r, s.warn ? "#f2a08c" : s.seat < 0 ? "rgba(214,202,172,.94)" : s.now ? "#dfe8f3" : "#f6eedb");
+        if (s.kind === "army" && s.seat >= 0) { emblem(ctx, icons[s.seat], p.x + r * 1.9, p.y, r * 0.9); ctx.lineWidth = 2.5; ctx.strokeStyle = "#1a1411"; ctx.stroke(); ctx.fillStyle = `rgb(${s.rgb})`; ctx.fill("evenodd"); }
+        if (s.buy) { const fh = Math.min(28, Math.max(18, r * 2.1)); flag(ctx, p.x - p.l - fh * 0.7 - 3, p.y + r, fh, "buy"); } // reading hook (p10-reading)
         continue;
       }
-      if (s.kind === "army") { army(s, x, y, Math.max(16, size * 0.52 * k)); continue; }
-      if (s.kind === "unit") { figure(s, x, y + size * 0.2 * flat, Math.max(26, size * (0.6 + s.rank * 0.1) * k)); continue; }
+      if (s.kind === "army") { const p = lay.get(s); army(s, p.x, p.y, p.rad); continue; }
+      if (s.kind === "unit") { const H = Math.max(26, size * (0.6 + s.rank * 0.1) * k), foot = y + size * 0.2 * flat; figure(s, x, foot, H); if (s.ready) flag(ctx, x + H * 0.06, foot - H * 1.0, Math.min(28, Math.max(18, H * 0.5)), "ready"); continue; } // reading hook (p10-reading): ready flag
       const h = Math.max(36, size * 0.95 * k), foot = y + size * 0.22 * flat;
       ctx.beginPath(); ctx.ellipse(x + h * 0.1, foot, h * 0.4, h * 0.15, 0, 0, 7); ctx.fillStyle = "rgba(12,9,7,.42)"; ctx.fill();
       ctx.save(); ctx.translate(x, foot); ctx.scale(h, h);
@@ -5628,7 +5935,9 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       tower(ctx); ctx.lineWidth = 3.4 / h; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(20,15,12,.95)"; ctx.stroke(); ctx.fillStyle = g; ctx.fill(); ctx.restore();
       const r = Math.max(10.5, h * 0.26), by = foot - h * 0.34;
       plate(String(s.count), x, by, r, s.warn ? "#f2a08c" : s.now ? "#dfe8f3" : "#f6eedb");
+      if (s.buy) { const fh = Math.min(28, Math.max(18, r * 2.1)); ctx.font = `700 ${Math.round(r * 1.12)}px system-ui,"Segoe UI",sans-serif`; flag(ctx, x - Math.max(r, ctx.measureText(String(s.count)).width / 2 + r * 0.38) - fh * 0.7 - 3, by + r, fh, "buy"); } // reading hook (p10-reading)
     }
+    if (reading.places) drawNames(ctx, cam, m, show, unit(), reading.places, taken.concat(inked), hovering, new Map([...lay].map(([s, p]) => [s.at, p])), R3 * look3.scale * 0.95); // reading hook (p10-reading)
     if (point) arrow(...point);
   }
 
@@ -5697,8 +6006,8 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     fingers.set(e.pointerId, now);
   });
   const at = (e) => { const r = under.getBoundingClientRect(); return pick(cam, m, e.clientX - r.left, e.clientY - r.top, tops, unit(), L.rise ? most() : 0); };
-  under.addEventListener("pointermove", (e) => { if (e.pointerType === "touch") return; const i = at(e); if (i !== hovering) { hovering = i; listeners.hover.forEach((f) => f(i)); } });
-  under.addEventListener("pointerleave", () => { if (hovering !== -1) { hovering = -1; listeners.hover.forEach((f) => f(-1)); } });
+  under.addEventListener("pointermove", (e) => { if (e.pointerType === "touch") return; const i = at(e); if (i !== hovering) { hovering = i; listeners.hover.forEach((f) => f(i)); if (reading.places) redraw(); } }); // reading hook (p10-reading): the place under the pointer is named
+  under.addEventListener("pointerleave", () => { if (hovering !== -1) { hovering = -1; listeners.hover.forEach((f) => f(-1)); if (reading.places) redraw(); } });
   under.addEventListener("click", (e) => { if (dragged) { dragged = false; return; } listeners.pick.forEach((f) => f(at(e))); });
   under.addEventListener("webglcontextlost", (e) => {
     e.preventDefault();
@@ -5728,7 +6037,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       const t = performance.now(), slow = !quick && !calm(), fade = !quick && !slow, step = Math.min(90, 900 / Math.max(1, order.length)), place = new Map(order.map((c, i) => [c, i]));
       let last = 0;
       owner.forEach((o, i) => {
-        const c = show[i], to = o < 0 ? ground(i) : mix(seats[o], ground(i), rough[i] ? 0.1 : 0), tall = sea[i] ? 0.2 : (homes.has(i) ? 1.5 : o < 0 ? 0.75 : 1.2) + (c.kind === 7 ? 0.3 : 0); // hills stand a little above the plain
+        const c = show[i], to = o < 0 || reading.rim ? ground(i) : mix(seats[o], ground(i), rough[i] ? 0.1 : 0), tall = sea[i] ? 0.2 : (homes.has(i) ? 1.5 : o < 0 ? 0.75 : 1.2) + (c.kind === 7 ? 0.3 : 0); // hills stand a little above the plain
         if (c.owner === o && c.topTo === tall) return;
         const wait = slow && place.has(i) ? place.get(i) * step : 0, long = slow ? 320 : fade ? 200 : 1; // reduced motion: all at once, a quick fade, no hop
         Object.assign(c, { from: c.rgb, to, topFrom: slow ? c.top : tall, topTo: tall, hop: slow ? 0.5 : 0, start: t + wait, ends: t + wait + long, soak: slow && o >= 0 && c.owner !== o });
@@ -5767,7 +6076,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
 
 $x.LOOKS = LOOKS; $x.EMBLEMS = EMBLEMS; $x.emblem = emblem; $x.seatPattern = seatPattern; $x.canDraw = canDraw; $x.createBoard = createBoard;
 return $x; })({});
-$m[43] = (($x) => {
+$m[45] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The second ground: a world of provinces as a lit relief map on the table. Capo's map, real or invented.
 // The table games' ground is a picture of cell numbers; that cannot hold thousands of provinces sharply, so here the
@@ -5919,7 +6228,7 @@ const { Camera } = $m[36];
 const { Meshes } = $m[38];
 const { models } = $m[39];
 const { STYLE_KEY, styleOf } = $m[41];
-const { WorldGround } = $m[43];
+const { WorldGround } = $m[45];
 
 /** Fetch and unpack a world: absolute points for every arc, a path, box and middle for every province. */
 async function loadWorld(url, disputesUrl = "") {
@@ -6277,7 +6586,7 @@ function worldMap(canvas, world, o) {
 
 $x.loadWorld = loadWorld; $x.unpackWorld = unpackWorld; $x.ownerColour = ownerColour; $x.worldMap = worldMap;
 return $x; })({});
-$m[44] = (($x) => {
+$m[46] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What stands on Capo's lit map: sober blocks with map symbols, not toy soldiers. Looks only: every piece is read off
 // the state the rules already keep (who holds what, might, wars, the people seated in command); nothing here changes a game.
@@ -6335,7 +6644,7 @@ function mapPieces({ world, homes, owner, might, wars = [], player = "", staff =
 
 $x.mapPieces = mapPieces;
 return $x; })({});
-$m[46] = (($x) => {
+$m[48] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Where this copy's source code can be read. Anyone who runs a changed copy puts their own address here.
 const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
@@ -6343,7 +6652,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.9.3";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "a4e5c30f";
+const BUILD = "241eabb8";
 // The AI services Capo's story game can call straight from the page, by preset (site/ai.js has their shapes and limits).
 // The story page's rule (connect-src in site/game.html) lists exactly these origins and this computer; the gate holds them equal.
 const AI_BASES = {
@@ -6363,7 +6672,7 @@ const AI_BASES = {
 
 $x.SOURCE_URL = SOURCE_URL; $x.SITE_URL = SITE_URL; $x.VERSION = VERSION; $x.BUILD = BUILD; $x.AI_BASES = AI_BASES;
 return $x; })({});
-$m[47] = (($x) => {
+$m[49] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The shape of Capo's replies, apart from how they travel: a reply as a structured tool call and back to its lines,
 // and a sample turn Capo writes itself. Whatever service a reply comes from, the same reader reads its lines and the
@@ -6426,7 +6735,7 @@ function sampleReply(g, to, auto, nameOf, near) {
 
 $x.formatOf = formatOf; $x.toolOf = toolOf; $x.linesFrom = linesFrom; $x.sampleReply = sampleReply;
 return $x; })({});
-$m[48] = (($x) => {
+$m[50] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The three shapes AI services speak (the common chat-completions form, Anthropic's and Gemini's): where a request
 // goes, what it carries, and how a reply, or one streamed piece of it, is read into progress { text, args, thinking,
@@ -6493,7 +6802,7 @@ function splitEvents(buf, final = false) {
 
 $x.SHAPES = SHAPES; $x.splitEvents = splitEvents;
 return $x; })({});
-$m[50] = (($x) => {
+$m[52] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The pure parts the MCP bridge (tools/capo-mcp.mjs) and the page (site/aimore.js) share: the read-only digest of a
 // game an AI app may see, whether a reply has the shape its prompt asked for, and the rules' answer to an order an AI
@@ -6501,7 +6810,7 @@ $m[50] = (($x) => {
 // accept it, and the rules carry it out at the turn as they would any other.
 const { oddsLine } = $m[7];
 const { NEED, treatyAnswer, treatyName } = $m[5];
-const { formatOf } = $m[47];
+const { formatOf } = $m[49];
 const { peaceAnswer, strengthOf } = $m[8];
 const { APPROACHES, atWar, attackPlan, commanders, treatiesOf, treatyOf, warsOf } = $m[2];
 
@@ -6577,7 +6886,7 @@ const APPROACH_NAMES = Object.keys(APPROACHES);
 
 $x.BRIDGE_PORT = BRIDGE_PORT; $x.ORDER_VERBS = ORDER_VERBS; $x.digest = digest; $x.shapeOf = shapeOf; $x.judgeOrder = judgeOrder; $x.APPROACH_NAMES = APPROACH_NAMES;
 return $x; })({});
-$m[51] = (($x) => {
+$m[53] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Plugins are data, never code: JSON files the player opens, checked like a save before anything uses them. Known
 // fields only, every text flattened to one line and clipped, no web address in any text, the hard line applied, and
@@ -6713,7 +7022,7 @@ function voice(style, tone) {
 
 $x.PLUGIN_KINDS = PLUGIN_KINDS; $x.LIMITS = LIMITS; $x.DIALS = DIALS; $x.STYLES = STYLES; $x.TONES = TONES; $x.plain = plain; $x.checkStyle = checkStyle; $x.checkTone = checkTone; $x.within = within; $x.checkService = checkService; $x.checkPack = checkPack; $x.checkPlugin = checkPlugin; $x.keepPlugins = keepPlugins; $x.toneWords = toneWords; $x.voice = voice;
 return $x; })({});
-$m[49] = (($x) => {
+$m[51] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Two additions to how Capo reaches an AI, kept apart from site/ai.js so its own lines stay few:
 // 1. The MCP bridge: a service called "Your AI app (MCP bridge)". The player runs tools/capo-mcp.mjs themselves and
@@ -6723,9 +7032,9 @@ $m[49] = (($x) => {
 // 2. Plugins: files of data the player opens (a prose style, a tone, a service preset), checked by
 //    src/story/plugins.js like a save and kept in this browser. Never code: nothing in a plugin is run.
 // The page parts are built from elements and text, never markup.
-const { AI_BASES } = $m[46];
-const { BRIDGE_PORT, digest, judgeOrder } = $m[50];
-const { PLUGIN_KINDS, STYLES, TONES, checkPlugin, keepPlugins, toneWords, voice } = $m[51];
+const { AI_BASES } = $m[48];
+const { BRIDGE_PORT, digest, judgeOrder } = $m[52];
+const { PLUGIN_KINDS, STYLES, TONES, checkPlugin, keepPlugins, toneWords, voice } = $m[53];
 
 const ORIGINS = [...new Set(Object.values(AI_BASES).map((b) => new URL(b).origin).filter((o) => o.startsWith("https:")))];
 const fail = (kind, message) => Object.assign(new Error(message), { kind });
@@ -6959,18 +7268,18 @@ function pluginPart(r, ui) {
 
 $x.aiMore = aiMore; $x.BRIDGE = BRIDGE; $x.bridgeBase = bridgeBase; $x.bridgeAsk = bridgeAsk; $x.bridgeCheck = bridgeCheck; $x.aiHost = aiHost; $x.hear = hear; $x.unhear = unhear; $x.proposals = proposals; $x.bridgePart = bridgePart; $x.openPlugin = openPlugin; $x.dropPlugin = dropPlugin; $x.choosePlugin = choosePlugin; $x.pluginsNow = pluginsNow; $x.voiceNow = voiceNow; $x.pluginPart = pluginPart;
 return $x; })({});
-$m[45] = (($x) => {
+$m[47] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // How Capo reaches an AI: a service the player connects with their own key, or a server on the player's computer
 // (addresses in config.js; the page's rule reaches only those and this computer). There is no copy-and-paste route
 // (ruling 142). A key is kept apart from the settings, in this tab only or on this device if
 // asked, and never goes in a save, a file, a web address, a message shown or the console, nor to another service.
 // The page parts at the end (settings, waiting box, connect box) are built from elements and text, never markup.
-const { AI_BASES } = $m[46];
-const { formatOf, linesFrom, toolOf } = $m[47];
-const { SHAPES, splitEvents } = $m[48];
+const { AI_BASES } = $m[48];
+const { formatOf, linesFrom, toolOf } = $m[49];
+const { SHAPES, splitEvents } = $m[50];
 // mcp and plugins hook: the bridge to the player's own AI app, and data-only plugins (site/aimore.js)
-const { aiMore, bridgeAsk, bridgePart, pluginPart, voiceNow } = $m[49];
+const { aiMore, bridgeAsk, bridgePart, pluginPart, voiceNow } = $m[51];
 
 /** The reply allowance in tokens for each kind of call (lane 2 review). A thinking model gets four times as much. */
 const BUDGET = { turn: 1800, chat: 400, council: 500, ask: 500, character: 300, check: 300 };
@@ -7350,7 +7659,7 @@ aiMore({ PRESETS, keyOf, setKey, setKeep }); // mcp and plugins hook: adds the b
 
 $x.BUDGET = BUDGET; $x.thinks = thinks; $x.allowance = allowance; $x.PRESETS = PRESETS; $x.NEEDS_PROXY = NEEDS_PROXY; $x.WORKS = WORKS; $x.CONNECT = CONNECT; $x.reachable = reachable; $x.connected = connected; $x.loadRoute = loadRoute; $x.saveRoute = saveRoute; $x.keyOf = keyOf; $x.setKey = setKey; $x.setKeep = setKeep; $x.forgetKeys = forgetKeys; $x.scrub = scrub; $x.presetOf = presetOf; $x.baseOf = baseOf; $x.explain = explain; $x.ask = ask; $x.check = check; $x.watch = watch; $x.waitBox = waitBox; $x.connectBox = connectBox; $x.aiPanel = aiPanel;
 return $x; })({});
-$m[52] = (($x) => {
+$m[54] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A page shown inside another site's frame could be dressed up to mislead a player. It shows a plain link instead.
 // Daylight or lamplight, as the table games' Light setting last left it; every page starts here. The front page has one theme.
@@ -7370,7 +7679,7 @@ function guard() {
 
 $x.guard = guard;
 return $x; })({});
-$m[55] = (($x) => {
+$m[57] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The council convened: two or three advisers argue one decision in front of the player. Words only.
 // The rules choose who argues: the member the state of the country pleases most, the one it pleases least (their
@@ -7428,7 +7737,7 @@ function readDebate(text, members) {
 
 $x.debaters = debaters; $x.debatePrompt = debatePrompt; $x.readDebate = readDebate;
 return $x; })({});
-$m[56] = (($x) => {
+$m[58] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What the map views show, read from what the rules keep: no drawing here, so any map (flat or 3D) can paint it.
 // Each gives, for a province or a country, a short word the page turns into a colour and a legend line.
@@ -7482,7 +7791,7 @@ const knownView = (g, c, near) => knowledge(g, c, near).tier;
 
 $x.fronts = fronts; $x.changed = changed; $x.claims = claims; $x.sphereView = sphereView; $x.knownView = knownView;
 return $x; })({});
-$m[54] = (($x) => {
+$m[56] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's page for the second round of what the rules keep: home politics and unrest, what you know of others,
 // scenes, the scale of play and your own means, the council convened, pacts and spheres, a scenario's own beats,
@@ -7494,9 +7803,9 @@ const { CARES, moodOf, quellPlan, termsFor } = $m[22];
 const { fogLines, knowledge, seenGauge, seenWords, setFog } = $m[23];
 const { chooseScene, openScene, readScene, scenePlan, sceneProblem, scenePrompt, sceneWith } = $m[24];
 const { MEANS, SCALES, meansOf, meansTarget, scaleProblem, switchScale } = $m[20];
-const { debatePrompt, debaters, readDebate } = $m[55];
+const { debatePrompt, debaters, readDebate } = $m[57];
 const { PACT, pactAnswer, pactOf, spheres, tributeOf } = $m[19];
-const { changed, claims, fronts, knownView, sphereView } = $m[56];
+const { changed, claims, fronts, knownView, sphereView } = $m[58];
 const { WHEN, keepScript } = $m[21];
 const { oddsLine, partsLine } = $m[7];
 const { NEED, treatyName } = $m[5];
@@ -7755,7 +8064,7 @@ function viewsInit(select, x, shown) {
 
 $x.knownLine = knownLine; $x.reads = reads; $x.knownFor = knownFor; $x.dimBox = dimBox; $x.realmMore = realmMore; $x.sceneSheet = sceneSheet; $x.councilMore = councilMore; $x.gameMore = gameMore; $x.cardMore = cardMore; $x.VIEWS = VIEWS; $x.viewFill = viewFill; $x.viewTint = viewTint; $x.viewsInit = viewsInit;
 return $x; })({});
-$m[53] = (($x) => {
+$m[55] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's page for what the rules keep about your country: its three gauges, your ambition, an open crisis, causes
 // for war, the press, the reckoning, and every past turn in full. The rules live in src/story (state.js,
@@ -7767,9 +8076,9 @@ const { demand, demandAnswer } = $m[15];
 const { ambitionsFor, chooseAmbition, progress, reckoning } = $m[18];
 const { papers } = $m[21];
 const { NOTE, NOTE2 } = $m[17];
-const { cardMore, reads, realmMore, sceneSheet } = $m[54];
+const { cardMore, reads, realmMore, sceneSheet } = $m[56];
 $x.backMore = $m[17].backMore; $x.keepMore = $m[17].keepMore;
-$x.councilMore = $m[54].councilMore; $x.dimBox = $m[54].dimBox; $x.gameMore = $m[54].gameMore; $x.knownFor = $m[54].knownFor; $x.viewFill = $m[54].viewFill; $x.viewTint = $m[54].viewTint; $x.viewsInit = $m[54].viewsInit;
+$x.councilMore = $m[56].councilMore; $x.dimBox = $m[56].dimBox; $x.gameMore = $m[56].gameMore; $x.knownFor = $m[56].knownFor; $x.viewFill = $m[56].viewFill; $x.viewTint = $m[56].viewTint; $x.viewsInit = $m[56].viewsInit;
 /** The words a converted game is told, once: which round of rules it was saved before. */
 const noteOf = (g) => (g.told === 2 ? NOTE2 : NOTE);
 /** The sheets this lane adds to the page: the country's, and the scene. */
@@ -7853,7 +8162,7 @@ function turnsTab(box, x) {
 
 $x.noteOf = noteOf; $x.moreSheets = moreSheets; $x.realmSheet = realmSheet; $x.notices = notices; $x.cardExtras = cardExtras; $x.demandBox = demandBox; $x.turnsTab = turnsTab;
 return $x; })({});
-$m[58] = (($x) => {
+$m[60] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Keeping a game small enough to keep (Phase 4, storage that cannot silently fill). Rules only: no page, no clock.
 // A browser gives one site about five million characters, shared by every game and scenario kept there. So:
@@ -7906,13 +8215,13 @@ const sizeWords = (n) => (n >= 1000000 ? `${Math.floor(n / 100000) / 10} MB` : `
 
 $x.ROOM = ROOM; $x.STEPS = STEPS; $x.slim = slim; $x.fatten = fatten; $x.shortTurn = shortTurn; $x.pressure = pressure; $x.compact = compact; $x.compactNote = compactNote; $x.sizeWords = sizeWords;
 return $x; })({});
-$m[57] = (($x) => {
+$m[59] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's save, kept so that it cannot fill the browser without saying so. The rules of it are in
 // src/story/keep.js; this file does the measuring, the writing, the warning and the file.
 // keeper(key, x) -> {save(state, past) -> past, rows(state, past) -> elements for the Game sheet, file(state), state()}.
 // x is what the game page lends: {el, button, toast}.
-const { ROOM, compact, compactNote, pressure, sizeWords } = $m[58];
+const { ROOM, compact, compactNote, pressure, sizeWords } = $m[60];
 const { RULES } = $m[7];
 
 const PROMISE = `The save promise: this game is saved under rules version ${RULES}. Until launch one a save may end when the rules version changes; this build brings older games up to date where it can, and says so. From launch one, a game saved under the previous rules version will always load.`;
@@ -7977,7 +8286,7 @@ function keeper(key, x, store = own()) {
 
 $x.keeper = keeper;
 return $x; })({});
-$m[59] = (($x) => {
+$m[61] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Capo's page for solo missions (ruling 124, step M1): the order on a province card with its odds before it is
 // given, the roster on the council sheet, and each mission step by step in the Ledger. The rules are in
@@ -8055,7 +8364,7 @@ function missionReports(turn, x) {
 
 $x.keepMissions = keepMissions; $x.missionBox = missionBox; $x.rosterRows = rosterRows; $x.missionReports = missionReports;
 return $x; })({});
-$m[60] = (($x) => {
+$m[62] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The content floor's last parts (road map 5, decision 9): one accept step before a first story game, "Fiction" on
 // newspapers and on anything copied out of the story, and one sentence that each AI service's own rules bind the
@@ -8140,22 +8449,22 @@ const { askPrompt, chatPrompt, councilPrompt, readAsk, readChat, readCouncil, se
 const { FIRST, KINDS, PRESETS, checkSetting, madeWorld, settingScenario, staged, startOrder, worldKey } = $m[31];
 const { loadWorld, ownerColour, unpackWorld, worldMap } = $m[34];
 // 3D hook: what stands on the lit map
-const { mapPieces } = $m[44];
-const { aiPanel, ask, connectBox, connected, loadRoute, waitBox, watch } = $m[45];
-const { sampleReply } = $m[47];
-const { BUILD, SOURCE_URL, VERSION } = $m[46];
-const { guard } = $m[52];
+const { mapPieces } = $m[46];
+const { aiPanel, ask, connectBox, connected, loadRoute, waitBox, watch } = $m[47];
+const { sampleReply } = $m[49];
+const { BUILD, SOURCE_URL, VERSION } = $m[48];
+const { guard } = $m[54];
 // mcp and plugins hook: orders an AI app proposes through the bridge, and scenario packs (site/aimore.js, src/story/plugins.js)
-const { aiHost } = $m[49];
-const { checkPack } = $m[51];
+const { aiHost } = $m[51];
+const { checkPack } = $m[53];
 // features hook: the country sheet, crises, ambitions, the Turns tab (site/realm.js)
-const { backMore, cardExtras, councilMore, demandBox, dimBox, gameMore, keepMore, knownFor, moreSheets, noteOf, notices, realmSheet, turnsTab, viewFill, viewTint, viewsInit } = $m[53];
+const { backMore, cardExtras, councilMore, demandBox, dimBox, gameMore, keepMore, knownFor, moreSheets, noteOf, notices, realmSheet, turnsTab, viewFill, viewTint, viewsInit } = $m[55];
 // phase 4 hook: storage that says when it is full (site/keep.js), solo missions (site/missions.js), the accept step and "Fiction" (site/accept.js)
-const { keeper } = $m[57];
-const { fatten, slim } = $m[58];
-const { keepMissions, missionBox, missionReports, rosterRows } = $m[59];
+const { keeper } = $m[59];
+const { fatten, slim } = $m[60];
+const { keepMissions, missionBox, missionReports, rosterRows } = $m[61];
 const { unfit } = $m[6];
-const { AI_RULES, acceptStep, accepted, fictionCopy, fictionTag } = $m[60];
+const { AI_RULES, acceptStep, accepted, fictionCopy, fictionTag } = $m[62];
 
 const KEEP = "capo-game-1";
 const $ = (id) => document.getElementById(id);

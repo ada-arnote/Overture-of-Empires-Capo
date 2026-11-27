@@ -28,16 +28,29 @@ const deal = (d) => `${d.n} ${GOODS[d.give]} for ${d.k} ${GOODS[d.get]}`;
 const raidText = (p) => (p.rule.roll === "sum" ? "A 7" : "Doubles");
 /** What a port swaps at: 3 of anything for 1, or 2 of its own good for 1 (and 3 of the rest). */
 const portText = (g) => (g === 4 ? "3:1" : `2:1 ${GOODS[g]}`);
-/** Each port's rate, printed on the sea beside it, so the board says what the flag means. */
-function portLabels(p, picture) {
-  const { near } = boardOf(p), out = [], dry = p.land.flatMap((l, i) => (l ? [picture.mid[i]] : []));
+/** reading hook (p10-reading): which way each port looks out to sea (toward the open water, away from the land), for its jetty, flag and rate plate. */
+function seaward(p, picture) {
+  const { near } = boardOf(p), out = new Map(), dry = p.land.flatMap((l, i) => (l ? [picture.mid[i]] : []));
   const cx = dry.reduce((n, m) => n + m[0], 0) / dry.length, cy = dry.reduce((n, m) => n + m[1], 0) / dry.length, off = (m) => Math.hypot(picture.mid[m][0] - cx, picture.mid[m][1] - cy);
   p.port.forEach((g, i) => {
     const wet = near[i].filter((m) => !p.land[m]);
     if (g === NONE || !wet.length) return;
-    out.push({ at: picture.mid[wet.reduce((a, b) => (off(b) > off(a) ? b : a))], sea: true, text: portText(g) }); // on the open sea beside it, away from the land
+    const to = picture.mid[wet.reduce((a, b) => (off(b) > off(a) ? b : a))], dx = to[0] - picture.mid[i][0], dy = to[1] - picture.mid[i][1], l = Math.hypot(dx, dy) || 1;
+    out.set(i, [dx / l, dy / l]);
   });
   return out;
+}
+/** reading hook (p10-reading): a hex's routes as links, one for each neighbour the same seat reaches (its route or its depot), seats on one edge side by side; and which routes are tied to something. */
+function links(q) {
+  const { near } = boardOf(q), lanes = new Map(), out = new Map();
+  q.route.forEach((seats, a) => seats.forEach((s) => near[a].forEach((b) => {
+    if (!(q.route[b].includes(s) && b > a) && !(q.depot[b] === s && !q.route[b].includes(s))) return;
+    const k = `${Math.min(a, b)} ${Math.max(a, b)}`;
+    (lanes.get(k) || lanes.set(k, []).get(k)).push({ a, b, s });
+  })));
+  const tied = new Set();
+  for (const list of lanes.values()) list.forEach(({ a, b, s }, lane) => { (out.get(a) || out.set(a, []).get(a)).push({ to: b, rgb: RGB[s], lane, of: list.length }); tied.add(`${a} ${s}`).add(`${b} ${s}`); });
+  return { out, tied };
 }
 /** Where each award stands for a seat: who holds it and with how many, how near the seat is, and who is one short of taking it. */
 function awardsOf(p, s) {
@@ -234,17 +247,19 @@ createTable({
   order: (events) => events.flatMap((e) => (e.at !== undefined && ["depot", "town", "route"].includes(e.kind) ? [e.at] : [])),
   board(T, stage) {
     const p = T.match.position, b = boardOf(p), sea = b.cells.map((_, i) => !p.land[i]), none = b.cells.map(() => false), picture = hexPicture(b.cells, none, sea);
+    const sides = seaward(p, picture);
     document.body.classList.remove("atlas");
     card(T);
     return hexBoard(T, stage, {
-      cells: b.cells, rough: none, sea, picture, labels: portLabels(p, picture), terrain: (i) => (sea[i] ? 1 : p.good[i] === WASTE ? 6 : [2, 4, 3, 5][p.good[i]]), ground: (i) => (sea[i] ? SEA : p.good[i] === WASTE ? WASTEG : TILE[p.good[i]]),
+      cells: b.cells, rough: none, sea, picture, terrain: (i) => (sea[i] ? 1 : p.good[i] === WASTE ? 6 : [2, 4, 3, 5][p.good[i]]), ground: (i) => (sea[i] ? SEA : p.good[i] === WASTE ? WASTEG : TILE[p.good[i]]),
       owner: () => b.cells.map(() => NONE),
+      reading: { goods: (i) => (p.land[i] && p.good[i] !== WASTE ? p.good[i] : -1), colours: TILE, key: GOODS.map((name, k) => ({ name, rgb: TILE[k] })) }, // reading hook (p10-reading)
       pieces() {
-        const q = T.match.position, out = [];
+        const q = T.match.position, out = [], joins = links(q);
         q.land.forEach((l, at) => {
-          if (q.port[at] !== NONE) out.push({ kind: "port", at, good: q.port[at] });
+          if (q.port[at] !== NONE) out.push({ kind: "port", at, good: q.port[at], toward: sides.get(at), rate: q.port[at] === 4 ? "3:1" : `2:1 ${GOODS[q.port[at]][0]}${GOODS[q.port[at]][1]}` });
           if (l && q.good[at] !== WASTE) out.push({ kind: "token", at, n: q.num[at], pips: pips(q, at), hot: BUSY[q.rule.roll].includes(q.num[at]), lit: q.lit.includes(at) }); // lit: it yielded on the last roll
-          if (q.route[at].length) out.push({ kind: "route", at, seats: q.route[at].map((s) => RGB[s]) });
+          if (q.route[at].length) out.push({ kind: "route", at, seats: q.route[at].filter((s) => !joins.tied.has(`${at} ${s}`)).map((s) => RGB[s]), joins: joins.out.get(at) || [] }); // seats: a route not yet tied to anything keeps its short bar
           if (q.depot[at] !== NONE) out.push({ kind: q.town[at] ? "town" : "depot", at, seat: q.depot[at], rgb: RGB[q.depot[at]], harbour: !!q.harbour[at] });
         });
         if (q.gate !== NONE) out.push({ kind: "gate", at: q.gate });
