@@ -78,11 +78,13 @@ h3 { font-size: 1.5rem; line-height: 1.2 }
   .tools { margin-left: auto }
   .top nav { order: 3; flex-basis: 100%; margin: 0 0 8px }
   .top nav ul { margin-left: -12px }
-  /* with the script running, the links fold behind a Menu button */
+  /* with the script running, the links fold behind a Menu button, and open as a sheet over the page: the bar itself does not move */
   .js .burger { display: inline-flex }
   .js .top:not(.open) nav { display: none }
-  .js .top nav ul { flex-direction: column }
-  .js .top nav a { display: flex; min-height: 48px; font-size: 1.0625rem; border-top: 1px solid var(--line); border-radius: 0 }
+  .js .top nav { position: absolute; top: 100%; left: 0; right: 0; margin: 0; padding: 0 var(--gutter) 8px; background: var(--deep); border-bottom: 1px solid var(--line-2); box-shadow: 0 24px 40px -16px var(--shade) }
+  .js .top nav ul { flex-direction: column; margin: 0 auto; max-width: calc(77rem - 2 * var(--gutter)) }
+  .js .top nav a { display: flex; min-height: 48px; padding: 0; font-size: 1.0625rem; border-top: 1px solid var(--line); border-radius: 0 }
+  .js .top nav li:first-child a { border-top: 0 }
 }
 @media (max-width: 479px) { .brand { font-size: 1.0625rem } .brand .mk, .brand b { display: none } .top .in { column-gap: 8px } .tools { gap: 6px } .burger { padding: 0 10px } .tools .btn { padding: 0 .9em } }
 
@@ -162,6 +164,7 @@ main > section:not(.hero, .figures) { padding-block: var(--gap) }
 .pic { overflow: hidden; background: var(--sea); aspect-ratio: 16 / 10 }
 .pic img { width: 100%; height: 100%; object-fit: cover; transition: scale .6s cubic-bezier(.2, .7, .2, 1) }
 .game:hover .pic img { scale: 1.035 }
+.g-banners .pic img { transform: scale(1.45) } /* the wide world board shares the desk's picture: in a card it stands closer, past the table's edge */
 .body { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: clamp(18px, 5cqi, 32px) }
 .body > p:not(.kind) { color: var(--soft) }
 .kind { display: flex; align-items: center; gap: 8px }
@@ -213,9 +216,9 @@ main > section:not(.hero, .figures) { padding-block: var(--gap) }
 .ledger dd { color: var(--soft) }
 .ledger dd a { padding-block: .7em }
 @media (min-width: 560px) { .ledger div { grid-template-columns: 7.5em 1fr } .ledger dt { padding-top: .2em } }
-/* Sandby's etching, printed light on the blue like a chart's cartouche */
+/* a close-up of a war table, framed like a chart's cartouche */
 .plate { justify-self: center; width: 100%; max-width: 32rem; padding: clamp(16px, 3vw, 32px); border: 1px solid var(--line-2); outline: 1px solid var(--line); outline-offset: 5px; text-align: center }
-.plate img { filter: brightness(0) invert(.93) sepia(.3); opacity: .88 }
+.plate img { border-radius: 4px }
 .plate figcaption { font-family: var(--text); font-style: italic; font-size: 1rem }
 
 .foot { padding-block: clamp(40px, 6vw, 72px) calc(32px + env(safe-area-inset-bottom, 0px)); background: var(--deep); border-top: 1px solid var(--line); border-image: url("textures/walnut.webp") 30 / 6px 0 0 round; border-top-width: 6px; color: var(--soft); font-size: .9375rem }

@@ -41,13 +41,11 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-The engraving in site/icons/engraved/ is in the public domain: a detail of Paul Sandby's etching "View of the Encampment in Hyde-Park from Marshal Sax's Tent" (1780; Rijksmuseum, Amsterdam, RP-P-1904-1473, Public Domain Mark). We cropped it and kept its ink as transparency.
-
 The texture in site/textures/ is cut from a CC0 colour map: Smoked Walnut Veneer by Jenelle van Heerden (Poly Haven). No credit is required; we give it gladly.
 
 The compass rose in site/icons/tent/ is our own drawing.
 
-The pictures in site/shots/ are screenshots of our own game pages, taken for the front page: our own work. The map in capo.webp is drawn from Natural Earth, as above.
+The pictures in site/shots/ are screenshots of our own game pages, taken for the front page: our own work. The map in capo.webp is drawn from Natural Earth, as above, with land cover from Ecoregions 2017 (RESOLVE, CC BY 4.0). Where the boards stand in 3D, the pictures show sculpted pieces that are open models by others under CC BY 4.0 (the soldiers, knights and horses by Andy Woodhead; ships by the Swedish National Maritime and Transport Museums and by Yi Tsung Lee with WTigerTw), modified as listed below; the front page's credits name their makers.
 
 <!-- models: written by tools/models.mjs -->
 Sculpted pieces in site/models/, fetched only when a board in 3D shows them. Each is cut down, repainted in the board's palette and re-encoded by tools/models.mjs; the credits are also in every game's About.
