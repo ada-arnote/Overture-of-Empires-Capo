@@ -172,6 +172,7 @@ export async function styleGate(root) {
   const W = STYLES.war, names = new Set(Object.keys(models())), shown = [], told = new Map(), tell = (k, v) => told.set(k, [...(told.get(k) || []), v]); // notes, one line a kind
   const colour = (v) => Array.isArray(v) && v.length >= 3 && v.slice(0, 3).every((x) => Number.isFinite(x) && x >= 0 && x <= 255);
   const same = (want, got, where) => { // the shape War table gives: the same keys, numbers where numbers, arrays of the same length
+    if (/\.sculpt$/.test(where)) { if (!Array.isArray(got) || !got.every((x) => want.includes(x))) bad.push(`style ${where}: wants a list drawn from ${want.join(", ")}`); return; } // a list of kinds, not a vector: any of War table's, in any number
     if (Array.isArray(want)) { if (!Array.isArray(got) || got.length !== want.length) return bad.push(`style ${where}: wants ${want.length} values`); want.forEach((w, i) => same(w, got[i], `${where}[${i}]`)); }
     else if (want && typeof want === "object") { if (!got || typeof got !== "object") return bad.push(`style ${where}: wants a table`); for (const k of new Set([...Object.keys(want), ...Object.keys(got)])) if (!(k in want)) bad.push(`style ${where}.${k}: not a key War table has`); else if (!(k in got)) bad.push(`style ${where}.${k}: missing`); else same(want[k], got[k], `${where}.${k}`); }
     else if (typeof got !== typeof want || (typeof got === "number" && !Number.isFinite(got))) bad.push(`style ${where}: wants a ${typeof want}`);
