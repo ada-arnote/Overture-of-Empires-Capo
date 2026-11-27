@@ -93,9 +93,11 @@ test("unrest: shaken names a figure and a province, revolt is a rising, a rising
   assert.equal(G.owner("CHL-1"), "CHL");
   assert.equal(g.unrest.PER, undefined);
   // with no taken land the rising costs mandate instead, and never the heartland
-  const h = game("unrest-2"), H = geoOf(h); gauges(h, "PER", 0);
+  const far = game("unrest-2"); gauges(far, "PER", 0); settleHome(far, "2027-01-01", geoOf(far));
+  assert.equal(far.unrest.PER.id, "PER-1", "away from the heartland");
+  // round three: a rising that holds founds a country (test/features3.test.mjs); in a country's last land none can be founded, and it costs mandate
+  const h = game("unrest-2", { owners: { "PER-1": "CHL" } }), H = geoOf(h); gauges(h, "PER", 0);
   settleHome(h, "2027-01-01", H);
-  assert.equal(h.unrest.PER.id, "PER-1", "away from the heartland");
   const toll = settleUnrest(h, "2028-01-01", H);
   assert.deepEqual(toll[0].gauge, [["PER", "m", -1, "a rising unanswered"]]);
   settleState(h, toll, "2028-01-01", H);
@@ -418,7 +420,8 @@ test("tribute: a weaker country asked adds up a score; paying lowers its treasur
   assert.equal(pactAnswer(g, G, "PER", "BOL", "tribute").ok, false, "a protector at least as strong stands behind it");
   g.treaties = [];
   plan(g, { kind: "pact", sub: "tribute", target: "BOL", text: "Demand tribute of Bolivia (BOL)." });
-  const t = closeTurn(g, reply(g), G, ["Demand tribute of Bolivia (BOL)."]);
+  // round three: other countries demand tribute by rule too, so here an AI moved for them (a move the rules refuse)
+  const t = closeTurn(g, reply(g, [mv("BRA", "PEACE", "CHL")]), G, ["Demand tribute of Bolivia (BOL)."]);
   assert.ok(t.receipt.some((x) => /^Bolivia: agrees to pay Peru a yearly tribute rather than refuse it/.test(x.text)), t.receipt.map((x) => x.text).join(" / "));
   assert.deepEqual(tributeOf(g, "PER", "BOL"), { kind: "tribute", a: "PER", b: "BOL", since: t.to });
   assert.equal(gaugeOf(g, "PER", "m"), 3, "a demand met lifts mandate");

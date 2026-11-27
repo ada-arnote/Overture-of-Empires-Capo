@@ -6,6 +6,7 @@
 //   claims: land in dispute, by who claims it.
 //   spheres: each country by the patron it stands under (pacts.js).
 //   known: each country by how well the player's side knows it (fog.js).
+//   pacts: each country by the clauses that bind it: a pact of non-aggression, tribute paid or received (pacts.js).
 import { knowledge } from "./fog.js";
 import { sphereOf } from "./pacts.js";
 
@@ -45,6 +46,25 @@ export function claims(g, geo) {
 
 /** A country on the spheres view: {patron, role: "patron" | "member" | ""}. patrons: the set of countries that have a sphere. */
 export const sphereView = (g, geo, c, patrons) => { const p = sphereOf(g, geo, c); return p ? { patron: p, role: "member" } : patrons.has(c) ? { patron: c, role: "patron" } : { patron: "", role: "" }; };
+
+/**
+ * Countries bound by a clause: Map(code -> "yours" (a pact with you) | "pays" (pays you tribute) | "paid" (you pay
+ * it) | "tribute" (pays another) | "bound" (a pact between others)). The player's own ties come first.
+ */
+export function pactView(g) {
+  const out = new Map(), me = g.player, RANK = ["bound", "tribute", "yours", "paid", "pays"], put = (c, k) => { if (c !== me && RANK.indexOf(k) > RANK.indexOf(out.get(c))) out.set(c, k); };
+  for (const p of g.pacts || []) {
+    if (p.kind === "peace") { const mine = p.a === me || p.b === me; put(p.a, mine ? "yours" : "bound"); put(p.b, mine ? "yours" : "bound"); }
+    else if (p.a === me) put(p.b, "pays"); else if (p.b === me) put(p.a, "paid"); else put(p.b, "tribute");
+  }
+  return out;
+}
+/** A country's clauses in words, for its card: who it is bound to, pays, and is paid by. name(code) names a country. */
+export function clauseWords(g, c, name, years = 5) {
+  const mine = (g.pacts || []).filter((p) => p.a === c || p.b === c), until = (p) => Number(p.since.slice(0, 4)) + years;
+  const bound = mine.filter((p) => p.kind === "peace").map((p) => `${name(p.a === c ? p.b : p.a)} (until ${until(p)})`), pays = mine.filter((p) => p.kind === "tribute" && p.b === c).map((p) => name(p.a)), paid = mine.filter((p) => p.kind === "tribute" && p.a === c).map((p) => name(p.b));
+  return [bound.length && `Bound by a pact of non-aggression with ${bound.join(", ")}.`, pays.length && `Pays tribute to ${pays.join(", ")}.`, paid.length && `Paid tribute by ${paid.join(", ")}.`].filter(Boolean).join(" ");
+}
 
 /** A country on the knowledge view: its tier, 0 to 3. */
 export const knownView = (g, c, near) => knowledge(g, c, near).tier;

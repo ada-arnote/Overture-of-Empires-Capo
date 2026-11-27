@@ -7,15 +7,41 @@
 //     with, and only when it has no war already; one a turn at most, and then one time in four;
 //   treaty: one country a turn asks one neighbour for the next treaty up, when the answer would be yes; beyond
 //     trade, only while one of the two is at war (blocs form around wars, not in a quiet world).
+//   pact (round three, ruling 149): one country a turn, three times in ten, asks one neighbour it has no treaty
+//     with for a pact of non-aggression, when the answer would be yes (pacts.js: the trade sum, +1 for a neighbour
+//     both fear, needing 1). A country never declares war by rule on one it has a pact with;
+//   tribute: three times in ten, one country that is steady at home demands a yearly tribute of a weaker neighbour
+//     in trouble (at war, or shaken at home) that would pay (pacts.js: needing 4); never of one it has a treaty with.
+//   Neither is ever asked of the player's country by rule: the player binds it, from a card.
+// How restless the world is can be set for a game (PACE): calm, lively (the numbers above) or stormy. It changes
+// how often a war, a pact, a demand for tribute and a crisis come, and nothing else.
 // Peace needs no proposal: wars end by rule at the end of every turn (war.js).
 // These are proposals like the AI's own: the same rules judge each one and write its receipt line. Which country
 // moves is drawn from the game's seed and the turn, so a turn replays.
 import { hash32 } from "./line.js";
-import { relOf, treatyAnswer } from "./relations.js";
+import { treatyAnswer } from "./relations.js";
+import { gaugeOf } from "./state.js";
+import { pactAnswer, pactOf } from "./pacts.js";
 import { strengthOf, truceUntil } from "./war.js";
 import { atWar, attackPlan, treatyOf, turnKey, warsOf } from "./worldrules.js";
 
 export const RIVALS = { odds: 45, attacks: 3, grudge: -2, edge: 2, war: 25, treaties: 1 };
+// How restless the world is. war, pact, tribute, crisis: the chance out of 100, each turn, of a war by rule, a
+// pact, a demand for tribute, and a crisis opened by the rules (crisis.js). grudge and edge: how bitter a pair must
+// be, and how much stronger the one that declares, before a war by rule.
+export const PACE = {
+  calm: { title: "Calm", says: "wars, pacts and crises come rarely", war: 10, grudge: -2, edge: 2, pact: 15, tribute: 15, crisis: 25 },
+  lively: { title: "Lively", says: "the world as the rules were tuned", war: RIVALS.war, grudge: RIVALS.grudge, edge: RIVALS.edge, pact: 30, tribute: 30, crisis: 50 },
+  stormy: { title: "Stormy", says: "old grudges come to war sooner, and crises come often", war: 50, grudge: -1, edge: 1, pact: 45, tribute: 50, crisis: 75 },
+};
+export const paceOf = (g) => (PACE[g?.pace] ? g.pace : "lively");
+const rate = (g, k) => PACE[paceOf(g)][k];
+/** The chance a crisis opens by rule in a turn, for crisis.js. */
+export const crisisChance = (g) => rate(g, "crisis");
+/** Set how restless the world is; returns the words to say. */
+export function setPace(g, k) { if (!PACE[k]) return ""; if (k === "lively") delete g.pace; else g.pace = k; return `The world is now ${PACE[k].title.toLowerCase()}: ${PACE[k].says}.`; }
+/** The pace from a save: one of the three, or the default. */
+export const keepPace = (s) => ({ pace: PACE[s?.pace] && s.pace !== "lively" ? s.pace : undefined });
 const NEXT = { "": "trade", trade: "defence", defence: "alliance" };
 
 /** Which countries touch which by land: Map(code -> sorted codes). geo.all lists every province id. */
@@ -47,13 +73,24 @@ export function rivalMoves(g, geo) {
     const best = bestAttack(g, geo, who, foe);
     if (best && best.chance >= RIVALS.odds) { move(who, "ATTACK", best.id); n++; }
   }
-  const grudges = Object.entries(g.rel || {}).filter(([, [rel]]) => rel <= RIVALS.grudge).map(([k]) => k).sort().flatMap((k) => { const [a, b] = k.split("|"); return [[a, b], [b, a]]; })
-    .filter(([c, t]) => c !== me && near.get(c)?.includes(t) && !warsOf(g, c).length && !atWar(g, c, t) && !treatyOf(g, c, t) && !truceUntil(g, c, t) && strengthOf(g, geo, c) - strengthOf(g, geo, t) >= RIVALS.edge);
-  if (grudges.length && pick("war", 100) < RIVALS.war) { const [c, t] = grudges[pick("whom", grudges.length)]; move(c, "WAR", t); }
+  const grudges = Object.entries(g.rel || {}).filter(([, [rel]]) => rel <= rate(g, "grudge")).map(([k]) => k).sort().flatMap((k) => { const [a, b] = k.split("|"); return [[a, b], [b, a]]; })
+    .filter(([c, t]) => c !== me && near.get(c)?.includes(t) && !warsOf(g, c).length && !atWar(g, c, t) && !treatyOf(g, c, t) && !pactOf(g, c, t) && !truceUntil(g, c, t) && strengthOf(g, geo, c) - strengthOf(g, geo, t) >= rate(g, "edge"));
+  if (grudges.length && pick("war", 100) < rate(g, "war")) { const [c, t] = grudges[pick("whom", grudges.length)]; move(c, "WAR", t); }
   const all = [...near.keys()].filter((c) => c !== me);
   for (let k = 0; k < RIVALS.treaties && all.length; k++) {
     const c = all[pick(`asks:${k}`, all.length)], list = near.get(c), t = list[pick(`of:${k}`, list.length)], kind = NEXT[treatyOf(g, c, t)?.kind || ""];
     if (kind && (kind === "trade" || warsOf(g, c).length || warsOf(g, t).length) && !atWar(g, c, t) && treatyAnswer(g, c, t, kind, (x) => strengthOf(g, geo, x)).ok) move(c, "TREATY", t, kind);
+  }
+  // round 3: a pact of non-aggression between two neighbours with no treaty, when the answer would be yes
+  if (all.length && pick("pact", 100) < rate(g, "pact")) {
+    const c = all[pick("pact:asks", all.length)], list = near.get(c).filter((t) => t !== me && !treatyOf(g, c, t)), t = list[pick("pact:of", list.length || 1)];
+    if (t && pactAnswer(g, geo, c, t, "peace").ok) move(c, "PACT", t);
+  }
+  // round 3: tribute demanded of a weaker neighbour in trouble that would pay
+  if (pick("tribute", 100) < rate(g, "tribute")) {
+    const weak = [...new Set([...g.wars.flatMap((w) => w.pair.split("|")), ...Object.keys(g.gauge || {}).filter((c) => gaugeOf(g, c, "s") < 2)])].filter((c) => c !== me && near.has(c)).sort();
+    const asks = weak.flatMap((t) => near.get(t).filter((c) => c !== me && gaugeOf(g, c, "s") >= 2 && pactAnswer(g, geo, c, t, "tribute").ok).map((c) => [c, t]));
+    if (asks.length) { const [c, t] = asks[pick("tribute:whom", asks.length)]; move(c, "TRIBUTE", t); }
   }
   return moves;
 }

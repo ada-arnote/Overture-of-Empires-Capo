@@ -72,7 +72,7 @@ const keep = keeper(KEEP, { el, button, toast });
 const save = () => { past = keep.save(state, past); saveFailed = keep.state().failed; };
 const load = () => { try { return JSON.parse(localStorage.getItem(KEEP) || "null"); } catch { return null; } };
 const checkSave0 = (s) => keepMore(checkSaveOf(s, (id) => world.provinces.has(id), (c) => onMap.has(c) || homes.has(c)), (id) => world.provinces.has(id), (c) => onMap.has(c) || homes.has(c) || s?.custom?.code === c); // features hook: keepMore
-const checkSave = (s) => keepMissions(checkSave0(s), (c) => onMap.has(c) || homes.has(c) || s?.custom?.code === c); // phase 4 hook
+const checkSave = (s) => { const k = checkSave0(s); return keepMissions(k, (c) => onMap.has(c) || homes.has(c) || s?.custom?.code === c || !!k?.lands?.[c]); }; // phase 4 hook; round 3 hook: a country founded in the game
 const keptPast = keptRecords;
 /** Move focus to a heading (or a control), so a keyboard or a screen reader is where the screen now is. */
 const land = (e) => { if (!e) return; if (e.tabIndex < 0) e.tabIndex = -1; e.focus({ preventScroll: true }); };
@@ -124,8 +124,9 @@ async function choose(id, seed) {
 }
 // ---- end of the presets hook (its other lines are marked where they stand) ----
 const custom = () => state?.custom || (draft?.kind === "own" ? { code: ownCode(), name: draft.own.name.trim() || "Your new country", colour: draft.own.colour } : scen()?.custom || null);
-const name = (code) => (custom()?.code === code ? custom().name : world.countries[code] || code);
-const colourOf = (code) => (custom()?.code === code ? custom().colour : (state || scen())?.alt?.lands[code]?.colour);
+const founded = (code) => (state || scen())?.lands?.[code]; // round 3 hook: a country founded in play by a rising (src/story/polity.js)
+const name = (code) => (custom()?.code === code ? custom().name : founded(code)?.name || world.countries[code] || code); // round 3 hook
+const colourOf = (code) => (custom()?.code === code ? custom().colour : founded(code)?.colour || (state || scen())?.alt?.lands[code]?.colour); // round 3 hook
 const ownerOf = (id) => (state ? state.owners[id] || world.provinces.get(id).country : draft?.kind === "own" && draft.own.provinces.has(id) ? ownCode() : scen()?.owners?.[id] || world.provinces.get(id).country);
 const fmtDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 
@@ -183,6 +184,7 @@ function codeOf(s) {
   const k = String(s || "").trim().toLowerCase().replace(/^the\s+/, "");
   if (!k) return "";
   if (custom()?.name?.toLowerCase() === k) return custom().code;
+  for (const [c, l] of Object.entries(state?.lands || {})) if (l.name.toLowerCase() === k) return c; // round 3 hook
   for (const [c, n] of Object.entries(world.countries)) if (n.toLowerCase().replace(/^the\s+/, "") === k && homes.has(c)) return c;
   return "";
 }
@@ -237,7 +239,8 @@ let ids = [];
 function geo() {
   return {
     name, all: ids, place: (id) => world.provinces.get(id), owner: ownerOf, neighbours: (id) => world.neighbours.get(id), across: (id) => world.across.get(id), coastal: (id) => world.coast.has(id),
-    home: (c) => homes.get(c)?.id, holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c, hasCoast: (c) => held(c).some((id) => world.coast.has(id)), might: (c) => (state || scen())?.might?.[c],
+    home: (c) => homes.get(c)?.id || founded(c)?.seat, holds: (c) => held(c).length, known: (c) => homes.has(c) || custom()?.code === c || !!founded(c), // round 3 hook: founded countries
+    hasCoast: (c) => held(c).some((id) => world.coast.has(id)), might: (c) => (state || scen())?.might?.[c],
     claims: (id, c) => (claimsOf.get(id) || []).some((d) => d.claimants.includes(c) && ownerOf(id) !== c),
     claimed: () => [...claimsOf].flatMap(([id, ds]) => [...new Set(ds.flatMap((d) => d.claimants))].filter((c) => homes.has(c) && ownerOf(id) !== c).map((c) => [id, c])), // features hook: disputed land, as [province, claimant]
     find: (s) => { const k = String(s || "").trim(); if (world.provinces.has(k)) return k; const low = k.toLowerCase(), hits = [...world.provinces.values()].filter((p) => p.name.toLowerCase() === low); return hits.length === 1 ? hits[0].id : null; },
@@ -676,7 +679,7 @@ async function viaAddress() {
   try { const text = await call(pending.prompt); finish(text); } catch (e) { if (pending) { pending.error = e.message; open("actions"); } toast(e.message); }
 }
 function finish(text) {
-  const r = readWorldReply(text, state, (c) => homes.has(c) || custom()?.code === c, pending.to, pending.auto, codeOf);
+  const r = readWorldReply(text, state, (c) => homes.has(c) || custom()?.code === c || !!founded(c) /* round 3 hook */, pending.to, pending.auto, codeOf);
   if (!r.matched) { pending.error = `That reply is not for this turn: it must start with TURN: ${turnCode(state)}.`; open("actions"); return; }
   if (!r.events.length) { pending.error = `No event could be read${r.dropped.length ? `: ${r.dropped.slice(0, 3).join("; ")}` : ""}.`; open("actions"); return; }
   // moves the AI wrote for the player's country, beyond the orders given by card, are shown for a tick first
@@ -772,7 +775,7 @@ let gmPicking = false, gmPlace = null;
 function countryInput(label) {
   const input = Object.assign(el("input", undefined, "plain"), { type: "search", placeholder: label }), id = `gm-${label.replace(/\W+/g, "-").toLowerCase()}`;
   const dl = el("datalist"); dl.id = id; input.setAttribute("list", id); input.setAttribute("aria-label", label);
-  const byName = new Map([...homes.keys(), ...(state.custom ? [state.custom.code] : [])].map((c) => [name(c), c]));
+  const byName = new Map([...homes.keys(), ...(state.custom ? [state.custom.code] : []), ...Object.keys(state.lands || {}) /* round 3 hook */].map((c) => [name(c), c]));
   dl.append(...[...byName.keys()].sort().map((n) => { const o = document.createElement("option"); o.value = n; return o; }));
   const wrap = el("span"); wrap.append(input, dl);
   return { el: wrap, get: () => byName.get(input.value.trim()) || null };
@@ -878,7 +881,7 @@ function chats(box) {
   box.append(el("h3", "Start a chat"));
   const pick = Object.assign(el("input", undefined, "plain"), { type: "search", placeholder: "Add a country" }), dl = el("datalist"), chosen = [];
   dl.id = "chat-countries";
-  const byName = new Map([...homes.keys(), ...(state.custom ? [state.custom.code] : [])].filter((c) => c !== state.player).map((c) => [name(c), c]));
+  const byName = new Map([...homes.keys(), ...(state.custom ? [state.custom.code] : []), ...Object.keys(state.lands || {}) /* round 3 hook */].filter((c) => c !== state.player).map((c) => [name(c), c]));
   dl.append(...[...byName.keys()].sort().map((n) => { const o = document.createElement("option"); o.value = n; return o; }));
   pick.setAttribute("list", "chat-countries"); pick.setAttribute("aria-label", "Add a country to the chat");
   const shown = el("p", "Nobody yet.", "note"), person = Object.assign(el("input", undefined, "plain"), { type: "text", maxLength: 80, placeholder: "Or a person, for example: Marta Ríos, union leader" });

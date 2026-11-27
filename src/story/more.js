@@ -2,8 +2,9 @@
 // One door for the small systems the turn calls. Round one: the state of countries and their causes (state.js),
 // crises (crisis.js), ambitions (ambitions.js), the turn's beat and the press (beats.js). Round two: home politics
 // (home.js), fog and rumours (fog.js), scenes (scenes.js), the scale of play and the player's own means
-// (scale.js), clauses and spheres (pacts.js). The turn, the rules and the page each call one function here, so
-// those files carry one line apiece.
+// (scale.js), clauses and spheres (pacts.js). Round three: clauses between any two countries (pacts.js,
+// rivals.js), countries founded by a rising (polity.js), how restless the world is (rivals.js). The turn, the
+// rules and the page each call one function here, so those files carry one line apiece.
 import { keepState, settleState, stateLines } from "./state.js";
 import { crisisLines, keepCrisis, settleCrisis } from "./crisis.js";
 import { ambitionLines, keepAmbition, settleAmbition } from "./ambitions.js";
@@ -13,6 +14,8 @@ import { keepFog, settleFog } from "./fog.js";
 import { keepScene, sceneLines, settleScene } from "./scenes.js";
 import { keepSelf, selfLines, settleSelf } from "./scale.js";
 import { keepPacts, pactLines, settlePacts } from "./pacts.js";
+import { keepLands, polityLines } from "./polity.js";
+import { keepPace } from "./rivals.js";
 
 // Which of these systems a saved game has met. 1: gauges, causes, crises, ambitions, beats and the press.
 // 2: home politics, fog, scenes, the scale of play and means, clauses and spheres, scripted beats.
@@ -25,7 +28,7 @@ function terrainLines(g, geo) {
 }
 
 /** Lines for the turn prompt's FACTS. near: the countries beside the player's, by land or narrow sea. */
-export const moreFacts = (g, geo, near = []) => [...stateLines(g, geo, near), ...homeLines(g, geo), ...pactLines(g, geo, near), ...selfLines(g), ...ambitionLines(g, geo), ...crisisLines(g, geo), ...sceneLines(g), ...terrainLines(g, geo), ...beatLines(g, geo)];
+export const moreFacts = (g, geo, near = []) => [...stateLines(g, geo, near), ...homeLines(g, geo), ...pactLines(g, geo, near), ...polityLines(g, geo), ...selfLines(g), ...ambitionLines(g, geo), ...crisisLines(g, geo), ...sceneLines(g), ...terrainLines(g, geo), ...beatLines(g, geo)];
 
 /**
  * An order by card for one of these systems, tied to the action that carries it: {kind, text, ...}. One of a kind
@@ -63,10 +66,12 @@ export const NOTE2 = "This game was saved before home politics, fog and scenes. 
 export const moreNote = (s) => (s && typeof s === "object" && s.turn > 1 && s.more !== MORE ? (s.more === 1 ? NOTE2 : NOTE) : "");
 
 /** A checked game with these systems' parts checked too: what does not fit the map is dropped, what is missing starts empty. */
-export function keepMore(s, isProvince, known) {
+export function keepMore(s, isProvince, known0) {
   if (!s) return s;
+  // round 3: a country founded in the game is a country of that game, whatever the map says
+  const lands = keepLands(s, isProvince), known = (c) => known0(c) || Object.hasOwn(lands, c);
   const beats = (Array.isArray(s.beats) ? s.beats : []).filter((b) => Array.isArray(b) && (BEATS.some(([id]) => id === b[0]) || /^s\d{1,2}$/.test(b[0])) && Number.isInteger(b[1])).slice(-BEATS.length - 12);
   const plans = (Array.isArray(s.plans) ? s.plans : []).filter((p) => p && typeof p.text === "string" && ["quell", "terms", "pact"].includes(p.kind) && (p.kind !== "pact" || (known(p.target) && ["peace", "tribute", "stop"].includes(p.sub)))).slice(0, 12).map((p) => ({ kind: p.kind, text: p.text.slice(0, 300), ...(p.kind === "pact" ? { sub: p.sub, target: p.target } : {}) }));
   const script = keepScript(s.script), note = moreNote(s);
-  return { ...s, ...keepState(s, known), ...keepCrisis(s, known, isProvince), ...keepAmbition(s, isProvince), ...keepHome(s, known, isProvince), ...keepFog(s, known), ...keepScene(s), ...keepSelf(s), ...keepPacts(s, known), beats, plans, ...(script.length ? { script } : { script: undefined }), ...(note ? { told: note === NOTE ? 1 : 2 } : {}), more: MORE };
+  return { ...s, ...keepState(s, known), ...keepCrisis(s, known, isProvince), ...keepAmbition(s, isProvince), ...keepHome(s, known, isProvince), ...keepFog(s, known), ...keepScene(s), ...keepSelf(s), ...keepPacts(s, known), ...keepPace(s), beats, plans, ...(script.length ? { script } : { script: undefined }), ...(note ? { told: note === NOTE ? 1 : 2 } : {}), more: MORE };
 }

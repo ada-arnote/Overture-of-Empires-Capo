@@ -11,7 +11,9 @@ import { chooseScene, openScene, readScene, scenePlan, sceneProblem, scenePrompt
 import { MEANS, SCALES, meansOf, meansTarget, scaleProblem, switchScale } from "../src/story/scale.js";
 import { debatePrompt, debaters, readDebate } from "../src/story/debate.js";
 import { PACT, pactAnswer, pactOf, spheres, tributeOf } from "../src/story/pacts.js";
-import { changed, claims, fronts, knownView, sphereView } from "../src/story/views.js";
+import { changed, claims, clauseWords, fronts, knownView, pactView, sphereView } from "../src/story/views.js";
+import { PACE, paceOf, setPace } from "../src/story/rivals.js";
+import { landsOf, rebelLand } from "../src/story/polity.js";
 import { WHEN, keepScript } from "../src/story/beats.js";
 import { oddsLine, partsLine } from "../src/story/check.js";
 import { NEED, treatyName } from "../src/story/relations.js";
@@ -51,10 +53,16 @@ export function dimBox(c, x) {
 }
 
 // ---- the country sheet: home, yourself, what you know, pacts and spheres ----
+/** What a rising a year old would take, in words: land handed back, a new country, or mandate. */
+function left(x, u) {
+  const g = x.g(), G = x.geo(), me = g.player, old = G.place(u.id)?.country, n = rebelLand(G, me, u.id).length;
+  if (old !== me && G.holds(old) > 0 && G.holds(me) > 1 && !g.wars.some((w) => w.pair === [me, old].sort().join("|"))) return `it hands ${G.place(u.id).name} back to ${x.name(old)}`;
+  return n ? `it founds a country of its own with ${n} of your province${n > 1 ? "s" : ""}` : "it costs you a step of mandate";
+}
 function unrestRows(x) {
   const g = x.g(), G = x.geo(), me = g.player, u = g.unrest?.[me];
   if (!u) return [x.el("p", "No unrest. When stability falls to shaken the rules name a figure and a province where trouble gathers; in revolt it is a rising.", "note")];
-  const said = `${u.rising ? "A rising" : "Unrest"} in ${G.place(u.id)?.name || u.id} around ${u.who}, since ${x.fmtDate(u.since)}.${u.rising ? " While it stands your country declares no war and makes no attack; a year unanswered and it costs you land or mandate." : ""}`;
+  const said = `${u.rising ? "A rising" : "Unrest"} in ${G.place(u.id)?.name || u.id} around ${u.who}, since ${x.fmtDate(u.since)}.${u.rising ? ` While it stands your country declares no war and makes no attack. A year unanswered, and ${left(x, u)}.` : ""}`;
   if (g.mode === "citizen") return [rows(x, [said]), x.el("p", "As a citizen you watch; the government answers, or does not.", "note")];
   const q = quellPlan(g, G), no = termsFor(g), parts = partsLine({ approach: null, parts: q.plan.parts.filter(([, n]) => n) });
   const terms = x.button(planned(g, "terms") ? "Terms: ordered" : "Meet their terms", () => (no ? x.toast(`${cap(no)}.`) : give(x, { kind: "terms", text: `Meet the terms of ${u.who}.` })));
@@ -71,7 +79,13 @@ function pactRows(x) {
     : p.a === me ? `${x.name(p.b)} pays you tribute, since ${x.fmtDate(p.since)}.`
       : [`You pay tribute to ${x.name(p.a)}, since ${x.fmtDate(p.since)}. It holds your treasury a step lower.`, ...(g.mode === "citizen" ? [] : [x.button(planned(g, "pact", "stop", p.a) ? "Ordered" : "Stop paying", () => give(x, { kind: "pact", sub: "stop", target: p.a, text: `Stop paying tribute to ${x.name(p.a)} (${p.a}).` }))])]));
   const around = [...spheres(g, G)].filter(([p, l]) => near.has(p) || l.some((c) => near.has(c))).map(([p, l]) => `${p === me ? "Your sphere" : `${x.name(p)}'s sphere`}: ${l.map(x.name).join(", ")}.`);
-  return [rows(x, list, "No pact binds you. Propose one from a foreign province's card."), x.el("h3", "Spheres of influence"), rows(x, around, "None near you."),
+  // round 3: the clauses that bind the countries beside you, and the countries founded in this game
+  const others = (g.pacts || []).filter((p) => p.a !== me && p.b !== me && (near.has(p.a) || near.has(p.b))).slice(0, 12).map((p) => (p.kind === "peace" ? `${x.name(p.a)} and ${x.name(p.b)}: a pact of non-aggression until ${Number(p.since.slice(0, 4)) + PACT.years}.` : `${x.name(p.b)} pays tribute to ${x.name(p.a)}, since ${x.fmtDate(p.since)}.`));
+  const born = Object.entries(landsOf(g)).map(([c, l]) => `${l.name} (${c}): founded by a rising in ${x.name(l.from)}${l.since ? `, ${x.fmtDate(l.since)}` : ""}. ${G.holds(c) ? `It holds ${G.holds(c)} province${G.holds(c) > 1 ? "s" : ""}.` : "It has since lost its land."}`);
+  return [rows(x, list, "No pact binds you. Propose one from a foreign province's card."),
+    x.el("h3", "Pacts among your neighbours"), rows(x, others, "None. Other countries bind each other by the same rules you do; the map view \"pacts and tribute\" shows them all."),
+    ...(born.length ? [x.el("h3", "Countries founded in this game"), rows(x, born), x.el("p", "A rising left a year unanswered founds a country of its own from the provinces around it. A truce of two years follows; after it, the country it left holds a cause.", "note")] : []),
+    x.el("h3", "Spheres of influence"), rows(x, around, "None near you."),
     x.el("p", "A country stands in the sphere of a defence or alliance partner whose might is at least three above its own, and of anyone it pays tribute to. Its patron shields it in a crisis.", "note")];
 }
 
@@ -180,8 +194,12 @@ export function gameMore(x) {
   const fog = el("label", undefined, "note"), box = Object.assign(el("input"), { type: "checkbox", checked: g.fog !== false });
   box.onchange = () => { x.toast(setFog(g, box.checked)); x.save(); x.refresh(); x.open("game"); };
   fog.append(box, " Fog of war: you see other countries only as well as you know them (neighbours, partners, enemies, talks). Off, every country's state and answers are in view.");
+  // round 3: how restless the world is (rivals.js)
+  const pace = el("div", undefined, "row");
+  for (const [k, p] of Object.entries(PACE)) { const b = button(p.title, () => { x.toast(setPace(g, k)); x.save(); x.open("game"); }); b.setAttribute("aria-pressed", String(paceOf(g) === k)); pace.append(b); }
   return [
     el("h3", "Fog of war"), fog,
+    el("h3", "How restless the world is"), el("p", `Now ${PACE[paceOf(g)].title.toLowerCase()}: ${PACE[paceOf(g)].says}. It sets how often other countries go to war, bind each other by pacts and tribute, and open a crisis, when the rules move them. It never changes an answer or a chance.`, "note"), pace,
     el("h3", "How you play"), el("p", `You play as ${MODES[g.mode][1]}. You may change the scale once a turn: standing goes to the new scale's own and your circle follows, each member to the matching seat.`, "note"), scale, ...(g.character?.name ? [] : [nm]),
     el("h3", "This scenario's own beats"), el("p", "Moments you script. Each comes once, on the first turn its condition holds, ahead of the rules' own beats; the AI writes it, and it changes no fact. They are saved with the scenario.", "note"),
     ...(script.length ? [rows(x, script.map((b, i) => [`${b.text} (${b.when.length ? `when: ${b.when.join(", ")}` : "whenever"}${(g.beats || []).some(([id]) => id === b.id) ? "; played" : ""})`, button("Remove", () => { g.script = script.filter((_, j) => j !== i); x.save(); x.open("game"); })]))] : []),
@@ -197,6 +215,7 @@ export function cardMore(p, x) {
   // folded away until asked for, so the card stays short on a phone
   const more = x.el("details"), sum = x.el("summary", `What you know of ${x.name(b)}${g.mode === "citizen" ? "" : ", and pacts"}`, "note");
   sum.style.cursor = "pointer"; more.append(sum, x.el("p", knownLine(x, b), "note")); out.push(more);
+  { const l = landsOf(g)[b], said = [l && `Founded by a rising in ${x.name(l.from)}${l.since ? `, ${x.fmtDate(l.since)}` : ""}.`, clauseWords(g, b, x.name, PACT.years)].filter(Boolean).join(" "); if (said) more.append(x.el("p", said, "note")); } // round 3
   if (g.mode === "citizen") return out;
   const box = x.el("div"), row = x.el("div", undefined, "row"), see = reads(x, b), notes = [];
   for (const [sub, label, text] of [["peace", "Non-aggression", `Propose a pact of non-aggression to ${x.name(b)} (${b}).`], ["tribute", "Tribute", `Demand a yearly tribute of ${x.name(b)} (${b}).`]]) {
@@ -217,6 +236,7 @@ export const VIEWS = {
   changed: ["Map: land changed", { won: ["#4f9a6b", "gained by you"], lost: ["#c9553f", "lost by you"], other: ["#d9a43a", "changed hands elsewhere"] }],
   claims: ["Map: claims", { yours: ["#d9a43a", "land you claim"], onyou: ["#c9553f", "your land, claimed by another"], other: ["#8d7f66", "other disputed land"] }],
   spheres: ["Map: spheres", { patron: ["", "a patron, in its own colour"], member: ["", "in its sphere, in a paler shade"] }],
+  pacts: ["Map: pacts and tribute", { yours: ["#4f9a6b", "a pact of non-aggression with you"], pays: ["#d9a43a", "pays you tribute"], paid: ["#c9553f", "you pay it tribute"], bound: ["#4a7fa8", "bound by a pact with another"], tribute: ["#8d7f66", "pays tribute to another"] }],
   known: ["Map: what you know", { 3: [TIER[3], "clear"], 2: [TIER[2], "reported"], 1: [TIER[1], "rumoured"], 0: [TIER[0], "dark"] }],
   state: ["", { 0: [STATE[0], "in revolt"], 1: [STATE[1], "shaken"], 2: [STATE[2], "steady"], 3: [STATE[3], "calm"], 4: [STATE[4], "united"], x: [TIER[0], "unknown to you"], u: ["#6e1d12", "unrest"] }],
 };
@@ -227,7 +247,7 @@ function nearOf(x) { const g = x.g(), key = `${g.seed}|${g.turn}|${Object.entrie
 function dataFor(view, x) {
   const g = x.g(), G = x.geo(), key = `${view}|${g.seed}|${g.turn}|${g.date}|${g.mode}|${g.wars.length}|${g.treaties.length}|${(g.pacts || []).length}|${Object.entries(g.owners).join()}|${Object.keys(g.unrest || {}).join()}|${Object.keys(g.seen || {}).join()}|${g.council?.seats?.foreign ? 1 : 0}`;
   if (memo.key === key) return memo.data;
-  const data = view === "fronts" ? fronts(g, G) : view === "changed" ? changed(g, G) : view === "claims" ? claims(g, G) : view === "spheres" ? new Set(spheres(g, G).keys()) : view === "state" ? new Map(Object.entries(g.unrest || {}).filter(([c]) => reads(x, c)).map(([, u]) => [u.id, "u"])) : null;
+  const data = view === "fronts" ? fronts(g, G) : view === "changed" ? changed(g, G) : view === "claims" ? claims(g, G) : view === "spheres" ? new Set(spheres(g, G).keys()) : view === "pacts" ? pactView(g) : view === "state" ? new Map(Object.entries(g.unrest || {}).filter(([c]) => reads(x, c)).map(([, u]) => [u.id, "u"])) : null;
   memo = { key, data };
   return data;
 }
@@ -238,6 +258,7 @@ export function viewFill(view, x, code) {
   if (view === "known") return TIER[knownView(g, code, nearOf(x))];
   if (view === "state") { const k = knowledge(g, code, nearOf(x)).tier, n = seenGauge(g, code, "s", k)[0]; return n === null ? TIER[0] : STATE[n]; }
   if (view === "spheres") { const v = sphereView(g, x.geo(), code, dataFor(view, x)); return v.role === "patron" ? x.colour(v.patron) : v.role === "member" ? `color-mix(in srgb, ${x.colour(v.patron)} 50%, #cfd6da)` : MUTE; }
+  if (view === "pacts") { const k = dataFor(view, x).get(code); return k ? VIEWS.pacts[1][k][0] : code === g.player ? MINE : MUTE; }
   return code === g.player ? MINE : MUTE;
 }
 /** A single province's tint on one of these views, or "". */

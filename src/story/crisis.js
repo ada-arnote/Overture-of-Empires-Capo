@@ -14,6 +14,8 @@ import { draw100, hash32 } from "./line.js";
 import { monthsApart } from "./relations.js";
 import { atWar, mightOf, treatiesOf, treatyOf, turnKey, warsOf } from "./worldrules.js";
 import { causeOf, gaugeOf, gaugeWord, setCause } from "./state.js";
+// round 3 hook: how restless the world is
+import { crisisChance } from "./rivals.js";
 
 export const CRISIS = { need: 4, quiet: 6, chance: 50, due: 3, mine: 1, again: 24 };
 const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
@@ -88,7 +90,7 @@ export function settleCrisis(g, to, geo, actions = []) {
     return lines;
   }
   if (!g.calm) { g.calm = to; return lines; }
-  if (monthsApart(g.calm, to) < CRISIS.quiet || draw100(g.seed, `${turnKey(g)}:crisis`) > CRISIS.chance) return lines;
+  if (monthsApart(g.calm, to) < CRISIS.quiet || draw100(g.seed, `${turnKey(g)}:crisis`) > crisisChance(g)) return lines;
   // who might press whom: the old holder of land that changed hands, and the claimant of land in dispute
   const pool = [[], []], seen = new Set(), stakes = [...Object.keys(g.owners || {}).map((id) => [id, geo.place(id)?.country]), ...(geo.claimed?.() || [])];
   for (const [id, a] of stakes) {

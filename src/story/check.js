@@ -13,7 +13,9 @@ export const BANDS = ["clean", "costly", "failed"];
 // 3: relations and treaty answers by rule, a chronicle, one skill a person dealt by rule, take-backs on numbered lines.
 // 4: people and threads remembered by code, peace answered by rule, wars that end by rule with a truce, strength that
 // changes, other countries moving by rule when no AI proposes for them, the player's moves reviewed, both endings told.
-export const RULES = 4;
+// 5: pacts of non-aggression and tribute between any two countries, as moves and by rule; a pact answered with a
+// part for a neighbour both fear; other countries answer their own unrest; a rising that holds founds a country.
+export const RULES = 5;
 
 /** A roll's name: the same name always draws the same number in the same game. */
 export const drawKey = ({ turn, mission, checkpoint = "main", person = "-" }) => `${turn}:${mission}:${checkpoint}:${person}`;

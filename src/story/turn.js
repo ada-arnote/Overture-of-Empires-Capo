@@ -63,6 +63,7 @@ export function newWorldGame(player, mode, seed, extra = {}) {
   const base = sc.alt ? { ...(sc.owners || {}) } : null, owners = { ...(sc.alt ? {} : sc.owners || {}), ...(extra.owners || {}) };
   return { v: 1, rules: RULES, orders: [], rel: Object.fromEntries(Object.entries(sc.rel || {}).map(([p, n]) => [p, [n, sc.start]])), word: {}, truce: {}, people: [], threads: [], start: { ...(base || {}), ...owners }, chron: { eras: [], turns: [] }, branch: 0, scenario: sc.id, opening: sc.opening, player, mode: MODES[mode] ? mode : "nation", seed, date: sc.start, turn: 1,
     ...(sc.beats?.length ? { script: structuredClone(sc.beats) } : {}), // features hook: the scenario's own beats
+    ...(sc.lands ? { lands: structuredClone(sc.lands) } : {}), // round 3 hook: countries founded in the game the scenario was saved from
     ...(sc.alt ? { alt: structuredClone(sc.alt), base } : {}), owners, ...(sc.world ? { world: sc.world } : {}), custom: extra.custom || sc.custom || null, character: extra.character || null,
     wars: structuredClone(sc.wars || []), treaties: structuredClone(sc.treaties || []), offers: [], log: [],
     standing: STANDING[mode] || 5, council: null, chats: [], counsel: [], facts: structuredClone(sc.facts || []), might: { ...(sc.might || {}) }, edits: [], sandbox: false };
@@ -105,7 +106,7 @@ export function worldPrompt(g, world, actions, to, auto = false) {
     "- Other countries may make up to 6 MOVE lines in all, with action number 0.",
     ROLE[g.mode] || ROLE.nation,
     "- Moves are proposals. Say that wars, attacks or talks begin; never say who wins a battle, who takes a province, or that a treaty is signed or refused. The rules decide, and you will read the results under RECEIPT next turn.",
-    "- A country asked for a treaty or for peace answers by the rules. Under RECEIPT you will read whether it agreed and why: tell that as decided. Wars also end by rule once both sides are worn out, and a two-year truce follows.",
+    "- A country asked for a treaty, a pact, tribute or peace answers by the rules. Under RECEIPT you will read whether it agreed and why: tell that as decided. Wars also end by rule once both sides are worn out, and a two-year truce follows.",
     ...(attacks.length ? ["- For each attack under ORDERED ATTACKS write one IF line with both endings, one sentence each. That is the only place you write how a battle ends: the rules choose which is shown."] : []),
     "- PEOPLE and THREADS are the story's memory: keep those people and matters as they are told there. PERSON and THREAD lines are optional.",
     "- Each attack under RECEIPT was decided by the rules: clean (taken), costly (taken, but the army is spent) or failed (thrown back). Tell it as decided, in words, never with its numbers, and never change who won.",
