@@ -12,7 +12,7 @@ import { coach } from "./coach.js";
 import { shelfCredits } from "./shelf.js";
 import { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } from "./shell.js";
 // motion hook: motion and sound that follow each move (site/motion.js, site/sound.js)
-import { hail, stir } from "./motion.js";
+import { hail, stageLeft, stir } from "./motion.js";
 // livelink hook: live play by two pasted links, straight between two browsers (site/livelink.js)
 import { liveLink } from "./livelink.js";
 // shelf hook: the community shelf, to browse and open replays and to share this game as one (site/community.js)
@@ -469,11 +469,12 @@ export function createTable(G) {
     keep();
     if (!T.demo) { score(); panel(); }
     G.seen?.(T, events);
-    stir(T, G.key, events, move, person, speed, ICONS); // motion hook: its sound (as the old cue, by game) and its motion
-    const rush = T.hurry || speed === "instant", took = board.show(G.order(events), rush);
+    const after = stir(T, G.key, events, move, person, speed, ICONS) || 0; // motion hook: its sound (as the old cue, by game) and its motion; p12: how long the board waits for the dice
+    const rush = T.hurry || speed === "instant", took = board.show(G.order(events), rush, after);
     if (!T.demo && !rush && words.length && (!person || T.match.turn !== seat)) toast(words.slice(0, 2).join(" "), person);
     if (T.human()) T.hurry = false;
-    await sleep(T.hurry || speed === "instant" ? 0 : T.demo ? Math.max(G.pace(T.match.position), took + 120) : speed === "fast" ? Math.max(90, took / 2) : Math.max(160, took + 60));
+    const own = person ? Math.max(0, took - after) : took; // motion hook p12: a person is never kept waiting for the dice
+    await sleep(T.hurry || speed === "instant" ? 0 : T.demo ? Math.max(G.pace(T.match.position), took + 120) : speed === "fast" ? Math.max(90, own / 2) : Math.max(160, own + 60));
     if (mine !== run) return;
     T.busy = false;
     G.changed?.(T);
@@ -502,7 +503,7 @@ export function createTable(G) {
         if (typeof s.value?.then === "function") { await s.value; if (mine !== run) return; slice = performance.now(); continue; } // stacking hook: a bot thinking in a worker hands over a promise
         if (performance.now() - slice > 7) { await sleep(0); if (mine !== run) return; slice = performance.now(); }
       }
-      if (!T.hurry) await sleep(Math.max(0, G.pace(T.match.position) * PACE[settings.speed] - (performance.now() - from)));
+      if (!T.hurry) await sleep(Math.max(0, G.pace(T.match.position) * PACE[settings.speed] - (performance.now() - from), settings.speed === "normal" ? Math.min(3500, stageLeft()) : 0)); // motion hook p12: at normal speed a bot waits for the dice, the raid or the capture to be seen
     }
     if (mine === run) play(move);
   }

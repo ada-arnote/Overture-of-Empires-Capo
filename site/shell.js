@@ -13,8 +13,8 @@ export const CHOICES = {
 };
 // seat patterns are on unless a player turns them off (accessibility): settings kept before they were (no `v`) do not carry the old "off"
 export const DEFAULTS = { sound: "on", volume: 60, speed: "normal", motion: "system", patterns: "on", text: "normal", keys: "on" }, SETTINGS_V = 2;
-/** How long bots wait, as a share of their usual pace; and how much bigger the words are. */
-export const PACE = { normal: 1, fast: 0.3, instant: 0 }, SCALE = { normal: 1, large: 1.15, larger: 1.3 };
+/** How long bots wait, as a share of their usual pace; and how much bigger the words are. Normal is unhurried, so each bot action can be followed (p12). */
+export const PACE = { normal: 1.6, fast: 0.3, instant: 0 }, SCALE = { normal: 1, large: 1.15, larger: 1.3 };
 
 /** Settings from what was kept: anything missing or strange falls back to its default. */
 export function parseSettings(text) {

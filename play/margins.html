@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1623">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-S2BoE2N5GJDdprDAHxQAcqEKkqXfrbnPiAU9amLXvZo='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ELGelvsTdLIgHMOczuyMItOe2Wg+KMWLC17FWKpWfWg='; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'">
 <title>Margins of Trust · Overture of Empires: Capo</title>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
@@ -3398,14 +3398,15 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
     queued = false;
     if (!alive) return;
     let moving = t < until;
-    if (holds.length) { for (const h of holds.filter((x) => t >= x.until)) { holds.splice(holds.indexOf(h), 1); spots = spots.concat(h.list.filter((x) => !spots.some((y) => y.at === x.at && y.kind === x.kind))); staged = false; } moving = true; } // motion hook
+    if (holds.length) { for (const h of holds.filter((x) => t >= x.until)) { holds.splice(holds.indexOf(h), 1); spots = spots.concat(h.list.filter((x) => !spots.some((y) => y.at === x.at && y.kind === x.kind))); staged = false; } } // motion hook; p12: a timer brings a held piece back (hold), so the board is not drawn every frame meanwhile
     if (timed && L.rise) { // the first frames, timed: a device that drags is told so, and the page can open flat instead
       timed.push(t);
       if (timed.length < 16 && !document.hidden) moving = true;
       else { const d = timed.slice(4).map((v, i) => v - timed[i + 3]).sort((a, b) => a - b); if (timed.length > 15 && d[d.length >> 2] > 24) (listeners.slow || []).forEach((f) => f()); timed = null; } // the quickest quarter is judged, so a busy moment on the page is not taken for a slow graphics card
     }
     show.forEach((c, i) => {
-      if (c.start || c.ends) {
+      if (c.start > t) { /* motion hook p12: a change waiting for the dice is not drawn until it starts (show's timer) */ }
+      else if (c.start || c.ends) {
         const k = t <= c.start ? 0 : t >= c.ends ? 1 : (t - c.start) / (c.ends - c.start);
         c.rgb = mix(c.from, c.to, ease(k));
         c.top = c.topFrom + (c.topTo - c.topFrom) * ease(k) + Math.sin(k * Math.PI) * c.hop;
@@ -3784,7 +3785,7 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
      * Show a position. owner[i] is a seat or -1. `order` lists cells that change first to last, so ink spreads.
      * Returns how long the change takes, in milliseconds.
      */
-    show(owner, { pieces = [], order = [], quick = false, names = null } = {}) {
+    show(owner, { pieces = [], order = [], quick = false, names = null, after = 0 } = {}) { // motion hook p12: after, ms the cells in `order` wait (the dice that take them land first)
       if (names) labels = names;
       const homes = new Set(pieces.filter((p) => p.kind === "tower").map((p) => p.at)), held = new Set(pieces.map((p) => p.at));
       const t = performance.now(), slow = !quick && !calm(), fade = !quick && !slow, step = Math.min(90, 900 / Math.max(1, order.length)), place = new Map(order.map((c, i) => [c, i]));
@@ -3792,17 +3793,21 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       owner.forEach((o, i) => {
         const c = show[i], to = o < 0 || reading.rim ? ground(i) : mix(seats[o], ground(i), rough[i] ? 0.1 : 0), tall = sea[i] ? 0.2 : (homes.has(i) ? 1.5 : o < 0 ? 0.75 : 1.2) + (c.kind === 7 ? 0.3 : 0); // hills stand a little above the plain
         if (c.owner === o && c.topTo === tall) return;
-        const wait = slow && place.has(i) ? place.get(i) * step : 0, long = slow ? 320 : fade ? 200 : 1; // reduced motion: all at once, a quick fade, no hop
+        const wait = slow && place.has(i) ? place.get(i) * step + after : 0, long = slow ? 320 : fade ? 200 : 1; // reduced motion: all at once, a quick fade, no hop
         Object.assign(c, { from: c.rgb, to, topFrom: slow ? c.top : tall, topTo: tall, hop: slow ? 0.5 : 0, start: t + wait, ends: t + wait + long, soak: slow && o >= 0 && c.owner !== o });
         c.owner = o;
         last = Math.max(last, wait + long);
         marks[i] = o < 0 ? null : { seat: o, seen: 1, home: held.has(i) };
       });
       owner.forEach((o, i) => { if (marks[i]) marks[i].home = held.has(i); });
-      spots = spots.filter((s) => s.kind === "dot" || s.kind === "ring").concat(pieces);
-      holds = []; // motion hook: a new position puts every piece where it stands
+      // motion hook: a new position puts every piece where it stands; p12: except one still on its way (a person may move on while a fight is thrown), which takes its new count
+      const now = performance.now(), away = (p) => holds.some((h) => h.list.some((x) => x.at === p.at && x.kind === p.kind));
+      holds = holds.filter((h) => h.until > now);
+      for (const h of holds) h.list = h.list.map((x) => pieces.find((p) => p.at === x.at && p.kind === x.kind)).filter(Boolean);
+      spots = spots.filter((s) => s.kind === "dot" || s.kind === "ring").concat(pieces.filter((p) => !away(p)));
       staged = false;
-      until = t + last;
+      until = t + last - (last > after ? after : 0); // p12: the wait itself is not drawn frame by frame
+      if (after > 0 && last > after) setTimeout(redraw, after);
       dirty = true;
       redraw();
       return last;
@@ -3818,7 +3823,8 @@ function createBoard(host, { cells, rough = [], sea = [], seats, ground, look = 
       redraw();
     },
     // motion hook (src/map/motion.js): a piece held back for `ms` (it is on its way), a point by a cell in pieces' own units with the size of a piece there, and a pan by screen pixels
-    hold(cells, ms, kinds) { const list = spots.filter((x) => cells.includes(x.at) && kinds.includes(x.kind)); if (!list.length) return; spots = spots.filter((x) => !list.includes(x)); holds.push({ until: performance.now() + ms, list }); staged = false; redraw(); },
+    hold(cells, ms, kinds) { const list = spots.filter((x) => cells.includes(x.at) && kinds.includes(x.kind)); if (!list.length) return; spots = spots.filter((x) => !list.includes(x)); holds.push({ until: performance.now() + ms, list }); staged = false; redraw(); setTimeout(redraw, ms + 20); }, // p12: the timer brings it back
+    release() { const t = performance.now(); for (const h of holds) h.until = Math.min(h.until, t); redraw(); }, // motion hook p12: every held piece back at once (a new fight replaces the last one's)
     place(i, dx = 0, dy = 0) { const k = m.R * grown(); cam.projectTo(m.mid[i][0] + dx * k, m.mid[i][1] + dy * k, show[i].top * unit()); return { x: cam.px, y: cam.py, r: k * cam.s * cam.pk }; },
     nudge(dx, dy) { if (zoom <= 1) return; cam.unprojectTo(cam.mx, cam.my, 0); const x = cam.ox, y = cam.oy; cam.unprojectTo(cam.mx + dx, cam.my + dy, 0); slide(x - cam.ox, y - cam.oy); },
     get zoomed() { return zoom > 1; }, get middle() { return { x: cam.mx, y: cam.my, w: cam.W - cam.left - cam.right, h: cam.H - cam.top - cam.bottom }; },
@@ -3851,7 +3857,7 @@ const SOURCE_URL = "https://github.com/ada-arnote/Overture-of-Empires-Capo";
 const SITE_URL = "https://ada-arnote.github.io/Overture-of-Empires-Capo/play/";
 const VERSION = "0.10.10";
 // "dev" in the pages as written; tools/bundle.mjs stamps each built page with a short fingerprint of its own code
-const BUILD = "15cbcda4";
+const BUILD = "85234df1";
 // guide hook (ruling 153.8): each AI service's own pages, for links in the Choose an AI guide (site/aiguide.js). A player
 // follows them in a new tab; the page never fetches them, and its rule does not reach them. Kept above the list of services
 // the page may call, because the gate reads every address after that list's name as one the page calls.
@@ -4201,8 +4207,8 @@ const CHOICES = {
 };
 // seat patterns are on unless a player turns them off (accessibility): settings kept before they were (no `v`) do not carry the old "off"
 const DEFAULTS = { sound: "on", volume: 60, speed: "normal", motion: "system", patterns: "on", text: "normal", keys: "on" }, SETTINGS_V = 2;
-/** How long bots wait, as a share of their usual pace; and how much bigger the words are. */
-const PACE = { normal: 1, fast: 0.3, instant: 0 }, SCALE = { normal: 1, large: 1.15, larger: 1.3 };
+/** How long bots wait, as a share of their usual pace; and how much bigger the words are. Normal is unhurried, so each bot action can be followed (p12). */
+const PACE = { normal: 1.6, fast: 0.3, instant: 0 }, SCALE = { normal: 1, large: 1.15, larger: 1.3 };
 
 /** Settings from what was kept: anything missing or strange falls back to its default. */
 function parseSettings(text) {
@@ -4303,11 +4309,11 @@ const INK = "#1a1411", CREAM = "#fdf6e4", GOLD = [226, 184, 92];
  * One canvas over the whole window, drawn only while an effect runs; then it is cleared and the loop stops.
  * An effect is { ms, draw(c, k, t), end() }, with k from 0 to 1. Frame gaps are kept while it runs, to judge smoothness.
  */
-function createMotion(parent = document.body) {
+function createMotion(parent = document.body, { z = 1 } = {}) {
   const cv = document.createElement("canvas"), c = cv.getContext("2d"), own = parent !== document.body; // own: inside a box of the page, not over the window
   cv.className = "motion-layer";
   cv.setAttribute("aria-hidden", "true");
-  Object.assign(cv.style, { position: own ? "absolute" : "fixed", inset: "0", width: "100%", height: "100%", zIndex: "1", pointerEvents: "none" });
+  Object.assign(cv.style, { position: own ? "absolute" : "fixed", inset: "0", width: "100%", height: "100%", zIndex: String(z), pointerEvents: "none" }); // z: p12, the table's layer sits over the score cards (goods reach them) and under the move panel
   parent.append(cv);
   let list = [], queued = false, prev = 0, wiped = true;
   const gaps = [], work = [];
@@ -4335,6 +4341,8 @@ function createMotion(parent = document.body) {
     /** Start an effect after `delay` ms. */
     add(e, delay = 0) { e.t0 = performance.now() + delay; list.push(e); kick(); return e; },
     clear() { list = []; if (!wiped) kick(); },
+    /** End at once every effect added with this tag (a new fight replaces the last one's). */
+    drop(tag) { list = list.filter((e) => e.tag !== tag); if (!wiped) kick(); },
     get busy() { return list.length > 0; },
     /** While something moved, in ms: the gaps between frames (the whole page), and this layer's own work in each frame. Each: how many, the middle one, the slowest in twenty, the slowest. */
     frames() { const sum = (list) => { const s = [...list].sort((a, b) => a - b); return s.length ? { n: s.length, median: +s[s.length >> 1].toFixed(2), p95: +s[Math.floor(s.length * 0.95)].toFixed(2), worst: +s[s.length - 1].toFixed(2) } : null; }; return { gaps: sum(gaps), work: sum(work) }; },
@@ -4357,8 +4365,23 @@ function die(c, x, y, s, face, rgb, turn, alpha) {
   c.restore();
 }
 function shadow(c, x, y, rx, a) { c.beginPath(); c.ellipse(x, y, rx, rx * 0.42, 0, 0, 7); c.fillStyle = `rgba(12,9,7,${a})`; c.fill(); }
-/** A piece on its way: a disc with its number (an army), or a standing pawn with its rank (a unit). */
+/** A piece on its way: a disc with its number (an army), a standing pawn with its rank (a unit), a crate of goods, or the toll gate. */
 function token(c, x, y, r, rgb, label, kind) {
+  if (kind === "good") {
+    c.beginPath(); c.roundRect(x - r, y - r * 0.8, r * 2, r * 1.6, r * 0.32);
+    const g = c.createLinearGradient(x, y - r, x, y + r); g.addColorStop(0, shade(rgb, 1.18, 18)); g.addColorStop(1, shade(rgb, 0.74));
+    c.fillStyle = g; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
+    c.beginPath(); c.moveTo(x - r * 0.7, y - r * 0.1); c.lineTo(x + r * 0.7, y - r * 0.1); c.lineWidth = 1.2; c.strokeStyle = "rgba(26,20,17,.45)"; c.stroke();
+    if (label) { c.font = `800 ${Math.round(r * 1.05)}px system-ui,"Segoe UI",sans-serif`; c.textAlign = "center"; c.textBaseline = "middle"; c.lineWidth = 3; c.strokeStyle = CREAM; c.strokeText(String(label), x, y + r * 0.12); c.fillStyle = INK; c.fillText(String(label), x, y + r * 0.12); }
+    return;
+  }
+  if (kind === "gate") {
+    c.lineWidth = 2; c.strokeStyle = INK;
+    for (const u of [-1, 1]) { c.beginPath(); c.rect(x + u * r * 0.9 - r * 0.16, y - r * 0.9, r * 0.32, r * 1.5); c.fillStyle = "#5b4636"; c.fill(); c.stroke(); }
+    c.beginPath(); c.rect(x - r * 1.25, y - r * 0.62, r * 2.5, r * 0.42); c.fillStyle = "#c0392b"; c.fill(); c.stroke();
+    c.fillStyle = CREAM; for (const u of [-0.7, 0, 0.7]) { c.beginPath(); c.rect(x + u * r - r * 0.13, y - r * 0.6, r * 0.26, r * 0.38); c.fill(); }
+    return;
+  }
   if (kind === "unit") {
     c.save(); c.translate(x, y + r * 0.9); c.scale(r * 1.6, r * 1.6);
     c.beginPath(); c.moveTo(-0.27, 0); c.quadraticCurveTo(-0.25, -0.34, -0.17, -0.58); c.lineTo(-0.1, -0.62); c.arc(0, -0.8, 0.19, 2.1, 7.32); c.lineTo(0.17, -0.58); c.quadraticCurveTo(0.25, -0.34, 0.27, 0); c.closePath();
@@ -4395,25 +4418,103 @@ function travel(where, from, to, { rgb, label = "", kind = "army", ms = 420 }) {
   };
 }
 
+/** A rounded label: a number held under the dice, or a chip of goods gained or lost. */
+function pill(c, x, y, text, px, fill, ink = CREAM, sub = "") {
+  c.font = `800 ${Math.round(px)}px system-ui,"Segoe UI",sans-serif`;
+  const w1 = c.measureText(text).width, sp = sub ? px * 0.46 : 0;
+  c.font = `700 ${Math.round(sp || 1)}px system-ui,"Segoe UI",sans-serif`;
+  const w2 = sub ? c.measureText(sub).width + px * 0.35 : 0, w = w1 + w2 + px * 0.8, h = px * 1.3;
+  c.beginPath(); c.roundRect(x - w / 2, y - h / 2, w, h, h / 2); c.fillStyle = fill; c.fill(); c.lineWidth = Math.max(2, px * 0.08); c.strokeStyle = INK; c.stroke();
+  c.textBaseline = "middle"; c.textAlign = "left"; c.fillStyle = ink;
+  c.font = `800 ${Math.round(px)}px system-ui,"Segoe UI",sans-serif`; c.fillText(text, x - w / 2 + px * 0.4, y + px * 0.04);
+  if (sub) { c.font = `700 ${Math.round(sp)}px system-ui,"Segoe UI",sans-serif`; c.fillText(sub, x - w / 2 + px * 0.4 + w1 + px * 0.35, y + px * 0.06); }
+}
+
 /**
  * Dice thrown from one place to where they come to rest: they tumble and bounce, show changing faces, then settle on the real
  * ones; the losing dice dim. sets: [{ from: () => point, land: [() => point], faces, rgb, lose: [bool] }]. linger: ms they stay.
+ * total: { text, sub, red } held under the dice once they settle (the number thrown, and what it means).
  */
-function dice(sets, { roll = 640, linger = 1000, size = 22 }) {
-  const ms = roll + linger, spin = sets.map((s) => s.faces.map((_, i) => (i % 2 ? -1 : 1) * (5 + ((s.faces[i] * 7 + i * 3) % 5))));
+function dice(sets, { roll = 640, linger = 1000, size = 22, total = null, fadeMs = 260 }) {
+  const ms = roll + linger, spin = sets.map((s) => s.faces.map((_, i) => (i % 2 ? -1 : 1) * (5 + ((s.faces[i] * 7 + i * 3) % 5)))), jump = clamp(size * 1.9, 46, 150);
   return {
     ms,
     draw(c, k, now) {
-      const t = k * ms, f = Math.min(1, t / roll), fade = t > ms - 260 ? (ms - t) / 260 : 1;
+      const t = k * ms, f = Math.min(1, t / roll), fade = t > ms - fadeMs ? (ms - t) / fadeMs : 1, land = (t - roll) / 160, thump = f >= 1 && land < 1 ? 1 + Math.sin(Math.PI * land) * 0.08 : 1;
+      let lx = 0, ly = -1e9, n = 0;
       sets.forEach((s, j) => {
         const a = s.from();
         s.faces.forEach((face, i) => {
-          const b = s.land[i](), x = lerp(a.x, b.x, out3(f)), y = lerp(a.y, b.y, out3(f)), hop = Math.abs(Math.sin(Math.PI * f * 2.6)) * (1 - f) ** 1.6 * 46;
+          const b = s.land[i](), x = lerp(a.x, b.x, out3(f)), y = lerp(a.y, b.y, out3(f)), hop = Math.abs(Math.sin(Math.PI * f * 2.6)) * (1 - f) ** 1.6 * jump;
           const shown = f < 0.82 ? 1 + ((Math.floor(now / 70) * 5 + i * 3 + j * 2 + face) % 6) : face, dim = f >= 1 && s.lose?.[i] ? Math.max(0.45, 1 - (t - roll - 120) / 300 * 0.55) : 1;
-          shadow(c, x + 2, y + size * 0.42, size * 0.5 * (1 - hop / 120), 0.3 * fade);
-          die(c, x, y - hop, size * (1 + hop / 300), shown, s.rgb, spin[j][i] * (1 - f) ** 2 + (face - 3.5) * 0.06, fade * Math.min(1, dim));
+          shadow(c, x + size * 0.08, y + size * 0.42, size * 0.5 * (1 - hop / (jump * 2.6)), 0.3 * fade);
+          die(c, x, y - hop, size * (1 + hop / (jump * 6.5)) * thump, shown, s.rgb, spin[j][i] * (1 - f) ** 2 + (face - 3.5) * 0.06, fade * Math.min(1, dim));
+          lx += b.x; ly = Math.max(ly, b.y); n++;
         });
       });
+      if (total && f >= 1 && n) {
+        const q = clamp((t - roll - 60) / 200, 0, 1), px = clamp(size * 0.62, 16, 52);
+        c.globalAlpha = fade * q; c.save(); c.translate(lx / n, ly + size * 0.62 + px * 0.9); c.scale(0.7 + out3(q) * 0.3, 0.7 + out3(q) * 0.3);
+        pill(c, 0, 0, total.text, px, total.red ? "#a3271b" : "rgba(26,20,17,.88)", CREAM, total.sub || "");
+        c.restore();
+      }
+    },
+  };
+}
+
+/** Something carried through the air between two places (a good to a player, a good taken): a low arc, a pop as it lands. */
+function fly(from, to, { rgb, label = "", kind = "good", ms = 700, size = 13, end }) {
+  return {
+    ms, end,
+    draw(c, k) {
+      const a = from(), b = to(), e = smooth(k), long = Math.hypot(b.x - a.x, b.y - a.y), lift = Math.sin(Math.PI * e) * clamp(long * 0.28, 20, 140);
+      const s = size * (k < 0.15 ? 0.5 + out3(k / 0.15) * 0.6 : k > 0.85 ? 1.1 - (k - 0.85) / 0.15 * 0.5 : 1.1);
+      c.globalAlpha = Math.min(1, k * 10, (1 - k) * 12);
+      token(c, lerp(a.x, b.x, e), lerp(a.y, b.y, e) - lift, s, rgb, label, kind);
+    },
+  };
+}
+
+/** A chip that rises a little and fades by a place: "+2 Grain", "-1". at() gives the point. */
+function chip(at, { text, rgb = GOLD, ms = 1300, red = false, px = 17, rise = 34 }) {
+  return {
+    ms,
+    draw(c, k) {
+      const p = at(), q = clamp(k / 0.12, 0, 1);
+      c.globalAlpha = Math.min(q, k > 0.7 ? (1 - k) / 0.3 : 1);
+      pill(c, p.x, p.y - out3(k) * rise, text, px * (0.8 + 0.2 * out3(q)), red ? "#a3271b" : shade(rgb, 0.9), red ? CREAM : INK);
+    },
+  };
+}
+
+/**
+ * The strength standing on a cell while a fight is thrown, counting down as it falls: steps [[ms, n]] says when it changes to what.
+ * It shakes as each loss lands.
+ */
+function tally(where, at, { rgb, start, steps = [], ms }) {
+  return {
+    ms,
+    draw(c, k) {
+      const t = k * ms, p = where(at), r = clamp(p.r * 0.36, 11, 22);
+      let n = start, hit = 1e9;
+      for (const [when, v] of steps) if (t >= when) { if (v !== n) hit = t - when; n = v; }
+      const shake = hit < 260 ? Math.sin(hit / 22) * (1 - hit / 260) * r * 0.35 : 0;
+      c.globalAlpha = Math.min(1, k * 20, (1 - k) * 25);
+      shadow(c, p.x, p.y + r * 0.3, r, 0.34);
+      token(c, p.x + shake, p.y - r * 0.35, r * (hit < 160 ? 1 + 0.15 * (1 - hit / 160) : 1), rgb, n, "army");
+    },
+  };
+}
+
+/** A raid: the edges of the window darken to red and ease back, once. */
+function raid({ ms = 1100 } = {}) {
+  return {
+    ms,
+    draw(c, k) {
+      const W = c.canvas.width / (c.getTransform().a || 1), H = c.canvas.height / (c.getTransform().d || 1), a = Math.sin(Math.PI * Math.min(1, k * 1.4)) * 0.55;
+      const g = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.32, W / 2, H / 2, Math.hypot(W, H) * 0.6);
+      g.addColorStop(0, "rgba(120,16,10,0)"); g.addColorStop(1, `rgba(120,16,10,${a})`);
+      c.fillStyle = g; c.fillRect(0, 0, W, H);
     },
   };
 }
@@ -4500,7 +4601,7 @@ function pennants(colours, box, { ms = 2600, many = 34 } = {}) {
   };
 }
 
-$x.createMotion = createMotion; $x.travel = travel; $x.dice = dice; $x.capture = capture; $x.build = build; $x.pulse = pulse; $x.sweep = sweep; $x.pennants = pennants;
+$x.createMotion = createMotion; $x.travel = travel; $x.dice = dice; $x.fly = fly; $x.chip = chip; $x.tally = tally; $x.raid = raid; $x.capture = capture; $x.build = build; $x.pulse = pulse; $x.sweep = sweep; $x.pennants = pennants;
 return $x; })({});
 $m[35] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -4535,9 +4636,14 @@ const CUES = {
   truceEnd: (a, b, t) => { tone(a, b, 784, t, 0.4, 0.12); tone(a, b, 523, t + 0.13, 0.55, 0.12); },
   age: (a, b, t) => { [392, 494, 587, 784].forEach((hz, i) => tone(a, b, hz, t + i * 0.05, 1.5, i === 3 ? 0.04 : 0.09)); },
   out: (a, b, t) => { tone(a, b, 220, t, 0.7, 0.24, "triangle", 140); tone(a, b, 110, t + 0.05, 0.8, 0.14); },
+  // p12: a second throw in a run is a shorter rattle; a raid is a drum and a falling horn; a theft a swish and a clink; goods arriving a soft knock
+  rethrow: (a, b, t) => { [0, 0.06, 0.14].forEach((at, i) => noise(a, b, t + at + Math.random() * 0.015, 0.035, 1500 + Math.random() * 1500, 3.5, 0.7 - i * 0.15)); },
+  raid: (a, b, t) => { [0, 0.11, 0.2].forEach((at, i) => { noise(a, b, t + at, 0.12, 140, 0.9, 0.9 - i * 0.2, "lowpass"); tone(a, b, 82, t + at, 0.2, 0.3 - i * 0.07, "triangle", 55); }); tone(a, b, 330, t + 0.3, 0.6, 0.12, "sawtooth", 220); },
+  steal: (a, b, t) => { noise(a, b, t, 0.22, 2400, 0.7, 0.35, "highpass"); tone(a, b, 1568, t + 0.24, 0.25, 0.09); tone(a, b, 2093, t + 0.29, 0.3, 0.05); },
+  gather: (a, b, t) => { noise(a, b, t, 0.03, 900, 5, 0.8); tone(a, b, 880, t + 0.02, 0.25, 0.06); tone(a, b, 1320, t + 0.08, 0.3, 0.04); },
 };
 /** How long a cue waits before it may sound again, so a busy moment is not a din. */
-const GAP = { dice: 0.25, march: 0.35, capture: 0.3, build: 0.3, attacked: 1.5, finished: 0.5, truce: 0.5, truceEnd: 0.5, age: 2, out: 2 };
+const GAP = { dice: 0.25, march: 0.35, capture: 0.3, build: 0.3, attacked: 1.5, finished: 0.5, truce: 0.5, truceEnd: 0.5, age: 2, out: 2, rethrow: 0.2, raid: 1, steal: 0.5, gather: 0.3 };
 
 /** Play a cue `later` seconds from now. */
 function play(name, later = 0) {
@@ -4556,14 +4662,15 @@ function play(name, later = 0) {
 
 /**
  * The cues a move makes, by game and by what happened in it. moving: motion is shown, so a capture waits for the piece to arrive.
+ * at: when the motion puts each moment, in seconds (throws: a run of throws; capture, gather, steal, raid), so the sound lands with it.
  * Returns the names played, for tests and checks.
  */
-function cuesOf(key, events, move, p) {
-  const out = [], add = (n, at = 0) => out.push([n, at]), has = (k) => events.some((e) => e.kind === k);
+function cuesOf(key, events, move, p, at = {}) {
+  const out = [], add = (n, when = 0) => out.push([n, when]), has = (k) => events.some((e) => e.kind === k);
   const me = p?.human;
   if (key === "banners") {
-    if (has("fight")) add("dice");
-    if (has("take")) add("capture", 0.75);
+    if (has("fight")) { add("dice"); for (const t of at.throws?.slice(1) || []) add("rethrow", t); }
+    if (has("take")) add("capture", at.capture ?? 0.75);
     if (has("move") || has("occupy")) add("march");
     if (has("fort")) add("build");
   } else if (key === "fable") {
@@ -4572,6 +4679,9 @@ function cuesOf(key, events, move, p) {
     if (has("fort") || has("farm")) add("build");
   } else if (key === "glass") {
     if (has("roll")) add("dice");
+    if (events.some((e) => e.kind === "roll" && e.raid)) add("raid", at.raid ?? 0.6);
+    if (events.some((e) => e.kind === "harvest" && e.got?.some((g) => g.some((v) => v)))) add("gather", at.gather ?? 0.9);
+    if (events.some((e) => e.kind === "toll" && e.from >= 0)) add("steal", at.steal ?? 0.1);
     if (events.some((e) => ["depot", "town", "harbour", "route"].includes(e.kind))) add("build");
   } else if (key === "inch") {
     if (p?.live) {
@@ -4590,8 +4700,8 @@ function cuesOf(key, events, move, p) {
   }
   return out;
 }
-function voice(key, events, move, p, moving) {
-  for (const [n, at] of cuesOf(key, events, move, p)) play(n, moving ? at : Math.min(at, 0.15));
+function voice(key, events, move, p, moving, at = {}) {
+  for (const [n, when] of cuesOf(key, events, move, p, moving ? at : {})) play(n, moving ? when : Math.min(when, 0.15));
 }
 
 $x.CUES = CUES; $x.play = play; $x.cuesOf = cuesOf; $x.voice = voice;
@@ -4599,17 +4709,33 @@ return $x; })({});
 $m[33] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Motion and sound for the table games: what each game's events look like as they happen, played over the board.
-// The rules have already moved when this is called, and the board already shows where things stand: nothing here waits for an
-// animation, holds up a move or changes a position. With motion reduced (the setting, or the system's wish) nothing moves;
-// with the sound off nothing sounds. The camera follows a rival's move only while the player has not moved the map lately.
-const { build, capture, createMotion, dice, pennants, pulse, sweep, travel } = $m[34];
+// The rules have already moved when this is called, and the panel already shows where things stand: nothing here holds up a
+// person's move or changes a position. The board may wait to recolour a cell until the dice that took it have landed (the
+// person can act meanwhile), and a bot waits for the moment to be told (stageLeft) before its next move. With motion reduced
+// (the setting, or the system's wish) nothing moves; with the sound off nothing sounds. The camera follows a rival's move only
+// while the player has not moved the map lately.
+const { build, capture, chip, createMotion, dice, fly, pennants, pulse, raid, sweep, tally, travel } = $m[34];
 const { settings } = $m[32];
 const { voice } = $m[35];
 
 let layer = null, touched = -1e9, fight = null, glide = null, RGB = [], ICONS = []; // the seats' colours and emblems, as the table dressed them
-const PALE = [206, 196, 170], GOODS = [[226, 196, 96], [176, 208, 216], [196, 120, 82], [228, 226, 214]];
+let ends = 0, run = null, walkIn = 0, gate = { m: null, at: -1 }; // p12: when the moment being told is over; the fight being thrown, and when its army walks in; where the toll gate stood
+const PALE = [206, 196, 170], GOODS = [[226, 196, 96], [176, 208, 216], [196, 120, 82], [228, 226, 214]], GOLD = [226, 184, 92];
 const still = () => document.documentElement.classList.contains("still");
 const rgbOf = (s) => (s >= 0 && RGB[s]) || PALE;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, k) => a + (b - a) * k;
+const mark = (ms) => { ends = Math.max(ends, performance.now() + ms); };
+/** Dice as big as the free part of the board allows: a share of its shorter side, within bounds. */
+const big = (b, k, lo, hi) => clamp(Math.min(b.middle.w, b.middle.h) * k, lo, hi);
+/** The part of the board the player can see now: the board's free middle, less the score strip above and a move sheet risen from below (a phone). */
+function room(b) {
+  const v = b.middle, rect = (id) => document.getElementById(id)?.getBoundingClientRect(), act = rect("act"), seats = rect("seats");
+  let top = v.y - v.h / 2, bottom = v.y + v.h / 2;
+  if (act?.width > innerWidth * 0.8 && act.top > innerHeight * 0.3) bottom = Math.min(bottom, act.top);
+  if (seats?.width > innerWidth * 0.6 && seats.bottom < innerHeight * 0.4) top = Math.max(top, seats.bottom);
+  if (bottom - top < 120) { top = v.y - v.h / 2; bottom = v.y + v.h / 2; }
+  return { x: v.x, y: (top + bottom) / 2, w: v.w, h: bottom - top };
+}
 
 /** Will motion play for a move? Not with motion reduced, not behind the title, not when bots are hurried or set to instant. */
 function moving(T, person = T.human?.()) {
@@ -4620,7 +4746,7 @@ function moving(T, person = T.human?.()) {
 const pace = (person) => (!person && settings.speed === "fast" ? 0.6 : 1);
 function ready() {
   if (layer) return layer;
-  layer = createMotion();
+  layer = createMotion(document.body, { z: 2 });
   // the player's own hand on the map (a drag, a wheel, a zoom button, a map key) stops the camera following for a while
   const mine = () => { touched = performance.now(); glide = null; };
   addEventListener("wheel", mine, { capture: true, passive: true });
@@ -4630,18 +4756,20 @@ function ready() {
 }
 /** Frame gaps while motion played (ms): for checking smoothness on a slow phone. */
 const frames = () => layer?.frames() || null;
+/** How long the moment on the board still needs to be told, in ms: a bot at normal speed waits this long before its next move. */
+const stageLeft = () => Math.max(0, ends - performance.now());
 
 /**
  * The camera drifts to a rival's move, gently, if that place is out of the comfortable middle of the view; never while the
  * player is touching the map or has moved it in the last few seconds, and never at the whole-board zoom.
  */
-function follow(b, at) {
+function follow(b, at, T) {
   if (at < 0 || performance.now() - touched < 6000 || !b.zoomed) return;
   const v = b.middle, p = b.place(at);
   if (Math.abs(p.x - v.x) < v.w * 0.3 && Math.abs(p.y - v.y) < v.h * 0.3) return;
   const mine = glide = { at, t: performance.now() };
   layer.add({ ms: 1100, draw(c, k, now) {
-    if (glide !== mine) return;
+    if (glide !== mine || T?.human?.()) { if (glide === mine) glide = null; return; } // p12: once a person's turn begins, the board's own come-home glide has the camera
     const q = b.place(at), dx = v.x - q.x, dy = v.y - q.y, dt = Math.min(50, now - mine.t);
     mine.t = now;
     if (Math.hypot(dx, dy) < 2) { glide = null; return; }
@@ -4650,49 +4778,113 @@ function follow(b, at) {
   } });
 }
 
-/** Dice thrown on the table: from one place, landing at points beside another. sets: [{ faces, rgb, lose }]; land(set, i) -> point. Returns the time they take to settle. */
-function throwDice(T, from, sets, land, { person = T.human?.(), hold = -1 } = {}) {
+/**
+ * Dice thrown on the table: from one place, landing at points beside another. sets: [{ faces, rgb, lose }]; land(set, i) -> point.
+ * size: a die's side in pixels; total: the number held under them. Returns the time they take to settle.
+ */
+function throwDice(T, from, sets, land, { person = T.human?.(), hold = -1, size = 22, total = null, roll = 640, linger = 1100, tag } = {}) {
   if (!moving(T, person)) return 0;
-  const b = T.board.moving, size = (p) => Math.max(12, Math.min(26, p.r * 0.4)), f = pace(person), roll = Math.round(640 * f);
-  const solid = b.solid, linger = solid && hold >= 0 ? 220 : Math.round(1100 * f);
-  const s = size(land(0, 0));
-  ready().add(dice(sets.map((x, j) => ({ ...x, from: () => from(), land: x.faces.map((_, i) => () => land(j, i)) })), { roll, linger, size: s }));
-  // the dice that lie on the table as models wait until the thrown ones come down on their places
-  if (solid && hold >= 0) queueMicrotask(() => b.hold([hold], roll, ["model"]));
-  return roll;
+  const b = T.board.moving, f = pace(person), r = Math.round(roll * f);
+  if (tag) ready().drop(tag); // a new throw takes the last one's place
+  ready().add(Object.assign(dice(sets.map((x, j) => ({ ...x, from: () => from(), land: x.faces.map((_, i) => () => land(j, i)) })), { roll: r, linger: Math.round(linger * f), size, total }), { tag }));
+  // the dice that lie on the table as models wait until the thrown ones are gone
+  if (b.solid && hold >= 0) queueMicrotask(() => b.hold([hold], r + linger * f, ["model"]));
+  return r;
 }
 
-/** Banners: a fight's dice from the attacker to the dice's place beside the defender (where the board lays them as models). */
+/** Each throw's losses, [attacker, defender], made to add up to what the fight cost each side (a leader, fort or capital can shift a die). */
+function losses(e, tieBoth) {
+  const per = e.rolls.map(([A, D]) => { let a = 0, d = 0; for (let i = 0; i < Math.min(A.length, D.length); i++) { if (A[i] > D[i]) d++; else { a++; if (A[i] === D[i] && tieBoth) d++; } } return [a, d]; });
+  for (const [k, sum] of [[0, e.lost.attacker], [1, e.lost.defender]]) {
+    let left = sum;
+    per.forEach((x, j) => { x[k] = j === per.length - 1 ? Math.max(0, left) : Math.min(x[k], Math.max(0, left)); left -= x[k]; });
+  }
+  return per;
+}
+
+/**
+ * Banners: a fight thrown on the table, every throw of it (the last eight of a long one), as a quick run: big dice between the
+ * two provinces, the losers dimmed, each side's strength counting down as its losses fall, the last throw held for a beat.
+ * The capture follows (PLANS.banners). Returns whether it plays; the panel's own dice show it either way.
+ */
 function bannersDice(T, e, tieBoth) {
-  const b = T.board?.moving;
+  const b = T.board?.moving, person = T.human?.();
   RGB = T.RGB || RGB;
-  if (!b) return false;
-  const [A, D] = e.rolls[e.rolls.length - 1], lose = (mine, theirs, tie) => mine.map((n, i) => i < theirs.length && (n < theirs[i] || (n === theirs[i] && tie)));
-  const sets = [{ faces: A, rgb: rgbOf(e.seat), lose: lose(A, D, true) }, { faces: D, rgb: rgbOf(e.was), lose: lose(D, A, tieBoth) }];
-  return throwDice(T, () => b.place(e.from), sets, (k, i) => b.place(e.to, (i - 1) * 0.5 + k * 0.2, 0.95 + k * 0.5), { hold: e.to }) > 0;
+  run = null;
+  if (!b || !moving(T, person)) return false;
+  ready().drop("fight");
+  b.release?.();
+  const f = pace(person), p = T.match.position, per = losses(e, tieBoth), n = e.rolls.length, first = Math.max(0, n - 8), m = n - first;
+  const aRgb = rgbOf(e.seat), dRgb = rgbOf(e.was), S = big(b, 0.075, 30, 58);
+  let a = p.str[e.from] + e.lost.attacker + (e.won ? 1 : 0), d = e.won ? e.lost.defender : p.str[e.to] + e.lost.defender;
+  for (let j = 0; j < first; j++) { a -= per[j][0]; d -= per[j][1]; }
+  const a0 = a, d0 = d, roll0 = 620 * f, step = m > 1 ? clamp(2600 / m, 330, 560) * f : 0, rollK = Math.min(step * 0.7, 340 * f);
+  const start = (j) => (j ? roll0 + 160 * f + (j - 1) * step : 0), landAt = (j) => start(j) + (j ? rollK : roll0), E = landAt(m - 1);
+  const seen = room(b), mid = () => { const x = b.place(e.from), y = b.place(e.to), v = seen; return { x: clamp(lerp(x.x, y.x, 0.62), v.x - v.w / 2 + S * 2.2, v.x + v.w / 2 - S * 2.2), y: clamp(lerp(x.y, y.y, 0.62) - S * 1.1, v.y - v.h / 2 + S * 1.6, v.y + v.h / 2 - S * 1.6) }; };
+  const lay = (k, cnt) => (_, i) => () => { const c = mid(); return { x: c.x + (i - (cnt - 1) / 2) * S * 1.18, y: c.y + (k ? 0.62 : -0.62) * S }; };
+  const lose = (mine, theirs, tie) => mine.map((v, i) => i < theirs.length && (v < theirs[i] || (v === theirs[i] && tie)));
+  const above = (cell) => () => { const q = b.place(cell); return { x: q.x, y: q.y - clamp(q.r * 0.36, 11, 22) * 1.9 }; };
+  const go = E + 250 * f, tail = e.won ? go : E + 600 * f, aSteps = [], dSteps = [], times = [];
+  for (let j = 0; j < m; j++) {
+    const [A, D] = e.rolls[first + j], [la, ld] = per[first + j], last = j === m - 1, t0 = start(j), t1 = landAt(j);
+    const fx = dice([{ from: () => b.place(e.from), land: A.map(lay(0, A.length)), faces: A, rgb: aRgb, lose: lose(A, D, true) }, { from: () => b.place(e.to), land: D.map(lay(1, D.length)), faces: D, rgb: dRgb, lose: lose(D, A, tieBoth) }],
+      { roll: t1 - t0, linger: last ? 1000 * f : Math.max(60, start(j + 1) - t1), size: S, fadeMs: last ? 260 : 60, total: last && e.won ? { text: "Taken" } : null });
+    fx.tag = "fight";
+    layer.add(fx, t0);
+    times.push(t0 / 1000);
+    a -= la; d -= ld;
+    if (la) { aSteps.push([t1, a]); layer.add(Object.assign(chip(above(e.from), { text: `−${la}`, red: true, ms: 900 }), { tag: "fight" }), t1); }
+    if (ld) { dSteps.push([t1, d]); layer.add(Object.assign(chip(above(e.to), { text: `−${ld}`, red: true, ms: 900 }), { tag: "fight" }), t1); }
+  }
+  // the strength on each side, counting down, stands in for the board's own counters until the run is over
+  layer.add(Object.assign(tally((i) => b.place(i), e.from, { rgb: aRgb, start: a0, steps: aSteps, ms: tail }), { tag: "fight" }));
+  layer.add(Object.assign(tally((i) => b.place(i), e.to, { rgb: dRgb, start: d0, steps: dSteps, ms: tail }), { tag: "fight" }));
+  queueMicrotask(() => { b.hold([e.from], tail, ["army"]); b.hold([e.to], e.won ? go + 440 * f : tail, ["army"]); if (b.solid) b.hold([e.to], E + 1000 * f, ["model"]); });
+  run = { to: e.to, go, times, f };
+  mark(e.won ? go + 440 * f + 500 : tail + 300); // a capture holds the game half a second more before a bot moves on
+  return true;
+}
+
+/** A seat's card on the screen (the score cards), or the top of the board when it is folded away. side: a point beside it, for a chip. */
+function card(b, s, side = false) {
+  return () => {
+    const li = document.querySelectorAll("#seats > li")[s], r = li?.getBoundingClientRect();
+    if (!r || !r.width) { const v = b.middle; return { x: v.x, y: v.y - v.h * 0.42 }; }
+    if (!side) return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    return r.right < innerWidth * 0.4 && r.height > 40 ? { x: r.right + 46, y: r.top + r.height / 2 } : { x: r.left + r.width / 2, y: r.bottom + 22 };
+  };
+}
+/** The card answers when goods reach it: a short glow. */
+function glow(s) {
+  document.querySelectorAll("#seats > li")[s]?.animate?.([{ boxShadow: "0 0 0 0 rgba(255,226,150,0)" }, { boxShadow: "0 0 0 5px rgba(255,226,150,.9)", offset: 0.3 }, { boxShadow: "0 0 0 0 rgba(255,226,150,0)" }], { duration: 650, easing: "ease-out" });
 }
 
 const PLANS = {
-  banners(T, events, move, b, where, f, person) {
+  banners(T, events, move, b, where, f, person, told) {
     const p = T.match.position;
     let focus = -1;
     for (const e of events) {
       if (e.kind === "fight") {
         fight = e; focus = e.to;
+        const staged = run?.to === e.to ? run : null;
+        if (staged) told.at.throws = staged.times;
         if (!e.won) continue;
-        const go = Math.round(360 * f), ms = Math.round(440 * f);
-        layer.add(travel(where, e.from, e.to, { rgb: rgbOf(e.seat), label: p.str[e.to], ms }), go);
-        queueMicrotask(() => b.hold([e.to], go + ms, ["army"]));
-        layer.add(capture(where, e.to, { rgb: rgbOf(e.seat), icon: ICONS[e.seat] ?? -1 }), go + ms - 40);
+        const go = staged ? staged.go : Math.round(360 * f), ms = Math.round(440 * f);
+        layer.add(Object.assign(travel(where, e.from, e.to, { rgb: rgbOf(e.seat), label: p.str[e.to], ms }), { tag: "fight" }), go);
+        if (!staged) queueMicrotask(() => b.hold([e.to], go + ms, ["army"]));
+        layer.add(Object.assign(capture(where, e.to, { rgb: rgbOf(e.seat), icon: ICONS[e.seat] ?? -1, ms: 900 }), { tag: "fight" }), go + ms - 40);
+        told.at.capture = (go + ms) / 1000;
+        walkIn = performance.now() + go + ms;
+        if (staged) told.after = go + ms - 40; // the province takes its new colour as the army walks in, not before the dice land
       } else if (e.kind === "move" || (e.kind === "occupy" && fight?.to === e.to)) {
-        const from = e.kind === "move" ? e.from : fight.from, ms = Math.round(420 * f);
-        layer.add(travel(where, from, e.to, { rgb: rgbOf(e.seat), label: e.kind === "occupy" && move?.n !== undefined ? move.n : e.n, ms })); // what moves in, not the total
-        queueMicrotask(() => b.hold([e.to], ms, ["army"]));
+        const from = e.kind === "move" ? e.from : fight.from, ms = Math.round(420 * f), wait = e.kind === "occupy" ? Math.round(Math.max(0, walkIn - performance.now())) : 0;
+        layer.add(travel(where, from, e.to, { rgb: rgbOf(e.seat), label: e.kind === "occupy" && move?.n !== undefined ? move.n : e.n, ms }), wait); // what moves in, not the total
+        queueMicrotask(() => b.hold([e.to], wait + ms, ["army"]));
         focus = e.to;
       } else if (e.kind === "place" || e.kind === "claim") { layer.add(pulse(where, e.at, { rgb: rgbOf(e.seat) })); } // placing is followed by the camera only when it comes to a fight
       else if (e.kind === "fort") { layer.add(build(where, e.at, {})); focus = e.at; }
     }
-    if (!person) follow(b, focus);
+    if (!person) follow(b, focus, T);
   },
   fable(T, events, move, b, where, f, person) {
     const p = T.match.position, to = move?.to ?? -1;
@@ -4702,39 +4894,87 @@ const PLANS = {
       layer.add(travel(where, move.from, to, { rgb: rgbOf(p.owner[to]), label: p.unit[to], kind: "unit", ms }));
       queueMicrotask(() => b.hold([to], ms, ["unit"]));
       if (took) layer.add(took.was >= 0 ? capture(where, to, { rgb: rgbOf(took.seat), icon: ICONS[took.seat] ?? -1, ms: 560 }) : pulse(where, to, { rgb: rgbOf(took.seat), out: true }), ms - 30);
+      mark(ms + (took ? 300 : 0));
     } else if (move?.do === "raise") {
       layer.add(took?.was >= 0 ? capture(where, to, { rgb: rgbOf(took.seat), icon: ICONS[took.seat] ?? -1, ms: 560 }) : build(where, to, { rgb: rgbOf(p.owner[to]), small: true, ms: 520 }));
     } else if (move?.do === "fort" || move?.do === "farm") layer.add(build(where, to, {}));
     for (const e of events) if (e.kind === "starve") for (const c of e.cells) layer.add(pulse(where, c, { rgb: [70, 62, 56], out: true, ms: 520 }));
-    if (!person) follow(b, to);
+    if (!person) follow(b, to, T);
   },
-  glass(T, events, move, b, where, f, person) {
+  glass(T, events, move, b, where, f, person, told) {
+    const p = T.match.position, hint = T.motionHints || {}, tile = hint.tile || GOODS, names = hint.goods || [];
+    const sum = (g, sign) => g.flatMap((v, k) => (v ? [`${sign}${v}${names[k] ? ` ${names[k]}` : ""}`] : [])).join(" ");
     let wait = 0, focus = -1;
     for (const e of events) {
       if (e.kind === "roll") {
-        // two dice come in from the near edge of the board and settle in its middle, then the yielding hexes answer
-        const v = () => b.middle, rgb = rgbOf(e.seat);
-        wait = throwDice(T, () => ({ x: v().x - v().w * 0.18, y: v().y + v().h * 0.36, r: 40 }), [{ faces: e.dice, rgb }], (_, i) => ({ x: v().x + (i ? 22 : -22), y: v().y + (i ? 6 : -4), r: 50 }), { person });
-      } else if (e.kind === "harvest") e.hexes.forEach((at, i) => layer.add(build(where, at, { rgb: GOODS[T.match.position.good[at]] || [230, 210, 150], small: true, ms: 640 }), wait + 80 + i * 60));
-      else if (["depot", "town", "harbour"].includes(e.kind)) { layer.add(build(where, e.at, { rgb: rgbOf(e.seat) })); focus = e.at; }
+        // two big dice come in from the near edge of the board, settle in its middle and hold the number thrown; a raid darkens the edges
+        const seen = room(b), v = () => seen, S = clamp(Math.min(seen.w, seen.h) * 0.11, 48, 84);
+        wait = throwDice(T, () => ({ x: v().x - v().w * 0.2, y: v().y + v().h * 0.42, r: 40 }), [{ faces: e.dice, rgb: rgbOf(e.seat) }], (_, i) => ({ x: v().x + (i ? 0.62 : -0.62) * S, y: v().y + (i ? 0.08 : -0.06) * S, r: 50 }),
+          { person, size: S, roll: 700, linger: 1100, tag: "roll", total: { text: String(e.n), sub: e.raid ? "raid" : "", red: e.raid } });
+        if (e.raid) { layer.add(raid({ ms: Math.round(1300 * f) }), wait); told.at.raid = wait / 1000; }
+        mark(wait + 900 * f);
+      } else if (e.kind === "harvest") {
+        e.hexes.forEach((at, i) => layer.add(build(where, at, { rgb: tile[p.good[at]] || [230, 210, 150], small: true, ms: 640 }), wait + 80 + i * 60));
+        // goods fly from each yielding hex to the cards of the players who gather them (one crate a hex and player, with its count)
+        const near = hint.near, flights = [];
+        if (near) for (const at of e.hexes) {
+          const by = new Map();
+          for (const c of [at, ...near(at)]) if (p.depot[c] >= 0) by.set(p.depot[c], (by.get(p.depot[c]) || 0) + (p.town[c] ? 2 : 1));
+          for (const [s, k] of by) flights.push({ at, s, k });
+        }
+        const ms = Math.round(760 * f), last = new Map();
+        flights.slice(0, 16).forEach((x, i) => {
+          const t = wait + 320 * f + i * 80 * f;
+          layer.add(fly(() => where(x.at), card(b, x.s), { rgb: tile[p.good[x.at]] || GOLD, label: x.k > 1 ? x.k : "", size: clamp(big(b, 0.022, 11, 17), 11, 17), ms, end: () => glow(x.s) }), t);
+          last.set(x.s, t + ms);
+        });
+        for (const [s, t] of last) if (e.got[s]?.some((n) => n)) layer.add(chip(card(b, s, true), { text: sum(e.got[s], "+"), rgb: GOLD, ms: 1500 }), t - 60);
+        if (flights.length) { told.at.gather = (wait + 320 * f + ms) / 1000; mark(wait + 320 * f + ms + Math.min(15, flights.length) * 80 * f); }
+      } else if (e.kind === "toll") {
+        // the gate is carried to its new hex, then the good it takes passes from one player's card to the other's
+        const was = gate.m === T.match && gate.at >= 0 && gate.at !== e.at ? gate.at : -1, ms = Math.round(700 * f), r = () => clamp(where(e.at).r * 0.32, 10, 20);
+        const from = was >= 0 ? () => where(was) : () => { const q = where(e.at); return { x: q.x, y: q.y - 140 }; };
+        layer.add(fly(from, () => where(e.at), { rgb: PALE, kind: "gate", size: r(), ms }));
+        queueMicrotask(() => b.hold([e.at], ms, ["gate"]));
+        layer.add(pulse(where, e.at, { rgb: [192, 57, 43], out: true, ms: 520 }), ms - 40);
+        focus = e.at;
+        if (e.from >= 0 && e.good >= 0) {
+          const t = ms + 140 * f, long = Math.round(950 * f), name = names[e.good] ? ` ${names[e.good]}` : "";
+          layer.add(chip(card(b, e.from, true), { text: `−1${name}`, red: true, ms: 1500 }), t);
+          layer.add(fly(card(b, e.from), card(b, e.seat), { rgb: tile[e.good] || GOLD, size: 16, ms: long, end: () => glow(e.seat) }), t);
+          layer.add(chip(card(b, e.seat, true), { text: `+1${name}`, rgb: GOLD, ms: 1500 }), t + long - 60);
+          told.at.steal = t / 1000;
+          mark(t + long + 400);
+        } else mark(ms + 300);
+      } else if (e.kind === "spoil") {
+        const name = names[e.good] ? ` ${names[e.good]}` : "";
+        layer.add(chip(card(b, e.seat, true), { text: `−1${name}`, red: true, ms: 1100 }));
+      } else if (["depot", "town", "harbour"].includes(e.kind)) { layer.add(build(where, e.at, { rgb: rgbOf(e.seat) })); focus = e.at; }
       else if (e.kind === "route") { layer.add(pulse(where, e.at, { rgb: rgbOf(e.seat), out: true, ms: 420 })); focus = e.at; }
     }
-    if (!person) follow(b, focus);
+    if (!person) follow(b, focus, T);
   },
   inch(T, events) {
     if (events.some((e) => e.kind === "age")) layer.add(sweep());
   },
 };
 
-/** After a move is shown: its sound, then its motion. G.key names the game; move is what was played; person: the seat to move was a person's. */
+/**
+ * After a move is shown: its motion, then its sound (timed to the motion). G.key names the game; move is what was played;
+ * person: the seat to move was a person's. Returns how long the board may wait before recolouring what the move took (ms).
+ */
 function stir(T, key, events, move, person, speed, icons = ICONS) {
   RGB = T.RGB || RGB; ICONS = icons;
-  const go = moving(T, person);
-  if (!T.demo && !T.hurry && speed === "normal") voice(key, events, move, T.match.position, go);
-  if (!go || !PLANS[key]) return;
-  ready();
-  const b = T.board.moving;
-  try { PLANS[key](T, events, move, b, (i, dx, dy) => b.place(i, dx, dy), pace(person), person); } catch (e) { console.warn("A moment of motion was skipped:", e); }
+  const go = moving(T, person), told = { after: 0, at: {} };
+  if (go && PLANS[key]) {
+    ready();
+    const b = T.board.moving;
+    try { PLANS[key](T, events, move, b, (i, dx, dy) => b.place(i, dx, dy), pace(person), person, told); } catch (e) { console.warn("A moment of motion was skipped:", e); }
+  }
+  if (!T.demo && !T.hurry && speed === "normal") voice(key, events, move, T.match.position, go, told.at);
+  if (key === "glass") gate = { m: T.match, at: T.match.position.gate ?? -1 };
+  run = null;
+  return told.after;
 }
 
 /** The end: pennants fall across the winner's card, in the winners' colours. Nothing with motion reduced, or for a loss. */
@@ -4746,7 +4986,7 @@ function hail(box, colours) {
   box.querySelector(".arms")?.animate?.([{ transform: "scale(.6) rotate(-8deg)", opacity: 0 }, { transform: "scale(1.08)", opacity: 1, offset: 0.6 }, { transform: "none", opacity: 1 }], { duration: 620, easing: "ease-out" });
 }
 
-$x.moving = moving; $x.frames = frames; $x.throwDice = throwDice; $x.bannersDice = bannersDice; $x.stir = stir; $x.hail = hail;
+$x.moving = moving; $x.frames = frames; $x.stageLeft = stageLeft; $x.throwDice = throwDice; $x.bannersDice = bannersDice; $x.stir = stir; $x.hail = hail;
 return $x; })({});
 $m[36] = (($x) => {
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -5338,7 +5578,7 @@ const { coach } = $m[30];
 const { shelfCredits } = $m[31];
 const { CHOICES, PACE, SCALE, cue, ranked, resultText, saveSettings, settings, sfx, takeBack, turnKey, wake } = $m[32];
 // motion hook: motion and sound that follow each move (site/motion.js, site/sound.js)
-const { hail, stir } = $m[33];
+const { hail, stageLeft, stir } = $m[33];
 // livelink hook: live play by two pasted links, straight between two browsers (site/livelink.js)
 const { liveLink } = $m[36];
 // shelf hook: the community shelf, to browse and open replays and to share this game as one (site/community.js)
@@ -5795,11 +6035,12 @@ function createTable(G) {
     keep();
     if (!T.demo) { score(); panel(); }
     G.seen?.(T, events);
-    stir(T, G.key, events, move, person, speed, ICONS); // motion hook: its sound (as the old cue, by game) and its motion
-    const rush = T.hurry || speed === "instant", took = board.show(G.order(events), rush);
+    const after = stir(T, G.key, events, move, person, speed, ICONS) || 0; // motion hook: its sound (as the old cue, by game) and its motion; p12: how long the board waits for the dice
+    const rush = T.hurry || speed === "instant", took = board.show(G.order(events), rush, after);
     if (!T.demo && !rush && words.length && (!person || T.match.turn !== seat)) toast(words.slice(0, 2).join(" "), person);
     if (T.human()) T.hurry = false;
-    await sleep(T.hurry || speed === "instant" ? 0 : T.demo ? Math.max(G.pace(T.match.position), took + 120) : speed === "fast" ? Math.max(90, took / 2) : Math.max(160, took + 60));
+    const own = person ? Math.max(0, took - after) : took; // motion hook p12: a person is never kept waiting for the dice
+    await sleep(T.hurry || speed === "instant" ? 0 : T.demo ? Math.max(G.pace(T.match.position), took + 120) : speed === "fast" ? Math.max(90, own / 2) : Math.max(160, own + 60));
     if (mine !== run) return;
     T.busy = false;
     G.changed?.(T);
@@ -5828,7 +6069,7 @@ function createTable(G) {
         if (typeof s.value?.then === "function") { await s.value; if (mine !== run) return; slice = performance.now(); continue; } // stacking hook: a bot thinking in a worker hands over a promise
         if (performance.now() - slice > 7) { await sleep(0); if (mine !== run) return; slice = performance.now(); }
       }
-      if (!T.hurry) await sleep(Math.max(0, G.pace(T.match.position) * PACE[settings.speed] - (performance.now() - from)));
+      if (!T.hurry) await sleep(Math.max(0, G.pace(T.match.position) * PACE[settings.speed] - (performance.now() - from), settings.speed === "normal" ? Math.min(3500, stageLeft()) : 0)); // motion hook p12: at normal speed a bot waits for the dice, the raid or the capture to be seen
     }
     if (mine === run) play(move);
   }
