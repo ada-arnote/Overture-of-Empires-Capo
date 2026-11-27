@@ -27,3 +27,9 @@ export const AI_BASES = {
 export const LIVE_ADDRESSES = [
   { url: "stun:stun.cloudflare.com:3478", why: "STUN: tells each browser its own public internet address, so two browsers can connect directly. Free and unlimited by Cloudflare's own page; nothing about the game is sent" },
 ];
+// worker hook (ruling 155): named outside addresses the table pages may reach for play with others, each with its reason.
+// The room server's address, empty until the owner deploys it (server/worker/DEPLOY.md); when set, it joins the pages' named
+// addresses beside LIVE_ADDRESSES. An empty address means nothing is ever contacted and the site stays fully static.
+export const PLAY_ADDRESSES = [
+  { name: "worker", address: "", reason: "room codes, a relay for pairs that cannot connect directly, play by turn with a 'your turn' notice, and saves by code (server/worker/)" },
+];

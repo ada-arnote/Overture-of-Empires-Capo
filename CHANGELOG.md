@@ -4,6 +4,15 @@ What changed in each tagged version of Overture of Empires: Capo, newest first. 
 
 ## Unreleased
 
+### The small worker: rooms, relay, play by turn, saves by code (built and tested, not deployed)
+
+**Contributors**
+- `server/worker/` (new, ruling 155; options.md option C, parts 1 and 2, and saves by code from part 3): one Cloudflare Worker with two Durable Objects, plain ES modules with no dependencies. `Room`: six-letter codes (no vowels), an optional password sent only as a digest, seats by role as in link play, signals passed seat to seat over one WebSocket, who is here, the room as relay when no direct path opens (or Cloudflare's relay keys when the owner adds them), and a mailbox for play by turn with a "your turn" Web Push notice (VAPID and aes128gcm by the platform's own crypto). Every move is checked by the games' own rules (`src/games`, bundled in); the room keeps the position and dice state beside the moves, so a woken room goes on without replaying. `Keep`: saves by a secret code, kept only if they replay whole. Rate limits per address in memory, per room for passwords, per socket for messages. Nothing personal is written: no address, no seat key or password (digests only), a push subscription only while notices are on. Rooms and saves delete themselves when their keeping time ends (live a day, by turn 90 days, finished a week, saves a year unused).
+- `server/worker/wrangler.toml` (a template with no account id or secret), `server/worker/DEPLOY.md` (the owner's steps, and the keeping-time table for the privacy note), `server/worker/tools/keys.mjs` (makes the notice keys).
+- `site/rooms.js` (new): the pages' side, `roomsAt()`, null when no worker address is configured, so nothing changes and the site stays static; `site/notice-sw.js` (new): the notice's service worker. Not yet wired into a table page.
+- One marked "worker hook" in `site/config.js`: `PLAY_ADDRESSES`, a placeholder with the worker named and no address, to merge into the live-link lane's named-address list.
+- `test/worker.test.mjs` (18 tests) against `test/fixtures/workerd.js`, a stand-in for the worker runtime made from Node's own modules. Measured here: checking one move takes a median of 0.3 to 0.9 ms in Banners, Fable and Glass and 6 ms in Inch (slowest 27 ms); a room with 300 Banners moves wakes in under 10 ms from its kept table, against about 300 ms replaying.
+
 ### Live link: two pasted links, then a direct table between two browsers (ruling 155)
 
 **Players**
