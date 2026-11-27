@@ -149,6 +149,68 @@ export function check(root, { release = false } = {}) {
   return { bad, note, total, code, assets, files: files.length };
 }
 
+// The style packs (src/map/style.js, ruling 147): every pack's schema, and its seat colours on its own board. Hard stops only where a
+// player would really lose something: a set that promises contrast or colour-blind safety and does not keep it, or pieces with no owner's colour.
+const lin = (v) => ((v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+export const luma = (c) => c.reduce((s, v, i) => s + [0.2126, 0.7152, 0.0722][i] * lin(v), 0);
+export const contrast = (a, b) => { const [x, y] = [luma(a) + 0.05, luma(b) + 0.05]; return Math.max(x, y) / Math.min(x, y); };
+// colour vision: Machado, Oliveira and Fernandes (2009) at full strength, in linear light; distances in Oklab (Ottosson, 2020)
+export const VISION = { normal: null, protan: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]], deutan: [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.01182, 0.04294, 0.968881]], tritan: [[1.255528, -0.076749, -0.178779], [-0.078411, 0.930809, 0.147602], [0.004733, 0.691367, 0.3039]] };
+function oklab(c, m) {
+  let v = c.map(lin);
+  if (m) v = m.map((r) => Math.max(0, Math.min(1, r[0] * v[0] + r[1] * v[1] + r[2] * v[2])));
+  const [l, n, s] = [[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566], [0.0883024619, 0.2817188376, 0.6299787005]].map((r) => Math.cbrt(r[0] * v[0] + r[1] * v[1] + r[2] * v[2]));
+  return [0.2104542553 * l + 0.793617785 * n - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * n + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * n - 0.808675766 * s];
+}
+/** The two colours of a list nearest each other under one kind of colour vision: [distance, i, j]. */
+export const nearest = (rgbs, m) => { let best = [9, 0, 0]; rgbs.forEach((a, i) => rgbs.forEach((b, j) => { if (j > i) { const p = oklab(a, m), q = oklab(b, m), d = Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); if (d < best[0]) best = [d, i, j]; } })); return best; };
+export async function styleGate(root) {
+  const bad = [], note = [], at = (f) => pathToFileURL(path.join(root, f)).href;
+  const { STYLES, SEATS, LANDS, washed, darkBoard, seatsOf } = await import(at("src/map/style.js")), { models } = await import(at("src/map/models.js"));
+  const W = STYLES.war, names = new Set(Object.keys(models())), shown = [], told = new Map(), tell = (k, v) => told.set(k, [...(told.get(k) || []), v]); // notes, one line a kind
+  const colour = (v) => Array.isArray(v) && v.length >= 3 && v.slice(0, 3).every((x) => Number.isFinite(x) && x >= 0 && x <= 255);
+  const same = (want, got, where) => { // the shape War table gives: the same keys, numbers where numbers, arrays of the same length
+    if (Array.isArray(want)) { if (!Array.isArray(got) || got.length !== want.length) return bad.push(`style ${where}: wants ${want.length} values`); want.forEach((w, i) => same(w, got[i], `${where}[${i}]`)); }
+    else if (want && typeof want === "object") { if (!got || typeof got !== "object") return bad.push(`style ${where}: wants a table`); for (const k of new Set([...Object.keys(want), ...Object.keys(got)])) if (!(k in want)) bad.push(`style ${where}.${k}: not a key War table has`); else if (!(k in got)) bad.push(`style ${where}.${k}: missing`); else same(want[k], got[k], `${where}.${k}`); }
+    else if (typeof got !== typeof want || (typeof got === "number" && !Number.isFinite(got))) bad.push(`style ${where}: wants a ${typeof want}`);
+  };
+  const { models: _m, lamp: _l, ...root0 } = W;
+  for (const [key, s] of Object.entries(STYLES)) {
+    const { models: swap, lamp, ...rest } = s;
+    same(root0, rest, key);
+    for (const [k, v] of Object.entries(swap)) if (!names.has(k) || (v !== "" && !names.has(v))) bad.push(`style ${key}.models: ${k} to ${v} is not a model`);
+    for (const [k, v] of Object.entries(lamp)) if (["name", "set", "pack", "models", "kit", "seats", "lamp"].includes(k) || !(k in W)) bad.push(`style ${key}.lamp.${k}: lamplight may change light, colour and surfaces only`); else same(W[k], v, `${key}.lamp.${k}`);
+    for (const c of [...s.pal, s.table.baize, s.table.rule, s.table.tone, s.surface.wash, s.surface.rim, s.surface.contour, s.surface.sea, s.map.wash]) if (!colour(c)) bad.push(`style ${key}: ${JSON.stringify(c)} is not a colour`);
+    if (!SEATS[s.seats]) bad.push(`style ${key}.seats: ${s.seats} is not a seat set`);
+    if (s.pack && !existsSync(path.join(root, "site/models", s.pack))) bad.push(`style ${key}.pack: site/models/${s.pack} is missing`);
+    if (!s.kit.cast && s.tone[1] >= 0.9) bad.push(`style ${key}: pieces would show no owner's colour (the tone greys it, and there is no enamel base)`);
+    if (s.kit.base < 0.8 || s.kit.base * s.scale > 1.6) bad.push(`style ${key}.kit.base: a piece must keep to its cell`);
+    // seat colours as this style's ground shows them, against the land they spread over
+    const lands = LANDS.map((l) => washed(l, s)), dark = darkBoard(s);
+    for (const [set, def] of Object.entries(SEATS)) {
+      if (!def.light) continue;
+      if (![def.light, def.dark || def.light].every((v) => v.length === 6 && v.every(([n, c]) => n && colour(c)))) { bad.push(`seat set ${set}: wants six named colours`); continue; }
+      const list = seatsOf(set, key), rgbs = list.map(([, c]) => washed(c, s, s.surface.own)), low = Math.min(...rgbs.flatMap((c) => lands.map((l) => contrast(c, l))));
+      const promise = set === "contrast" || set === s.seats; // High contrast everywhere, and a style's own default set on its own board
+      if (low < 3 && promise) bad.push(`${s.name}, ${def.name} seats: ${low.toFixed(2)}:1 against the ${dark ? "dark" : "light"} land, under 3:1`);
+      else if (low < 3) tell(`${def.name} seats under 3:1 against the land (borders and patterns carry it)`, `${s.name} ${low.toFixed(2)}`);
+      for (const [v, m] of Object.entries(VISION)) {
+        const [d, i, j] = nearest(rgbs, m), floor = set === "safe" ? 0.06 : 0.03;
+        if (d < floor) bad.push(`${s.name}, ${def.name} seats: ${list[i][0]} and ${list[j][0]} are ${d.toFixed(3)} apart in ${v} vision, under ${floor}`);
+        else if (d < 0.06) tell(`${def.name} seats close in ${v} vision (patterns carry it)`, `${s.name} ${list[i][0]} and ${list[j][0]} ${d.toFixed(3)}`);
+      }
+      // greyscale: High contrast must also part every two seats by lightness alone
+      const [g, i, j] = rgbs.flatMap((a, i) => rgbs.slice(i + 1).map((b, k) => [contrast(a, b), i, i + 1 + k])).sort((a, b) => a[0] - b[0])[0];
+      if (g < 1.1 && set === "contrast") bad.push(`${s.name}, ${def.name} seats: ${list[i][0]} and ${list[j][0]} are ${g.toFixed(2)}:1 in greyscale, under 1.1:1`);
+      else if (g < 1.1) tell(`${def.name} seats alike in greyscale (patterns carry it)`, `${s.name} ${list[i][0]} and ${list[j][0]} ${g.toFixed(2)}:1`);
+      if (promise) shown.push(low);
+    }
+  }
+  for (const [k, v] of told) note.push(`${k}: ${v.join(", ")}`);
+  note.push(`styles: ${Object.keys(STYLES).length} packs and ${Object.keys(SEATS).length} seat sets checked; promised seat colours stand at least ${Math.min(...shown).toFixed(2)}:1 from their land`);
+  return { bad, note };
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const at = process.argv.indexOf("--root"), root = at > 0 ? path.resolve(process.argv[at + 1]) : path.dirname(path.dirname(fileURLToPath(import.meta.url)));
   const r = check(root, { release: process.argv.includes("--release") });
@@ -157,6 +219,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     r.bad.push(...v.bad);
     r.note.push(...v.note);
   }
+  if (existsSync(path.join(root, "src/map/style.js"))) { const v = await styleGate(root); r.bad.push(...v.bad); r.note.push(...v.note); }
   for (const n of r.note) console.log("note  " + n);
   for (const b of r.bad) console.log("STOP  " + b);
   console.log(`${r.files} files ship, ${(r.total / KB).toFixed(1)} kB compressed (guide ${LIMITS.first / KB}, not a limit). ${r.bad.length ? r.bad.length + " to fix" : "All clear"}.`);

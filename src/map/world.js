@@ -9,7 +9,7 @@ import { DEPTH, HEAD, SHADE, aim, program } from "./mesh.js";
 
 // heights: one byte, 96 is the sea's surface; made from noise when a world brings no picture of its own
 const COMMON = `
-uniform sampler2D uRelief; uniform vec2 uSize; uniform vec4 uWash; uniform float uReal,uSeed,uShade,uRel,uGloss;
+uniform sampler2D uRelief; uniform vec2 uSize; uniform vec4 uWash,uGrade,uCont; uniform float uReal,uSeed,uShade,uRel,uGloss;
 float grain(vec2 p){ p=floor(p); return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
 float nz(vec2 p){ vec2 f=fract(p); f=f*f*(3.-2.*f); return mix(mix(grain(p),grain(p+vec2(1.,0.)),f.x),mix(grain(p+vec2(0.,1.)),grain(p+1.),f.x),f.y); }
 float hgt(vec2 p){ if(uReal>0.) return texture(uRelief,p/uSize).r; vec2 q=p/uSize.x*9.+uSeed; float r=1.-abs(2.*nz(q*1.7)-1.);
@@ -30,14 +30,15 @@ void main(){ float h=hgt(vP),t=clamp((h-.376)/.624,0.,1.); vec2 g=slope(vP);
   float glow=vC.a<.6?1.:0.,ice=uReal>0.?1.-smoothstep(.55,.95,texture(uRelief,vP/uSize).a):0.; // a province that is lit: chosen, or offered. Ice, where the world's picture marks it
   c=mix(c,vec3(.9,.94,.97),ice);
   c=mix(c,vC.rgb,uTint*(1.-.45*ice))*clamp(1.-dot(g,uSun.xy)*26.*uRel,.6,1.36)*(.96+.07*grain(vP*uS*1.5));
+  if(uCont.a>0.){ float d=abs(fract((h-.4)/.045+.5)-.5)*.045,w=fwidth(h); c=mix(c,uCont.rgb,uCont.a*(1.-.6*uTint)*step(.4,h)*(1.-smoothstep(.3*w,1.2*w,d))); } // styles hook: lit contours, fainter where owners' colours lie
   if(vZ<.99) c=mix(vec3(.2,.17,.14),c,.25+.3*vZ); // the cut side of the coast
   else c*=1.-uShade*shd(vP,uRise);
   c=mix(c,vec3(.93,.96,1.),glow*.3);
-  o=vec4(c,1.); }`;
+  o=vec4(c*uGrade.rgb,1.); }`;
 const SEA_VS = `#version 300 es
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const SEA_FS = `${HEAD}${COMMON}${SHADE}
-uniform sampler2D uWood; uniform float uDpr; uniform vec3 uBaize,uRule; uniform vec2 uWoodK;
+uniform sampler2D uWood; uniform float uDpr,uGrid; uniform vec3 uBaize,uRule,uTone; uniform vec2 uWoodK;
 out vec4 o;
 void main(){ vec2 uv=vec2(gl_FragCoord.x/uDpr,uView.y-gl_FragCoord.y/uDpr)-uMid,p=uC+vec2(uv.x,uv.y/uTilt.x)/uS,hs=uSize*.5; float foot=1./uS;
   vec2 d=abs(p-hs)-hs; float sd=max(d.x,d.y); vec3 c;
@@ -48,10 +49,10 @@ void main(){ vec2 uv=vec2(gl_FragCoord.x/uDpr,uView.y-gl_FragCoord.y/uDpr)-uMid,
     c=mix(c,uWash.rgb,uWash.a*.8); c+=.2*uGloss*pow(max(dot(normalize(vec3(-w,1.)),normalize(normalize(uSun)+v)),0.),30.); c*=(.97+.06*grain(p*uS*1.5))*(1.-uShade*shd(p,0.));
     c*=1.-.35*smoothstep(-14.*foot,0.,sd); }
   else { float mg=max(hs.x,hs.y)*.09,r=mg*.6; d=d-mg+r; float bd=length(max(d,0.))+min(max(d.x,d.y),0.)-r;
-    c=texture(uWood,p/(max(hs.x,hs.y)*vec2(1.3,.65))).rgb; c=mix(c,vec3(.3,.19,.12),uWoodK.y)*uWoodK.x; c*=1.-.3*smoothstep(mg*.5,0.,bd)*step(0.,bd);
+    c=texture(uWood,p/(max(hs.x,hs.y)*vec2(1.3,.65))).rgb; c=mix(c,uTone,uWoodK.y)*uWoodK.x; c=mix(c,uRule,uGrid*.16*max(1.-smoothstep(0.,1.5*foot,abs(fract(p.x/(mg*.9))-.5)*mg*.9),1.-smoothstep(0.,1.5*foot,abs(fract(p.y/(mg*.9))-.5)*mg*.9))); c*=1.-.3*smoothstep(mg*.5,0.,bd)*step(0.,bd);
     c=mix(uBaize*(.86+.28*grain(p*uS*2.)),c,smoothstep(-foot,foot,bd)); c=mix(c,uRule,(1.-smoothstep(mg*.04,mg*.04+foot*1.5,abs(bd+mg*.36)))*.8);
     c*=1.-.5*smoothstep(26.*foot,0.,sd); }
-  o=vec4(c*(1.-1.6*dot(uv/uView,uv/uView)),1.); }`;
+  o=vec4(c*uGrade.rgb*(1.-(1.6+uGrade.w)*dot(uv/uView,uv/uView)),1.); }`;
 
 export class WorldGround {
   constructor(canvas) {
@@ -117,12 +118,13 @@ export class WorldGround {
       g.useProgram(P); aim(g, u, cam);
       g.uniform1i(u.uTab, 0); g.uniform1i(u.uRelief, 1); g.uniform1i(u.uWood, 3); g.uniform2f(u.uSize, ...this.size); g.uniform1f(u.uReal, this.real); g.uniform1f(u.uSeed, this.seed);
       g.uniform3f(u.uSun, ...o.style.sun); g.uniform1f(u.uShOn, 0); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uRel, (o.relief ?? 1) * o.style.map.relief); g.uniform1f(u.uGloss, o.style.surface.gloss); g.uniform4f(u.uWash, ...o.style.map.wash.map((v, i) => (i < 3 ? v / 255 : v)));
+      g.uniform4f(u.uGrade, ...o.style.grade); g.uniform4f(u.uCont, ...o.style.surface.contour.map((v, i) => (i < 3 ? v / 255 : v))); // styles hook
       o.lamp?.(u);
       return u;
     };
     g.disable(g.DEPTH_TEST);
     let u = both(this.sea);
-    g.uniform1f(u.uDpr, dpr); g.uniform3f(u.uBaize, ...st.baize.map((v) => v / 255)); g.uniform3f(u.uRule, ...st.rule.map((v) => v / 255)); g.uniform2f(u.uWoodK, ...st.wood);
+    g.uniform1f(u.uDpr, dpr); g.uniform3f(u.uBaize, ...st.baize.map((v) => v / 255)); g.uniform3f(u.uRule, ...st.rule.map((v) => v / 255)); g.uniform2f(u.uWoodK, ...st.wood); g.uniform3f(u.uTone, ...st.tone.map((v) => v / 255)); g.uniform1f(u.uGrid, st.grid);
     g.drawArrays(g.TRIANGLES, 0, 3);
     g.enable(g.DEPTH_TEST); g.depthFunc(g.LEQUAL); g.clearDepth(1); g.clear(g.DEPTH_BUFFER_BIT);
     u = both(this.land);

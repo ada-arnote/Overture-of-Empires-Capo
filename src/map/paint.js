@@ -6,7 +6,7 @@ const VS = `#version 300 es
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); gl_Position=vec4(p*2.-1.,0.,1.); }`;
 const FS = `#version 300 es
 precision highp float; precision highp int;
-uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable,uTall,uK,uShade; uniform vec3 uSun,uBaize,uRule,uMark; uniform vec4 uWin,uSurf,uWash; uniform vec2 uWoodK;${SHADE}
+uniform sampler2D uId,uHt,uTab,uWood; uniform vec2 uSize,uView,uMid,uC,uYaw,uTilt,uLight; uniform float uS,uQ,uDpr,uMost,uUnit,uRelief,uTime,uPat,uCell,uBev,uSlab,uTable,uTall,uK,uShade; uniform vec3 uSun,uBaize,uRule,uMark; uniform vec4 uWin,uSurf,uWash,uRim,uCont,uMore,uSea,uGrade; uniform vec2 uWoodK; uniform vec3 uTone;${SHADE}
 float dep(vec2 p,float z){ vec2 d=(p-uC)*uS; float D=(d.x*uYaw.y+d.y*uYaw.x)*uTilt.y+z*uTilt.x; return .5-.5*uK*D/(1.-uQ*D); }
 uniform vec3 uInk,uPale,uWall,uGlow,uLand; out vec4 o;
 int raw(ivec2 t){ if(t.x<0||t.y<0||t.x>=int(uSize.x)||t.y>=int(uSize.y)) return 0; vec4 v=texelFetch(uId,t,0); return int(v.r*255.+.5)+256*int(v.g*255.+.5); }
@@ -43,15 +43,19 @@ float pattern(vec2 q,int k){
   if(k==4) return hatch((q.x-q.y)*.7071,6.5);
   return hatch(q.y,5.5); }
 vec3 face(vec2 p,int id,float foot){
-  vec4 a=tab(id,0),b=tab(id,1); vec3 c=mix(a.rgb,uWash.rgb,uWash.a*(a.a<.99?.7:1.)); float e=2.; // a style may wash every colour toward its paper; an owner's less, so it still reads
+  vec4 a=tab(id,0),b=tab(id,1); vec3 c=mix(a.rgb,uWash.rgb,uWash.a*(a.a<.99?uMore.x:1.)); float e=2.; // a style may wash every colour toward its paper; an owner's less, so it still reads
   vec2 g=vec2(ht(p+vec2(e,0.))-ht(p-vec2(e,0.)),ht(p+vec2(0.,e))-ht(p-vec2(0.,e)))/100.;
   vec4 t2=tab(id,2),t3=tab(id,3); int kd=int(t2.r*255.+.5); vec2 q=(p-vec2(t3.r+t3.g*256.,t3.b+t3.a*256.)*15.9375)/uCell; float fm=0.;
+  if(kd==1){ c=mix(c,uSea.rgb,uSea.a); c=mix(c,uCont.rgb,uMore.w*.22*max(hatch(p.x*uS,40.*uS),hatch(p.y*uS,40.*uS))); } // styles hook: the sea in a colour of the style's, and a sparse grid on it
   if(kd>1){ float sd=t2.g,rim=kd>5?1.:smoothstep(.93,.78,max(abs(q.x),abs(q.x)*.5+abs(q.y)*.866)/.866); fm=form(kd,p,q,sd);
     g+=vec2(form(kd,p+vec2(1.,0.),q+vec2(1.,0.)/uCell,sd)-fm,form(kd,p+vec2(0.,1.),q+vec2(0.,1.)/uCell,sd)-fm)*rim*(kd==3?.5:kd>5?.2:.16);
     c*=mix(1.,kd==2?.84+.24*fm:kd==3?.66+.42*fm:kd==5?1.04-.16*fm:.86+.22*fm,rim); if(kd==5) c=mix(c,vec3(.96,.97,.95),.35*rim*(1.-fm)*grain(floor(q*3.6+sd)*7.)); }
   float k=clamp(1.-dot(g,uLight)*2.3*uRelief*uSurf.y,.56,1.36); c*=k;
   if(uMark.x>0.){ float sl=length(g); if(sl>.04){ vec2 dn=g/sl; c=mix(c,uInk,uMark.x*smoothstep(.05,.28,sl)*hatch(dot((p-uC)*uS,vec2(-dn.y,dn.x)),4.5)); } } // slopes as pen strokes down the hill c=mix(c,vec3(1.,.97,.9),.30*smoothstep(78.,118.,ht(p))*uRelief);
+  if(uCont.a>0.){ float h=ht(p),w=max(length(g)*25.*foot*uDpr,.03),d=abs(fract(h/uMore.z+.5)-.5)*uMore.z,on=uCont.a*smoothstep(30.,33.,h)*smoothstep(.004,.03,length(g))*(a.a<.99?.3:1.); // lit lines along the heights, above the plain, faint over owned land
+    c=mix(c,uCont.rgb,on*(1.-smoothstep(.3*w,1.1*w,d)))+uCont.rgb*on*(a.a<.99?0.:.16)*exp(-d/(3.*w)); } // and a soft glow beside them, made here (no glow pass)
   c*=1.+.07*uSurf.x*(grain(p*1.5)-.5); // paper
+  if(uMore.y>0.) c*=1.+uMore.y*(.06*sin(p.y*.55+nz(p*vec2(.018,.06))*14.)-.03*nz(p*vec2(.05,.5))); // wood grain
   float wet=b.b; c=mix(c,c*c*1.15,wet*.55); // fresh ink is deeper
   if(wet>0.) c+=vec3(.10)*wet*smoothstep(.0,1.,k-1.)*2.+min(uBev,1.)*uSurf.w*wet*.5*shine(g*2.5+vec2(nz(p*.35)-.5,nz(p*.35+7.)-.5)*.7,18.); // and it shines while it is wet
   if(uBev>0.){ // a tile is a moulded thing: its rim falls away and catches the light, and a taller neighbour shades its foot
@@ -73,7 +77,7 @@ vec3 face(vec2 p,int id,float foot){
     if(owned) c=near!=dark?uInk*.5:mix(c,uPale,dark?.9:.6);
     // beside owned land only the owned side draws the edge, so the ink meets the ground as it is
     else if(!them){ float l=dot(a.rgb,vec3(.3,.6,.1)); vec3 line=l>.36?uInk:uPale; c=mix(c,near?line:mix(line,a.rgb,.55),near?.42:.15); } }
-  else if(edge) c=mix(c,uInk,b.a<.99?.46:.16);
+  else if(edge) c=uRim.a>0.?mix(c,uRim.rgb,uRim.a):mix(c,uInk,b.a<.99?.46:.16); // a style may draw the line between cells as wire or light
   if(land) c=mix(c,uLand,own?.6:.92);
   float gl=b.g; if(gl>0.){ float pulse=uTime<=0.?1.:.72+.28*cos(uTime*6.2832); c=mix(c,uGlow,gl*(edge?.95:.34*pulse)); }
   return c; }
@@ -95,10 +99,11 @@ void main(){
     if(uTable<=0.){ o=vec4(0.,0.,0.,s/20.*.55); return; }
     // walnut, with a blue baize inlay for the board to lie on and a silver rule round it
     vec2 hs=uSize*.5; float mg=max(hs.x,hs.y)*.16,r=mg*.6; vec2 d=abs(p0-hs)-hs-mg+r; float sd=length(max(d,0.))+min(max(d.x,d.y),0.)-r,fw=foot*uDpr*1.2;
-    vec3 c=texture(uWood,p0/(max(hs.x,hs.y)*vec2(1.3,.65))).rgb; c=mix(c,vec3(.3,.19,.12),uWoodK.y)*uWoodK.x; c*=1.-.3*smoothstep(mg*.5,0.,sd)*step(0.,sd);
+    vec3 c=texture(uWood,p0/(max(hs.x,hs.y)*vec2(1.3,.65))).rgb; c=mix(c,uTone,uWoodK.y)*uWoodK.x; c*=1.-.3*smoothstep(mg*.5,0.,sd)*step(0.,sd);
     c=mix(uBaize*(.86+.28*grain(p0*2.)),c,smoothstep(-fw,fw,sd)); c=mix(c,uRule,(1.-smoothstep(mg*.035,mg*.035+fw,abs(sd+mg*.32)))*.8);
+    c=mix(c,uRule,uMore.w*.16*max(hatch(p0.x*uS,48.*uS),hatch(p0.y*uS,48.*uS))); // a faint grid on a glass table
     gl_FragDepth=dep(p0,0.);
-    o=vec4(c*(1.-s/20.*.62)*(1.-uShade*shd(p0,0.))*(1.-2.*dot(uv/uView,uv/uView)),1.); return; }
+    o=vec4(c*uGrade.rgb*(1.-s/20.*.62)*(1.-uShade*shd(p0,0.))*(1.-(2.+uGrade.w)*dot(uv/uView,uv/uView)),1.); return; }
   vec3 c;
   if(wall){ vec3 b=tab(id,0).rgb; float l=.36+.30*clamp(z/max(top(id),.01),0.,1.); vec2 n=vec2(0.);
     if(uBev>0.){ for(int i=0;i<6;i++){ float t=float(i)*1.0471976+.5; vec2 d=vec2(cos(t),sin(t)); if(idAt(p+d*1.7)!=id) n+=d; } if(n!=vec2(0.)) l*=1.25+.55*dot(normalize(n),uLight); } // a side that faces the lamp is lighter
@@ -106,8 +111,8 @@ void main(){
   else { c=face(uMost>0.?p:p,id,foot); if(uMost>0.){ float h=top(id); for(int k=1;k<=5;k++){ float d=float(k)*3.; if(top(idAt(p+uLight*d))>h+.6*float(k)){ c*=.80; break; } } } }
   if(!wall) c*=1.-uShade*shd(p,z/uS);
   gl_FragDepth=dep(p,z);
-  if(uTable>0.) c*=1.-dot(uv/uView,uv/uView);
-  o=vec4(c,1.); }`;
+  if(uTable>0.) c*=1.-(1.+uGrade.w)*dot(uv/uView,uv/uView);
+  o=vec4(c*uGrade.rgb,1.); }`;
 
 export class Painter {
   constructor(canvas) {
@@ -178,7 +183,9 @@ export class Painter {
     g.uniform1f(u.uK, DEPTH); g.uniform1f(u.uShade, o.lamp ? o.style.ground : 0); g.uniform1f(u.uShOn, 0);
     o.lamp?.(u);
     const sf = o.style.surface; g.uniform4f(u.uSurf, sf.grain, sf.relief, sf.bevel, sf.gloss); g.uniform4f(u.uWash, sf.wash[0] / 255, sf.wash[1] / 255, sf.wash[2] / 255, sf.wash[3]); g.uniform3f(u.uMark, sf.hatch, sf.ruled, sf.edge);
-    const st = o.style.table; g.uniform3f(u.uBaize, st.baize[0] / 255, st.baize[1] / 255, st.baize[2] / 255); g.uniform3f(u.uRule, st.rule[0] / 255, st.rule[1] / 255, st.rule[2] / 255); g.uniform2f(u.uWoodK, st.wood[0], st.wood[1]);
+    const f4 = (k, c, a = c[3]) => g.uniform4f(u[k], c[0] / 255, c[1] / 255, c[2] / 255, a), st = o.style.table; // styles hook: rim, contours, sea, the rest, the grade
+    f4("uRim", sf.rim); f4("uCont", sf.contour); f4("uSea", sf.sea); g.uniform4f(u.uMore, sf.own, sf.wood, sf.spacing, st.grid); g.uniform4f(u.uGrade, ...o.style.grade); g.uniform3f(u.uTone, st.tone[0] / 255, st.tone[1] / 255, st.tone[2] / 255);
+    g.uniform3f(u.uBaize, st.baize[0] / 255, st.baize[1] / 255, st.baize[2] / 255); g.uniform3f(u.uRule, st.rule[0] / 255, st.rule[1] / 255, st.rule[2] / 255); g.uniform2f(u.uWoodK, st.wood[0], st.wood[1]);
     g.uniform1i(u.uId, 0); g.uniform1i(u.uHt, 1); g.uniform1i(u.uTab, 2); g.uniform1i(u.uWood, 3);
     g.uniform2f(u.uSize, m.w, m.h); g.uniform2f(u.uView, cam.W, cam.H); g.uniform2f(u.uMid, cam.mx, cam.my); g.uniform2f(u.uC, cam.cx, cam.cy);
     g.uniform2f(u.uYaw, cam.cw, cam.sw); g.uniform2f(u.uTilt, cam.ct, cam.st); g.uniform2f(u.uLight, o.style.sun[0], o.style.sun[1]);

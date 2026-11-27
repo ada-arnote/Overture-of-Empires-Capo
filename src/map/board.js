@@ -6,7 +6,7 @@ import { hexPicture } from "./hexes.js";
 import { Meshes } from "./mesh.js";
 import { models, unpack } from "./models.js";
 import { Painter } from "./paint.js";
-import { STYLES, styleOf } from "./style.js";
+import { STYLES, wear } from "./style.js";
 
 const DEG = Math.PI / 180;
 export const LOOKS = {
@@ -82,10 +82,10 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
   if (wood) { const img = new Image(); img.onload = () => { if (alive) { painter.wood(img); redraw(); } }; img.src = wood; }
   let timed = probe ? [] : null;
   // The mesh layer: real shapes for scenery and pieces, in every look but Flat (where the drawn pieces stay, as the plain and accessible view).
-  let look3 = styleOf(style), styleName = STYLES[style] ? style : "war";
+  let light = "day", look3 = wear(style, light), styleName = STYLES[style] ? style : "war"; // styles hook: worn in daylight or lamplight
   const lift = () => 9 * L.rise;
   let meshes = null, staged = false;
-  try { meshes = new Meshes(painter.g, models()); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); }
+  try { meshes = new Meshes(painter.g, models(look3.kit)); } catch (e) { console.warn("The models did not start; the drawn pieces stay:", e); }
   const solid = () => L.rise > 0 && !!meshes;
   /** Pieces on a map of small cells are made larger, so that they read when the whole board is in view (they still grow as you zoom in). */
   const grown = () => Math.max(1, Math.min(picture ? 3.2 : 1.25, 24 / (m.R * base))); // on a board of hexes a piece must still fit its own hex
@@ -460,6 +460,10 @@ export function createBoard(host, { cells, rough = [], sea = [], seats, ground, 
     pack(buffer) { if (meshes) { meshes.add(unpack(buffer)); staged = false; redraw(); } },
     get style() { return look3; }, get styleName() { return styleName; },
     /** Another style: the same board and pieces, in other materials. */
-    setStyle(name) { if (!STYLES[name]) return; styleName = name; look3 = STYLES[name]; staged = false; dirty = true; redraw(); },
+    setStyle(name) { if (!STYLES[name]) return; const kit = models(look3.kit); styleName = name; look3 = wear(name, light); if (meshes && models(look3.kit) !== kit) meshes.add(models(look3.kit)); staged = false; dirty = true; redraw(); },
+    /** styles hook: "day" or "lamp", the style's lighting for the page's Daylight or Lamplight. */
+    setLight(v) { light = v === "lamp" ? "lamp" : "day"; look3 = wear(styleName, light); staged = false; dirty = true; redraw(); },
+    /** styles hook: the seats' colours have changed; owned land takes them at the next show. */
+    recolour() { show.forEach((c) => { if (c.owner >= 0) c.owner = -2; }); },
   };
 }

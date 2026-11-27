@@ -51,10 +51,14 @@ export function hexBoard(T, stage, o) {
     stage.replaceChildren(svg);
     fit();
   };
+  const root = document.documentElement, night = matchMedia("(prefers-color-scheme: dark)"), lamp = () => ((root.dataset.theme ? root.dataset.theme === "dark" : night.matches) ? "lamp" : "day");
+  const relight = () => b?.setLight(lamp()), seen = new MutationObserver(relight);
+  seen.observe(root, { attributes: true, attributeFilter: ["data-theme"] }); night.addEventListener("change", relight);
   if (canDraw()) {
     try {
       b = createBoard(stage, { size: o.size, picture: o.picture, lands: o.lands, lines: o.lines, labels: o.labels, icons: ICONS, cells: o.cells, fit: o.fit, rough: o.rough, sea: o.sea, seats: o.seats || RGB, ground: o.ground, terrain: o.terrain, style: get(STYLE_KEY) || "war", wood: "textures/walnut.webp", probe: !LOOKS[kept] && !weak, look: LOOKS[kept] ? kept : weak ? "flat" : "relief" });
       if (b.style.pack) fetch(`models/${b.style.pack}`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((buf) => { if (buf) b?.pack(buf); }).catch(() => {}); // a style's sculpted models come after the board is up; the code-made ones stand meanwhile
+      b.setLight(lamp()); // styles hook: the board's lighting follows the page's Daylight or Lamplight
       b.on("slow", () => { try { localStorage.setItem(SLOW, "1"); } catch { /* it will be timed again next time */ } b?.setLook("flat"); });
       b.on("pick", (i) => { if (i >= 0) o.tap(i); });
       b.on("hover", (i) => b?.setCursor(i >= 0 && T.ready() && o.can(i)));
@@ -86,6 +90,8 @@ export function hexBoard(T, stage, o) {
     light: (cells, chosen) => b?.preview(cells, chosen),
     clear: () => b?.preview([]),
     at: (i) => b?.screenOf(i), // where a cell is on the screen, for the coach
-    destroy: () => b?.destroy(),
+    /** styles hook: the seats' colours changed (Settings, Seat colours): owned land takes the new ones. */
+    recolour() { b?.recolour(); if (!b && svg) still(); },
+    destroy() { seen.disconnect(); night.removeEventListener("change", relight); b?.destroy(); },
   };
 }
