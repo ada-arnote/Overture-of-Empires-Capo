@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { canon, chance, createMatch, openSave, seedState } from "../src/core/index.js";
-import { COUNT, COURIER, LAYOUTS, LAYOUTS_SMALL, LODE, LONGEST, PEBBLE, PLACE_LEAST, QUIET, SLINGER, SMALL, WARDEN, boardOf, cellAt, countOf, hasMove, legalOf, lodeOf, make as makeRule, nameOf, stacking, stoneOf, stonesOf, threatened } from "../src/games/stacking/rules.js";
+import { COUNT, COURIER, LAYOUTS, LAYOUTS_SMALL, LODE, LONGEST, PEBBLE, PLACE_LEAST, QUIET, SLINGER, SMALL, WARDEN, boardOf, cellAt, countOf, firstOf, hasMove, legalOf, lodeOf, make as makeRule, nameOf, stacking, stoneOf, stonesOf, threatened } from "../src/games/stacking/rules.js";
 import { STEPS, TIERS, choose, deciding, drain, hinting, reviewing, why } from "../src/games/stacking/bot.js";
 import { evaluate, flat, legal, make, moveOf, think, unmake } from "../src/games/stacking/search.js";
 import { PUZZLES, optionOf } from "../src/games/stacking/puzzles.js";
@@ -178,7 +178,7 @@ test("quiet turns and the longest game end in a draw", () => {
   const p = bare([...LODES, [0, PEBBLE, -2, 2], [1, PEBBLE, 2, -2]], { quiet: QUIET - 1 });
   const q = stacking.apply(p, legalOf(p).find((m) => m.do === "move")).position;
   assert.deepEqual(q.over.winners, [0, 1]);
-  const r = bare([...LODES, [0, PEBBLE, -2, 2], [1, PEBBLE, 2, -2]], { ply: LONGEST - 1 });
+  const r = bare([...LODES, [0, PEBBLE, -2, 2], [1, PEBBLE, 2, -2]], { ply: LONGEST - 1, rule: { ...start("x", { style: "custom" }).position.rule, limit: 0 } }); // Custom with no count
   assert.deepEqual(stacking.apply(r, legalOf(r).find((m) => m.do === "move")).position.over.winners, [0, 1]);
 });
 
@@ -227,6 +227,7 @@ test("the Capo set: 37 cells, nine stones a side in three home rows, mirrored, d
     p.cells.forEach((c, j) => { const [q, r] = b.cells[j], o = p.cells[cellAt(-q, -r, 3)]; assert.equal(c.length, o.length); if (c.length) assert.equal(c[0] % 5, o[0] % 5); });
     assert.ok(!threatened(p, 0) && !threatened(p, 1));
     assert.deepEqual(p.rule, { size: 3, opening: "set", swap: true, limit: 30, drops: true, topple: true, extra: false });
+    assert.equal(firstOf(p), 2, "2 added for the first player on the small board");
   }
   assert.equal(seen.size, LAYOUTS_SMALL.length);
   assert.equal(nameOf(start("n", { style: "ours" }).position, cellAt(0, -3, 3)), "A1");
@@ -239,6 +240,7 @@ test("Traditional keeps the settled game: the same twelve stones in the same set
     assert.equal(p.cells.length, 61);
     for (const [kind, q, r] of LAYOUTS[layout].stones) assert.deepEqual(p.cells[at(q, r)], [stoneOf(0, kind)]);
     assert.equal(stonesOf(p, 1), COUNT.reduce((a, b) => a + b, 0));
+    assert.equal(p.rule.limit, 40, "version 3: a count after 40 turns each");
   }
 });
 
@@ -247,11 +249,11 @@ test("the count at a turn limit: each stack a side tops counts its height", () =
   assert.equal(countOf(p, 0), 3);
   assert.equal(countOf(p, 1), 2);
   const q = stacking.apply(p, legalOf(p).find((m) => m.do === "move" && m.from === at(-4, 4))).position;
-  assert.deepEqual(q.over, { winners: [0], why: "after 3 turns each, tiers topped 5 to 2 with the first player's 2" });
-  const tie = (more = {}) => bare([...LODES, [0, PEBBLE, -2, 2], [1, PEBBLE, 2, -2], [1, PEBBLE, 2, -2], [1, PEBBLE, 2, -2]], { rule: p.rule, ply: 5, began: 0, ...more }); // 2 + 2 against 4
+  assert.deepEqual(q.over, { winners: [0], why: "after 3 turns each, tiers topped 4 to 2 with the first player's 1" }); // 1 added on the large board
+  const tie = (more = {}) => bare([...LODES, [0, PEBBLE, -2, 2], [1, PEBBLE, 2, -2], [1, PEBBLE, 2, -2]], { rule: p.rule, ply: 5, began: 0, ...more }); // 2 + 1 against 3
   const end = (r) => stacking.apply(r, legalOf(r).find((m) => m.do === "move" && m.from === at(-4, 4))).position.over;
-  assert.deepEqual(end(tie()), { winners: [1], why: "after 3 turns each, tiers topped 4 to 4 with the first player's 2, and more stones held" });
-  assert.deepEqual(end(tie({ pouch: [[0, 0, 0, 0, 2], [0, 0, 0, 0, 0]] })), { winners: [0, 1], why: "after 3 turns each, tiers topped 4 to 4 with the first player's 2, and stones held level" });
+  assert.deepEqual(end(tie()), { winners: [1], why: "after 3 turns each, tiers topped 3 to 3 with the first player's 1, and more stones held" });
+  assert.deepEqual(end(tie({ pouch: [[0, 0, 0, 0, 1], [0, 0, 0, 0, 0]] })), { winners: [0, 1], why: "after 3 turns each, tiers topped 3 to 3 with the first player's 1, and stones held level" });
   const t = bare([...LODES, [1, PEBBLE, 2, -2], [1, PEBBLE, 2, -2], [1, PEBBLE, 2, -2], [1, PEBBLE, 1, -1], [1, PEBBLE, 0, -1]], { rule: p.rule, ply: 5, began: 0 }); // 1 + 2 against 6
   assert.deepEqual(end(t).winners, [1]);
 });

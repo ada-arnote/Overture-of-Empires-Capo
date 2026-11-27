@@ -5,7 +5,8 @@
 // as yours), topple (knock a rival top stone to the cell behind), or drop a pouch stone beside one of your own.
 // You may never leave your own Lodestone open to a strike; a player with no legal move loses, so trapping the rival
 // Lodestone wins. Thirty quiet turns each, or two hundred turns each, end in a draw.
-// Traditional: 61 cells, twelve stones a side, a set opening drawn from three (or free placement). Capo: the quick set,
+// Traditional: 61 cells, twelve stones a side, a set opening drawn from three (or free placement), and a count after 40 turns
+// each, as in Capo, with 1 added for the first player (version 3: between strong players the trap alone drew nearly every game). Capo: the quick set,
 // 37 cells, nine stones a side, a set opening drawn from three, and after 30 turns each the higher count of tiers topped wins
 // (the first player adds 2, as the second player has the last move; a tie goes to the side holding more stones).
 // Custom: size, opening, swap, the count, drops and an extra Pebble for the second player. After the first move of play
@@ -19,8 +20,10 @@ export const COUNT = [1, 1, 2, 2, 6], SMALL = [1, 1, 2, 1, 4];
 export const RADIUS = 4, TALLEST = 3, LODE_TOP = 2;
 /** Plies with no strike and no topple before a draw, and the longest game in plies. */
 export const QUIET = 60, LONGEST = 400;
-/** At the count, the first player adds this to their tiers topped, as the second player has the last move. A tie goes to the side holding more stones. */
-export const FIRST = 2;
+/** At the count, the first player adds this to their tiers topped, as the second player has the last move: 1 on the large board, 2 on the small.
+ *  A tie goes to the side holding more stones. */
+export const FIRST = { 4: 1, 3: 2 };
+export const firstOf = (p) => FIRST[sizeOf(p)];
 /** In free placement a side places at least this many stones before it may stop; the rest wait in its pouch. */
 export const PLACE_LEAST = 8;
 /** The six ways out of a cell, in turn round it: east, north-east, north-west, west, south-west, south-east. Opposite: +3. */
@@ -243,7 +246,7 @@ function finish(p, winners, why, events) {
 /** The rules a style stands for: Traditional and Capo are fixed but for Traditional's opening; Custom takes every switch. */
 export function ruleOf(o) {
   if (o.style === "ours") return { size: 3, opening: "set", swap: true, limit: 30, drops: true, topple: true, extra: false };
-  if (o.style === "classic") return { size: 4, opening: o.opening, swap: true, limit: 0, drops: true, topple: true, extra: false };
+  if (o.style === "classic") return { size: 4, opening: o.opening, swap: true, limit: 40, drops: true, topple: true, extra: false };
   return { size: o.size, opening: o.opening, swap: o.swap, limit: o.limit, drops: o.drops, topple: true, extra: o.extra };
 }
 const small = (rule) => rule.size === 3;
@@ -257,7 +260,7 @@ function puzzleOk(v, size = 3) {
 
 export const stacking = {
   id: "stacking",
-  version: "2",
+  version: "3",
   options: {
     style: { values: ["classic", "ours", "custom"], normal: "classic" }, // Traditional, Capo (the quick small set), Custom
     seats: { values: [2], normal: 2 },
@@ -298,8 +301,8 @@ export const stacking = {
     else if (p.goal && p.seat === p.goal.seat && played >= p.goal.turns * 2) finish(p, [1 - p.goal.seat], `the Lodestone was not trapped within ${p.goal.turns} turn${p.goal.turns > 1 ? "s" : ""}`, events);
     else if (p.quiet >= QUIET) finish(p, [0, 1], `${QUIET / 2} turns each passed without a strike or a topple`, events);
     else if (p.rule.limit && played >= p.rule.limit * 2) {
-      const a = countOf(p, 0) + FIRST, b = countOf(p, 1), held = stonesOf(p, 0) - stonesOf(p, 1), lead = a - b || held;
-      finish(p, lead ? [lead > 0 ? 0 : 1] : [0, 1], `after ${p.rule.limit} turns each, tiers topped ${a} to ${b} with the first player's ${FIRST}${a === b ? held ? ", and more stones held" : ", and stones held level" : ""}`, events);
+      const a = countOf(p, 0) + firstOf(p), b = countOf(p, 1), held = stonesOf(p, 0) - stonesOf(p, 1), lead = a - b || held;
+      finish(p, lead ? [lead > 0 ? 0 : 1] : [0, 1], `after ${p.rule.limit} turns each, tiers topped ${a} to ${b} with the first player's ${firstOf(p)}${a === b ? held ? ", and more stones held" : ", and stones held level" : ""}`, events);
     } else if (played >= LONGEST) finish(p, [0, 1], `the game reached its longest, ${LONGEST / 2} turns each`, events);
     return { position: p, events };
   },

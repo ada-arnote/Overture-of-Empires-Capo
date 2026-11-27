@@ -246,7 +246,7 @@ export function evaluate(f) {
   for (let t = 0; t < 2; t++) v += (t === s ? 1 : -1) * guard(f, t);
   if (f.limit) { // the count at the limit: tiers topped, worth more as it nears
     const left = f.limit * 2 - (f.ply - f.began);
-    let c = s === 0 ? FIRST : -FIRST;
+    let c = s === 0 ? FIRST[f.size] : -FIRST[f.size];
     for (let i = 0; i < N; i++) if (f.h[i]) c += (own(top(f, i)) === s ? 1 : -1) * f.h[i];
     v += c * (left < 12 ? 24 : left < 30 ? 10 : 4);
   }
@@ -291,7 +291,7 @@ function ended(f) {
   if (f.goal && f.seat === f.goal[0] && played >= f.goal[1] * 2) return -WIN + 500;
   if (f.quiet >= QUIET) return 0;
   if (f.limit && played >= f.limit * 2) {
-    let c = f.seat === 0 ? FIRST : -FIRST, held = 0; // the first player's addition; a tie goes to the side holding more stones
+    let c = f.seat === 0 ? FIRST[f.size] : -FIRST[f.size], held = 0; // the first player's addition; a tie goes to the side holding more stones
     for (let i = 0; i < f.n; i++) { if (f.h[i]) c += (own(top(f, i)) === f.seat ? 1 : -1) * f.h[i]; for (let k = 0; k < f.h[i]; k++) held += own(f.st[i * 3 + k]) === f.seat ? 1 : -1; }
     for (let k = 0; k < 5; k++) held += f.pouch[f.seat * 5 + k] - f.pouch[(1 - f.seat) * 5 + k];
     const lead = c || held;
@@ -362,13 +362,19 @@ export function* thinking(f, o = {}) {
     const buf = bufs[ply], n = moves(f, buf), s = f.seat, a0 = alpha;
     order(buf, n, ply, hint);
     let best = -WIN * 2, bestMove = -1, count = 0;
+    const held = o.reduce && inDanger(f, s); // no shortcuts while our own Lodestone is open
     for (let k = 0; k < n; k++) {
       const m = buf[k];
       make(f, m);
       if (inDanger(f, s)) { unmake(f); continue; }
       count++; nodes++;
       const check = ext < 3 && inDanger(f, 1 - s) ? 1 : 0; // a move that opens the rival Lodestone is looked at one step deeper
-      const v = -search(depth - 1 + check, -beta, -alpha, ply + 1, ext + check);
+      let v;
+      if (o.reduce && count > 1) { // the strongest step: later moves first with a narrow window, quiet late ones a step or two shallower, again in full if they surprise
+        const t = typeOf(m), cut = !held && !check && depth >= 3 && count > 3 && (t === MOVE || t === DROP) && m !== killers[ply * 2] && m !== killers[ply * 2 + 1] ? (count > 10 ? 2 : 1) : 0;
+        v = -search(depth - 1 + check - cut, -alpha - 1, -alpha, ply + 1, ext + check);
+        if (!out && v > alpha && (cut || v < beta)) v = -search(depth - 1 + check, -beta, -alpha, ply + 1, ext + check);
+      } else v = -search(depth - 1 + check, -beta, -alpha, ply + 1, ext + check);
       unmake(f);
       if (out) return 0;
       if (v > best) { best = v; bestMove = m; }

@@ -13,7 +13,7 @@ export const TIERS = ["easy", "normal", "hard", "master"];
 /** What each step may look at. gentle is the lesson's bot: one move ahead, very loose. */
 export const STEPS = {
   gentle: { depth: 1, noise: 240 }, easy: { depth: 1, noise: 30 }, two: { depth: 2, budget: 1e9 },
-  normal: { budget: 8000 }, hard: { budget: 20000, table: true }, master: { budget: 80000, table: true },
+  normal: { budget: 8000 }, hard: { budget: 20000, table: true }, master: { budget: 80000, table: true, reduce: true },
 };
 export const STEP_OF = { gentle: 1, easy: 1, two: 2, normal: 3, hard: 4, master: 5 };
 
